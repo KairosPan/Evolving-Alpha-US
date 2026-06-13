@@ -1,0 +1,173 @@
+# Evolving-Alpha-US
+
+A **self-evolving US speculative-momentum decision-support co-pilot**, adapted from the
+[Evolving-Alpha](https://github.com/KairosPan/Evolving-Alpha) A-share system.
+
+Built on the Continual Harness `H=(p,G,K,M)` two-loop architecture (paper
+[2605.09998](https://arxiv.org/abs/2605.09998), Princeton/ARISE/DeepMind). The harness edits its
+own playbook each day via meta-tool CRUD — the only sustainable response to alpha decay and
+market reflexivity.
+
+> **Disclaimer:** This is a research and decision-support tool only. It is **not financial
+> advice**. It does not submit live orders at any phase. All `DecisionPackage` outputs require
+> explicit human confirmation. Past simulated performance does not imply future results.
+> Speculative momentum trading carries substantial risk of loss.
+
+---
+
+## Status
+
+**US-0 Foundations — Complete.** The data layer, point-in-time firewall, offline universe builder,
+and English architecture documentation are in place. Four firewall-surface regression tests are
+green. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full phase plan.
+
+| Phase | Status |
+|---|---|
+| US-0 Foundations | **Complete** |
+| US-1 Harness + eval + sizing + guard | Planned |
+| US-2 Agent + inner loop | Planned |
+| US-3 Web + enrichment | Planned |
+
+---
+
+## What It Does
+
+The system is a **co-pilot** for US speculative-momentum trading. Each day at close it:
+
+1. Screens the market universe for gainers, gap-ups, multi-day runners, and high relative-volume
+   candidates using strict point-in-time (PIT) data — no future leakage.
+2. Computes a `MarketState` capturing regime (Washout/Recovery/Heating/Trend/Distribution/
+   Exhaustion), gainer breadth, runner echelon (consecutive-up-days tiers), and failed-breakout rate.
+3. *(US-2+)* Runs the LLM agent to produce a `DecisionPackage`: ranked candidates, per-candidate
+   size tier, fill-feasibility check, guard/veto checks, and rationale.
+4. *(US-2+)* Presents the `DecisionPackage` to a human for confirmation. The human's
+   confirm/reject/modify response doubles as a DAgger expert label for future training.
+5. *(US-2 inner loop)* The Refiner reads the day's trajectory, identifies failure signatures, and
+   edits the harness (`p/G/K/M`) via meta-tool CRUD — self-evolving the playbook daily.
+
+**No automatic orders at any phase.** The co-pilot is a research and decision-support tool.
+
+---
+
+## Architecture
+
+See [docs/blueprint.md](docs/blueprint.md) for the full authoritative architecture reference.
+
+Brief overview:
+
+```
+data (L0) → features → regime (G_cycle, read-only) → universe →
+agent (L2, master-dispatch + G sub-agents) →
+sizing (L3: position/correlation/portfolio) →
+guard (L4: stops/veto/circuit-breaker) →
+DecisionPackage → human confirmation
+```
+
+The `H=(p,G,K,M)` harness wraps this pipeline. The Refiner edits `H` daily (inner loop). The outer
+loop (LoRA / θ update) is deferred to US-2+.
+
+---
+
+## Quickstart
+
+### Prerequisites
+
+- Python ≥ 3.11
+- `pytest`, `pandas`, `pydantic`, `pyarrow` available in the active interpreter
+- (Optional, for live data) Alpaca account with `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY`
+
+### Install
+
+```bash
+git clone https://github.com/KairosPan/Evolving-Alpha-US.git
+cd Evolving-Alpha-US
+
+# Install in editable mode (no venv required if deps already present)
+pip install -e ".[dev]"
+
+# Install with live-data extras (alpaca-py + pandas-market-calendars)
+pip install -e ".[dev,live]"
+```
+
+### Run Tests
+
+```bash
+# Full test suite (all offline, no network needed)
+python -m pytest -q
+
+# Four firewall-surface acceptance tests only
+python -m pytest \
+  tests/data/test_source.py::test_guarded_source_blocks_future_snapshot \
+  tests/data/test_corp_actions.py::test_has_reverse_split_pending_pit \
+  tests/data/test_snapshot_source.py::test_bars_are_raw_not_future_adjusted \
+  tests/universe/test_build_universe.py::test_rvol_uses_only_trailing_bars -v
+```
+
+Expected output: all tests pass (~30 tests at US-0 baseline).
+
+---
+
+## Data Setup (Offline Backtesting)
+
+The system ships with a `FakeSource` for fully offline tests. For real data, use Alpaca:
+
+### 1. Set Environment Variables
+
+```bash
+export APCA_API_KEY_ID=your_key_id
+export APCA_API_SECRET_KEY=your_secret_key
+```
+
+### 2. Smoke-Test the Alpaca Connection
+
+```bash
+# Requires [live] extras and Alpaca credentials
+python scripts/smoke_alpaca.py AAPL 2026-06-01 2026-06-12
+```
+
+### 3. Build an Offline PIT Snapshot Database
+
+```bash
+# Captures bars for a symbol set into a local parquet store at ./snap/
+python scripts/capture_window.py 2026-06-01 2026-06-12 snap AAPL MSFT NVDA TSLA
+```
+
+The `PITStore` at `./snap/` can then be used as an offline `SnapshotSource` for backtesting.
+All prices are stored **raw/unadjusted** (PIT-correct for level features).
+
+**Alpaca free-tier caveat:** the free tier uses the IEX feed, which is adequate for OHLCV history
+(available to ~2016) but thin for full-market gainer screening. Universe completeness is the
+primary free-tier limitation, not history depth. A broader snapshot source is a US-3 enhancement.
+
+---
+
+## Key Design Decisions
+
+- **All English.** Code, comments, and documentation. `reference/cn/` is read-only algorithmic
+  reference for the rebuild, not production code.
+- **Frozen pydantic models** for all value objects (`StockSnapshot`, `MarketState`, `RunnerRung`).
+- **Four firewall surfaces** enforced by regression tests: date-lookahead, corp-action ex-date PIT,
+  split-vintage raw-PIT, windowed-rank trailing-only.
+- **Gross eval.** All backtested expectancy is gross (no cost/slippage). This is stated, not
+  assumed away. A cost model ships in US-3.
+- **Delist = terminal loss.** Delistings/halts-to-zero are scored as `return = −1.0`, never
+  silently dropped.
+- **Human confirmed.** The `DecisionPackage` requires explicit human confirmation at every phase.
+  The confirmation doubles as DAgger expert labeling for future outer-loop training.
+
+---
+
+## Documentation
+
+| File | Contents |
+|---|---|
+| [docs/blueprint.md](docs/blueprint.md) | Authoritative US architecture blueprint (TL;DR, concept mapping, layers, firewall surfaces, phasing, risks, glossary) |
+| [docs/PROJECT_STATE.md](docs/PROJECT_STATE.md) | Compressed session-restart context (identity, locked decisions, tech stack, repo map, current milestone) |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Four-phase roadmap with task lists and acceptance gates |
+| [docs/superpowers/specs/2026-06-13-us-market-adaptation-design.md](docs/superpowers/specs/2026-06-13-us-market-adaptation-design.md) | Full design spec (v1.1, post adversarial self-review) |
+
+---
+
+## License
+
+Research use only. See `LICENSE` (to be added). No financial advice. No automatic order execution.
