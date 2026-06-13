@@ -103,7 +103,7 @@ python -m pytest \
   tests/universe/test_build_universe.py::test_rvol_uses_only_trailing_bars -v
 ```
 
-Expected output: all tests pass (~30 tests at US-0 baseline).
+Expected output: all tests pass (40 tests at US-0 baseline).
 
 ---
 

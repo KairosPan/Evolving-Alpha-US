@@ -127,7 +127,9 @@ alpha/
     alpaca.py            # AlpacaSource: daily bars (raw/unadjusted) + corp-actions
     calendar.py          # US market calendar (NYSE/Nasdaq)
     firewall.py          # AsOfGuard / LookaheadError
-    pit_store.py         # PIT snapshot store (parquet, atomic); stores RAW + adjustment factors
+    pit_store.py         # PIT snapshot store (parquet, atomic); stores RAW prices (PIT). A separate
+                         #   PIT adjustment-factor table is deferred to US-1 (raw-only satisfies the
+                         #   split-vintage firewall; adjusted levels are recomputed when needed)
     snapshot_source.py   # offline PIT source (SnapshotSource)
     capture.py           # window prefetch → store (PIT-correct, idempotent)
     corp_actions.py      # splits / reverse-splits / delistings — PIT by announcement date
@@ -357,9 +359,18 @@ The lookahead firewall is law. Four regression tests enforce zero leakage:
 | Surface | What it guards | Test location | Implementation |
 |---|---|---|---|
 | **1. Date-lookahead** | `GuardedSource.check(requested > as_of)` raises `LookaheadError` | `tests/data/test_source.py::test_guarded_source_blocks_future_snapshot` | `alpha/data/firewall.py`, `alpha/data/source.py` |
-| **2. Corp-action ex-date PIT** | Split detection keys on `announce_date ≤ as_of`, never the future `ex_date` | `tests/data/test_corp_actions.py::test_has_reverse_split_pending_pit` | `alpha/data/corp_actions.py` |
+| **2. Corp-action announce-date PIT** | Split detection keys on `announce_date ≤ as_of`, never the future `ex_date` | `tests/data/test_corp_actions.py::test_has_reverse_split_pending_pit` | `alpha/data/corp_actions.py` |
 | **3. Split-vintage raw-PIT** | Stored prices are raw; a $14 close pre-reverse-split stays $14, not future-adjusted $140 | `tests/data/test_snapshot_source.py::test_bars_are_raw_not_future_adjusted` | `alpha/data/pit_store.py`, `alpha/data/snapshot_source.py` |
 | **4. Windowed-rank trailing-only** | RVOL = today_volume / mean(trailing window strictly < day); today's bar never enters the denominator | `tests/universe/test_build_universe.py::test_rvol_uses_only_trailing_bars` | `alpha/universe/universe.py::_trailing_rvol` |
+
+**Corp-action consumption (surface 2), as designed:** PIT detection runs on the *full captured*
+corp-actions table (`PITStore.get_corp_actions()`) filtered in-process by
+`known_corporate_actions(table, as_of)` (announce-date ≤ as_of). This is deliberately distinct from
+the `MarketDataSource.corporate_actions(start, end)` method, which windows by `ex_date` (for future
+adjustment bookkeeping) and is therefore guarded on `end`. A reverse split announced before `as_of`
+but with a *future* ex-date is "pending" and must be visible to detection — so detection does **not**
+go through the ex-date-windowed guarded query. No consumer wires this in US-0 (reverse-split-pump is
+a US-1 failure-detector); the helper + its test are the foundation.
 
 ### 8.5 Eval Oracles
 
@@ -392,7 +403,7 @@ Each phase has a design spec, implementation plan, offline tests, and explicit a
 
 | Phase | Contents | Acceptance Gate |
 |---|---|---|
-| **US-0 Foundations** | Alpaca daily source (raw + adjustment factors) + calendar + corp-actions + firewall (incl. 3 new US surfaces) + PITStore + SnapshotSource + MarketState + US universe builder (trailing-only) + English blueprint | Four firewall-surface regression tests green; universe reproduces deterministically offline |
+| **US-0 Foundations** | Alpaca daily source (raw bars; PIT adjustment-factor table deferred to US-1) + calendar + corp-actions + firewall (incl. 3 new US surfaces) + PITStore + SnapshotSource + MarketState + US universe builder (trailing-only) + English blueprint | Four firewall-surface regression tests green; universe reproduces deterministically offline |
 | **US-1 Harness + eval + sizing + guard** | `H=(p,G,K,M)` (containers, 9 meta-tools, persistence, immutable-core, snapshot/rollback), seeds v1 (four families, per-phase scope, defense-heavy + alpha-production channel), return oracle (horizon≥2, delist→terminal-loss) + optional exogenous pool-category, walk-forward, baselines, regime classifier + state machine, `sizing/` (L3) + `guard/` (L4), `DecisionPackage` schema | Firewall no-leak + baselines reproduce + sizing/guard unit-tested (baseline-only, no agent yet) |
 | **US-2 Agent + inner loop** | Per-role LLM agent (+ Claude client, master-dispatch + G sub-agents), Refiner 4-pass CRUD + credit + signatures + retire-discipline, scorer-aware capability-floor breaker, inner loop, three-way HCH/Hexpert/Hmin compare | Statistical decision procedure: multi-seed, paired HCH−Hexpert with CI, temp=0, window MDE < expected effect; offense-vs-defense contribution reported |
 | **US-3 Web + enrichment** | `alpha_web` cockpit (research + decision); progressive enrichment unlocking full offense per §6 | Runner intraday/halts → meme short-interest/SSR/FINRA-short-volume → event earnings calendar/surprise → social sentiment; cost/slippage model |

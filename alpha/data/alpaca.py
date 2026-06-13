@@ -13,7 +13,12 @@ _SNAP_COLS = ["symbol", "name", "open", "high", "low", "close", "volume", "prev_
 def _normalize_bars(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame(columns=_BARS_COLS)
-    out = df.rename(columns={"timestamp": "date", "t": "date"}).copy()
+    out = df.copy()
+    if "date" not in out.columns:                    # rename one source column, never two -> "date"
+        for src in ("timestamp", "t"):
+            if src in out.columns:
+                out = out.rename(columns={src: "date"})
+                break
     out["date"] = pd.to_datetime(out["date"]).dt.date
     for c in ("open", "high", "low", "close", "volume"):
         out[c] = pd.to_numeric(out[c], errors="coerce")
