@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}H 查看器{% endblock %}
+{% block topbar %}<b>H 查看器</b> <span class="muted">· 种子 playbook</span>{% endblock %}
+{% block content %}
+<section>
+  <div class="label">技能 Skills (p) · {{ h.skills | length }}</div>
+  <table class="data">
+    <thead><tr><th>技能</th><th>状态</th><th>n</th><th>命中率</th><th>超额(advantage)</th><th>nukes</th></tr></thead>
+    <tbody>
+      {% for s in h.skills %}
+      <tr>
+        <td>{{ s.name_cn }}</td>
+        <td class="status-{{ s.status }}">{{ s.status }}</td>
+        <td>{{ s.stats.n }}</td>
+        <td>{{ '%.2f' | format(s.stats.hit_rate) if s.stats.hit_rate is not none else '—' }}</td>
+        <td>{{ '%+.3f' | format(s.stats.expectancy) if s.stats.expectancy is not none else '—' }}</td>
+        <td>{{ s.stats.nukes }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+<div class="cols">
+  <section>
+    <div class="label">纪律 Doctrine (K) · {{ h.doctrine.entries | length }}</div>
+    {% for e in h.doctrine.entries %}
+    <div class="card"><b>{{ e.section }}</b><p>{{ e.guidance }}</p></div>
+    {% endfor %}
+  </section>
+  <section>
+    <div class="label">记忆 Memory (M) · {{ h.memory | length }}</div>
+    {% for m in h.memory %}
+    <div class="card"><b>{{ m.lesson_id }}</b> <span class="muted">{{ m.outcome }}</span><p>{{ m.lesson }}</p></div>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

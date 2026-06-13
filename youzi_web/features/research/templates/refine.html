@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}refine 时间线{% endblock %}
+{% block topbar %}<b>refine 时间线</b>
+{% if runs %}<select onchange="location.href='?run='+this.value" style="margin-left:auto;">
+  {% for m in runs %}<option value="{{ m.run_id }}" {% if m.run_id == run_id %}selected{% endif %}>{{ m.window }} · {{ m.scorer }}</option>{% endfor %}
+</select>{% endif %}{% endblock %}
+{% block content %}
+{% if not report or not report.hch_loop_report %}<div class="card">还没有运行结果。跑 <code>python scripts/sample_run.py</code> 或 <code>smoke_compare</code> 生成。</div>
+{% else %}
+{% set lr = report.hch_loop_report %}
+<div class="label">refine · {{ lr.refine_events | length }} 次</div>
+{% if not lr.refine_events %}<div class="card">本次无 refine。</div>{% endif %}
+{% for ev in lr.refine_events %}
+<div class="card">
+  <b>{{ ev.date }}</b> <span class="muted">ckpt={{ ev.checkpoint_version if ev.checkpoint_version is not none else '—' }}</span>
+  {% for e in ev.report.applied %}<div class="status-active">✓ {{ e.pass_kind }}:{{ e.tool }} → {{ e.target_id }} «{{ e.rationale }}»</div>{% endfor %}
+  {% for e in ev.report.rejected %}<div class="muted">✗ {{ e.pass_kind }}:{{ e.tool }} → {{ e.target_id }} 拒因:{{ e.reason }}</div>{% endfor %}
+  {% if not ev.report.applied and not ev.report.rejected %}<div class="muted">（无编辑）</div>{% endif %}
+  {% for n in ev.report.notes %}<div class="muted">· {{ n }}</div>{% endfor %}
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

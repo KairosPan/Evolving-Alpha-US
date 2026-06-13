@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>youzi · {% block title %}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>   <!-- 本地 vendor,无外链/无 SRI 顾虑、离线可用 -->
+
+</head>
+<body>
+<div class="shell">
+  <nav class="rail">
+    <div class="rail-logo" title="youzi">⚡</div>
+    {% for f in features %}
+    <a class="rail-item {% if f.id == active_feature_id %}active{% endif %}"
+       href="{{ f.subnav[0].path if f.subnav else '/' }}" title="{{ f.label }}">{{ f.icon }}</a>
+    {% endfor %}
+  </nav>
+  {% set active = (features | selectattr('id', 'equalto', active_feature_id) | list | first) %}
+  <aside class="subnav">
+    <div class="subnav-title">{{ active.label if active else 'youzi' }}</div>
+    {% if active %}
+      {% for item in active.subnav %}
+      <a class="subnav-item {% if item.path == active_path %}active{% endif %} {% if not item.enabled %}disabled{% endif %}"
+         {% if item.enabled %}href="{{ item.path }}"{% endif %}>{{ item.label }}</a>
+      {% endfor %}
+    {% endif %}
+  </aside>
+  <main class="main">
+    <header class="topbar">{% block topbar %}{% endblock %}</header>
+    <div class="content">{% block content %}{% endblock %}</div>
+  </main>
+</div>
+</body>
+</html>

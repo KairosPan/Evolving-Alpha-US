@@ -1,0 +1,26 @@
+[project]
+name = "youzi"
+version = "0.0.1"
+description = "自进化游资系统 — Phase-0a 数据·特征·回放地基"
+requires-python = ">=3.11"
+dependencies = [
+    "akshare>=1.16",
+    "pandas>=2.0",
+    "pydantic>=2.6",
+    "pyarrow>=15",
+    "openai>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["youzi*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

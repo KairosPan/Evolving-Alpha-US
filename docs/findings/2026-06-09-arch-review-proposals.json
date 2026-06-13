@@ -1,0 +1,363 @@
+{
+ "survivingProposals": [
+  {
+   "title": "统一统计裁决层:日级等权聚合 + 配对差 + 移动块 bootstrap CI + 符号置换 + MDE,三值 verdict 贯穿对比/聚合/闸门",
+   "area": "eval-oracle",
+   "problem": "compare.py:87 用 hch_beats_hexpert = d_mean>0 裸符号判胜,metrics.py:39-47 只产均值无方差;同日候选强相关+高产日主导池化均值,有效 n 远小于 n_candidates。实证:冻结臂 Hexpert 零代码改动被 LLM 重采样从 +0.267 抖到 +0.000(findings §8),verdict 翻转无法归因;§9 的'打平'引用 Δ=0.003 点估计,粗算 80% 功效下 5 窗约 30 日的 MDE≈0.26,检出 Δ=0.003 需约 20 万交易日——北极星判定目前结构上不可证伪。四个视角独立指认同一根缺陷。",
+   "proposal": "新建 youzi/eval/stats.py 纯函数集(四版合并取最强):① daily_portfolio_scores(traj)->list[DayScore{date,n,mean}],决策日内候选等权聚合,空仓/无候选日记 mean=0 入列保证两臂日历对齐(同时消同日相关与高产日加权);EvalReport 增 daily 字段,日级等权与旧候选池化双口径并报;② paired_daily_deltas(a,b) 对两臂共同决策日做配对差(同窗同 universe,配对差 sd 远小于绝对分 sd,免费方差缩减);③ moving-block bootstrap(块长 2-5 连续交易日保留自相关,B≥10000,seed 可控)出 90%/95% CI,辅以符号置换检验(以日为交换单元,n_perm=20000)与 min_detectable_effect(n_days, sd, power)——每次对比自带'当前样本量能分辨多大效应'的诚实标尺;④ ComparisonReport 增 verdict∈{win,loss,flat,insufficient}(ci_lo>0→win,ci_hi<0→loss,配对日<8→insufficient)+ ci/p/mde/n_days,保留旧 bool 向后兼容,web compare 视图渲染 CI/MDE;⑤ scripts/aggregate_runs.py 读 RunStore 全部 run(按 run_id 前缀过滤 sample),以窗为天然 block 拼接日级配对差统一 bootstrap——把 findings §9 人工目测池化程序化可复跑;⑥ 检验默认在 advantage/excess 口径上做(见优势化条)进一步缩方差;EditGate/锦标赛/熔断的'谁赢'判定全部复用同一函数(小窗退化为保守模式);蓝图 Phase-1 验收门改为 ci_low>0。",
+   "impact": "北极星问题('自进化是否有益')从单次采样的符号变成带置信度的可证伪命题;防止把 ±0.05 量级噪声误读为进展;日级聚合+配对本身把所需窗口数降一个量级,是最便宜的功效提升;所有上游选择机制(验收闸/锦标赛/熔断)从此不再拿噪声做选择。",
+   "effort": "M",
+   "priority": "P0",
+   "evidence": "youzi/loop/compare.py:78-87;youzi/eval/metrics.py:39-47;docs/findings §8:85(+0.267→+0.000 纯重采样)、§9:112-115(Δ=0.003 无区间,人工池化)",
+   "sources": [
+    "self-evolution",
+    "quant-strategy",
+    "architecture",
+    "eval-validity"
+   ],
+   "verdict": {
+    "verdict": "needs-revision",
+    "reason": "三关核实结果:\n\n【关1:问题真实存在,证据全部对上】\n- 裸符号判胜:youzi/loop/compare.py:87 `hch_beats_hexpert=d_mean > 0`,d_mean 来自 compare.py:78 两臂池化均值之差,无任何方差/区间/样本量信息。\n- 只产均值:youzi/eval/metrics.py:39-47 `_agg` 仅返回 (hit_rate, nuke_rate, mean);EvalReport(metrics.py:27-36)无 daily 字段、无方差。ScoredCandidate 带 decision_date(metrics.py:13)但从未按日聚合——池化均值确实被高产日加权、同日候选相关性未处理。\n- 重采样翻转实证:docs/findings/2026-06-06-real-data-hch-vs-hexpert.md:85 \"Hexpert(冻结、无代码改动)窗口 1 期望分 +0.267→+0.000 纯属随机,故 verdict 翻转不能干净归因于 1b-3d\" ——零代码改动臂被采样噪声抖动 0.267,而当前 verdict 对 Δ=±0.003 也判胜负,问题坐实。\n- §9 点估计无区间:findings §9:110-115 池化表 HCH +0.222 vs Hexpert +0.219(Δ=0.003),纯人工目测,无 CI;ROADMAP.md:16 北极星判定直接引用该数字。提案的 MDE 粗算自洽(配对日差 sd≈0.5 时 MDE=2.8×0.5/√30≈0.26;检出 0.003 需 (2.8×0.5/0.003)²≈22 万日)——\"结构上不可证伪\"的指控成立。\n- 现有机制未覆盖:youzi/eval/ 下无 stats 模块;scripts/ 下无 aggregate_runs.py;全库 grep 无 bootstrap/置换/CI 代码。\n\n【关2:非已登记债务换皮】\nROADMAP.md:91-103 债务清单 8 条均无统计裁决项。最接近的是 findings §6.3 一句\"多窗口聚合+统计显著性(1b-3b 债务)\"和 §8:93\"需多窗口/多 episode 聚合\"——只登记了'需要',零设计。提案的日级等权对齐(空仓日记0保两臂日历对齐)、配对差方差缩减、移动块 bootstrap+符号置换、MDE 诚实标尺、四值 verdict(含 insufficient)、跨 run 聚合脚本,全是新设计,且与已有机制可对接(TrajectoryStep 带 date+outcomes,trajectory.py:21;两臂同窗同 source 由 compare.py:54-55 _MemoizedSource 公平性保证,配对前提成立)。\n\n【关3:技术上基本站得住,但第⑤条有一处事实性高估 + 一处幻影组件,可修】\n架构兼容:纯函数 stats.py 离线可测(符合 ROADMAP.md:27 离线优先);事后统计不触防火墙(ROADMAP.md:24);不碰观测-编辑边界;ComparisonReport 加默认值字段对 RunStore 旧 JSON 向后兼容(run_store.py:53 model_validate);FE-B compare 视图已存在可渲染 CI/MDE。A股约束:统计层在 scorer 下游,T+1/涨跌停/无做空不受影响;空仓日=0 与 Hmin_notrade 口径一致(findings §9:110);交易日历对齐由 ReplayEngine 天然提供。蓝图验收门改 ci_low>0 是对蓝图:524 \"稳定优于\"的合理锐化。\n\n缺陷一(事实错误):第⑤条声称\"把 findings §9 人工目测池化程序化可复跑\"——不成立。实查 runs/ 仅有 sample.json 一个离线样例 run(meta: scorer=pool);§8/§9 的真实 run(2026-06-07)早于 RunStore 落地(FE-B,2026-06-08),从未持久化。且即便存了,旧 ComparisonReport 的 ArmReport 只含池化 EvalReport(compare.py:21-28),Hexpert/Hmin 臂无 trajectory、日级序列不可回溯(仅 HCH 经 hch_loop_report 有);§9 窗口又已掉出 akshare ~30 交易日硬限(findings §9:124)无法重采。\"§9 可复跑\"是不可兑现的承诺。\n\n缺陷二(幻影组件):\"EditGate/锦标赛/熔断的谁赢判定全部复用同一函数\"——全库 grep 无 EditGate;锦标赛仅存在于蓝图未来设计(蓝图:339 孵化锦标赛);现有熔断(inner_loop.py:147-166)是 rolling expectancy 对地板阈值,非臂对臂判胜,直接\"复用\"需适配。该条作为前瞻接口约定可以,作为本期交付描述则失实。",
+    "revision": "保留 ①②③④⑥ 原设计不动(均核实可行),修两处:\n\n修第⑤条为:\"scripts/aggregate_runs.py 读 RunStore 全部 run(按 meta.scorer/horizon 过滤同口径,按 run_id 前缀剔除 sample),对**含 daily 字段的 run**以窗为天然 block 拼接日级配对差统一 bootstrap;对缺 daily 的旧 run 降级为池化口径并在输出中显式标注'不可配对'。注意:findings §8/§9 的历史 run 从未入 RunStore 且窗口已掉出 akshare 30 日限,**不可回溯复算**——§9 的程序化版本须用新管线产出的新窗口 run 重建(待 akshare 恢复或 PIT 快照建库后)。本条依赖 ①(EvalReport.daily)落地后 ArmReport.report 随 RunStore 自动持久化各臂日级序列,无需额外存 trajectory。\"\n\n修第⑥条\"消费方\"表述为:\"verdict 统一函数本期接入两处实际存在的消费点:compare_harnesses(替换 compare.py:87 裸符号)与 web compare 视图;对规划中的 1b-3c 影子 Hexpert 地板与蓝图孵化锦标赛(蓝图 §6.3),以'臂对臂判胜必须走 stats.verdict(小窗→insufficient 即保守不动作)'写入接口约定,落地时复用;现有熔断(inner_loop.py:147-166,rolling vs 阈值)非臂对臂判定,本期不动,仅在 1b-3c 引入影子臂时切换。删去'EditGate'字样(库内不存在该组件)。\"\n\n其余(日级等权+空仓日0对齐、配对差、移动块 bootstrap B≥10000+seed、符号置换 n_perm=20000、MDE、verdict 四值+配对日<8→insufficient、旧 bool 向后兼容、蓝图验收门 ci_low>0)按原案执行。P0、effort M 维持——修订未扩大范围,反而砍掉了不可兑现的回溯承诺。"
+   }
+  },
+  {
+   "title": "优势化信用/截面超额口径:score 减同日池基线,credit、对比、北极星检验全面去市场β + PoolAverage/RandomFromPool 基线臂",
+   "area": "eval-oracle",
+   "problem": "apply_credit(credit.py:99-100)、熔断滚动均值(inner_loop.py:146,150-152)、compare 的 d_mean(compare.py:78)全用原始分。裸追高 +0.185≈HCH +0.222(findings §9)说明 mean_score 大头是'涨停池基准晋级率'这个行情β:情绪好时随机选池 continued 也多,技能 expectancy 混入市场方向,Refiner 无法区分'技能好'与'上周市场好';跨窗绝对分不可比,牛熊窗无法合并聚合;baselines.py:8-28 无'池内平均'对照,系统答不了最基本的问题:agent 比闭眼买整个涨停池好多少。",
+   "proposal": "两视角同一量纲合并(self-evolution 的 advantage 与 quant 的 excess_score 是同一截面 demean,统一命名 advantage):① scorer.py 增 day_baseline 按日计算并缓存:PoolScorer 下=决策日 limit_up 池全体成员按 exit 日成员判 outcome 的 SCORE 均值(PoolRecord 已录两日成员,零额外取数);ReturnScorer 下=池成员前向收益均值(capture 已按池 codes 抓 OHLCV,离线免费);② ScoredCandidate 增 advantage = score − day_baseline(metrics.py:10-16),EvalReport 增 mean_excess;③ 消费面全切:apply_credit 的 expectancy 改记 advantage(保留 raw 作第二字段),refiner_prompt 技能信用行同步增 advantage 口径——Refiner 第一次拿到'选股技能'而非'市场方向'的学习信号;compare 的 d_mean 与北极星配对检验(统计裁决条)改在 advantage 上做,截面 demean 砍掉日间共同波动,直接提升功效且跨窗可比;熔断口径的具体机制并入'熔断重设计'条(advantage 自带零点=随机选池,floor 语义天然 scorer 无关——这比'重标定常数'的债务登记更深:不是调常数而是换自带基准的量纲,弃常数重调方案);④ baselines.py 增 PoolAveragePolicy(选当日全池,pattern='pool_avg',作第五臂)与 RandomFromPoolPolicy(k, seed)('精选 vs 广撒'对照),compare.html 加 mean_excess 列并注明口径。",
+   "impact": "把'行情给的'与'技能挣的'分开——游资策略评测的第一性基准;HCH−Hexpert 之差从β噪声中浮出;高产日主导均值的问题被按日基线天然分层解决;与统计裁决条合起来才能在可行窗口数内宣称'有益/无益'。",
+   "effort": "M",
+   "priority": "P0",
+   "evidence": "youzi/refine/credit.py:99-100;youzi/loop/inner_loop.py:146,148-156;youzi/loop/compare.py:74-87;youzi/eval/oracle.py:22-36;youzi/eval/baselines.py:8-28;findings §9(裸追高 +0.185 vs HCH +0.222,β占比一目了然)",
+   "sources": [
+    "self-evolution",
+    "quant-strategy"
+   ],
+   "verdict": {
+    "verdict": "valid",
+    "reason": "三关全过。【问题属实】① credit.py:99-100 expectancy 用原始 sc.score 增量更新,refiner_prompt.py:84-85 把这个原始 expectancy 喂给 Refiner——技能信用确实混入市场β;② inner_loop.py:146 scores.append(sc.score),149-152 熔断 baseline/rolling 全是原始分均值;③ compare.py:78 d_mean=mean_score 原始直减(metrics.py:46 mean_score 无任何去均值);④ baselines.py:8-28 仅 NoTrade+HighestBoard,无池内平均对照;⑤ findings §9(docs/findings/2026-06-06-real-data-hch-vs-hexpert.md:110-113)裸追高 +0.185 vs HCH +0.222 支撑β占大头诊断;全库 grep advantage|excess|day_baseline|pool_avg 零命中,无现有机制覆盖。【非债务换皮】ROADMAP.md:91-102 债务清单最接近的只有\"熔断 scorer-aware 重标定\"(ROADMAP.md:97)=调常数;本提案的截面 demean advantage 量纲、credit/compare/北极星全面切换、PoolAverage/RandomFromPool 基线臂、mean_excess 在 ROADMAP/PROJECT_STATE/后续开发文档/代码中均无,且对熔断是\"换自带零点的量纲\"明确超越登记债务,是新设计。【技术站得住】数据可得性属实:PoolRecord(oracle.py:22-36)经 inner_loop.py:113/walk_forward.py:49 已录决策日+exit日成员,零额外取数;capture.py:24,32-52 确按 4 池全体 codes 抓 OHLCV,ReturnScorer 池均基线离线免费。防火墙不破:day_baseline 集合定义用 ≤t 决策日池、outcome 用 t+horizon 标签,与现有 score 同等地位,仅事后消费(credit.py:86 契约不变);观测-编辑边界不变(仍走 apply_credit 观测通道);离线优先满足(SnapshotSource/seed 确定性;compare.html 在 youzi_web/features/research/templates/);A股约束一致:score_step 调用点已用 days_seen[j+1] 作 T+1 entry(inner_loop.py:133),池基线沿用同一约定,fill-feasibility 偏差对 agent/基线对称、advantage 反而更少受其污染。实现细节提醒(不构成缺陷):score_step(scorer.py:15-16)需多传决策日成员或经已传入的 source 缓存重建;空池日 day_baseline 需约定跳过;ReturnScorer 池均只对有 OHLCV 成员求(与 scorer.py:49-50 丢弃规则一致);SkillStats.expectancy 语义变更需同步 web H 查看器标签(提案已含保留 raw 第二字段)。"
+   }
+  },
+  {
+   "title": "可成交收益尺:T+1 合规(horizon≥2)+ 一字板成交判定 + 成本滑点 + 缺数显式化 + 路径感知 stop-on-nuke 结算",
+   "area": "eval-oracle",
+   "problem": "当前收益尺度量一笔不存在的交易:horizon=1 时 walk_forward.py:71 以 days_seen[j+1] 同作 entry/exit——次日开盘买当日收盘卖,违反 A 股 T+1;return_oracle.py:25 无佣金/印花税/滑点;次日一字板(恰是 continued 最确定的强信号)按 open 假设全额成交,把买不到的钱全额计入;scorer.py:49-50 把收益 None 候选(停牌/核查,最差尾部)静默丢弃,幸存者偏差直通信用链。且 horizon 提到 ≥2 后,PoolScorer 只看 exit 终点快照(oracle.py:39-45)立即成 material 错误源:某票 t+1 跌停(实盘已止损出局)t+2 反包仍判 continued +1。当前 +0.22 量级对实盘是多重系统性高估。",
+   "proposal": "合并入场成交与持有路径两半为一把完整的尺:(1) T+1:scorer 为 ReturnScorer 时构造期强制 horizon≥2 否则 raise,默认 horizon 改 2,entry=t+1 open、exit=t+horizon close;(2) 新建 youzi/eval/fill.py fill_check(entry_row, prev_close, code, name)->FillResult{fillable, fill_price}:涨停幅按代码段(60/00→10%、30/68→20%、北交所→30%、名称含 ST→5%);qfq 复权价不可绝对取整,用比值阈值:open/prev_close−1 ≥ 阈值−50bp 且 open≈high≈low→一字板不可成交;开盘顶板盘中开板(low/prev_close−1<阈值)→以涨停价成交 fill_price=prev_close×(1+阈值),诚实计入'买在打开的板上';(3) ReturnScorer 重构:score=(exit_close−fill_price)/fill_price−成本(佣金 3bp×2+印花税 10bp 卖侧+slippage_bp 可配默认 30bp);不可成交记 outcome='unfillable'、缺数记 'missing',均不计入 mean 但绝不静默丢弃;EvalReport 增 fill_rate/n_unfillable/n_missing,报 mean_score_filled 与 all_in(unfillable=0)双口径敏感性——'选了多少买不到的票'第一次成一等指标;(4) 路径结算:oracle.py 增 path_outcome(code, mems) 扫 entry..exit 逐日池成员(PoolRecord 已逐日录全成员,零新数据),任一日 limit_down/blowup→nuked 且 stop-on-nuke(exit_price=首个 nuked 日 close,近似砍仓),全程 limit_up→continued,否则 faded;horizon=1 行为完全不变向后兼容。OHLCV 全经 PIT 快照,零新增 akshare 依赖。",
+   "impact": "直接决定北极星读数的真实性:评测尺从'预测次日池成员'校正为'可实现盈亏';预期 hit 最高的追一字策略 fill_rate 将暴露其不可交易性;不做这条,后续一切自进化结论建立在虚构结算上。",
+   "effort": "M",
+   "priority": "P0",
+   "evidence": "youzi/eval/walk_forward.py:67,71;youzi/eval/metrics.py:32;youzi/eval/return_oracle.py:25;youzi/eval/scorer.py:49-50;youzi/eval/oracle.py:39-45",
+   "sources": [
+    "quant-strategy"
+   ],
+   "verdict": {
+    "verdict": "needs-revision",
+    "reason": "【第一关:问题属实,五项指控全部在源码确认】(1) T+1 违规:walk_forward.py:71 向 scorer 传 `days_seen[j+1], days_seen[j+self._horizon]`,horizon=1 时 entry_day==exit_day==t+1;return_oracle.py:9-25 计算 (close@exit−open@entry)/open,即\"次日开盘买当日收盘卖\"——A股 T+1 下不存在的交易。同一约定还复制在 inner_loop.py:133(提案 evidence 漏列此处)。(2) 零成本:return_oracle.py:25 裸收益,grep 全库无任何佣金/印花/滑点代码。(3) 一字板假设全额成交:无任何 fill 判定代码(grep fill/unfillable 零命中);且 source.py:111-113 daily_ohlcv 固定 adjust=\"qfq\",证实提案\"复权价不可绝对取整、须用比值阈值\"的担忧成立。(4) 静默丢弃:scorer.py:49-50 `if ret is None: continue`,metrics.py:39-47 按幸存 n 求均值——停牌(最差尾部)被剔除,幸存者偏差直通 apply_credit 信用链,属实。(5) 终点快照结算:oracle.py:39-45 outcome 只看单日 DayMembership,walk_forward.py:67 只取 exit 日成员;horizon≥2 后 t+1 跌停 t+2 反包会被判 continued,属实(当前 horizon=1 下为潜伏缺陷,但本提案自己把 horizon 提到 ≥2,故必须同时修,提案已预见)。【第二关:有新设计,非旧债换皮】ROADMAP.md:79/101 登记的债务只有一行\"fill-feasibility(一字涨停次日买不进)、成本/滑点\",无任何设计;且五项问题中 T+1 同日买卖 bug、scorer.py:49-50 幸存者偏差、终点vs路径结算三项完全不在债务清单/findings 中(findings 2026-06-06 §53 只笼统说\"不是 tradeable 结论\")。fill.py 比值阈值、unfillable/missing 一等公民、fill_rate 双口径、path_outcome+stop-on-nuke 均为新设计。【第三关:架构兼容但有四处可修缺陷】兼容性成立:打分时刻已走 engine.guarded_source(walk_forward.py:71),GuardedSource.daily_ohlcv 按 end≤as_of 守界(source.py:142-144),prev_close(决策日t)与 entry 日均≤打分游标,防火墙无冲突;PoolRecord 确实逐日录全成员(walk_forward.py:49,oracle.py:28-36),path_outcome 零新数据成立;SnapshotSource.daily_ohlcv 已存在(snapshot_source.py:47),零新增 akshare 依赖属实;horizon=1 下 path==终点,向后兼容成立;Candidate.name 字段存在(decision.py:16)。但提案照写实现会出错:(a) \"名称含 ST→5%\"未限定主板——创业板/科创板 ST 仍是 20%,游资域 ST 连板是常见模式,照写会把 300xxx 的 ST 在 +5% 误判一字板不可成交,系统性错杀;(b) 印花税 10bp 过时,2023-08-28 起卖方 5bp;(c) stop-on-nuke 若首个 nuked 日即 entry 日(t+1),以当日 close 结算违反它自己要修的 T+1(当日买入不可卖);(d) \"构造期强制 horizon≥2\"若放在 WalkForwardEval,InnerLoop 自有打分路径(inner_loop.py:128-133,cfg.horizon 默认 1)会绕开守门;且 Scorer 协议(scorer.py:15-16)现只传单日 mem,path_outcome 需要协议签名改传 mems 序列,提案未明说接口变更。",
+    "revision": "保留原方案四件套(T+1 horizon≥2 / fill.py / 成本+unfillable+missing 显式化+双口径 / path_outcome stop-on-nuke),做六处修正:(1) 涨跌幅阈值判定顺序改为\"先板块后 ST\":60/00 主板→10%,30/68→20%,北交所(4/8/92 段)→30%;仅当主板(60/00)且名称含 ST/*ST 才降为 5%——创业板/科创板/北交所 ST 不降。(2) 成本参数全部进可配 CostModel(默认佣金 3bp×2、印花税卖侧 5bp[2023-08 现行]、slippage_bp=30),不硬编码。(3) stop-on-nuke 遵守 T+1:若首个 nuked 日 == entry 日,exit 顺延至下一交易日 close(首个可卖日);若 nuked 日 > entry 日,以该日 close 结算;两种情况均在 ScoredCandidate 上标注 settle='stop_on_nuke' 并在文档注明\"跌停价可成交\"为乐观近似(跌停封单实际可能卖不出)。(4) horizon≥2 守门下沉到 ReturnScorer 本身:score_step 内 entry_day==exit_day(或跨度<1 交易日)直接 raise,使 WalkForwardEval 与 InnerLoop(inner_loop.py:128-133)两条调用路径同受保护;WalkForwardEval/InnerLoopConfig 默认 horizon 不动(=1,池制语义),仅在 scorer 为 ReturnScorer 时要求显式传 horizon≥2,避免改默认值波及 PoolScorer 既有对比结果。(5) 明确 Scorer 协议变更:score_step 的 mem 参数改为 mems: list[DayMembership](entry..exit 逐日,由 walk_forward/inner_loop 从 PoolRecord 取),PoolScorer 取 mems[-1] 保持现行为,path_outcome 吃整个序列;这是 protocol 级接口改动,两处调用点+测试同改。(6) fill_check 的 name 来源:优先 decision.candidates 的 name(decision.py:16,可空),为空时回退到入场日 zt_pool 行的 name 列(经 guarded_source,打分时刻合法);仍取不到则按非 ST 处理并在 FillResult 标 name_missing=True,不静默。"
+   }
+  },
+  {
+   "title": "LLM record/replay 缓存:content-addressed key + read_only 严格回放 + 黄金 run 全链路回归 + 提示指纹",
+   "area": "architecture",
+   "problem": "DeepSeekClient 纯 live 无缓存(client.py:56-76),API 不支持 seed,temp=0 也无服务端确定性;findings §8 实测冻结臂被重采样从 +0.267 抖到 +0.000,verdict 翻转无法归因;每轮真实验证重复支付采样噪声+API 费;299 测试中'编辑→决策改变'的真实验证途径只剩手动花钱的 smoke_compare(test_compare.py:114 自认);ROADMAP 仅登记'响应缓存'四字无设计。",
+   "proposal": "三版合并并仲裁 key 方案:新建 youzi/llm/cache.py CachedLLMClient(inner, store_dir, mode∈{read_write, read_only, off}) 实现 LLMClient Protocol 对调用方透明。key 仲裁:弃 eval-validity 版'按 seq 序盒带'做主键——臂执行顺序/分支稍变即失配、四臂需手工分带管理;取 content-addressed key=sha256(canonical_json({model, temperature, system, user})):LLMAgentPolicy 每次 decide 现场重渲染系统提示(agent.py:23-27),提示已是 H 状态(含 stats 战绩行)+当日数据的纯函数,key 天然区分 H 演化的每个状态,对 refiner 调用同样成立,无需独立 H-hash。存 cache_dir/{key[:2]}/{key}.json(含各字段原文+response+created_at),复用 tmp+os.replace 原子写;read_only 模式 miss 即 raise CacheMissError,决不静默回落 live(防假离线);env YOUZI_LLM_CACHE 控制;接线点 smoke_compare.py:114-115 的 client factory 包一层。保留盒带版的回归资产价值:用 temp=0 record 一次真实 smoke_compare,把 LLM cache 目录+PIT 快照固化进 tests/fixtures/golden_run/,新增 tests/test_golden_run.py 全链路离线重跑 compare_harnesses,断言 ComparisonReport 关键数字逐位复现——第一个'真实 LLM 输出驱动、零成本、确定性'的回归层,改 refiner_prompt/parse/credit 任何一处都自动发现行为漂移。附加:提示版本指纹(build_system_prompt 输出 hash)写入 run meta,失配报'提示已变需重录'而非误用旧响应;key 加可选 sample_idx 盐,temp>0 时显式收集 K 个独立样本估方差,为统计裁决层供数。一个 run=数据快照+响应缓存+报告的完整可复现单元。",
+   "impact": "真实窗口一次付费后无限次离线确定性复跑(换 scorer/换聚合/加检验零 LLM 成本零噪声);'verdict 翻转无法归因'类复现成本彻底消除;每轮 prompt/refiner 改动的验证成本从'花钱+人眼比对+采样噪声'降为一次 pytest。",
+   "effort": "M",
+   "priority": "P0",
+   "evidence": "youzi/llm/client.py:56-76;youzi/agent/agent.py:23-27(提示=H 纯函数);tests/test_compare.py:114;docs/findings §8:85;ROADMAP.md:78,98",
+   "sources": [
+    "architecture",
+    "data-engineering",
+    "eval-validity"
+   ],
+   "verdict": {
+    "verdict": "valid",
+    "reason": "三关全过。\n\n【关1:问题真实存在】所有证据逐条命中:\n1. youzi/llm/client.py:56-76 `DeepSeekClient.complete` 纯 live 直打 API(仅 retry/backoff),无任何缓存层。全库唯一缓存是 PIT 数据缓存(youzi/data/cache.py:29,缓的是 akshare 行情帧);youzi/replay/ 是市场数据回放+AsOfGuard 防火墙(replay/engine.py、firewall.py),与 LLM 响应回放无关——不存在已有 LLM record/replay,不是 already-done。\n2. docs/findings/2026-06-06-real-data-hch-vs-hexpert.md:85 原文:\"verdict 被 LLM 重采样污染:Hexpert(冻结、无代码改动)窗口 1 期望分 +0.267→+0.000 纯属随机,故 verdict 翻转不能干净归因于 1b-3d\"——抖动数字与归因失效的引用完全准确;:103 自认 temp=0 仅\"贪婪近确定性\",印证\"无服务端确定性\"。\n3. tests/test_compare.py:114 注释自认\"MockLLM 局限:refine 不改脚本化决策\"——离线测试确实无法验证\"编辑→决策改变\"。\n4. ROADMAP.md:78 与 :98 均只有一句话\"LLM 响应缓存:让真实跑也能确定性 replay\",零设计。\n5. 测试数 299 实测核实(pytest --collect-only = 299,与 ROADMAP.md:4 一致)。\n\n【关2:相对已登记债务有实质新设计】债务条目仅一行字;提案新增:key 方案仲裁(弃 seq 盒带的理由成立——compare_harnesses 四臂各自独立调 LLM,顺序盒带确实脆)、content-addressed key、read_only 严格 miss 即 raise(防假离线)、黄金 run 全链路回归层、提示指纹、temp>0 的 sample_idx 盐。不是换说法。\n\n【关3:技术成立、无架构冲突】\n- content-addressed key 的前提\"提示是纯函数\"已逐文件验证:youzi/agent/agent.py:23-27 每次 decide 现场重渲染;agent/prompt.py:16-61 build_system_prompt 确定性遍历 doctrine/cycle/skills/memory,:39-46 渲染战绩行(n/胜率/nukes/exp)使 H 每个演化状态产生不同提示;build_user_prompt :67 含日期、:78 候选排序;refiner 同走 llm.complete(refiner.py:154),refine 模块 grep 无 now/datetime/random/uuid。key 天然区分状态的论断成立。\n- CachedLLMClient 实现 client.py:8-10 的 LLMClient Protocol(runtime_checkable 结构化),对调用方透明;接线点 smoke_compare.py:114-115 的 agent_llm_factory/refiner_llm_factory lambda 确实存在,包一层即可。\n- 与架构边界(ROADMAP.md:21-28)逐条无冲突:不触数据防火墙(AsOfGuard 管数据侧,提示内容本已被守住 ≤t);不碰观测/编辑边界;youzi/llm/cache.py 留在领域层不违反分层;read_only 拒绝静默回落 live 恰是\"离线优先、live 是末端可换适配器\"原则的强化。\n- A股约束(T+1/涨跌停/无做空)与 LLM 缓存正交,不改变任何决策语义。\n- 离线确定性复跑可达:ComparisonReport 断言不含墙钟(datetime.now 只进 run_id/meta,smoke_compare.py:122-125)。\n\n三个非阻塞小瑕疵(不到 needs-revision 程度):(a) key 需要 model/temperature 但 Protocol 不暴露、DeepSeekClient 存私有 _model/_temperature(client.py:50-51)——在 factory 处显式传给 CachedLLMClient 即解,温度本来就是 smoke_compare 的入参;(b) sample_idx 盐在 complete(system,user) 签名下无传递通道,需按 key 出现次数计数实现,提案已标\"可选\";(c) 黄金 run 的录制依赖 PIT 快照,而建库当前被 akshare 硬拒挡住(findings §11)——缓存层本身可用 MockLLM 离线先建,录制是时序问题非设计缺陷。"
+   }
+  },
+  {
+   "title": "孵化→晋升通路 + 预算化检索注入:试验位渲染、promote 证据门、demote 真生效、token 预算化",
+   "area": "self-evolution",
+   "problem": "三个结构性断点使'refine 编辑不改变决策'(findings §9 两窗 HCH≡Hexpert):① write_skill 强制 incubating(refiner.py:116)而 prompt 只渲染 active(agent/prompt.py:33)→新技能对决策不可见→pattern 永不命中→stats 永远 n=0→永无证据晋升,扩张算子结构性死锁;而 promote 本身又无任何证据门(registry.py:97-103 只查状态转移),一旦 promote 即零证据上岗——两头都坏;② demote_memory 只改 importance,prompt.py:49-59 全量渲染且 importance.weight() 全库零消费,收缩算子 no-op;③ 55 技能+21 教训全量注入 ~24K 字符,by_phase/for_regime/active_skills_for 索引零调用,write_skill 使提示单调膨胀、越进化注入越稀释。",
+   "proposal": "两视角合并:① 新 youzi/agent/retrieval.py select_for_prompt(h, phase_prior, budget)->PromptSlice{skills, incubating, lessons, doctrine}:active 技能取 by_phase(phase_prior)∪applies_all,有战绩按 expectancy(优势化落地后按 advantage)、无战绩按种子序排序截 top-B1;记忆按 importance.weight() 降序截 top-B2,weight<0.15 直接不渲染(demote 即时生效);phase_prior=前一交易日 regime_read(parse.py 加字段解析进 DecisionPackage,顺带为 G_cycle 留监督信号记录),首日用 sentiment 阈值兜底,相位分类器(P1 条)落地后切 classify_phase;② 孵化试验位:渲染至多 3 条 incubating(最新优先)标 [试验],指示'仅触发条件清晰命中时使用,pattern 填其 skill_id'——孵化技能积累归因样本的唯一通道;③ promote 证据门(镜像 retire 门):refiner._apply_op 校验 stats.n≥min_promote_samples(默认 3)且 advantage 均值>0(优势化前用 expectancy>0),否则 RejectedEdit;K-pass 系统提示明示可见性规则:'incubating 以试验位注入(最多 3 条);n≥3 且 adv>0 才可 promote;长期 n=0 的孵化技能优先 retire 腾位';④ resolve_skill 加 strip+casefold+全半角归一(credit.py:35-45),孵化期样本稀缺经不起精确匹配再漏;⑤ 注入模式作 ExperimentConfig 开关 injection='full'|'retrieval',compare 可加消融臂验证不伤 Hexpert 基线。",
+   "impact": "对北极星最直接的杠杆:扩张(新技能可见→可归因→证据化晋升)与收缩(demote 触达行为)两个算子同时接通,新技能生命周期'提出→试验位小注→攒证据→过门晋升'第一次走通;token 成本与注意力稀释不再随 H 生长单调恶化,解除'越学越大→提示越差'的自相矛盾。",
+   "effort": "M",
+   "priority": "P0",
+   "evidence": "youzi/refine/refiner.py:113-117,92-98;youzi/agent/prompt.py:32-33,49-59;youzi/harness/registry.py:97-103;youzi/harness/harness.py:24-26(索引零调用);youzi/refine/credit.py:35-45;findings §9",
+   "sources": [
+    "self-evolution",
+    "architecture"
+   ],
+   "verdict": {
+    "verdict": "valid",
+    "reason": "三关全过。\n\n【关1:问题属实,三个断点逐一坐实】\n断点①(孵化死锁+promote 无门):youzi/refine/refiner.py:115-116 write_skill 剥 stats 后强制 a[\"status\"]=\"incubating\";youzi/agent/prompt.py:33 系统提示只渲染 h.skills.by_status(\"active\"),incubating 对 agent 完全不可见;youzi/refine/credit.py:35-45 resolve_skill 只按 agent 输出的 pattern 精确匹配 skill_id/name_cn——agent 看不见就引用不了,新技能 stats 永远 n=0(实测种子 2 条 incubating 也同样不可见)。而 youzi/harness/registry.py:97-103 promote 只查状态转移;refiner.py:92-98 的证据门只覆盖 retire_skill,全库 grep 无任何 min_promote(只有 min_retire_samples);refiner_prompt.py:52-62 K-pass 提示也只有收缩纪律、无晋升证据规则。\"两头都坏\"成立。唯一小夸张:\"pattern 永不命中\"严格说是\"几乎不会\"(agent 理论上可幻觉撞中孵化技能名),不影响结构性结论。\n断点②(demote no-op):youzi/harness/metatools.py:77-81→memory_store.py:72-76→memory_item.py:22-25,demote 只乘 time_decay;prompt.py:49-59 用 h.memory.all() 全量渲染、不看 importance;weight()(memory_item.py:19)全生产代码零消费(仅 tests/test_memory_item.py)。坐实。\n断点③(全量注入):实测 load_seeds+build_system_prompt 渲染 24,263 字符、55 active 技能+21 教训,与\"~24K\"声称精确吻合;by_phase 唯一调用方是 harness.py:26 的 active_skills_for,而 active_skills_for 本身零调用方;doctrine.py:40 / memory_store.py:27 的 for_regime 零调用。坐实。\n佐证:docs/findings/2026-06-06-*.md:115,119 原文\"temp=0 下两窗 HCH 编辑未改变 agent 选股(Δ 精确=0)\",与提案动机一致。\n\n【关2:非旧债换皮】ROADMAP.md:99 债务清单只登记了\"选择性提示注入(按 regime),现全量 ~24KB/次\"——仅覆盖断点③的动机且无设计。断点①②(孵化→晋升通路死锁、promote 证据门、demote 真生效)在 ROADMAP/债务清单/findings 下一步里均无登记。且提案给出了实质新设计:预算化 PromptSlice 检索、孵化试验位(≤3 条+归因指示)、镜像 retire 门的 promote 证据门(n≥3 且均值>0)、weight<0.15 截断、phase_prior=前日 regime_read+sentiment 兜底、resolve_skill 归一化、injection 消融开关。不是换说法。\n\n【关3:技术站得住】防火墙:phase_prior 用前一交易日自身输出(≤t 信息),无未来函数;观测-编辑边界:promote 门与现有 retire 门(refiner.py:92-98)同构,只读 stats 不写,LLM 仍不可注入 stats(refiner.py:115 已剥);离线优先:retrieval 是 HarnessState 上的纯函数,FakeSource/MockLLM 全程可测;A股约束(T+1/涨跌停/无做空)与本提案正交(打分/oracle 层已处理),无冲突。提案自带消融臂(injection='full'|'retrieval')保护 Hexpert 基线,实验卫生良好。\n\n两处非致命小瑕疵(不构成 needs-revision):① \"ExperimentConfig\"在代码里不存在,实际是 LoopConfig(youzi/loop/inner_loop.py:21)+ compare_harnesses 参数,开关落点需对号;② 种子实为 57 技能(55 active+2 incubating),提案\"55 技能全量注入\"指渲染数、准确,但表述易误读。另一个实施时需留意的点:Candidate 单 pattern 字段意味着试验位归因会与 active 技能争抢信用,且 parse.py:31-54 目前确实不解析 regime_read 进 DecisionPackage(DecisionPackage 为 frozen,加默认字段可行)——提案已正确预见此改动。"
+   }
+  },
+  {
+   "title": "EditGate 编辑验收闸:sandbox 克隆 + 反事实回放,Δ非负才提交 live H",
+   "area": "self-evolution",
+   "problem": "refine 编辑就地生效于 live H(refiner.py:70-72 docstring '就地编辑…不 checkpoint/不回滚'),唯一安全网是事后熔断,而熔断真实数据 3 窗全程未触发(findings §4)。系统没有任何'这批编辑是否真的改善决策'的后验检验——1b-3d 只能靠先验规则(退役证据门)把有害修成无害,而先验规则同时压死了有益编辑的试错空间。'编辑→决策→结果'是开环。",
+   "proposal": "新模块 youzi/loop/edit_gate.py,InnerLoop 的 refine 流程改为:① H_sandbox=HarnessState.from_dict(live.to_dict())(harness.py:28-45 已有深克隆通路,零新依赖),配独立 EditLog/MetaTools;② Refiner 在 sandbox 上产出编辑;③ applied 非空则反事实回放最近 W 个已打分决策日(W=credit_window):对每个历史日用同一 guarded_source 重建 universe(d≤当前游标,PIT 合法),LLMAgentPolicy(H_sandbox) 以 temp=0 决策,用已录 PoolRecord 成员直接打分,零额外取数;④ sandbox 池化分对比 live H 同窗实际得分,Δ 判定复用统计裁决层同一函数(小窗退化为'非负即放行'的保守模式),过检才由 manager.adopt(h, log) 整体采纳;否则丢弃并记 GateRejectedEvent(date, Δ, 编辑摘要)进 LoopReport 作下轮 Refiner 证据。成本:每 refine 多 W≈6 次 temp=0 agent 调用(配 LLM 缓存后离线复跑免费),空 applied 不回放。与锦标赛条分工:EditGate 是单批次接受/拒绝(P0 先立),锦标赛在其上加多候选选择压(P1 扩展);此设计同时取代债务清单'1b-3c 影子 Hexpert 地板'的编辑级部分——从事后抓整环漂移前移为提交前验收单批编辑(整环级由熔断重设计条承接)。",
+   "impact": "把'编辑→决策→结果'从开环变闭环,是从'无害'走向'有益'的前提:有了后验闸,可放宽 min_retire_samples 等先验约束让 Refiner 敢切大刀;同时为锦标赛提供选择机件。",
+   "effort": "M",
+   "priority": "P0",
+   "evidence": "youzi/refine/refiner.py:70-72;youzi/loop/inner_loop.py:28-32,148-167,169-177;youzi/harness/harness.py:28-45;youzi/harness/manager.py:22-30;docs/findings §4",
+   "sources": [
+    "self-evolution"
+   ],
+   "verdict": {
+    "verdict": "needs-revision",
+    "reason": "第一关过:问题真实存在——refine 就地编辑 live H 且不回滚(youzi/refine/refiner.py:70-73 docstring),唯一后验安全网是熔断(youzi/loop/inner_loop.py:147-167),而真实数据 3 窗熔断全程未触发且自相对地板原理上抓不到\"比 frozen 差\"(docs/findings/2026-06-06-real-data-hch-vs-hexpert.md:39,注意是 §3 第 4 点而非提案所引 §4);孵化闸(refiner.py:115-116)只罩新技能,patch/retire/doctrine/memory 编辑无任何后验验收。第二关过:非旧债换皮——1b-3c(ROADMAP.md:70)是整环级影子 Hexpert 事后熔断,与单批次提交前验收闸机制不同,全库无 EditGate/反事实既有计划,有新设计。第三关不过:核心缺陷是反事实回放窗 = Refiner 证据窗(credit_window),纯 in-sample——findings §3 记录的真实病理(基于窗内 1-2 次 faded=0 分就退役技能,危害=后段错过 continued 赢家)在后向回放里表现为\"拿掉 0 分候选→池化均分 Δ≥0\",闸会放行甚至奖励恰恰被 1b-3d 治住的那类有害编辑(危害在窗外/前向);而 impact 主张\"有闸后可放宽 min_retire_samples\"会重开退化通道且闸抓不住,有把\"无害\"修回\"有害\"的风险。可行部分均核实:深克隆通路(youzi/harness/harness.py:28-45)、TrajectoryStep 存 market(youzi/eval/trajectory.py:25)、PoolRecord 按日存成员(youzi/eval/oracle.py:22-36)、AsOfGuard 只拦未来(youzi/replay/firewall.py:20-24)故回放过去日合法;与防火墙/观测-编辑边界/离线优先/A股约束无冲突。次要问题:\"零额外取数\"言过其实(live 源下重建 universe 仍需逐日取池,只有打分零取数);\"LLM 缓存后免费\"依赖未落地债务(ROADMAP.md:98);manager.adopt 为新增 API 非现有通路(youzi/harness/manager.py:22-34 仅有 checkpoint/rollback_to/latest_version)。",
+    "revision": "保留 EditGate 骨架(sandbox 克隆 + 提交前验收 + GateRejectedEvent 回流作下轮 Refiner 证据),但验收证据改为双通道:① 主通道=前向影子验收(out-of-sample):refine 产出的 H_candidate 不立即采纳,作 challenger 与 live champion 并行前向 k 个交易日(challenger 决策只虚拟打分、不写 engine.history/PoolRecord/live EditLog),k 日后 Δ(challenger−champion)≥0(小样本保守模式:非负放行)才 manager.adopt——这同时把 1b-3c 影子机制落地到编辑级,分工自然(影子从 Hexpert 换成 H_candidate,整环级 Hexpert 地板仍由 1b-3c 承接);② 后向回放降级为快速冒烟闸:只拦\"在证据窗内就明显变差\"的编辑,且对收缩型编辑(retire_skill/加禁忌)附加参与度/覆盖率不塌约束(sandbox 窗内非空仓决策数与候选数不低于 live 的某比例),后向 Δ≥0 不得作为放宽 min_retire_samples 的依据——只有前向影子通道的证据可以。工程修正:sandbox 的 EditLog 须克隆自 live log(可走 SnapshotStore 序列化通路)保 seq/审计连续;adopt=原子替换 manager.harness/log + InnerLoop._rebind;challenger 观察期内 live H 的 apply_credit 观测在 adopt 时需对 challenger H 重放窗内 credit(守住观测/编辑边界)。措辞修正:成本注明\"打分零额外取数,但 live 源下后向回放每 refine 多 W 天池查询(snapshot/offline 源零网络成本)\";\"离线复跑免费\"以 LLM 响应缓存债务落地为前置;evidence 的 findings §4 改为 §3(第 4 点);manager.adopt 标注为新增 API。"
+   }
+  },
+  {
+   "title": "PIT 数据完整性闭环:入口契约校验 + 漂移哨兵 + 覆盖 manifest + 缺数语义分型 + snapshot_doctor 强制门",
+   "area": "data",
+   "problem": "三类静默污染共用病根——PIT 层只有'文件存在/不存在'两态,且入口无契约:① capture 把炸板池>30 日的 ValueError 与限流统统存成空帧(capture.py:38-39),SnapshotSource 照常供数→历史窗 blowup_rate 恒 0、情绪分系统性偏正、money_effect 把限流编码成中性 0.0;② OHLCV 按 code 全局单文件无窗口键(cache.py:52-53),同一 store 抓第二窗时旧 code 不补抓新日期→范围过滤返空帧→ReturnScorer 静默丢弃(scorer.py:49-50),跨窗复用快照库的收益评估无声污染;③ akshare 列名漂移唯一防线是 smoke_akshare 人肉看列名,_RENAME 零感知,boards 全 None 静默通过且残缺帧永久写进不可再生的 PIT;无抓取时间戳,as-of 承诺(cache.py:31)无机制兑现。",
+   "proposal": "三条提案合并为一个写入前-存储中-读取时的完整闭环:(1) sidecar manifest:每 (kind, day) 原子写 .meta.json{status∈{ok, empty_ok(成功调用且确实空), unavailable(端点范围限制), fetch_failed, contract_violation}, fetched_at, source, n_rows, schema_version};ohlcv 每 code 记 covered_ranges:[(start,end),...];(2) has_ohlcv 升级为 covers(code, start, end) 范围语义,capture_window 据此对旧 code 增量补抓新窗日期,按 date 去重 merge 后整文件原子重写;(3) SnapshotSource 读 manifest:status=unavailable/fetch_failed→raise SnapshotMissingError(限流不再伪装成'今日无炸板'),请求范围未被覆盖→raise(让上游显式记 missing 而非被 scorer 静默剔除),empty_ok 才返空帧;put 检测已存在且内容 hash 不同→raise(force=True 显式覆盖),兑现 as-of 不可覆盖;(4) 新 youzi/data/contract.py:per-kind 契约(required_cols+dtype+值域:zt 的 code 6 位/boards≥1/pct∈[-21,21];ohlcv 的 date 单调/high≥low),AkshareSource 各池方法在 _normalize 出口 validate,raw 非空但缺必需列→DataContractError 硬失败拒写 PIT;raw_columns 与已知中文列集合做差报 unknown_cols 漂移哨兵(捕获 akshare 改版最早信号);golden parquet 回归锚锁死 _RENAME 映射;scripts/probe_contract.py 作每日 capture 前置门;(5) scripts/snapshot_doctor.py 覆盖审计(窗口内缺池日/unavailable 占比/OHLCV 缺口清单),exit 非零——作为跑任何快照驱动收益对比/跨窗聚合前的强制门,届时按 P0 执行。定 P1 仅因当前主跑 PoolScorer 且离线收益路线暂被 akshare 建库挡住;它是数据轨道的第一优先。",
+   "impact": "离线收益评估(北极星最终度量的数据地基)的全部无声污染——跨窗空帧幸存者偏差、限流污染情绪特征、上游改版静默全错——变成大声失败或显式记账;PIT 这一只能向前积累的不可再生资产从此可审计可信任。",
+   "effort": "L",
+   "priority": "P1",
+   "evidence": "youzi/data/capture.py:38-39,47;youzi/data/cache.py:29-31,49-63;youzi/data/snapshot_source.py:29-33,49-53;youzi/data/source.py:11-19;youzi/eval/scorer.py:49-50;youzi/features/money_effect.py:8-11;findings §11",
+   "sources": [
+    "architecture",
+    "data-engineering"
+   ],
+   "verdict": {
+    "verdict": "needs-revision",
+    "reason": "【第1关:问题属实,逐条核验过】① ValueError→空帧+空帧不可区分:capture.py:36-40 `except ValueError: df = pd.DataFrame(columns=[\"code\"])` 后照常 store.put;OHLCV 同路径 capture.py:48-51;SnapshotSource 仅在文件缺失时 raise(snapshot_source.py:29-33),空帧原样供数——PIT 确实只有\"文件存在/不存在\"两态。下游后果链成立:blowup 池>30 日必 ValueError→空帧→blowup_rate=0.0(blowup.py:10-14)→sentiment.py:20 `-8.0*blowup_rate` 系统性偏正;money_effect.py:8-11 空 prev_zt 返 0.0(中性)。限流→空帧有实录:findings §10 明载\"先软限流返空、再硬断连\",软限流返空 df 经 _normalize 成合法空帧直接入库;且 JSONDecodeError 是 ValueError 子类,限流错误页解析失败也走 38-39。唯一措辞瑕疵:硬拒连(RemoteDisconnected)会在 _retry_ak(source.py:57-74)耗尽后崩(大声而非静默),\"限流统统存成空帧\"略过宽,但不影响问题实质。test_capture.py:19/50 锁定了存空帧行为,说明是有意设计(\"不卡死\"),但确实未解决可区分性。② 跨窗 OHLCV 静默丢弃:cache.py:52-56 per-code 单文件无窗口键;capture.py:47 `if not store.has_ohlcv(code)` 第二窗跳过旧 code;snapshot_source.py:53 范围过滤返空;scorer.py:49-50 `if ret is None: continue` 静默丢弃。且 ROADMAP.md:59 文档用法就是固定 `snap` 目录,跨窗复用是被引导的路径——真实风险。③ 列漂移零感知:source.py:11-19 _RENAME 硬编码,_normalize(22-32)对缺列全部 `if col in columns` 静默跳过;echelon.py:9-11 缺 boards 静默返空;唯一防线是 smoke_akshare.py:17 人肉 print;cache.py:29-31 as-of 承诺纯 docstring(\"由调用方保证幂等\"),put(cache.py:49-50)无条件覆盖,无 fetched_at。【第2关:非换皮】ROADMAP.md:91-103 债务清单只有\"OHLCV 多源 fallback\"(可用性)、\"真历史回测/幸存者偏差\"(数据时长),与本提案的完整性闭环正交;全库 grep 无 manifest/contract/doctor 任何机制;manifest 五态+covers 范围语义+读取时语义分型+漂移哨兵+doctor 门是新设计。也非 already-done:现有 SnapshotMissingError(snapshot_source.py:13-14)只覆盖文件缺失,不覆盖空帧语义。【第3关:架构一致但有两个实质设计缺陷】架构无冲突:SnapshotSource 仍被 GuardedSource 套(snapshot_source.py:18),manifest 是取数元数据不进 ≤t 决策推理;全部离线可测;与 snapshot_source.py:14 \"大声失败别静默当 no-trade\" 的既有哲学同向。缺陷 (a) qfq 与增量 merge 矛盾:source.py:113 `adjust=\"qfq\"`——前复权价随除权事件回溯重算,第二窗\"增量补抓新窗日期按 date 去重 merge\"会把两个复权基准的行拼进同一文件,跨缝收益错误,一个以完整性为名的提案自己引入新静默污染;且与自己的\"put 已存在 hash 不同→raise\"自相矛盾(合法复权重算必触发 hash 不同)——pool 帧是真 PIT,qfq OHLCV 是\"as-of 抓取时刻\"的回溯序列,两者不可变语义必须分开,提案未意识到。缺陷 (b) zt 契约值域 pct∈[-21,21] 会误杀合法数据:东财涨停池含北交所(30% 涨跌幅),代码里 universe 无板块过滤(universe.py 无 code 前缀过滤),30cm 涨停触发 contract_violation 硬拒写,每日 capture 强制门被真数据卡死。两缺陷皆可修,故 needs-revision 而非 flawed。",
+    "revision": "保留原方案主体(sidecar manifest 五态 status+fetched_at+n_rows、SnapshotSource 读 manifest 语义分型 raise、per-kind 契约+unknown_cols 漂移哨兵+golden parquet 锚、probe_contract 前置门、snapshot_doctor 强制门——这些全部成立),做三处修正:(1) OHLCV 覆盖扩展改\"整段重抓\"替代\"增量 merge\":covers(code,start,end) 不满足时,对该 code 按新旧 union range 一次性重抓(stock_zh_a_hist 单次调用可取任意 range,与增量补抓调用量相同,几乎零额外成本)、整文件原子重写、manifest 记 fetched_at 与 adjust=\"qfq\" 基准——彻底回避复权基准拼接污染;可选加强:重抓后与旧文件重叠区比对,不一致即在 manifest 标记 adjust_rebase 事件供 doctor 审计。(2) 不可覆盖语义分两类:pool 日帧 = 真 point-in-time,put 时 hash 不同→raise(force=True 显式覆盖)照原案;OHLCV = \"as-of fetch 时刻\"的回溯重算序列,明确豁免 hash guard,允许整段重写但必须更新 manifest 的 fetched_at(审计轨迹替代不可变性)。(3) 契约值域按 A 股板块修正并分级:zt 池 pct∈(0,31](或按 code 前缀细分:主板 10/创业科创 20/北交 30,ST 5,留 ±1 容差),dt 池对称 [-31,0);违约分两级——结构性问题(缺必需列/dtype 错/code 非 6 位)→ DataContractError 硬拒写;值域越界 → 照写 PIT 但 manifest 标 contract_warning + doctor 汇总,避免边界真数据卡死每日 capture。其余(empty_ok 与 unavailable 分型、blowup>30 日标 unavailable 而非空帧、ReturnScorer 上游显式记 missing)不变。优先级 P1 合理:当前主跑 PoolScorer,但它确是离线收益对比(轨道 A 第 1 项)跑之前的硬前置,届时升 P0 的条款应保留。"
+   }
+  },
+  {
+   "title": "best-of-N 编辑锦标赛:方案C 育种场最小可行版(含'不编辑'零臂)",
+   "area": "self-evolution",
+   "problem": "进化算子=单次 LLM 采样的一批 CRUD 单点提交,蓝图方案C 的 population/锦标赛 0 行代码(grep 零命中)。即便有 EditGate 也只是接受/拒绝二元,没有'在多个候选改法中选最好'的选择压——而选择压才是进化搜索产 alpha 的引擎(ADAS/PBT 核心机制);findings §9 已证明单点贪婪编辑短窗边际≈0。",
+   "proposal": "在 EditGate 之上建 youzi/loop/tournament.py:① 每次 refine 采样 N=3 个候选编辑批次——同一证据 refiner temp=0.7 采 3 次,或更优:3 种证据框架(仅失败签名/仅赢家错过/全量)各产一批,天然多样性;② 每批应用到独立 sandbox 克隆(HarnessState.from_dict),连同'不编辑'零臂共 N+1 臂,全部用 EditGate 同窗反事实回放打分(temp=0),用统计裁决函数判胜——必须显著不劣于零臂才采纳,tie 即零臂胜=本日不编辑;③ 胜者 sandbox 经 manager.adopt 进 live H,LoopReport 增 TournamentEvent(各臂Δ/胜者/被弃批次 rationale 摘要),被弃 rationale 进下轮编辑史形成'试过什么不行'的记忆;④ 成本控制:N×W≈18 次 temp=0 调用/refine,仅 YOUZI_SNAPSHOT 离线快照模式启用,live 模式退化 N=1(纯 EditGate);⑤ 留杂交接口(胜者∪次胜者不冲突 ops 合并),本期不实现。",
+   "impact": "把'每日精炼'从单点贪婪爬山升级为带选择压的小种群搜索——蓝图判断的产 alpha 正道;全部复用 EditGate/统计裁决机件,边际实现量小;'零臂必须被显著击败'同时是最强防退化闸。",
+   "effort": "L",
+   "priority": "P1",
+   "evidence": "蓝图:95,339(育种场);grep tournament 全库零命中;findings §9(单点编辑边际≈0);依赖:EditGate 条、统计裁决条、harness.py:28-45",
+   "sources": [
+    "self-evolution"
+   ],
+   "verdict": {
+    "verdict": "needs-revision",
+    "reason": "问题真实:refine=每pass单次LLM采样直接就地应用、无候选比选(youzi/refine/refiner.py:154,165-168;:72\"就地编辑…不checkpoint/不回滚\");tournament/population全库grep零命中;蓝图证据行号准确(架构蓝图:95,339育种场)、findings §9证据准确(docs/findings/2026-06-06-real-data-hch-vs-hexpert.md:119\"编辑未改变选股Δ精确=0\");HarnessState.from_dict存在(youzi/harness/harness.py:37-45)。非债务换皮:ROADMAP债务清单(ROADMAP.md:91-102)无此项;蓝图Phase-2规划的是技能级孵化锦标赛(蓝图:339,525),本提案是编辑批次级best-of-N+零臂+多证据框架,属新设计。但有三处实质缺陷:①同窗反事实打分=样本内选胜,N臂选max放大winner's curse,且违反其引用的蓝图:339自身\"OOS显著胜出才promote\"要求;②manager.adopt不存在(manager.py:9-34仅checkpoint/rollback_to/latest_version),且若整态移植胜者sandbox,打分期间apply_credit写入的反事实stats会进live H,违反ROADMAP.md:25观测-编辑边界(SkillStats=真实轨迹观测);③提案自引的§9证明PoolScorer+horizon=1下编辑常不改决策→N+1臂大概率全tie→按\"tie即零臂胜\"将日日不编辑,选择压为零、白烧N×W调用;次要:成本估算18偏低(credit_window默认10,inner_loop.py:25,实际≈(N+1)×10+采样≈40+),DeepSeekClient温度是构造参数(llm/client.py:38)需双client。防火墙/离线优先/A股约束无新冲突。",
+    "revision": "保留骨架(N候选批次+零臂+统计裁决+TournamentEvent+被弃rationale记忆+杂交接口留空),修四点:① 窗内holdout+OOS确认:把credit_window的scored_steps切两半,前半作证据喂refiner产N批候选,N+1臂只在后半验证段反事实回放打分;胜者须显著优于零臂才进入\"影子确认\"——随后k个真实交易日胜者H'与零臂并行影子决策(不下单、只记分),影子段仍不劣才最终采纳(对齐蓝图:339的OOS-promote闸)。② adopt语义改为\"ops重放\"而非状态移植:每臂sandbox=HarnessState.from_dict(live.to_dict())+独立EditLog/MetaTools;胜者定义为其AppliedEdit的ops序列,采纳=经live的mgr.tools把这批ops重放到live H(live SkillStats不动,sandbox打分期间的反事实credit绝不入live);manager加adopt_ops(ops)薄方法,而非adopt(sandbox)。③ 启用前提条件:仅在YOUZI_SNAPSHOT离线快照+ReturnScorer+horizon>=2时开锦标赛(1b-3e已建好,信号够细才能区分臂,治§9的全tie死区);PoolScorer或horizon=1下强制N=1退化为纯EditGate。④ 成本如实记账:每refine≈N×3次采样调用(p/K/M三pass)+(N+1)×W_val次temp=0回放decide,N=3、W_val=5时≈29次,写进TournamentEvent供复盘;live模式N=1不变。依赖顺序明确:EditGate条(同窗反事实回放打分机件)与统计裁决条须先落地,本条在其上加多臂选择与影子确认。"
+   }
+  },
+  {
+   "title": "相位分类器 G-0:classify_phase 规则版 + SkillStats 相位分桶 + 条件化注入 + regime_read 对账 + 分层评测",
+   "area": "trading-strategy",
+   "problem": "《轮回》playbook 的全部结构是相位条件化(冰点买/退潮不接力),但 MarketState 无离散相位字段,G_cycle 只读纯占位,引发四个互锁断裂:① SkillStats 全局一锅(skill.py:13-32),'主升赢退潮亏'的技能不可分辨,Refiner 只能整体 retire;② by_phase/active_skills_for/for_regime 索引全闲置,注入全量 24K;③ regime_read 被 parse 丢弃(parse.py:30-54),G_cycle 转移永无监督信号;④ seeds/state_machine.json 的 you_see 引用特征层不存在的数据(880005 连板指数等);demote/importance 旋钮零效。退潮期亏损(游资最大回撤来源)系统无法识别。",
+   "proposal": "两视角合并:① 新 youzi/features/phase.py classify_phase(state, history)->Phase|None:确定性阈值树把 state_machine.json 的 you_see 量化为可计算判据(冰点=max_board_height≤3 且 limit_up_count 窗内分位<0.2 且 money_effect<0;主升=高度创窗口新高且 blowup_rate<0.25 且 money_effect>0;退潮=高度自窗内峰值回落≥2 且 money_effect<0;余相类推),阈值集中进 config 作未来可进化参数,样本不足返 None 延续诚实缺失语义;MarketState 增 phase 字段,builder 接线;用快照窗对照校准+人工抽查 10 天与 playbook 对表;② SkillStats 增 per_phase: dict[str, PhaseBucket(n/wins/nukes/adv)],apply_credit 按决策日 phase 双写(全局+分桶),refiner_prompt K-pass 渲染分桶战绩(如'主升 n=4 adv+0.3 | 退潮 n=3 adv-0.5')并引导 patch applicable_regime——Refiner 第一次能学'技能仅某相位失效→缩 regime'而非 retire,这是'安全地改'升级到'聪明地改'的关键结论类型;③ 检索注入条的 phase_prior 切到 classify_phase(替代 regime_read 先验),memory 走 for_regime(phase)+weight 过滤,doctrine 按相位过滤;④ parse 提取的 regime_read 与分类器逐日对账写入 trajectory/报告(一致率统计),为未来 LLM 相位分类器与 G-pass 状态机修订积累金标;⑤ EvalReport 增 by_phase 分层(北极星可答'自进化在哪个相位有益');signatures.py 增相位条件签名 relay_in_ebb(退潮接力)——playbook 头号禁忌第一次可检测。",
+   "impact": "把'轮回'从静态文本变成贯穿决策(条件化注入)、归因(分桶 stats)、评测(分层报告)的运行时变量;分桶信用是给 Refiner 最有价值的证据类型;G 子系统 0→1。",
+   "effort": "L",
+   "priority": "P1",
+   "evidence": "youzi/schemas/market.py(无 phase);youzi/harness/skill.py:13-32;youzi/agent/prompt.py:32-33,49-59;youzi/agent/parse.py:30-54;seeds/state_machine.json(you_see 引用不存在特征);youzi/harness/memory_item.py:19-25(weight 零消费);youzi/refine/signatures.py:27-54",
+   "sources": [
+    "self-evolution",
+    "quant-strategy"
+   ],
+   "verdict": {
+    "verdict": "needs-revision",
+    "reason": "关1全过:MarketState 无 phase(youzi/schemas/market.py:16-29);SkillStats 无相位维度、apply_credit 全局直写(youzi/harness/skill.py:13-32;youzi/refine/credit.py:81-108);by_phase/active_skills_for/for_regime 定义于 registry.py:35/harness.py:24-26/memory_store.py:27/doctrine.py:40 但全仓零生产调用,实际注入走 prompt.py:33 by_status(\"active\")+prompt.py:49-59 memory.all()(全量、不看 weight),ROADMAP.md:99 自记\"全量 ~24KB\";regime_read 在输出契约(prompt.py:9)但 parse.py:40-54 只取 candidates/no_trade_reason 即丢弃;state_machine.json:8,10,54,78,99,142 引用\"昨日涨停指数/880005连板指数5日线\"而 youzi/features/ 无任何指数特征;Importance.weight()(memory_item.py:19-20)全仓无消费者,demote 旋钮确属零效;G_cycle 只读占位(cycle.py:23 自注\"不做推断\")。关2过:ROADMAP A.2\"regime 分层评测\"与债务\"按 regime 选择性提示注入\"(ROADMAP.md:69,99)只是目标级一句话,无相位分类器这一使能原语的任何设计;①②④及 relay_in_ebb 均为新设计,且 registry.py:75-78 已支持 patch applicable_regime 自动重算 phases/ecologies,提案补的恰是缺失的证据通路,非换皮。关3发现一处真实缺陷:②的示例证据\"退潮 n=3 adv-0.5 → 引导缩 regime\"是在桶级小样本上做结构性收缩,而分桶让每桶 n 更小,提案未设桶级证据门——这正是 1b-3d 治过的\"小样本过度收缩\"病(refiner_prompt.py:59-62 的 retire 门只看全局 n);叠加③的硬过滤注入后形成不可逆死循环:缩错 regime→该相位永不注入→该桶永无样本→无法翻案(现行全量注入下 LLM 至少还能看见技能自行判断)。另 7 相全集仅靠 5 个标量特征对中间相位(回暖/题材启动/震荡补涨)弱可分,提案只给出 3 相具体判据,\"余相类推\"过于乐观。缺陷可修,故 needs-revision 而非 valid。",
+    "revision": "保留总体五件套结构,做四处修正:【① 收敛相位全集】classify_phase 首版只输出强可分的 冰点/主升/退潮 三相 + None(判据即提案已给的三条),CANONICAL_PHASES 七相全集作为目标域保留;中间相位待 ④ 的 regime_read 对账金标攒够、或题材/指数特征补齐后再扩。阈值进 config 不变。【② 加桶级证据门】per_phase 分桶照做(嵌入 SkillStats,registry._PATCH_FORBIDDEN 已整体护住 stats),但 refiner K-pass 提示必须复用 1b-3d 纪律:建议\"缩 applicable_regime\"需该相位桶 n≥min_retire_samples(沿用现 retire 门参数或单设 K_phase),桶样本不足时只渲染\"观察中\"不引导收缩;faded≠nuked 纪律同样按桶渲染。【③ 注入先软后硬】条件化注入首版做\"软过滤\":phase 命中的技能/记忆/doctrine 排前并标注\"当前相位适用\",未命中的折叠降权而非删除(纪律红线/immutable 永远全量);classify_phase 返 None 时回退现行全量注入。硬过滤(真正省 24K)以 ④ 的对账一致率达标(如滚动 ≥80%)为开启条件,且被缩 regime 的技能保留小比例继续注入作翻案证据通道——杜绝\"缩错→不注入→无样本→不可逆\"环。【④⑤ 容错细化】parse 提取 regime_read 缺字段/非法值容错为 None 且不影响候选解析;EvalReport.by_phase 对无 phase 的旧 run/None 日落 unknown 桶;relay_in_ebb 仅在 phase==退潮(非 None)时产签名。其余(MarketState 加 Optional[phase]、builder/replay history 扩展沿 engine.py 回跳截断模式、对账写 trajectory)按原提案执行。effort 维持 L,P1 成立。"
+   }
+  },
+  {
+   "title": "赢家/错过者挖掘:SuccessSignature + MissedWinner 给 Refiner 探索素材",
+   "area": "self-evolution",
+   "problem": "extract_signatures 只产失败签名,continued 直接跳过(signatures.py:33-34);决策日池内未被选中的票完全不被分析。Refiner 扩张算子(write_skill)唯一素材是 LLM 凭空生成:收缩有证据、扩张无证据,系统只会越改越保守——findings §8 实测改后行为上移到 patch/rewrite 正是收缩偏置表现。探索-利用回路缺探索的 grounding 一端。",
+   "proposal": "① signatures.py 增两类正向签名:SuccessSignature=continued 且 advantage>0 的已选候选,带 boards/max_board/phase 上下文('什么条件的选择在赢');MissedWinner=决策日 limit_up 池中未被选、exit 日仍 continued 的 code——全部数据 PoolRecord 已录(决策日与 exit 日成员都有),boards 从当日 universe 取,零额外取数;按 boards 分层取 top-5 渲染;② build_refiner_user_prompt 增'## 赢家与错过'段;③ K-pass 提示加硬指令:'write_skill 必须引用至少 2 个 MissedWinner/SuccessSignature 实例填入 examples 字段'——新技能从真实错过的赢家归纳而非拍脑袋;④ InnerLoop 把 PoolRecord 传入 extract 调用点(inner_loop.py:175 加参)。",
+   "impact": "探索算子第一次有数据 grounding;与孵化试验位+EditGate 串成'从数据挖技能→小注验证→证据晋升'的完整探索-利用回路——这是产 alpha 的正向通道,目前系统只有防亏通道。",
+   "effort": "M",
+   "priority": "P1",
+   "evidence": "youzi/refine/signatures.py:30-34;youzi/eval/oracle.py:22-36;youzi/loop/inner_loop.py:95,113,175;findings §8(行为上移到 patch/rewrite)",
+   "sources": [
+    "self-evolution"
+   ],
+   "verdict": {
+    "verdict": "needs-revision",
+    "reason": "【关1:问题属实】① signatures.py:33-34 确为 `if sc.outcome == \"continued\": continue`,FailureKind 四类全是负面(signatures.py:12),无任何正向签名;② 未被选中的池内票确实零分析:extract_signatures 只遍历 step.outcomes,而 outcomes 仅来自 decision.candidates(inner_loop.py:115-123, 131-133);③ Refiner 证据面全是负向:build_refiner_user_prompt(refiner_prompt.py:72-99)三段=决策→结果/\"技能信用(本轮谁在亏)\"/\"失败签名(入场坑)\",write_skill 无任何数据素材;④ 收缩偏置有实证:findings 2026-06-06 文档 L34\"几乎每次 refine 都在砍\"、L89 改后行为上移到 patch_skill+rewrite_doctrine、L119\"自精炼中性非增益\";⑤ 提案引用的行号全部核实无误(oracle.py:22-36 PoolRecord 只存三池 frozenset;inner_loop.py:95/113/175)。【关2:非换皮】ROADMAP.md:69 轨道A.2 只登记了\"更细的失败签名\"(仍是负向方向),PROJECT_STATE.md:59 债务③\"需对全 universe 打分\"也只针对失败比较签名;全库 grep 无 SuccessSignature/MissedWinner/赢家挖掘的任何既有设计——正向签名+反事实错过者挖掘+扩张算子 grounding 是新设计。【关3:技术上大方向成立但有四处缺陷】无防火墙冲突(refine 时被打分步满足 idx≥j+horizon,决策日与 exit 日成员均≤当前游标,纯事后分析,符合 credit.py:86 防火墙契约与 ROADMAP 边界2/3);离线可测;Skill.examples 字段存在(skill.py:50)且 _dispatch 只剥 stats(refiner.py:115),examples 可通过。缺陷:(a) \"advantage>0\"概念在代码库不存在(grep 零命中),未定义;(b) PoolRecord 的 DayMembership 只存 code frozenset(oracle.py:28-33)不存 boards,提案④只传 PoolRecord 无法做\"按 boards 分层取 top-5\"——\"全部数据 PoolRecord 已录\"对 boards 不成立;(c) 最实质:MissedWinner 会系统性混入一字板/秒板等不可买入的延续票(已登记债务 ROADMAP.md:79/101 \"fill-feasibility(一字涨停次日买不进)\"),把不可执行的入场挖成\"错过的赢家\"教 Refiner 写不可执行技能——已选候选的同类偏差是 agent 主动选择的,反事实挖掘会放大它;(d) \"必须引用至少2个实例\"在窗口无赢家时逼 LLM 幻觉编造或阻断合法 write_skill,且 K-pass 工具 schema 文档(refiner_prompt.py:18-19)未列 examples 字段、\"phase 上下文\"不可得(MarketState 无 phase 字段,schemas/market.py:16-29;G_cycle 相位分类器未建,refiner.py:149-150 G-pass 仍 no-op)。",
+    "revision": "修正版(保留①-④骨架,修四处):【修a】SuccessSignature 条件改为 `outcome==\"continued\" 且 sc.score>0`(兼容 PoolScorer/ReturnScorer,删除未定义的 advantage;若想要\"超额\"语义,可用 sc.score 减当步已评分候选均值,但须在 signatures.py 显式定义)。【修b】扩展 PoolRecord.record():DayMembership 增 `boards: dict[str,int|None]`(或并存 first_seal_time/blowup_count),在 inner_loop.py:113 录制时从 universe 取——universe 此处在作用域内,真正零额外取数;extract 调用点(inner_loop.py:175)加 record 参数即可分层。【修c】MissedWinner 加可买性过滤/标注:利用 StockSnapshot 已有的 first_seal_time/blowup_count(stock.py:20-21),将\"早盘即封板且零炸板\"(近似一字/秒板)的延续票排除或单独标注 `fill_doubt=True`,并在\"## 赢家与错过\"段提示\"标注 fill_doubt 的票可能买不进,归纳技能时须以可介入形态(开板回封/换手板)为准\"——否则该提案会把已登记的 fill-feasibility 债务从\"收益高估\"放大成\"技能库系统性学歪\"。【修d】硬指令改条件式:\"若'赢家与错过'段非空,write_skill 须引用其中至少2个实例填入 examples;若为空则照常允许但 rationale 须说明依据\";同步在 refiner_prompt.py:18-19 的 write_skill schema 文档加 \"examples\":[...] 字段;可选加固:_apply_op 对 write_skill 校验 examples 中的 code 出现在本窗签名集合(防幻觉编码),仿退役证据门(refiner.py:92-98)模式;SuccessSignature 上下文用 boards/max_board/sentiment_norm/blowup_rate(MarketState 现有字段)替代不存在的 phase,待 G_cycle 建成后再补。"
+   }
+  },
+  {
+   "title": "Refiner 证据重构:水位线非重叠窗 + 编辑历史摘要 + 涉案技能全文渲染",
+   "area": "self-evolution",
+   "problem": "三个互相放大的破绽:① 证据窗 scored_steps[-credit_window:] 滑动重叠(inner_loop.py:172-174),同一失败签名可连续最多 10 次重现;② user prompt 无既往编辑记录(refiner_prompt.py:72-99 仅决策/信用/签名三段),Refiner 不知上次已 patch/被拒,实测重复 lesson_id 被拒(findings §8);③ K-pass 只渲染技能 id/name/type/status/n/nukes,patch_skill 看不见 trigger/taboo 现值,盲改且可能反复加同一条 taboo。叠加 horizon=1 单步证据稀薄,这是'编辑不收敛、额度被浪费'的直接机制。",
+   "proposal": "① InnerLoop 增 last_refined_idx 水位线:refine 证据=scored_steps[水位线:](非重叠),且仅当水位线后新增已打分候选≥evidence_min(默认 6)才触发 refine,替代固定 refine_every 节奏(LoopConfig 增 evidence_min)——同时提高单次证据密度与消除重复证据;② build_refiner_user_prompt 增'## 近期编辑史(最近 2 次 refine)'段:渲染 applied 的 tool/target/rationale 与 rejected 的原因(RefineReport/EditLog 已有全部数据);③ K-pass 对出现在本窗证据中的技能(credit.per_skill keys ∪ signatures 的 skill_id)渲染全文(trigger/entry/exit_stop/taboo/applicable_regime),其余保持单行——定向切片不爆 token。",
+   "impact": "编辑从盲改+重复震荡变为增量收敛;单次 refine 证据密度翻倍;rejected 噪声不再占用编辑额度;LLM 调用随证据触发而非固定节奏,省成本。",
+   "effort": "S",
+   "priority": "P1",
+   "evidence": "youzi/loop/inner_loop.py:169-177;youzi/refine/refiner_prompt.py:52-57,72-99;youzi/refine/refiner.py:142-154;findings §8 line95",
+   "sources": [
+    "self-evolution"
+   ],
+   "verdict": {
+    "verdict": "valid",
+    "reason": "三关全过。【问题真实】① 滑动重叠证据窗属实:inner_loop.py:172-174 确为 scored_steps[-credit_window:] + per_step_credits[-credit_window:] 切片,配默认 refine_every=1(inner_loop.py:24)、credit_window=10(inner_loop.py:25),同一失败签名最多连续 10 次重现,量化准确。② user prompt 无编辑史属实:refiner_prompt.py:72-99 仅决策窗/信用/签名三段;refiner.py:142-171 不接收历史 RefineReport,RefineReport.applied/rejected(refiner.py:45-49)数据齐全未用于提示;findings §8 line 95 确证复测仍见重复 lesson_id 被拒。关键加分发现:M-pass system prompt 自 commit 514d2b2 起就列\"当前记忆\"含 lesson_id(refiner_prompt.py:64-66)——\"列现状\"已存在仍挡不住跨 refine 重提,证明真因正是提案指的\"重叠证据窗反复重现同一证据+无已处理/被拒记录\",①+② 组合打在真因上;rejected 拒因在现状渲染中完全不可见。③ K-pass 盲改属实且被低估:refiner_prompt.py:56-57 只渲染 id/name/type/status/n/nukes;且 registry.py:62-73 patch 为 setattr 整字段替换,盲发 patch_skill(taboo=[...]) 会静默丢失既有 taboo(比\"反复加同一条\"更糟);Skill 字段(skill.py:41-48)与 FailureSignature.skill_id(signatures.py:21)支持定向全文渲染。【非换皮】ROADMAP.md:100 仅登记症状(friction:重复 lesson_id 浪费编辑额度)无设计;findings §6.1 的\"列已有记忆\"已在代码中且实证不足;水位线非重叠窗/evidence_min 触发/编辑史段/涉案技能全文渲染在 docs/youzi/scripts 全库 grep 零命中,属新设计。【技术成立】编辑史是 Refiner 自身行为日志非 oracle 数据,无防火墙冲突;零新增外部数据依赖、LLM 调用减少,符合离线优先;与 T+1/涨跌停/无做空正交;scored_steps 与 per_step_credits 在 inner_loop.py:137,143-144 同步追加,水位线切片两者对齐;熔断后永久冻结无需水位线重置。实现注意(非阻塞缺陷):(a) 替代 refine_every 会动 tests/test_inner_loop.py:137,156,167,建议保留 refine_every 作节奏上限门与 evidence_min 取与平滑迁移;(b) 5-7 日 smoke 窗口下 evidence_min=6 将每窗 refine 压至 1-2 次,与 findings §8 基线不可直接对比,需重跑基线;(c) 破绽②措辞宜修正为\"applied 现状部分可见(系统提示列现状)、rejected 与 patch diff 完全不可见\"。"
+   }
+  },
+  {
+   "title": "熔断器重设计:日级武装 + 影子配对地板 + advantage-MAD 自标定 fallback + frozen 真冻结 + 整段回滚",
+   "area": "risk",
+   "problem": "实证上熔断不是'没触发'而是'从未上膛':breaker_min_samples=40 按候选计数(inner_loop.py:32,148),真实窗每窗候选仅 3~20(findings §2),len(scores)>=40 恒假——三窗'全程未触发'是算术必然。叠加:floor_abs=-0.2 按池 SCORE 标定,换 ReturnScorer(日收益 ~±0.02-0.1)几乎永不触发(inner_loop.py:28-31 自注释债务);自相对地板结构上抓不到'比 frozen 差'这一真实数据已证明的退化模式(findings §4);frozen 后 apply_credit 仍写 stats(142-146 不受门控)→冻结的提示仍在漂移;回滚只撤最后一个 ckpt。",
+   "proposal": "三视角合并仲裁:① 武装单位换'已评分决策日':breaker_min_days=3,scores 改逐日均值序列(空仓日记 0),删按候选计数的 40 门槛;② 主地板=影子配对(取 eval-validity 版):compare_harnesses 先跑 Hexpert,其 daily 分数序列作 shadow_daily 传入 InnerLoop,熔断条件=最近 k 日配对差均值 < −λ·rolling_std(配对差)(λ≈1.0)——以配对差自身波动定标,天然 scorer 无关,直抓'比 frozen 差'(DayStream 落地后升级为同日订阅);③ fallback(无影子单跑)=advantage 口径日级 rolling < m − k·MAD(k≈2):合并 self-evolution 的 advantage 零点(=随机选池,额外剥离市场β)与 architecture 的 robust-MAD 定标——弃 architecture 版用原始分做 MAD 的口径,因 advantage 在同等 scorer 无关性上多剥离一层β;floor_abs 仅 MAD≈0 退化分布兜底;两方案双重 scorer 无关,'熔断 scorer-aware 重标定'债务整体作废;④ frozen 真冻结:apply_credit 包进 if not frozen;⑤ 回滚目标改'退化窗起点前最近 checkpoint',撤销整段退化期编辑而非最后一刀;熔断从一次性改为可再武装(rollback 后重置窗口,同窗第二次触发才 frozen)。",
+   "impact": "蓝图六道闸中唯一'已实现'的一道从形同虚设变真保护;ReturnScorer 路线不再有重标定债务;HCH 最危险的失败模式(累积退化于 frozen)首次有自动安全网,与 EditGate(编辑级)形成整环级/编辑级双层防线。",
+   "effort": "M",
+   "priority": "P1",
+   "evidence": "youzi/loop/inner_loop.py:28-32,142-146,148,159-163;findings §2:27(每窗 3~20 候选)、§4:39(自相对地板抓不到比 frozen 差)",
+   "sources": [
+    "eval-validity",
+    "architecture",
+    "self-evolution"
+   ],
+   "verdict": {
+    "verdict": "needs-revision",
+    "reason": "三关核实:【问题真实】① 熔断从未上膛坐实:youzi/loop/inner_loop.py:32 默认 breaker_min_samples=40(注释明言\"已评分候选数\"),:145-146 scores 按候选累积,:148 len(scores)>=40 才进熔断分支;scripts/smoke_compare.py:117 实跑用 LoopConfig(horizon=horizon) 全默认,docs/findings/2026-06-06-real-data-hch-vs-hexpert.md:27 实证每窗仅 3~20 候选 → 三窗\"未触发\"是算术必然,且此诊断修正了 findings:39 自己的错误归因(\"地板没破\"——实际地板检查从未执行)。② floor_abs 池 SCORE 标定债务:inner_loop.py:28-31 自注释 + ROADMAP.md:77,97 登记,属实。③ 自相对地板抓不到\"比 frozen 差\":findings:39,属实。④ frozen 后提示漂移属实:inner_loop.py:142-146 apply_credit 不受 frozen 门控(对比 :169 refine 受门控),youzi/refine/credit.py:98-102 就地写 skill.stats,youzi/agent/prompt.py:38-46 战绩渲染进 agent 提示,而 Hexpert 路(youzi/eval/walk_forward.py 无 apply_credit)stats 静态——frozen 态确与 frozen 基线语义不一致。⑤ 回滚只撤最后一刀属实:inner_loop.py:159-163 只回 last_ckpt;manager.py:25-30 rollback_to(version) 支持任意版本,整段回滚可行。【非换皮】ROADMAP.md:70 的 1b-3c 仅\"并行跑冻结 agent+固定 margin\"一句;提案的日级武装诊断、配对差自定标(连带作废 :77 重标定债务)、advantage-MAD fallback、frozen 真冻结、整段回滚+可再武装均为新诊断/新设计。【技术性】防火墙无冲突(熔断只消费 ≥t+horizon 已实现结果、只门控编辑,与现有 breaker 同性质);先跑 Hexpert 可行(youzi/loop/compare.py:58-72 两路独立,需让 WalkForwardEval 暴露逐日分数,M 工作量内);离线优先兼容;A股约束无碍(同日同池配对天然中和涨跌停/β)。但主路径②有真缺陷:条件 mean(diff)<−λ·rolling_std(diff) 在 std≈0 时退化——findings §9(:115-119)实证 temp=0 下 HCH≡Hexpert、配对差恒 0 很常见,若差序列为微小负值近零方差(如三日均 −0.001),std=0 → 可忽略退化即触发;提案只给 fallback ③ 配了 MAD≈0 兜底(floor_abs),主路径②无同等防护;且 k 未给值、breaker_min_days=3 暗示 k 可低至 3(std 自由度 2,极脆),仅被\"可再武装\"部分对冲。可修 → needs-revision。",
+    "revision": "保留原方案①③④⑤不变,仅修补主路径②的退化分布缺口并补全参数:(a) 双门触发:熔断条件改为 mean(最近k日配对差) < −max(λ·rolling_std(配对差), ε_abs),其中 ε_abs 保持 scorer 无关地取 ε_abs = c·MAD(影子日分数序列非零项)(c≈0.25;影子序列全零/近零时 ε_abs 退回池 SCORE 量纲下 0.05 的绝对兜底)——堵死 std≈0 时微小负差误触发(temp=0 实证 HCH≡Hexpert 配对差恒 0 是常态,findings §9);(b) 方向一致性副门:最近 k 日中至少 ⌈k/2⌉+1 日配对差严格为负才允许触发,防\"单日大负+余日为零\"的单点触发;(c) 明确 k:k = min(已评分决策日数, 5) 且 k≥breaker_min_days=3 才评估(akshare 30 日限制下每窗仅 ~5 交易日,k 上限 5 是窗口长度逼出的现实约束,小 k 脆弱性由 ε_abs+方向门+可再武装三重对冲);(d) 实现注记:Hexpert 逐日分数需 compare_harnesses 改为先跑 Hexpert 并从其 trajectory 提取逐日均值(现 wf.run 只返回聚合 EvalReport,需暴露 trajectory);InnerLoop 消费 shadow_daily 严格限于 ≤ 当前已评分日的条目(防前视,DayStream 落地后升级同日订阅照原计划)。其余:①日级武装、③advantage-MAD fallback(其 MAD≈0 兜底已有)、④apply_credit 包进 if not frozen、⑤回滚至退化窗起点前最近 checkpoint+可再武装(同窗第二次触发才 frozen),照原方案执行。"
+   }
+  },
+  {
+   "title": "实验可复现与预注册:ExperimentConfig 单源收口 + 窗口预注册协议 + 聚合完成率门",
+   "area": "architecture",
+   "problem": "配置三处散落且有必须一致的重复旋钮:LoopConfig.credit_window 与 RefinerConfig.window 对同一 traj 各切一刀(inner_loop.py:172 vs refiner.py:24,153),默认都是 10,一旦漂移即静默错窗;EWMA decay=0.1 是函数默认参魔法数;temperature 散落两处;run meta 仅 5 字段,run 不可从记录复现。同时多窗结论的窗口集是手工挑选且被数据可得性事后筛选:findings §9 计划 5 窗、04-30 窗崩溃被静默丢弃,余 4 窗同月单一 regime,'总共跑了多少次、丢了哪些窗'无审计痕迹——'打平'结论暴露在 garden-of-forking-paths 下,且崩溃窗(数据边界期)与坏行情可能相关,丢弃方向未必中性。",
+   "proposal": "两条合并为'实验出处'一件事:(1) 新 youzi/loop/experiment.py ExperimentConfig(frozen pydantic)组合 LoopConfig+RefinerConfig+LLMConfig(model/temperature/seed)+scorer_kind+injection,作 compare_harnesses 唯一参数入口,model_dump 全量写入 RunStore meta——任意 run 可逆向重建完整配置;删 RefinerConfig.window(证据窗只由 credit_window 决定,切片只在 InnerLoop 做一次);decay 升入 RefinerConfig;temperature 单源;(2) 新 scripts/run_protocol.py:运行前按确定性规则枚举窗口(交易日历∩数据可得性探针如炸板池 30 日界),原子写 protocol.json{protocol_id, rule, scorer, horizon, temperature, windows:[{start,end,status:'planned'}]}——先注册后执行;逐窗调 compare_harnesses,成功/崩溃/全空仓一律回写 status+reason,run meta 携 protocol_id;(3) aggregate_runs 对完成率<80% 的 protocol 拒绝输出池化结论,输出必须列出全部 planned 窗口含被排除者及原因;findings 此后引用 protocol_id 而非手选窗口列表。熔断的 robust 定标部分已并入熔断重设计条。",
+   "impact": "任何'打平/有益'宣称变成第三方可审计:计划了什么、丢了什么、为什么;每个 run 完整可复现,是统计聚合层的口径前提;消灭'两个旋钮静默漂移'一类 bug。",
+   "effort": "M",
+   "priority": "P1",
+   "evidence": "youzi/loop/inner_loop.py:172;youzi/refine/refiner.py:24,153;youzi/refine/credit.py:81;youzi/llm/client.py:38+scripts/smoke_compare.py:86;findings §9:104(04-30 窗静默丢弃)、:16(同一 regime)",
+   "sources": [
+    "architecture",
+    "eval-validity"
+   ],
+   "verdict": {
+    "verdict": "needs-revision",
+    "reason": "【关1:问题基本属实,个别表述夸大】(a) 双窗口旋钮坐实:youzi/loop/inner_loop.py:25 `credit_window=10` + :172 `scored_steps[-cfg.credit_window:]` 切第一刀;youzi/refine/refiner.py:24 `window: int = 10` + :153 传入 refiner_prompt.py:76 `traj.scored_steps()[-window:]` 切第二刀。且比提案说的更隐蔽:credit 报告按 credit_window 合并(inner_loop.py:174),prompt 步列表按 RefinerConfig.window 切——两旋钮漂移时同一 prompt 内\"步列表\"与\"信用统计\"口径静默不一致。(b) decay 魔法数坐实:credit.py:81 `decay: float = 0.1` 函数默认参,inner_loop.py:143 调用未传。(c) temperature 两处坐实:llm/client.py:38(DeepSeekClient 默认 0.3)+ scripts/smoke_compare.py:86/166(main 与 CLI 各一份默认 0.3)。(d) run meta 仅 5 字段坐实:smoke_compare.py:123-125 只存 window/scorer/horizon/temperature/created;LoopConfig 熔断阈值与 credit_window、RefinerConfig.min_retire_samples、model 名均未入 meta,run 配置确实不可逆向重建。(e) 窗口事后筛选坐实:findings §1(文件 :16,三窗按 akshare ~30 日可得性选)、§9(:104,计划 5 窗、04-30 窗崩溃丢弃余 4 窗同月)。**但\"静默丢弃、无审计痕迹\"夸大**——findings :104 明文记录了丢窗及原因并登记了债务,只是散文非机器可读、聚合表无 planned/excluded 结构;garden-of-forking-paths 的实质担忧仍成立。【关2:非已登记债务复述】ROADMAP.md:91-101 债务清单 8 条无一覆盖配置收口/预注册/聚合完成率门;aggregate_runs 在全库 grep 0 命中(尚不存在);最接近的\"LLM 响应缓存\"债务是结果级确定性 replay,与配置级出处机制不同。预注册协议+完成率门是新设计。【关3:方向站得住,两处实质缺陷】预注册协议与防火墙无冲突(枚举用交易日历+数据可得性探针,是实验基建非交易信号,不回灌 ≤t 推理),原子写仿 RunStore(run_store.py:25-29)先例,akshare 炸板池 30 日界探针正中 §9 崩溃根因;删 RefinerConfig.window 可行(InnerLoop :172 已切片,prompt 内 window 二次切片冗余)。但:① \"作 compare_harnesses 唯一参数入口\"与离线优先原则冲突——compare.py:44-52 现为工厂注入签名,tests/test_compare.py:84、test_pit_e2e.py:21、test_run_store.py:15 等全部离线测试依赖注入 MockLLMClient/scorer,若 ExperimentConfig 内部构造 DeepSeekClient 则 294 离线测试被破坏;② \"decay 升入 RefinerConfig\" 放错容器——decay 唯一消费者是 InnerLoop 调的 apply_credit(inner_loop.py:143),Refiner 只读 stats 不算 EWMA,放 RefinerConfig 恰好重演提案自己要消灭的\"旋钮与消费者异处\"病;③ impact 称\"每个 run 完整可复现\"过强:配置可重建≠结果可复现(LLM 非确定,真 replay 需已登记的 LLM 响应缓存债务);④ injection 字段现无对应旋钮(选择性注入是 A 轨未实现债务)。A股约束(T+1/涨跌停/无做空)与本提案正交,无冲突。",
+    "revision": "保留整体结构(ExperimentConfig 单源 + 预注册协议 + 完成率门),修四点:(1) ExperimentConfig 定位改为\"唯一**声明式配置**入口 + 全量入 RunStore meta\",compare_harnesses 保留依赖注入:工厂参数默认由 config 构造(如 LLMConfig{model,temperature,seed?} → DeepSeekClient),测试可覆盖为 MockLLMClient——或 LLMConfig 加 kind:\"deepseek|mock\" 判别字段;source/store 仍注入(不可序列化的运行时依赖),meta 另记 data_source:\"snapshot:<path>|akshare\" 字符串。(2) decay 升入 **LoopConfig**(消费者是 InnerLoop 的 apply_credit 调用,inner_loop.py:143)而非 RefinerConfig;apply_credit 去掉默认值改为必传,杜绝魔法数。(3) 删 RefinerConfig.window 时同步删 build_refiner_user_prompt 的 window 参数(refiner_prompt.py:73,改为渲染传入 traj 全部 scored_steps,窗口裁剪职责唯一归 InnerLoop :172),并更新 tests/test_refiner_prompt.py:53。(4) 措辞收敛:problem 中\"静默丢弃、无审计痕迹\"改为\"丢弃仅散文记录于 findings,无机器可读的 planned/executed/excluded 协议,聚合结论不携带排除清单\";impact 中\"完整可复现\"改为\"配置级可复现+实验出处可审计\"(结果级确定性 replay 另属已登记的 LLM 响应缓存债务);injection 字段标注为预留(对应 A 轨选择性注入债务,落地前置 None 并照常入 meta)。其余照案:protocol.json 原子写、run meta 携 protocol_id、aggregate_runs(新建)完成率<80% 拒绝池化并强制列出全部 planned 窗口含排除原因、findings 此后引用 protocol_id。"
+   }
+  },
+  {
+   "title": "Hcredit 消融臂:把'编辑效应'与'战绩回注效应'拆开归因",
+   "area": "eval-oracle",
+   "problem": "HCH−Hexpert 差异有两个混杂通道:Refiner 编辑 + apply_credit 在线写 stats 后被渲染进提示(prompt.py:39-46,n>0 即渲染战绩行;Hexpert 全程无 credit)。即便 0 条 applied 编辑,两臂提示也不同。findings §9 temp=0 下两窗 HCH≡Hexpert(编辑通道精确=0)恰说明残差 +0.003 若非噪声只能来自 stats 通道——现架构无法区分,'自进化无害'实际是合效应无害,归因不干净。",
+   "proposal": "① LoopConfig 增 enable_refine: bool = True;InnerLoop.run 的 refine 块(inner_loop.py:169-177)受其门控,credit/熔断照常——得到'只有在线战绩反馈、无结构编辑'的 Hcredit 臂;② compare_harnesses 增可选参 ablate=True 时多跑此臂,报告增 hch_minus_hcredit_* 与 hcredit_minus_hexpert_* 两组配对日差(直接复用统计裁决层);③ 可选第二刀:build_system_prompt 增 render_stats 开关,支持 2×2 消融矩阵;④ smoke_compare 加 --ablate 旗标(成本 +N 次 agent 调用;配 LLM 缓存后可免费重放)。",
+   "impact": "把北极星拆成两个可独立回答的问题:'在线战绩反馈是否有益'与'结构性编辑是否有益',直接指明投入方向(若 stats 通道占全部效应,则 Refiner 编辑面才是真瓶颈)。",
+   "effort": "S",
+   "priority": "P1",
+   "evidence": "youzi/agent/prompt.py:39-46;youzi/loop/inner_loop.py:142-146 vs youzi/eval/walk_forward.py(无 credit);findings §9:115,119(两窗 Δ 精确=0)",
+   "sources": [
+    "eval-validity"
+   ],
+   "verdict": {
+    "verdict": "needs-revision",
+    "reason": "关1:核心混杂属实——prompt.py:39-46(st.n>0 即渲染战绩行)、credit.py:81-103(apply_credit 就地写 skill.stats,82行注释\"观测,不入 EditLog\")、inner_loop.py:142-146(HCH 每个新打分步调用)、walk_forward.py 全文无 credit + compare.py:69-71(Hexpert=fresh 种子 H)+ seeds/skills.json 57 技能无 stats 字段(n=0,Hexpert 永不渲染战绩)→ HCH−Hexpert 确有编辑+stats 两条混杂通道,即便 0 编辑提示也分叉。但 problem 中\"残差 +0.003 只能来自 stats 通道\"推理错误:findings §9:115 两个 Δ=0 窗对池化残差贡献为零,+0.003 来自另两窗(−0.048/+0.063),其中两通道均活跃,残差仍是合效应;且 05-18~22 窗 stats 已渲染却决策仍≡Hexpert,反证该窗 stats 通道效应亦为 0。关2:非已登记——grep 全库(ROADMAP.md/PROJECT_STATE.md/docs/youzi/scripts)零命中\"消融/ablat/Hcredit/enable_refine/render_stats\";已登记债务(OHLCV fallback/live 接线/熔断重标定)无重叠;refine_every 无上界(inner_loop.py:24)可零代码近似 Hcredit 但 compare 不暴露此臂,显式设计仍新。关3:①③④可行(credit/熔断在 refine 块外,inner_loop.py:148-167;熔断已处理 last_ckpt=None 分支 159-163),但②有硬伤:\"直接复用统计裁决层\"指向不存在的机制——compare.py:78-87 仅三个标量均值差,metrics.py 无配对差/显著性代码,\"配对日差\"须新写;另 compare.html:14 硬编码四臂名需补模板,youzi/llm 无缓存(\"免费重放\"是未来项)。架构(防火墙/观测-编辑边界/离线优先)无冲突,A股约束无涉。",
+    "revision": "修正版:【problem 改】删\"残差 +0.003 只能来自 stats 通道\"断言,改为:\"§9 残差来自两个决策分叉窗(−0.048/+0.063),其中编辑与 stats 通道均活跃,合效应不可拆;两个 Δ=0 窗里 stats 虽已渲染却未翻转决策——各通道效应量级现架构无法测量,需消融臂直接测。\"【proposal 改】① 不变:LoopConfig 增 enable_refine: bool = True,门控 inner_loop.py:168-177 refine 块(credit 142-146 与熔断 148-167 在块外照常);落地前可先用 refine_every>窗长 的零代码旁路手动预跑一次 Hcredit,确认效应量级值得建全套。② 改措辞:compare_harnesses(ablate=True) 多跑 Hcredit 臂;**新增**(非复用)一个按日对齐两臂 Trajectory 的配对日差小函数(同窗同日历,~30 行),报告增 hch_minus_hcredit_* / hcredit_minus_hexpert_*,新字段全带默认值保 run_store 旧 JSON 反序列化兼容;同步补 compare.html:14 硬编码臂名列表加 Hcredit 行。③ 不变(build_system_prompt 加 render_stats=True 默认参,2×2 可选)。④ 不变,但注明 smoke_compare 现为位置参数需引 argparse 或续用位置约定;\"LLM 缓存免费重放\"标注为依赖未建缓存(youzi/llm 现无)。【新增注意】长窗实验若熔断触发,HCH rollback_to 会连 stats 一起回滚而 Hcredit 无 checkpoint 不回滚,解释 hch_minus_hcredit 时须核对 ArmReport.n_breaker_trips(字段已有);短窗(breaker_min_samples=40)不受影响。effort 维持 S(配对日差函数+模板行很小),priority P1 合理。"
+   }
+  },
+  {
+   "title": "确定性规则策略中层:Skill.gate 机器可读门 + HarnessRulePolicy,让'编辑→决策改变'进 CI",
+   "area": "architecture",
+   "problem": "299 绿测试里 agent 决策全被 MockLLM 脚本钉死:refine 编辑 H 后只能断言系统提示词含/不含技能名(test_inner_loop.py:112-116),test_compare.py:114 注释自认'refine 不改脚本化决策'。自进化核心因果链'编辑 H→决策改变→分数改变'没有任何自动化验证——这正是'299 绿测试的安全感'与'真实 3/3 退化'落差的来源。",
+   "proposal": "两视角合并(architecture 版 RuleAgentPolicy 并入 eval-validity 的更全设计):① Skill 增可选字段 gate: dict|None(机器可读触发门,如 {'min_boards':2,'max_boards':4,'status_in':['limit_up']}),仅测试种子填充,不要求 57 个真种子标注;patch_skill 允许编辑 gate(不入 _PATCH_FORBIDDEN);② 新 youzi/eval/rule_policy.py HarnessRulePolicy(DecisionPolicy):构造时持 live HarnessState 引用,decide 时对每个候选按 skill_id 序找第一个 active 且 gate 匹配的技能,产出 Candidate(pattern=skill_id),无匹配则空仓——零 LLM、完全确定、真读 H;③ 中层集成测试:InnerLoop(agent=HarnessRulePolicy, refiner=MockLLM 脚本化编辑)断言:retire X 后次日不再产出 X 型候选且 credit 不再归因 X;patch gate.max_boards 收紧后高位板被过滤;promote incubating→active 后该技能开始入选并积累 stats——'编辑改变决策、决策改变分数'首次有秒级确定性回归,顺带为孵化可见性修复提供验收器。与 LLM 缓存层互补:规则层测因果机制,黄金 run 层测真实 LLM 行为。",
+   "impact": "补上测试金字塔最大断层:Refiner/credit/可见性的任何后续改动不再只能靠付费 smoke 验证。",
+   "effort": "M",
+   "priority": "P1",
+   "evidence": "tests/test_inner_loop.py:112-116;tests/test_compare.py:114;scripts/smoke_compare.py:12-13;findings §2:18-28(绿测试下真实 3/3 退化)",
+   "sources": [
+    "eval-validity",
+    "architecture"
+   ],
+   "verdict": {
+    "verdict": "needs-revision",
+    "reason": "关1过:问题真实。tests/test_inner_loop.py:112-116 仅以系统提示词字符串断言 refine 可见性;tests/test_compare.py:114 注释自认\"MockLLM 局限:refine 不改脚本化决策\";youzi/llm/client.py:13-27 MockLLMClient 按脚本返回、无视提示内容,故测试中 agent 决策与 H 编辑因果解耦;youzi/loop/inner_loop.py:70-90 InnerLoop 只收 agent_llm 且 _rebind 硬编码 LLMAgentPolicy,无非 LLM 决策层可注入;pytest --collect-only 确认 299 测试;扫 test_agent_integration.py、test_refine_integration.py、test_phase0b3_integration.py、test_inner_loop_real_seeds.py:110-128,无任何测试验证\"编辑→决策改变→分数改变\"链;scripts/smoke_compare.py:12-13 自述见真章只能靠付费 live;findings §2 3/3 退化属实。关2过:非旧债换皮。ROADMAP.md:91-102 债务清单仅有\"LLM 响应缓存\"(定位互补非重复),全库无 gate/RulePolicy 登记;Skill.gate+HarnessRulePolicy+中层集成测试均为新设计。关3:核心可行——Skill(extra=forbid,skill.py:37)加 gate:dict|None 兼容,seeds/skills.json 57 技能无 gate 键不受影响;_PATCH_FORBIDDEN(registry.py:49)不含 gate,refiner._dispatch patch_skill 直通 **a(refiner.py:118-120);DecisionPolicy 协议(decision.py:35-40)本有\"构造期持 HarnessState\"先例;resolve_skill(credit.py:35-45)先按 skill_id 精确匹配,pattern=skill_id 归因正确;StockStatus(universe/stock.py:7)支持 status_in/boards gate;防火墙(只读 GuardedSource 产物)、观测-编辑边界(gate 走 patch_skill 入 EditLog)、离线优先(零 LLM)三原则不冲突反强化;A股 T+1/涨跌停由现有 oracle/scorer 处理,测试仪器层无涉。但两处按字面实施必出错:① \"InnerLoop(agent=HarnessRulePolicy)\"与现 API 冲突——InnerLoop 无 agent 参数,且 manager.rollback_to 替换 harness 对象(manager.py:25-30 docstring 明确警告旧引用静默操作被丢弃状态),固定 policy 实例会在熔断回滚后失效,必须注入工厂并在 _rebind 重建;② \"retire X 后 credit 不再归因 X\"断言忽略 horizon 滞后:apply_credit/resolve_skill 不过滤 status(credit.py:90-101),退役前已决策、退役后才打分的 in-flight 候选仍归因 dormant 的 X 并更新其 stats,按字面写断言会假失败。均可修,故 needs-revision。",
+    "revision": "修正版(保留原方案①②③骨架,修三点):① Skill 增可选字段 gate,但建议用 GateSpec(BaseModel, extra=\"forbid\", 字段 min_boards/max_boards/status_in 均可选)而非裸 dict——裸 dict 下 patch_skill 可写入任意垃圾键(registry.patch 仅挡 _PATCH_FORBIDDEN),\"机器可读门\"的 CI 价值会被 typo 静默吞掉;gate 默认 None,57 真种子零改动,不入 _PATCH_FORBIDDEN(自动可 patch)。② youzi/eval/rule_policy.py HarnessRulePolicy(DecisionPolicy) 照原设计:构造持 HarnessState,decide 对 universe 候选按 sorted(h.skills.by_status(\"active\"), key=skill_id) 找首个 gate 匹配(gate=None 视为不匹配,只有带 gate 的测试技能参与),产 Candidate(pattern=skill_id),无匹配空仓——与 prompt.py:33 仅渲染 active 的语义对齐。③ InnerLoop 改造点必须显式:新增可选参数 agent_factory: Callable[[HarnessState], DecisionPolicy] | None = None,默认 None 走现行 LLMAgentPolicy(mgr.harness, agent_llm);_rebind(inner_loop.py:86-90)改为经 factory 重建 agent——这是关键,因 manager.rollback_to 替换 harness 对象(manager.py:25-30),传固定实例会在熔断回滚后静默读废弃 H。向后兼容、现有 299 测试零变化。④ 集成测试断言对齐 horizon 滞后:retire X 于 day t refine 后,断言 day t+1 起的决策不再含 pattern=X 候选;credit 断言改为\"day t+1 起做出的决策打分后不再归因 X\"(即检查 day t+1+horizon 之后 X.stats.n 不再增长,而非 refine 当日立即停止——in-flight 决策仍会归因,这是 apply_credit 的既有正确语义)。promote incubating→active、patch gate.max_boards 收紧两条断言同理按\"编辑次日生效\"措辞。其余(零 LLM 确定性、与 LLM 缓存层互补分工、为孵化可见性提供验收器)维持原案。effort 仍 M,priority 仍 P1。"
+   }
+  },
+  {
+   "title": "RunJournal 逐步落盘 + InnerLoop 步进化:长跑可观测、可断点续跑",
+   "area": "architecture",
+   "problem": "全 youzi/ 包零 logging;InnerLoop.run 是 ~90 行单体 while,全部状态在局部变量(inner_loop.py:96-107);LLM 重试耗尽即上抛(client.py:70-75)且 inner_loop/refiner 均无捕获——整窗作废,已花的钱与 trajectory/refine_events 全丢;持久化只有 smoke 脚本末尾一次 RunStore.save;EditLog 仅内存、只随 checkpoint 落盘。蓝图要求 episode=完整情绪周期(数十交易日)×四臂,当前架构下任何一次中途异常=从零重来。",
+   "proposal": "(1) 新 youzi/loop/journal.py:RunJournal(dir) append-only JSONL,事件类型 step_decided/step_scored/credit_applied/refine_done/breaker_tripped/rollback,每事件含 idx/date/pydantic payload,写后 flush+fsync;(2) InnerLoop 把局部变量收进可序列化 LoopState dataclass,run() 改为驱动 step_once(state)->事件列表的循环,事件产生即写 journal,同时打 logging(INFO=日级进度,DEBUG=候选级);(3) InnerLoop.resume(journal_dir, snapshot_store):重放 journal 重建 LoopState——已记录的 step_decided 直接复用决策(不再调 LLM),H 从最近 checkpoint 恢复后重放其后 refine 编辑,从断点继续;(4) smoke_compare 加 --resume,每臂跑完即增量写 RunStore。journal 同时是 web live 视图的数据底座。从源 P0 降 P1 的仲裁:LLM 响应缓存落地后,中断重跑命中缓存近零成本,'崩溃=钱全丢'的经济论据大幅减弱;本条价值收敛为可观测性+长 episode 工程性,属显著推进而非成败根基。",
+   "impact": "更长窗口/多窗口的北极星验证从'一次崩全丢'变成'花费可累积、随时可续';系统第一次有运行期可观测性;规模×10(窗口×臂×episode)时是生存必需品。",
+   "effort": "L",
+   "priority": "P1",
+   "evidence": "youzi/loop/inner_loop.py:92-184;youzi/llm/client.py:70-75;scripts/smoke_compare.py:121-126;grep logging 全包 0 命中;youzi/harness/snapshot.py:39-40",
+   "sources": [
+    "architecture"
+   ],
+   "verdict": {
+    "verdict": "needs-revision",
+    "reason": "三关核查:【第一关✓问题真实】(a) 全 youzi/ 包 grep logging 0 命中;(b) InnerLoop.run 单体 while、13 个状态局部变量(youzi/loop/inner_loop.py:92-184,变量在 96-107);(c) LLM 重试耗尽上抛(youzi/llm/client.py:70-75)且 agent.py:26、refiner.py:154 直调 complete 无任何 try——client.py:34 注释声称\"由编排或 LLMAgentPolicy 空仓兜底\"但两处均未实现,注释与现实不符;(d) 唯一持久化是 compare 全跑完后的 RunStore.save(scripts/smoke_compare.py:121-126),且 SnapshotStore 落在 tempfile.mkdtemp(smoke_compare.py:93,116),崩溃连 checkpoint 都在丢弃目录;(e) EditLog 仅内存、只随 snap 落盘(youzi/harness/edit_log.py:22-31;youzi/harness/snapshot.py:39-40);(f) 蓝图第 20 行确认 episode=完整周期轮回。【第二关✓非已登记】ROADMAP.md:91-103 债务清单无 journal/断点续跑/logging 条目;\"LLM 响应缓存\"(ROADMAP.md:98)是不同机制且提案已正确引用作降级仲裁;capture_window 幂等续跑(ROADMAP.md:59)是数据建库续跑非 loop 续跑;RunJournal/LoopState/step_once/resume 为实质新设计。【第三关✗一处实质缺陷】提案(3)\"H 从最近 checkpoint 恢复后重放其后 refine 编辑\"不可实现:AppliedEdit 无完整 op args(refiner.py:28-34),EditRecord payload 对 write_skill/process_memory 不含完整 Skill/Lesson 内容(youzi/harness/metatools.py:25-28,63-66 只记 name/summary),前向重放无法重建新建技能/记忆;次要:apply_credit 直写 stats 不入 EditLog(youzi/refine/credit.py:98-100,且 :84 契约禁止重复计入),H 重建必须按 journal 顺序补放 checkpoint 后的 credit,提案漏说;\"每臂增量写 RunStore\"与 ComparisonReport frozen 全量 schema 不兼容(youzi/loop/compare.py:31-38;run_store.py:21-24)。与防火墙/观测-编辑边界/离线优先/分层原则均不冲突,与 A 股约束正交。缺陷可修→needs-revision。",
+    "revision": "保留提案 (1)(2)(4) 主体与 P1 定级,修正三点:【修正 A——H 恢复改为\"双 checkpoint + credit 重放\",放弃\"重放 refine 编辑\"】现 checkpoint 在 refine 前(inner_loop.py:170),refine 后的编辑只存在于内存 EditLog 且 payload 不足以前向重放。改为:refine 完成后追加一次 post-refine checkpoint(保留 pre-refine checkpoint 不动——它是熔断 rollback_to 的语义锚点,inner_loop.py:160-161),journal 的 refine_done 事件只记 RefineReport+前后 checkpoint 版本号作索引。resume 时:H 直接 load 最新 post-refine checkpoint(含全部 refine 编辑与 EditLog,snapshot.py 已原子写),再按 journal 顺序对该 checkpoint 之后的 step_scored 步重放 apply_credit(决策与 outcomes 均从 journal 复用,不调 LLM、不重算打分;apply_credit 对给定 step+harness 确定性),严格只重放 checkpoint 版本号之后的 credit_applied 事件以遵守 credit.py:84 的\"一条 trajectory 只调一次\"契约;journal 的 rollback 事件在重放序列中照序执行 rollback_to。【修正 B——LoopState 序列化范围明确】drafts/scored_steps/per_step_credits/scores/pending/days_seen/idx/frozen/frozen_from/last_ckpt 全部从 journal 事件重建(均为 pydantic 或标量,step_decided/step_scored/credit_applied 事件携带);PoolRecord 按 journal 中已录的 (date, universe 成员) 重建或随 step_decided 事件落 universe 快照。【修正 C——增量持久化不复用 RunStore.save】RunStore 的 ComparisonReport schema 是 frozen 全量(compare.py:31-38),不为部分臂松动;改为 journal 目录内每臂跑完写 arm_done 事件+独立 arm_<name>.json(EvalReport+LoopReport),四臂齐后由 smoke_compare 组装 ComparisonReport 走现有 RunStore.save 不变;web live 视图读 journal 目录(经 data_access,维持领域/web 单向依赖)。另:smoke_compare 的 SnapshotStore 根目录从 tempfile.mkdtemp 改为 YOUZI_RUNS_DIR 下 run 专属子目录,否则 resume 无 checkpoint 可恢复(smoke_compare.py:93,116)。effort 仍 L,P1 维持(LLM 缓存落地前中断=真金白银损失,落地后收敛为可观测性+长 episode 工程性)。"
+   }
+  }
+ ],
+ "p2": [
+  {
+   "title": "回放与决策分离:DayStream/Arm 多臂共驱架构(影子地板、锦标赛、消融的承载层)",
+   "area": "architecture",
+   "problem": "InnerLoop 与 WalkForwardEval 是两份近乎复制的'游标推进+PoolRecord+pending 延迟打分'代码(inner_loop.py:108-141 vs walk_forward.py:44-76),打分语义修改必须同步两处,口径分叉风险已现;compare_harnesses 臂硬编码四个、各臂重建 ReplayEngine 重走全流水线;影子地板需要 HCH 第 t 日读到 Hexpert 同日成绩,现架构两臂串行跑完,结构上做不到;每个已规划扩展(消融臂/锦标赛/G 子 Agent 群)都是 O(N×整条流水线) 复制成本。",
+   "proposal": "(1) 新 youzi/loop/day_stream.py:ReplayDriver 独占游标推进与延迟打分队列,每日产 DayContext(date, market_state, universe) 向注册的各 Arm 扇出,打分成熟回调 arm.on_scored(step)——pending 逻辑全系统只剩一份;(2) Arm 协议 {name, decide(ctx), on_scored(step), finalize()->ArmReport}:InnerLoop 的 credit/refine/breaker 收进 SelfRefiningArm,WalkForwardEval 退化为 FrozenArm,基线为 PolicyArm,口径不可能分叉;(3) compare_harnesses 重写为 run_arms(driver, arms),臂声明式注册;影子严格地板在此结构下是 20 行装饰器(SelfRefiningArm 订阅 FrozenArm 同日 scored 流);(4) Arm 间无共享可变状态,为每臂一进程并行留切面。从源 P1 降 P2 的仲裁:近期需求均有低成本替代——影子地板可用'先跑 Hexpert 传 shadow_daily'(熔断条已采),锦标赛在单臂内 sandbox 即可,Hcredit 第五臂增量可加;待消融矩阵/育种场使臂数真实增长时再上,但两份结算代码合一的口径统一价值保留,宜在下次触碰打分语义时顺势重构。",
+   "impact": "育种场/锦标赛/影子地板/消融从'复制整条流水线'变'注册一个 Arm';评测两份代码合一份;同日臂间交叉从结构不可能变自然支持。",
+   "effort": "L",
+   "priority": "P2",
+   "evidence": "youzi/loop/inner_loop.py:108-141 vs youzi/eval/walk_forward.py:44-76;youzi/loop/compare.py:59-76;findings §4",
+   "sources": [
+    "architecture"
+   ]
+  },
+  {
+   "title": "confidence 闭环:校准报告 + 置信加权期望分(仓位 v0)",
+   "area": "trading-strategy",
+   "problem": "输出契约强制 LLM 产 confidence(prompt.py:11)但全链路零消费(唯一消费点 cockpit 展示)——报 0.9 和 0.5 后果完全相同,无校准压力;而仓位(蓝图 L3 自认'比单股选择更决定实盘存活')完全缺失。confidence 是现成的、无需改决策契约的仓位 proxy。",
+   "proposal": "(1) metrics.py 增校准统计:已打分候选按 confidence 三桶(<0.5/0.5-0.75/>0.75)报 hit_rate/mean_score,EvalReport 增 calibration 字段+Brier 分(以 outcome==continued 为事件),渲染进 research 视图;(2) EvalReport 增 mean_score_conf_weighted=Σ(conf×score)/Σconf 作'按信心下注'组合 proxy,与等权并列:若加权显著优于等权(用统计裁决层判),confidence 含真信息、值得升级真仓位档(size_tier);若劣于,说明过度自信,把分桶表喂进 refiner_prompt 证据区让 M-pass 写教训;(3) 不改 Candidate schema、纯评测端消费。",
+   "impact": "最小成本把'仓位'接上学习信号入口:先证明/证伪 confidence 信息含量再决定是否投入完整 size_tier 层;给 LLM 的每个概率第一次施加可见的校准后果。",
+   "effort": "S",
+   "priority": "P2",
+   "evidence": "youzi/agent/prompt.py:11;youzi/eval/decision.py:19(定义后无消费);youzi/eval/metrics.py:39-47;cockpit.html:34(唯一消费点)",
+   "sources": [
+    "quant-strategy"
+   ]
+  },
+  {
+   "title": "历史池重建层 derive_zt_pool:从全市场原价 OHLCV 推导涨停/连板/炸板 + duckdb 横截面层,解锁周期级长窗回测",
+   "area": "data",
+   "problem": "蓝图核心主张 episode=完整情绪周期轮回,但池端点只覆盖 ~30 交易日,全部真实实验窗口仅 5-8 天——in-episode 复利论点(选 Continual Harness 路线的全部理由)在现有数据下不可检验;免费源无历史涨停池,唯一出路是从可获取的全历史 OHLCV 重建。同时 per-code parquet(~5400 文件)的访问模式是 code 主键,按日横截面扫描 IO 模型不匹配。",
+   "proposal": "(1) 新 youzi/data/derive.py derive_pools(day, market_df)->{zt, blowup, dt}:涨停判定 close==limit_price(prev_close),limit_price=round(prev_close×(1+r),2),r 按 code 前缀+日期分段(60/00→10%;30→2020-08-24 前 10% 后 20%;68→20%;北交→30%);ST 用当日 name 判定,无 name 历史的 code 标 uncertain 并剔除(显式记账不猜);boards=连续涨停日计数;blowup=high==limit_price 且 close<limit_price;盘口字段(seal_amount/first_seal_time 等)不可重建存 None——builder 本就容忍;(2) 写入 PIT 用 kind='zt_derived' 独立命名空间+manifest source=derived,SnapshotSource 加 allow_derived 开关,绝不与 as-seen 池静默混用;(3) 校准回归:最近 30 日(两种数据都有)跑 derive vs captured 成员 diff,命中率进 doctor 报告——重建可信度有数字;(4) scripts/build_market_db.py 把 per-code parquet 压成按 date 分区 dataset(或 ohlcv.duckdb),derive 按日查询毫秒级;duckdb 是派生只读产物可随时重建,不动现有读路径。",
+   "impact": "解锁 60-250 交易日周期级回测,使'reset-free 周期内复利'第一次可检验;给数据规模演进一条不推翻现有架构的渐进路径。依赖 OHLCV fallback+原价口径先落地,故 P2。",
+   "effort": "L",
+   "priority": "P2",
+   "evidence": "design-docs 地图 weakness #1(蓝图:118 episode 定义 vs findings:16 实验窗 5-8 天);findings :124;youzi/data/cache.py:52-53;youzi/data/snapshot_source.py:18",
+   "sources": [
+    "data-engineering"
+   ]
+  },
+  {
+   "title": "HarnessManager 所有权收紧:epoch 化句柄防静默写丢弃态 + EditLog WAL + rollback 审计记录",
+   "area": "architecture",
+   "problem": "rollback_to 直接换掉 harness/log/tools 三对象,旧引用静默操作被丢弃态——目前只靠 docstring 警告(manager.py:27-29)与 InnerLoop._rebind 手工纪律兜着;未来 G 子 Agent 群/外环/web live 持有方变多,任何一个漏 rebind 都是无症状状态腐蚀且无运行时检测。另两处审计盲区:EditLog 仅内存态,崩溃丢两次 checkpoint 间全部编辑轨迹;rollback 不产生审计记录,'快照点之后发生过什么、为何回滚'从恢复态不可见。",
+   "proposal": "(1) HarnessManager 加 epoch: int,rollback_to 时 +1;MetaTools 绑定 (manager_ref, birth_epoch),每次编辑入口校验 birth_epoch==manager.epoch,失配 raise StaleHandleError——'静默写丢弃态'整类 bug 变大声失败;(2) LLMAgentPolicy 与 Refiner 改持 manager 而非 harness/tools 裸引用,decide/refine 时现取——_rebind 手工纪律整体删除;(3) EditLog 加 WAL:append() 同步追一行 JSONL(O_APPEND 原子),崩溃后 from_wal 重放恢复,checkpoint 记 wal 水位 seq;(4) rollback_to 在还原后的 log 里 append 合成记录 EditRecord(tool='rollback', payload={from_version, to_version, dropped_seq_range}),熔断回滚事件进入审计链与 web refine 时间线。",
+   "impact": "状态管理从'靠注释和纪律'变'协议保证';审计链在崩溃与回滚两个边界闭合;为多 H/多持有方时代(育种场、G 群、live)扫清最隐蔽一类腐蚀 bug。",
+   "effort": "M",
+   "priority": "P2",
+   "evidence": "youzi/harness/manager.py:25-30;youzi/loop/inner_loop.py:86-90;youzi/harness/edit_log.py:19-31;youzi/harness/snapshot.py:39-40",
+   "sources": [
+    "architecture"
+   ]
+  }
+ ],
+ "stats": {
+  "maps": 7,
+  "rawProposals": 36,
+  "consolidated": 24,
+  "verified": 16,
+  "surviving": 16,
+  "killed": []
+ }
+}

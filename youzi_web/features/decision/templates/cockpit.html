@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}决策驾驶舱{% endblock %}
+{% block topbar %}<b>🎯 决策驾驶舱</b>
+{% if runs %}<span style="margin-left:auto;">run
+<select onchange="location.href='?run='+this.value">
+  {% for m in runs %}<option value="{{ m.run_id }}" {% if m.run_id == run_id %}selected{% endif %}>{{ m.window }} · {{ m.scorer }}</option>{% endfor %}
+</select></span>
+{% endif %}
+{% if days %}<span>日期
+<select onchange="location.href='?run={{ run_id }}&day='+this.value">
+  {% for d in days %}<option value="{{ d }}" {% if d == day %}selected{% endif %}>{{ d }}</option>{% endfor %}
+</select></span>{% endif %}{% endblock %}
+{% block content %}
+{% if not step %}<div class="card">还没有运行结果。跑 <code>python scripts/sample_run.py</code> 或 <code>smoke_compare</code> 生成。</div>
+{% else %}
+<div class="label">盘面 · 市场态</div>
+<div class="card">
+  最高板 <b>{{ step.market.max_board_height }}</b>　涨停 <b>{{ step.market.limit_up_count }}</b>　炸板 <b>{{ step.market.blowup_count }}</b> <span class="muted">({{ '%.1f' | format(step.market.blowup_rate * 100) }}%)</span>　跌停 <b>{{ step.market.limit_down_count }}</b>　情绪 <b>{{ '%.2f' | format(step.market.sentiment_norm) if step.market.sentiment_norm is not none else '%.2f' | format(step.market.sentiment_raw) }}</b>　赚钱效应 <b>{{ '%+.1f' | format(step.market.money_effect_raw) }}%</b>
+  {% if step.market.echelon %}<div style="margin-top:6px;"><span class="muted">连板梯队</span>
+    {% for r in step.market.echelon %}<span style="background:#fff3e0; border-radius:4px; padding:2px 8px; margin-right:6px;">{{ r.height }}板×{{ r.count }}{% if r.representatives %} <span class="muted">{{ r.representatives | join('/') }}</span>{% endif %}</span>{% endfor %}
+  </div>{% endif %}
+</div>
+
+<div class="label" style="margin-top:14px;">决策 · {% if step.decision.candidates %}排序候选 {{ step.decision.candidates | length }}{% else %}空仓{% endif %}</div>
+{% if not step.decision.candidates %}
+<div class="card"><b>空仓</b>{% if step.decision.no_trade_reason %} <span class="muted">— {{ step.decision.no_trade_reason }}</span>{% endif %}</div>
+{% else %}
+{% for it in candidates %}
+<div class="card" style="border-left:3px solid {% if it.outcome and it.outcome.outcome == 'continued' %}#1f7a50{% elif it.outcome and it.outcome.outcome == 'nuked' %}#b22{% else %}#ccc{% endif %};">
+  <div style="display:flex; align-items:baseline; gap:8px;">
+    <span class="muted">#{{ loop.index }}</span>
+    <b>{{ it.cand.name or it.cand.code }}</b> <span class="muted">{{ it.cand.code }}</span>
+    {% if it.cand.pattern %}<span style="background:#eef1ff; color:#3b46c4; border-radius:4px; padding:1px 7px;">{{ it.cand.pattern }}</span>{% endif %}
+    <span style="margin-left:auto;" class="muted">置信 {{ '%.2f' | format(it.cand.confidence) }}</span>
+    {% if it.outcome %}<span class="status-{{ 'active' if it.outcome.outcome == 'continued' else 'retired' }}">{{ it.outcome.outcome }} {{ '%+.3f' | format(it.outcome.score) }}</span>{% endif %}
+  </div>
+  {% if it.cand.reason %}<div style="margin-top:6px;"><b class="muted">理由</b> {{ it.cand.reason }}</div>{% endif %}
+  {% if it.plan %}
+  <div style="margin-top:6px; background:#fafafc; border:1px solid #f0f0f4; border-radius:6px; padding:8px; line-height:1.7;">
+    <div><b style="color:#3b46c4;">触发</b> {{ it.plan.trigger }}</div>
+    <div><b style="color:#3b46c4;">进场</b> {{ it.plan.entry }}</div>
+    <div><b style="color:#3b46c4;">出场/止损</b> {{ it.plan.exit_stop }}</div>
+    {% if it.plan.taboo %}<div><b style="color:#b22;">禁忌</b> {{ it.plan.taboo | join('；') }}</div>{% endif %}
+  </div>
+  {% else %}<div class="muted" style="margin-top:6px; font-size:11px;">(未在种子 H 找到「{{ it.cand.pattern }}」→ 仅显候选自带)</div>{% endif %}
+</div>
+{% endfor %}
+{% endif %}
+{% endif %}
+{% endblock %}

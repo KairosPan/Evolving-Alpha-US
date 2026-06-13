@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}trajectory{% endblock %}
+{% block topbar %}<b>trajectory</b>
+{% if runs %}<select onchange="location.href='?run='+this.value" style="margin-left:auto;">
+  {% for m in runs %}<option value="{{ m.run_id }}" {% if m.run_id == run_id %}selected{% endif %}>{{ m.window }} · {{ m.scorer }}</option>{% endfor %}
+</select>{% endif %}{% endblock %}
+{% block content %}
+{% if not report or not report.hch_loop_report %}<div class="card">还没有运行结果。跑 <code>python scripts/sample_run.py</code> 或 <code>smoke_compare</code> 生成。</div>
+{% else %}
+{% set lr = report.hch_loop_report %}
+<div class="label">trajectory · {{ lr.trajectory.steps | length }} 步</div>
+{% for s in lr.trajectory.steps %}
+<div class="card">
+  <b>{{ s.date }}</b> <span class="muted">最高板 {{ s.market.max_board_height }} · 涨停 {{ s.market.limit_up_count }} · 炸板率 {{ '%.2f' | format(s.market.blowup_rate) }}{% if s.market.sentiment_norm is not none %} · 情绪 {{ '%.2f' | format(s.market.sentiment_norm) }}{% endif %}{% if not s.scored %} · 未评分{% endif %}</span>
+  {% for sc in s.outcomes.values() %}<div>{{ sc.code }} <span class="muted">{{ sc.pattern }}</span> → {{ sc.outcome }} ({{ '%+.3f' | format(sc.score) }})</div>{% endfor %}
+  {% if s.scored and not s.outcomes %}<div class="muted">（空仓/无候选）</div>{% endif %}
+</div>
+{% endfor %}
+{% if lr.breaker_events %}<div class="label" style="margin-top:14px;">熔断</div>
+{% for be in lr.breaker_events %}<div class="card status-retired">{{ be.date }} {{ be.reason }} rolling={{ '%+.3f' | format(be.rolling) }} → rollback={{ be.rolled_back_to }}</div>{% endfor %}{% endif %}
+{% endif %}
+{% endblock %}

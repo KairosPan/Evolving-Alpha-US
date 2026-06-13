@@ -1,0 +1,25 @@
+# macOS junk
+.DS_Store
+._*
+
+# Claude Code local settings (keep shared config, ignore personal/local)
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Data / model artifacts (大文件与生成物,避免污染版本库)
+/data/
+*.parquet
+*.feather
+checkpoints/
+*.ckpt
+*.safetensors
+.superpowers/
+
+# run-store(compare 运行结果落盘,YOUZI_RUNS_DIR 默认目录)
+runs/

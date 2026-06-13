@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}三方对比{% endblock %}
+{% block topbar %}<b>三方对比</b>
+{% if runs %}<select onchange="location.href='?run='+this.value" style="margin-left:auto;">
+  {% for m in runs %}<option value="{{ m.run_id }}" {% if m.run_id == run_id %}selected{% endif %}>{{ m.window }} · {{ m.scorer }}</option>{% endfor %}
+</select>{% endif %}{% endblock %}
+{% block content %}
+{% if not report %}<div class="card">还没有运行结果。跑 <code>python scripts/sample_run.py</code> 或 <code>smoke_compare</code> 生成。</div>
+{% else %}
+<div class="label">{{ meta.window }} · scorer={{ meta.scorer }}</div>
+<table class="data">
+  <thead><tr><th>路</th><th>候选</th><th>期望分</th><th>超额均值</th><th>命中率</th><th>被砸率</th><th>refine</th><th>熔断</th></tr></thead>
+  <tbody>
+  {# C4:Hcredit 消融臂仅 ablate 运行才有 → 按存在性渲染(旧 run 四臂不受影响) #}
+  {% for name in ['HCH', 'Hcredit', 'Hexpert', 'Hmin_highest', 'Hmin_notrade'] if name in report.arms %}
+    {% set arm = report.arms[name] %}
+    <tr><td>{{ name }}</td><td>{{ arm.report.n_candidates }}</td>
+      <td>{{ '%+.4f' | format(arm.report.mean_score) }}</td>
+      <td>{{ '%+.4f' | format(arm.report.mean_excess) }}</td>
+      <td>{{ '%.3f' | format(arm.report.hit_rate) }}</td>
+      <td>{{ '%.3f' | format(arm.report.nuke_rate) }}</td>
+      <td>{{ arm.n_refines if arm.n_refines is not none else '—' }}</td>
+      <td>{{ arm.n_breaker_trips if arm.n_breaker_trips is not none else '—' }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<div class="muted" style="margin-top:6px;">口径:超额(advantage)= score − 当日涨停池基线(闭眼买全池的同日期望);>0 才胜过随机选池。旧运行无此字段时显示 0。</div>
+<div class="card" style="margin-top:14px;">
+  <b>HCH − Hexpert</b>　Δ期望分 {{ '%+.4f' | format(report.hch_minus_hexpert_mean_score) }}　Δ超额 {{ '%+.4f' | format(report.hch_minus_hexpert_mean_excess) }}　Δ命中率 {{ '%+.4f' | format(report.hch_minus_hexpert_hit_rate) }}　Δ被砸率 {{ '%+.4f' | format(report.hch_minus_hexpert_nuke_rate) }}<br>
+  verdict(超额口径): {% if report.hch_beats_hexpert %}<span class="status-active">✅ HCH 胜 frozen</span>{% else %}<span class="status-retired">❌ HCH 未胜(持平/退化)</span>{% endif %}
+</div>
+<div class="card" style="margin-top:14px;">
+  <b>统计裁决</b>(C1:日级配对差 advantage 口径,移动块 bootstrap + 符号置换)<br>
+  {% set sv = report.stat_verdict %}
+  {% if not sv %}
+  <span class="muted">旧运行无统计裁决(需新管线重跑)</span>
+  {% else %}
+  裁决:
+  {% if sv.verdict == 'win' %}<span class="status-active">✅ 显著胜出</span>
+  {% elif sv.verdict == 'loss' %}<span class="status-retired">❌ 显著退化</span>
+  {% elif sv.verdict == 'insufficient' %}<span class="muted">⚠ 样本不足</span>
+  {% else %}<span class="muted">≈ 持平(无法区分)</span>{% endif %}
+  　配对日 {{ sv.n_days }}　日均差 {{ '%+.4f' | format(sv.mean_diff) }}
+  {% if sv.ci_low is not none %}　95% CI [{{ '%+.4f' | format(sv.ci_low) }}, {{ '%+.4f' | format(sv.ci_high) }}]{% endif %}
+  {% if sv.p_value is not none %}　p={{ '%.4f' | format(sv.p_value) }}{% endif %}
+  {% if sv.mde is not none %}　MDE≈{{ '%.4f' | format(sv.mde) }}{% endif %}
+  <div class="muted" style="margin-top:4px;">规则:配对日&lt;8→样本不足;CI 下界&gt;0→胜;CI 上界&lt;0→退化;否则持平。MDE=当前样本量/方差下最小可检测效应(诚实标尺,日均差小于它则检不出)。</div>
+  {% endif %}
+</div>
+{# C4 消融归因:仅 ablate=True 的 run 才有两组 verdict(旧 run / 默认四臂 → None,整卡不渲染) #}
+{% if report.hch_minus_hcredit_verdict is not none or report.hcredit_minus_hexpert_verdict is not none %}
+<div class="card" style="margin-top:14px;">
+  <b>消融归因</b>(C4:Hcredit=只回注战绩、无结构编辑;把 HCH−Hexpert 合效应拆成两通道)<br>
+  {% for label, sv in [('编辑通道 HCH−Hcredit', report.hch_minus_hcredit_verdict),
+                       ('战绩回注通道 Hcredit−Hexpert', report.hcredit_minus_hexpert_verdict)] %}
+  {% if sv is not none %}
+  {{ label }}:
+  {% if sv.verdict == 'win' %}<span class="status-active">✅ 显著为正</span>
+  {% elif sv.verdict == 'loss' %}<span class="status-retired">❌ 显著为负</span>
+  {% elif sv.verdict == 'insufficient' %}<span class="muted">⚠ 样本不足</span>
+  {% else %}<span class="muted">≈ 持平(无法区分)</span>{% endif %}
+  　配对日 {{ sv.n_days }}　日均差 {{ '%+.4f' | format(sv.mean_diff) }}
+  {% if sv.ci_low is not none %}　95% CI [{{ '%+.4f' | format(sv.ci_low) }}, {{ '%+.4f' | format(sv.ci_high) }}]{% endif %}
+  {% if sv.p_value is not none %}　p={{ '%.4f' | format(sv.p_value) }}{% endif %}<br>
+  {% endif %}
+  {% endfor %}
+  {% set hch_trips = (report.arms['HCH'].n_breaker_trips or 0) if 'HCH' in report.arms else 0 %}
+  {% set hcr_trips = (report.arms['Hcredit'].n_breaker_trips or 0) if 'Hcredit' in report.arms else 0 %}
+  {% if hch_trips > 0 or hcr_trips > 0 %}
+  <div class="muted" style="margin-top:4px;">⚠ 本窗有熔断(HCH={{ hch_trips }} / Hcredit={{ hcr_trips }}):HCH rollback 连战绩(skill.stats)一起回滚,而 Hcredit 无 checkpoint 只冻结不回滚——两臂 stats 历史不对称,编辑通道归因失真,慎读。</div>
+  {% endif %}
+  <div class="muted" style="margin-top:4px;">口径:同 C1 统计裁决(日级配对差);Hcredit 臂 enable_refine=False,apply_credit 战绩回注照常。</div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
