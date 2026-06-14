@@ -169,7 +169,7 @@ from the H-evolvable universe screen — kills the circular-oracle bug); pluggab
 (primary) / `PoolScorer` (diagnostic) with cross-sectional `advantage` vs the decision-day
 gainer-pool baseline; `ScoredCandidate`/`EvalReport`; baselines (NoTrade / ChaseBiggestGainer /
 PoolAverage); `WalkForwardEval` (per-day GuardedSource + delayed scoring — firewall by construction).
-Baseline-only (no agent yet). Full suite 145 tests green. *Fill-feasibility + cost model deferred to
+Baseline-only (no agent yet). Full suite 149 tests green. *Fill-feasibility + cost model deferred to
 US-3 (daily entries fill at next-open; hard halt-locked infeasibility needs intraday data).*
 
 **Next — US-1e Regime machine + features:** the 6-state US momentum cycle (washout/recovery/

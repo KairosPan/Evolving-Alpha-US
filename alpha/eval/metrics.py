@@ -42,6 +42,10 @@ class PatternStat(BaseModel):
 
 
 class EvalReport(BaseModel):
+    # Mixed lens (by design, spec §7): hit_rate/nuke_rate come from the exogenous pool-category
+    # (outcome), while mean_score/mean_excess come from the scorer's score (forward return under
+    # ReturnScorer). The two lenses can disagree per-candidate (e.g. positive return but outcome
+    # 'nuked'); the return lens is primary, the category is a coarse diagnostic.
     model_config = ConfigDict(frozen=True)
     n_decisions: int
     n_no_trade: int
