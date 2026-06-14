@@ -191,14 +191,28 @@ single-name / single-day / consecutive-loss / MWCB). The §6 immutable-core rule
 Data-dependent flags (dilution/SSR/halt/MWCB) are forward-plumbed; US-3 supplies them. Full suite
 202 tests green.
 
-**Next — US-1g Seeds v1 + DecisionPackage:** the full human-facing `DecisionPackage` schema (§4.1:
-per-candidate pattern/skill_id/entry/exit_stop/size_tier/fill_feasibility/taboo_check/reason/
-confidence + regime_read + portfolio + no_trade_reason) and four **defense-heavy** seed packs
-(runner/swing/event/meme) loaded into `H`. **Final US-1 sub-plan** — after it, US-1 is complete and
-US-2 wires in the LLM agent + Refiner.
+**US-1g Seeds v1 + DecisionPackage — Complete (2026-06-14).** Enriched `alpha/eval/decision.py` to the
+full §4.1 `DecisionPackage` (per-candidate skill_id/entry/exit_stop/size_tier/fill_feasibility/
+taboo_check/counterview/family + structured `regime` (RegimeRead) + `as_of` + key_risks + portfolio +
+human_confirm), backward-compatible with the US-1d eval contract. Authored `seeds/` v1: 16 skills
+(4 families, **defense-heavy 10 detectors > 6 patterns**; squeezes incubating pending US-3 short
+data), 8 memory lessons, 12 doctrine (7 immutable red-lines), loaded into `H` via `load_seeds`. Full
+suite 216 tests green.
 
-**US-1 acceptance gate (whole phase):** Firewall no-leak + baselines reproduce + sizing/guard
-unit-tested. Baseline-only at US-1 (no agent yet — the agent is US-2).
+## ✅ US-1 COMPLETE (2026-06-14)
+
+The entire **non-LLM substrate** is in place and tested (216 tests):
+data → PIT/firewall (US-0) → harness `H=(p,K,M)` + 9 meta-tools + persistence/rollback (US-1a/b/c) →
+eval oracle (return + delist=terminal-loss + exogenous pool, walk-forward) (US-1d) → L1 regime +
+features (US-1e) → L3 sizing + L4 guard (US-1f) → full DecisionPackage + 4 defense-heavy seed packs
+(US-1g). Firewall sound, immutable-core enforced, baseline-only eval reproduces.
+
+**Next — US-2 LLM agent + Refiner inner loop:** per-role LLM clients (Claude / cheap, via env);
+the agent that reads `H` + MarketState + universe and emits a populated `DecisionPackage`; the Refiner
+4-pass CRUD + credit assignment + retire-discipline; the inner loop with scorer-aware floor-breaker +
+checkpoint/rollback; and the HCH/Hexpert/Hmin three-way compare to validate on real Alpaca data
+(honest bar: HCH ≥ Hexpert on OOS). US-3 then adds intraday/halts/short-interest/SSR/social
+enrichment unlocking full runner/meme/event offense.
 
 ---
 
