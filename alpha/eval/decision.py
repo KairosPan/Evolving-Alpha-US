@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import date as Date
+from datetime import date as Date, datetime
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from alpha.regime.classifier import RegimeRead
 from alpha.sizing.position import SizeTier
 from alpha.state.market import MarketState
 from alpha.universe.universe import CandidateUniverse
@@ -43,11 +44,18 @@ class Candidate(BaseModel):
     counterview: str = ""
 
 
-class DecisionPackage(BaseModel):
-    """A day's decision (US-1d minimal eval subset of the co-pilot's action a_t).
+class Portfolio(BaseModel):
+    """Portfolio-level sizing summary (from L3 sizing). Field names match PortfolioPlan / spec §4.1."""
+    model_config = ConfigDict(frozen=True)
+    total_exposure_budget: float = 0.0
+    correlated_groups: list[list[str]] = Field(default_factory=list)
 
-    US-1g enriches this with size_tier / fill_feasibility / taboo_check / regime_read. Here it is the
-    eval contract: ranked candidates + no-trade reason + the policy's raw regime read (<=t).
+
+class DecisionPackage(BaseModel):
+    """A day's decision — the co-pilot's action a_t (the human-confirmation surface + DAgger record).
+
+    US-1d shipped the minimal eval contract (date/candidates/no_trade_reason/regime_read); US-1g adds
+    the full §4.1 fields below. All additions are optional so US-1d construction still validates.
     `symbol`s should be unique; a policy returning duplicates would be double-counted (the scorer
     de-dups defensively).
     """
@@ -56,6 +64,14 @@ class DecisionPackage(BaseModel):
     candidates: list[Candidate] = Field(default_factory=list)
     no_trade_reason: str = ""
     regime_read: str = ""
+    # ── full DecisionPackage fields (US-1g, §4.1); optional so US-1d construction still validates
+    as_of: datetime | None = None        # snapshot timestamp; agent sets it on the inference path (US-2)
+    regime: RegimeRead | None = None     # structured GLOBAL regime read from G_cycle (§4.1 global_risk_gate
+                                         #   + frontside); per-narrative 'lines' -> US-3 (needs theme data).
+                                         #   regime_read (str above) stays as the agent's prose read / phase_prior.
+    key_risks: list[str] = Field(default_factory=list)
+    portfolio: Portfolio | None = None
+    human_confirm: str | None = None     # human fills: confirm | reject | modify(+reason) -> DAgger label
 
 
 class DecisionPolicy(Protocol):
