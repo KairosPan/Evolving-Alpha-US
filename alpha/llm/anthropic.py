@@ -23,6 +23,8 @@ class ClaudeClient:
             self._client = anthropic.Anthropic(api_key=key)
         except ImportError:
             self._client = None        # anthropic not installed (offline tests inject _client)
+        except Exception as e:         # SDK present but init failed (bad config) -> surface cleanly
+            raise RuntimeError(f"anthropic SDK init failed: {e}") from e
         self.model = model
         self.temperature = temperature
         self._max_tokens = max_tokens

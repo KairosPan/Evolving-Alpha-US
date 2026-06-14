@@ -1245,3 +1245,5 @@ git commit -m "US-2a Task 9: acceptance gate (agent drives walk-forward on MockL
 - **[important] env hygiene**: `test_missing_key_raises` uses `monkeypatch.delenv` (no session leak).
 - **[minor] honesty/fidelity**: dropped the unimplemented "by family" retrieval claim (deferred); reworded master-dispatch collapse as a deliberate spec REDUCTION; softened the prompt's frontside line to "per-line attribute, not a fixed function of phase" (spec §5 #2).
 - **Rejected [minor]**: a reviewer flagged `claude-sonnet-4-6` as "not a real model id" — that is the correct current Sonnet 4.6 id; kept.
+
+**Post-execution holistic review (READY TO MERGE):** all 5 invariants confirmed in the shipped code, no firewall leak, no secrets. Two cheap hardening nits folded: both real clients now wrap a non-`ImportError` SDK-init failure in a clean `RuntimeError` (instead of leaking a raw traceback) while still degrading to `None` when the SDK is simply absent; the acceptance gate asserts the exact `n_candidates == 2` (traced) rather than `>= 1`.

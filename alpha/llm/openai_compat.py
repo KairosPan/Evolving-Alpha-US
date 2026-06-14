@@ -24,6 +24,8 @@ class OpenAICompatClient:
             self._client = OpenAI(api_key=key, base_url=base_url)
         except ImportError:
             self._client = None        # openai not installed (offline tests inject _client)
+        except Exception as e:         # SDK present but init failed (bad config) -> surface cleanly
+            raise RuntimeError(f"OpenAI SDK init failed: {e}") from e
         self.model = model
         self.temperature = temperature
         self._max_retries = max_retries

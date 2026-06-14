@@ -36,5 +36,6 @@ def test_agent_drives_walk_forward_end_to_end():
     agent = LLMAgentPolicy(h, llm)
     wf = WalkForwardEval(_source(), date(2026, 6, 10), date(2026, 6, 15), horizon=2, scorer=ReturnScorer())
     report = wf.run(agent)
-    assert report.n_decisions == 4 and report.n_candidates >= 1     # RUN picked + scored on real bars
+    # 4 calendar days walked; horizon=2 scores decisions[0] & [1] (both pick RUN, in-universe those days)
+    assert report.n_decisions == 4 and report.n_candidates == 2     # RUN picked + scored on real bars
     assert llm.calls                                               # the LLM was actually consulted
