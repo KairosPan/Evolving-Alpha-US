@@ -34,6 +34,18 @@ def test_phases_are_canonical():
     for s in h.skills.all():
         for p in s.phases:
             assert p in CANONICAL_PHASES, f"{s.skill_id} has non-canonical phase {p}"
+    # pin the silent-drop contract (normalize_phases drops unrecognized tokens) so this test isn't
+    # tautological: a non-canonical seed phase normalizes to [] rather than slipping through.
+    from alpha.harness.skill import Skill
+    assert Skill.from_seed({"skill_id": "x", "name": "X", "type": "pattern",
+                            "phases": ["bogus_phase"]}).phases == []
+
+
+def test_seed_skills_carry_at_least_one_canonical_phase():
+    # complements the above: real seed skills must classify into the cycle, not silently empty out
+    h = _h()
+    empty = [s.skill_id for s in h.skills.all() if not s.phases]
+    assert empty == [], f"seed skills with no canonical phase (typo'd?): {empty}"
 
 
 def test_immutable_core_present_and_protected():
