@@ -162,10 +162,20 @@ existing `to_dict`/`from_dict`, so the immutable-core guard survives persistence
 auto-carry once US-1e adds it. Documented hazard: a `mgr.tools` reference cached before a rollback
 operates on the discarded state (re-fetch after rollback). Full suite 119 tests green.
 
-**Next — US-1d Eval oracle + scoring:** forward-return oracle (next-open→t+N-close, **horizon≥2**),
-**delisting=terminal-loss**, exogenous pool-category (continued/faded/nuked), pluggable scorer,
-walk-forward, baselines (chase-biggest-gainer / no-trade), inference-path fill-feasibility.
-Then 1e regime machine + features, 1f sizing/guard, 1g seeds + DecisionPackage.
+**US-1d Eval oracle + scoring — Complete (2026-06-13).** `alpha/eval/`: forward-return oracle
+(next-open→t+N-close) with **delisting=terminal-loss** (−1.0, never discarded) + **horizon≥2** guard
+(no same-day round-trip); **exogenous** pool-category oracle (fixed GAINER_PCT/LOSER_PCT, decoupled
+from the H-evolvable universe screen — kills the circular-oracle bug); pluggable `ReturnScorer`
+(primary) / `PoolScorer` (diagnostic) with cross-sectional `advantage` vs the decision-day
+gainer-pool baseline; `ScoredCandidate`/`EvalReport`; baselines (NoTrade / ChaseBiggestGainer /
+PoolAverage); `WalkForwardEval` (per-day GuardedSource + delayed scoring — firewall by construction).
+Baseline-only (no agent yet). Full suite 145 tests green. *Fill-feasibility + cost model deferred to
+US-3 (daily entries fill at next-open; hard halt-locked infeasibility needs intraday data).*
+
+**Next — US-1e Regime machine + features:** the 6-state US momentum cycle (washout/recovery/
+ignition/trend/distribution/flush) + per-narrative-line classifier (G_cycle, read-only/SSOT) +
+feature modules (breadth / runner / failed-breakout / relative-strength) feeding a richer MarketState.
+Then 1f sizing/guard, 1g seeds + DecisionPackage.
 
 **US-1 acceptance gate (whole phase):** Firewall no-leak + baselines reproduce + sizing/guard
 unit-tested. Baseline-only at US-1 (no agent yet — the agent is US-2).
