@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from alpha.harness.edit_log import EditLog, EditRecord
-from alpha.harness.memory import Lesson
+from alpha.harness.memory import Importance, Lesson
 from alpha.harness.skill import Skill, SkillStats
 from alpha.harness.state import HarnessState
 
@@ -17,6 +17,7 @@ def _require_rationale(rationale: str) -> None:
 
 class MetaTools:
     """The paper's meta-tool API: an Agent/Refiner edits H=(p,K,M) in place through this facade.
+    (G sub-agents and the regime cycle join H in US-1e/US-2; this layer edits p/K/M.)
 
     Each tool executes the edit first; if it raises, H is unchanged and NOTHING is logged. On
     success it appends exactly one EditRecord (rationale + before/after payload). Edit only through
@@ -74,9 +75,12 @@ class MetaTools:
     # ── M memory ──
     def process_memory(self, lesson: Lesson, rationale: str) -> EditRecord:
         _require_rationale(rationale)
-        self.h.memory.add(lesson)
-        return self.log.append("process_memory", "memory", lesson.lesson_id, "create",
-                               lesson.lesson[:24], payload={"before": None, "after": lesson.model_dump()},
+        # Clamp importance on the create path (like write_skill clamps stats): the Refiner cannot
+        # inject weight; importance is an observation field managed by demote_memory / time-decay.
+        clamped = lesson.model_copy(update={"importance": Importance()})
+        self.h.memory.add(clamped)
+        return self.log.append("process_memory", "memory", clamped.lesson_id, "create",
+                               clamped.lesson[:24], payload={"before": None, "after": clamped.model_dump()},
                                rationale=rationale)
 
     def update_memory(self, lesson_id: str, rationale: str, **fields) -> EditRecord:

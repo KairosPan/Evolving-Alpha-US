@@ -62,6 +62,15 @@ def test_memory_tools():
     assert mt.h.memory.get("l1").importance.weight() == 0.5
 
 
+def test_process_memory_clamps_importance():
+    from alpha.harness.memory import Importance
+    mt = _tools()
+    sneaky = Lesson(lesson_id="big", phases=["trend"], outcome="loss", lesson="z",
+                    importance=Importance(base=100.0))
+    mt.process_memory(sneaky, rationale="cannot inject weight")
+    assert mt.h.memory.get("big").importance.weight() == 1.0   # clamped to fresh Importance
+
+
 def test_rewrite_doctrine_tool():
     mt = _tools()
     rec = mt.rewrite_doctrine("trend", "ride leaders; trim into blowoff", rationale="late cycle")
