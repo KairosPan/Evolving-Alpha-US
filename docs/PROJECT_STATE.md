@@ -154,10 +154,18 @@ facade) — `write/patch/retire/revive/promote_skill`, `process/update/demote_me
 observation fields (stats/importance) and identity fields (skill_id/lesson_id, structurally via the
 positional param) unpatchable. Full suite 107 tests green.
 
-**Next — US-1c Persistence + rollback:** SnapshotStore (atomic, versioned) + HarnessManager
-(checkpoint/rollback rebinding tools), consuming the EditLog + before/after payloads from US-1b.
-Then 1d eval oracle (return + delist→terminal-loss + horizon≥2), 1e regime machine + features,
-1f sizing/guard, 1g seeds + DecisionPackage.
+**US-1c Persistence + rollback — Complete (2026-06-13).** `SnapshotStore` (versioned JSON,
+`snap_<NNNN>.json`, atomic temp+`os.replace`, corrupt-load guard, disk-monotonic versioning) +
+`HarnessManager` (live `(harness, log, tools, store)`; `checkpoint`/`rollback_to`/`latest_version`;
+rollback rebinds `MetaTools` to the restored state). Round-trips `(HarnessState, EditLog)` via the
+existing `to_dict`/`from_dict`, so the immutable-core guard survives persistence and `cycle` will
+auto-carry once US-1e adds it. Documented hazard: a `mgr.tools` reference cached before a rollback
+operates on the discarded state (re-fetch after rollback). Full suite 119 tests green.
+
+**Next — US-1d Eval oracle + scoring:** forward-return oracle (next-open→t+N-close, **horizon≥2**),
+**delisting=terminal-loss**, exogenous pool-category (continued/faded/nuked), pluggable scorer,
+walk-forward, baselines (chase-biggest-gainer / no-trade), inference-path fill-feasibility.
+Then 1e regime machine + features, 1f sizing/guard, 1g seeds + DecisionPackage.
 
 **US-1 acceptance gate (whole phase):** Firewall no-leak + baselines reproduce + sizing/guard
 unit-tested. Baseline-only at US-1 (no agent yet — the agent is US-2).
