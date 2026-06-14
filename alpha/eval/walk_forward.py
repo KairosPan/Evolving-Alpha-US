@@ -10,6 +10,7 @@ from alpha.eval.metrics import EvalReport, ScoredCandidate, build_report
 from alpha.eval.oracle import PoolRecord, classify_day
 from alpha.eval.return_oracle import ReturnOracle
 from alpha.eval.scorer import PoolScorer
+from alpha.eval.trajectory import Trajectory, TrajectoryStep, report_from_trajectory
 from alpha.state.builder import build_market_state
 from alpha.universe.universe import build_universe
 
@@ -35,12 +36,15 @@ class WalkForwardEval:
         self._horizon = horizon
         self._scorer = scorer or PoolScorer()
 
-    def run(self, policy: DecisionPolicy) -> EvalReport:
+    def walk(self, policy: DecisionPolicy) -> Trajectory:
+        """Forward-replay capturing the full per-day record (the Refiner's evidence). Same scoring as
+        run(): decision j enters days[j+1] open, exits days[j+horizon] close; last `horizon` unscored."""
         days = trading_days_between(self._source.trading_calendar(), self._start, self._end)
         record = PoolRecord()
-        decisions: list = []        # one per walked day
-        scored: list[ScoredCandidate] = []
-        n_no_trade = 0
+        decisions: list = []
+        markets: list = []
+        universes: list = []
+        scored_by_day: dict = {}
         for i, cursor in enumerate(days):
             guarded = GuardedSource(self._source, AsOfGuard(cursor))
             universe = build_universe(guarded, cursor)
@@ -48,14 +52,24 @@ class WalkForwardEval:
                                        as_of=DateTime(cursor.year, cursor.month, cursor.day, 16, 0))
             record.record(cursor, classify_day(guarded.daily_snapshot(cursor)))
             decision = policy.decide(state, universe)
-            decisions.append(decision)
-            if not decision.candidates:
-                n_no_trade += 1
-            # delayed scoring: score decision j once we've walked to j+horizon
+            decisions.append(decision); markets.append(state); universes.append(universe)
             j = i - self._horizon
             if j >= 0:
-                scored.extend(self._score(decisions[j], days, j, cursor, record))
-        return build_report(scored, n_decisions=len(days), n_no_trade=n_no_trade, horizon=self._horizon)
+                sc_list = self._score(decisions[j], days, j, cursor, record)
+                scored_by_day[days[j]] = {sc.symbol: sc for sc in sc_list}
+        n = len(days)
+        steps: list[TrajectoryStep] = []
+        for i, cursor in enumerate(days):
+            uni = universes[i]
+            entries = {c.symbol: snap for c in decisions[i].candidates
+                       if (snap := uni.get(c.symbol)) is not None}
+            steps.append(TrajectoryStep(date=cursor, market=markets[i], decision=decisions[i],
+                                        entries=entries, outcomes=scored_by_day.get(cursor, {}),
+                                        scored=(i <= n - 1 - self._horizon)))
+        return Trajectory(steps=steps)
+
+    def run(self, policy: DecisionPolicy) -> EvalReport:
+        return report_from_trajectory(self.walk(policy), horizon=self._horizon)
 
     def _score(self, decision, days: list[Date], j: int, cursor: Date,
                record: PoolRecord) -> list[ScoredCandidate]:
