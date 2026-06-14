@@ -53,3 +53,26 @@ class Doctrine(BaseModel):
 
     def mutable_entries(self) -> list[DoctrineEntry]:
         return [e for e in self.entries if not e.immutable]
+
+    # ── CRUD (US-1b; immutable-protected) ─────────────────────────────────
+    def add(self, entry: DoctrineEntry) -> None:
+        if self.get(entry.section) is not None:
+            raise ValueError(f"duplicate section: {entry.section}")
+        self.entries.append(entry)
+
+    def rewrite(self, section: str, new_guidance: str) -> DoctrineEntry:
+        e = self.get(section)
+        if e is None:
+            raise KeyError(f"no such section: {section}")
+        if e.immutable:
+            raise ImmutableDoctrineError(f"immutable doctrine cannot be rewritten: {section}")
+        e.guidance = new_guidance
+        return e
+
+    def remove(self, section: str) -> None:
+        e = self.get(section)
+        if e is None:
+            raise KeyError(f"no such section: {section}")
+        if e.immutable:
+            raise ImmutableDoctrineError(f"immutable doctrine cannot be removed: {section}")
+        self.entries.remove(e)
