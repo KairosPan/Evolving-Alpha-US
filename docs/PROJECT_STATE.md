@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-14 (US-0 + US-1 complete; US-2a LLM clients + agent complete).
+> Last updated: 2026-06-14 (US-0 + US-1 complete; US-2a agent + US-2b Refiner complete).
 
 ---
 
@@ -232,13 +232,33 @@ record/replay `CachedLLMClient` → later US-2; sizing(L3)/guard(L4) wiring into
 (size_tier/fill_feasibility/taboo_check) → US-2c; master-dispatch + named G sub-agents collapsed to one
 orchestrating agent for v1 (a deliberate spec reduction).*
 
-**Next — US-2b Refiner (closing the inner loop):** the Refiner that *edits* `H` via the 9 meta-tools —
-4-pass CRUD (skill mint/patch/retire, memory process/demote, doctrine rewrite) + credit assignment from
-`EvalReport`/`ScoredCandidate` stats + retire-discipline (nuke-rate / expectancy floors) — wired into
-the inner loop with scorer-aware floor-breaker + checkpoint/rollback (US-1c `HarnessManager`). Then
-**US-2c** wires sizing/guard into the agent's `DecisionPackage`, and **US-2d** runs the
-HCH/Hexpert/Hmin three-way compare on real Alpaca data (honest bar: HCH ≥ Hexpert on OOS). US-3 then
-adds intraday/halts/short-interest/SSR/social enrichment unlocking full runner/meme/event offense.
+**US-2b Refiner + evidence substrate — Complete (2026-06-14).** `alpha/eval/trajectory.py` (`TrajectoryStep`/
+`Trajectory`; `WalkForwardEval.walk()` captures per-day market+decision+entries+realized outcomes; `run()`
+delegates to `walk()`+`report_from_trajectory`, behavior preserved) and `alpha/refine/`: `credit.py`
+(`apply_credit` mutates matched skills' `SkillStats` **in place** — Welford running mean on **advantage**
+for `expectancy` + raw for `expectancy_raw`, EWMA winrate, `nukes`; `__unattributed__` bucket; cumulative
+once-per-trajectory; `merge_credit_reports` read-only; `resolve_skill` id→normalized→name cascade),
+`signatures.py` (US-native `faded_miss`/`chased_blowoff`/`weak_laggard_nuke`/`generic_nuke`; degrades to
+`generic_nuke` on live walks until runner-tier enrichment lands), `ops.py` (4-pass `('p','G','K','M')` +
+per-pass tool whitelist, G reserved no-op; robust `parse_ops`), `refiner_prompt.py` (per-pass system w/
+retire+promote discipline + immutable red-lines read-only + strict-JSON contract; shared-evidence user
+prompt + edit-history feedback), `refiner.py` (`RefinerConfig` — caps 5/pass, 12/refine, min_retire=5,
+min_promote=3; `Refiner.refine()` 4-pass driver, G no-op so exactly **3** live LLM calls; `_apply_op`
+evidence gates [retire n≥5; promote n≥3 ∧ expectancy>0] + empty-patch + reject-don't-crash; edits H only
+through `MetaTools`; `_recent_reports` deque). The observation/edit boundary holds: credit writes stats
+directly (not logged), structural deltas go through the audited `MetaTools`. End-to-end acceptance: agent
+walk → credit → signatures → Refiner edits the **seeded** H (mutable doctrine rewritten, immutable
+red-line rejected) → audited in `EditLog` → reverted by `HarnessManager` rollback. Adversarial 4-lens
+plan review folded (parse_ops non-list crash; inert-taxonomy deferral; empty-patch hardening). Full suite
+**274 tests green**. *Edits in place — checkpoint/rollback-on-trip is US-2c.*
+
+**Next — US-2c InnerLoop (the loop comes alive):** the interleaved driver — agent decides on live `H` →
+delayed scoring → **online** `apply_credit` (cumulative, per scored step) → checkpoint-before-refine →
+`Refiner.refine()` → the **scorer-aware capability-floor breaker** (rolling daily advantage vs early
+baseline) → rollback-and-rebind / freeze (re-fetch `mgr.tools` after every rollback). Then **US-2d** runs
+the **HCH/Hexpert/Hmin** three-way compare (honest bar: HCH ≥ Hexpert OOS, multi-seed, temp=0). Deferred:
+wire L3 sizing / L4 guard into the agent's `DecisionPackage`; master-dispatch G sub-agents (keeps the
+`G`-pass a reserved no-op). US-3 then adds intraday/halts/short-interest/SSR/social enrichment.
 
 ---
 
