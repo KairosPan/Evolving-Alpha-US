@@ -146,3 +146,44 @@ class Refiner:
             return False, RejectedEdit(pass_kind=pk, tool=op.tool, target_id=tid, reason=f"{type(e).__name__}: {e}")
         return True, AppliedEdit(pass_kind=pk, tool=op.tool, target_id=str(rec.target_id),
                                  seq=rec.seq, rationale=op.rationale)
+
+    def refine(self, traj: Trajectory, credit: CreditReport,
+               signatures: list[FailureSignature]) -> RefineReport:
+        """Run the 4 passes (p, G, K, M) over the live H. G is a reserved no-op (no LLM call). Each
+        non-empty pass = one scoped LLM call -> parse_ops -> apply under per-pass / per-refine caps."""
+        history = list(self._recent_reports)            # snapshot BEFORE the loop (never see our own report)
+        applied: list[AppliedEdit] = []
+        rejected: list[RejectedEdit] = []
+        notes: list[str] = []
+        involved = set(credit.per_skill) | {s.skill_id for s in signatures if s.skill_id}
+        user = build_refiner_user_prompt(traj, credit, signatures, window=self._cfg.window,
+                                         recent_reports=history)
+        for pk in PASS_ORDER:
+            allowed = PASS_TOOLS[pk]
+            if not allowed:                              # G-pass: reserved no-op (sub-agents unbuilt)
+                notes.append(f"{pk}-pass reserved (no sub-agents yet); skipped")
+                continue
+            system = build_refiner_system_prompt(self._h, pk, min_retire_samples=self._cfg.min_retire_samples,
+                                                 min_promote_samples=self._cfg.min_promote_samples,
+                                                 involved_skill_ids=involved)
+            ops = parse_ops(self._llm.complete(system, user))
+            pass_count = 0
+            for op in ops:
+                tid = _target_id(op.tool, op.args)
+                if len(applied) >= self._cfg.max_edits_per_refine:
+                    rejected.append(RejectedEdit(pass_kind=pk, tool=op.tool, target_id=tid,
+                                                 reason="exceeds per-refine limit"))
+                    continue
+                if pass_count >= self._cfg.max_edits_per_pass:
+                    rejected.append(RejectedEdit(pass_kind=pk, tool=op.tool, target_id=tid,
+                                                 reason="exceeds per-pass limit"))
+                    continue
+                ok, edit = self._apply_op(op, pk, allowed)
+                if ok:
+                    applied.append(edit)
+                    pass_count += 1
+                else:
+                    rejected.append(edit)
+        report = RefineReport(applied=applied, rejected=rejected, notes=notes)
+        self._recent_reports.append(report)
+        return report
