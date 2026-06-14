@@ -172,10 +172,20 @@ PoolAverage); `WalkForwardEval` (per-day GuardedSource + delayed scoring — fir
 Baseline-only (no agent yet). Full suite 149 tests green. *Fill-feasibility + cost model deferred to
 US-3 (daily entries fill at next-open; hard halt-locked infeasibility needs intraday data).*
 
-**Next — US-1e Regime machine + features:** the 6-state US momentum cycle (washout/recovery/
-ignition/trend/distribution/flush) + per-narrative-line classifier (G_cycle, read-only/SSOT) +
-feature modules (breadth / runner / failed-breakout / relative-strength) feeding a richer MarketState.
-Then 1f sizing/guard, 1g seeds + DecisionPackage.
+**US-1e Regime machine + features — Complete (2026-06-14).** `alpha/features/` (sentiment: raw
+composite + regime-relative percentile `sentiment_norm`; breadth: counts / failed-breakout /
+gap-and-go / follow-through; runner: trailing `consecutive_up_days` + echelon; full `build_market_state`
+enriching the universe with runner depth + features) and `alpha/regime/` (the 6-state US momentum
+`StateMachine` — washout/recovery/ignition/trend/distribution/flush; `G_cycle` classifier — **read-only
+/ SSOT**, returns a `RegimeRead` of global phase + confidence + frontside/backside + risk-gate, size
+multiplier capped when regime context is absent). Trailing-only (firewall-clean); MarketState extended
+backward-compatibly. Full suite 174 tests green. *Per-narrative-line phases deferred to US-3 (need
+theme tagging); LLM judge calibration → US-2; wiring the full builder into the eval loop → US-2.*
+
+**Next — US-1f Sizing (L3) + Guard (L4):** `sizing/` (position confidence→tier + risk budget;
+correlation: same-narrative/family = one bet; portfolio: exposure vs the regime risk-gate) and
+`guard/` (stops, dilution/halt/regulatory veto, single-name/single-day/consecutive-loss + MWCB
+circuit-breakers). Then 1g seeds + DecisionPackage.
 
 **US-1 acceptance gate (whole phase):** Firewall no-leak + baselines reproduce + sizing/guard
 unit-tested. Baseline-only at US-1 (no agent yet — the agent is US-2).
