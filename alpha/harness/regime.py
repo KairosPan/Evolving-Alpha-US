@@ -26,6 +26,11 @@ def normalize_phases(raw: str | list[str] | None) -> tuple[list[str], bool]:
 
     Accepts a single string (wrapped to one token, so a seed `regime: "all"` works) or a list;
     'all' (any case) sets applies_all; unrecognized tokens are dropped; first-seen order kept.
+
+    NOTE: a single string is treated as ONE token — it is NOT split on delimiters. So a seed value
+    like `"trend/flush"` normalizes to ([], False) silently. US seeds use list-of-phases
+    (`phases: ["trend", "flush"]`); use that form for multiple phases. (Differs from the CN
+    parse_regime_field, which split compound strings.)
     """
     if isinstance(raw, str):
         raw = [raw]
