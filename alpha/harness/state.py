@@ -1,0 +1,40 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from alpha.harness.doctrine import Doctrine
+from alpha.harness.memory import Lesson
+from alpha.harness.registry import MemoryStore, SkillRegistry
+from alpha.harness.skill import Skill
+
+
+@dataclass
+class HarnessState:
+    """Harness state H = (p=doctrine, K=skills, M=memory).
+
+    The regime state machine (cycle) and G sub-agents join in US-1e / US-2.
+    """
+    doctrine: Doctrine          # p
+    skills: SkillRegistry       # K
+    memory: MemoryStore         # M
+
+    def active_skills_for(self, phase: str) -> list[Skill]:
+        return [s for s in self.skills.by_phase(phase) if s.status == "active"]
+
+    def to_dict(self) -> dict:
+        return {
+            "skills": [s.model_dump() for s in self.skills.all()],
+            "memory": [l.model_dump() for l in self.memory.all()],
+            "doctrine": self.doctrine.model_dump(),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "HarnessState":
+        # model_validate rebuilds immutable entries via the core constructor (bypassing the
+        # __setattr__ guard at build time); the guard is back in force on the rebuilt object.
+        # US-1e: add a `cycle` field above and a "cycle" key in to_dict/from_dict here.
+        return cls(
+            doctrine=Doctrine.model_validate(d["doctrine"]),
+            skills=SkillRegistry.from_skills([Skill.model_validate(x) for x in d["skills"]]),
+            memory=MemoryStore.from_lessons([Lesson.model_validate(x) for x in d["memory"]]),
+        )
