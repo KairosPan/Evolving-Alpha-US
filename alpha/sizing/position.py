@@ -6,7 +6,7 @@ from typing import Literal
 SizeTier = Literal["flat", "probe", "core", "heavy"]
 
 # fraction of a single-name unit allocated at each tier
-SIZE_TIER_WEIGHT: dict[str, float] = {"flat": 0.0, "probe": 0.25, "core": 0.5, "heavy": 1.0}
+SIZE_TIER_WEIGHT: dict[SizeTier, float] = {"flat": 0.0, "probe": 0.25, "core": 0.5, "heavy": 1.0}
 
 
 @dataclass(frozen=True)
