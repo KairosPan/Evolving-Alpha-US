@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-13 (US-0 Foundations complete; US-1a Harness Core complete).
+> Last updated: 2026-06-14 (US-0 + US-1 complete; US-2a LLM clients + agent complete).
 
 ---
 
@@ -127,7 +127,7 @@ scripts/
   smoke_alpaca.py       # Manual Alpaca probe (needs APCA_API_KEY_ID/SECRET)
   capture_window.py     # Build offline PIT snapshot DB from Alpaca
 reference/cn/           # Copied CN system — reference only, DELETE when rebuild complete
-pyproject.toml          # Package: alpha 0.0.1; extras: live=[alpaca-py,pandas-market-calendars]
+pyproject.toml          # Package: alpha 0.0.1; extras: live=[alpaca-py,pandas-market-calendars,openai,anthropic]
 README.md               # Public-facing project intro + quickstart
 ```
 
@@ -207,12 +207,38 @@ eval oracle (return + delist=terminal-loss + exogenous pool, walk-forward) (US-1
 features (US-1e) → L3 sizing + L4 guard (US-1f) → full DecisionPackage + 4 defense-heavy seed packs
 (US-1g). Firewall sound, immutable-core enforced, baseline-only eval reproduces.
 
-**Next — US-2 LLM agent + Refiner inner loop:** per-role LLM clients (Claude / cheap, via env);
-the agent that reads `H` + MarketState + universe and emits a populated `DecisionPackage`; the Refiner
-4-pass CRUD + credit assignment + retire-discipline; the inner loop with scorer-aware floor-breaker +
-checkpoint/rollback; and the HCH/Hexpert/Hmin three-way compare to validate on real Alpaca data
-(honest bar: HCH ≥ Hexpert on OOS). US-3 then adds intraday/halts/short-interest/SSR/social
-enrichment unlocking full runner/meme/event offense.
+---
+
+## US-2 LLM Agent + Refiner inner loop (sub-plans 2a → 2d)
+
+**US-2a LLM clients + Agent (the "act" half-loop) — Complete (2026-06-14).** `alpha/llm/`: a
+provider-agnostic `LLMClient` protocol + `MockLLMClient` (offline replay/record) + `extract_json_object`
+(balanced-brace JSON scanner tolerant of prose/markdown fences); `OpenAICompatClient` (DeepSeek/any
+base_url) and `ClaudeClient` (Anthropic) — smoke-only real adapters with retry/backoff, lazy SDK
+import, and **injectable transport so retry is tested offline** without keys/network; `make_client(role)`
+per-role config from env (agent→cheap/deepseek, refiner→Claude; `mock` for tests; `temperature=0` for
+eval determinism). `alpha/agent/`: budgeted `retrieval` (active skills phase-prior-hit-first then by
+stats; incubating trial slots; lessons by importance weight), `prompt` rendering (doctrine + K + M +
+6-state cycle + strict JSON output contract; `build_user_prompt` state+universe), `parse` with
+**hallucination defense** (re-anchor every pick to the universe, drop hallucinated/duplicate symbols,
+clamp confidence, malformed→no-trade, stamp `as_of`), and `LLMAgentPolicy` (implements `DecisionPolicy`;
+**holds `H` and rebuilds the prompt from live `H` each `decide()`** so US-2b Refiner edits are visible
+immediately; default budgeted `injection="retrieval"`; threads a **canonical** `phase_prior` extracted
+from its prior multi-token `regime_read`). Drives `WalkForwardEval` end-to-end on MockLLM (firewall
+holds: the agent only ever sees `(state, universe)`). Adversarial 4-lens plan review folded before
+execution (caught: isinstance-vs-non-runtime_checkable Protocol; phase_prior dead under the output
+contract; `as_of` never set; retrieval not the default). Full suite **246 tests green**. *Deferred:
+record/replay `CachedLLMClient` → later US-2; sizing(L3)/guard(L4) wiring into the DecisionPackage
+(size_tier/fill_feasibility/taboo_check) → US-2c; master-dispatch + named G sub-agents collapsed to one
+orchestrating agent for v1 (a deliberate spec reduction).*
+
+**Next — US-2b Refiner (closing the inner loop):** the Refiner that *edits* `H` via the 9 meta-tools —
+4-pass CRUD (skill mint/patch/retire, memory process/demote, doctrine rewrite) + credit assignment from
+`EvalReport`/`ScoredCandidate` stats + retire-discipline (nuke-rate / expectancy floors) — wired into
+the inner loop with scorer-aware floor-breaker + checkpoint/rollback (US-1c `HarnessManager`). Then
+**US-2c** wires sizing/guard into the agent's `DecisionPackage`, and **US-2d** runs the
+HCH/Hexpert/Hmin three-way compare on real Alpaca data (honest bar: HCH ≥ Hexpert on OOS). US-3 then
+adds intraday/halts/short-interest/SSR/social enrichment unlocking full runner/meme/event offense.
 
 ---
 
