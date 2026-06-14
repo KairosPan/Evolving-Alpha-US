@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-13 (US-0 Foundations complete).
+> Last updated: 2026-06-13 (US-0 Foundations complete; US-1a Harness Core complete).
 
 ---
 
@@ -133,16 +133,24 @@ README.md               # Public-facing project intro + quickstart
 
 ---
 
-## Next Milestone: US-1 Harness + Eval + Sizing + Guard
+## US-1 Harness + Eval + Sizing + Guard (sub-plans 1a → 1g)
 
-**What ships:** `H=(p,G,K,M)` containers, 9 meta-tools, persistence, immutable-core guard,
-snapshot/rollback, seeds v1 (four families, defense-heavy + alpha-production channel), return oracle
-(horizon≥2, delist→terminal-loss), walk-forward, baselines, regime classifier + state machine,
-`sizing/` (L3: position/correlation/portfolio), `guard/` (L4: stops/veto/breaker),
-`DecisionPackage` schema.
+US-1 ships as a sequence of sub-plans (each its own plan + subagent-driven execution).
 
-**Acceptance gate:** Firewall no-leak + baselines reproduce + sizing/guard unit-tested. Baseline-only
-at US-1 (no agent yet — the agent is US-2).
+**US-1a Harness Core — Complete (2026-06-13).** `alpha/harness/`: Skill/SkillStats/GateSpec,
+Lesson/Importance, Doctrine + immutable-core write-guard, SkillRegistry/MemoryStore (query by
+phase/family/status/outcome), `HarnessState=(p,K,M)` with to_dict/from_dict round-trip, seed loader.
+Read-only load + query. US 6-phase vocabulary (washout/recovery/ignition/trend/distribution/flush) +
+family tag (runner/swing/event/meme). Immutable guard pre-verified in pydantic 2.11.7 + survives
+round-trip. Adversarial 4-lens plan review folded in before execution. Full suite 70 tests green.
+
+**Next — US-1b Meta-tools CRUD:** 9 meta-tools + EditLog (append-only audit) + immutable-core
+write-guard enforcement on the edit path. Then 1c persistence/rollback, 1d eval oracle (return +
+delist→terminal-loss + horizon≥2), 1e regime machine + features, 1f sizing/guard, 1g seeds +
+DecisionPackage.
+
+**US-1 acceptance gate (whole phase):** Firewall no-leak + baselines reproduce + sizing/guard
+unit-tested. Baseline-only at US-1 (no agent yet — the agent is US-2).
 
 ---
 
