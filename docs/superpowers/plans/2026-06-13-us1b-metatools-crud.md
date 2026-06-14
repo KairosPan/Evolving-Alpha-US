@@ -1038,3 +1038,7 @@ git commit -m "US-1b Task 8: acceptance gate (editable harness + audit + immutab
 **Placeholder scan:** no TBD/TODO; every code step shows full code; deferrals (SnapshotStore/HarnessManager → US-1c; cycle → US-1e; Refiner caller → US-2) are explicit scope notes.
 
 **Scope:** editable harness + audit only; no persistence store, no LLM, no rollback engine (US-1c consumes the payloads/serialization produced here). Produces an independently-testable editable-harness layer.
+
+## Execution note (2026-06-13)
+
+Executed directly (TDD, test-gated per task) rather than via the subagent workflow, since the US-1a workflow stalled on infrastructure. One correction surfaced at execution that supersedes the snippets above: **`skill_id`/`lesson_id` were dropped from `_PATCH_FORBIDDEN`/`_UPDATE_FORBIDDEN`.** They are the positional parameter of `patch()`/`update()`, so passing them as a field collides → `TypeError` (still rejected, just structurally, not via the forbidden-set check). The tests assert the structural `TypeError` for those two; the forbidden sets are `{"status","stats"}` and `{"importance"}`. All 8 tasks committed; full suite 107 tests green.

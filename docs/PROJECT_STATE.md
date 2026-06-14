@@ -144,10 +144,20 @@ Read-only load + query. US 6-phase vocabulary (washout/recovery/ignition/trend/d
 family tag (runner/swing/event/meme). Immutable guard pre-verified in pydantic 2.11.7 + survives
 round-trip. Adversarial 4-lens plan review folded in before execution. Full suite 70 tests green.
 
-**Next — US-1b Meta-tools CRUD:** 9 meta-tools + EditLog (append-only audit) + immutable-core
-write-guard enforcement on the edit path. Then 1c persistence/rollback, 1d eval oracle (return +
-delist→terminal-loss + horizon≥2), 1e regime machine + features, 1f sizing/guard, 1g seeds +
-DecisionPackage.
+**US-1b Meta-tools + CRUD + EditLog — Complete (2026-06-13).** The harness is now **editable**:
+registry/memory/doctrine CRUD + skill lifecycle (retire→dormant/revive/promote, no-op transitions
+rejected), `EditLog` (append-only audit, serializable for US-1c), and the **9 meta-tools** (MetaTools
+facade) — `write/patch/retire/revive/promote_skill`, `process/update/demote_memory`,
+`rewrite_doctrine`. Hardening: rationale required; immutable-core enforced on the edit path;
+**reject-don't-log** (rejected edits raise, leave H unchanged, add nothing to the log);
+`write_skill` clamps status→incubating + resets stats (no minting active / injecting stats);
+observation fields (stats/importance) and identity fields (skill_id/lesson_id, structurally via the
+positional param) unpatchable. Full suite 107 tests green.
+
+**Next — US-1c Persistence + rollback:** SnapshotStore (atomic, versioned) + HarnessManager
+(checkpoint/rollback rebinding tools), consuming the EditLog + before/after payloads from US-1b.
+Then 1d eval oracle (return + delist→terminal-loss + horizon≥2), 1e regime machine + features,
+1f sizing/guard, 1g seeds + DecisionPackage.
 
 **US-1 acceptance gate (whole phase):** Firewall no-leak + baselines reproduce + sizing/guard
 unit-tested. Baseline-only at US-1 (no agent yet — the agent is US-2).
