@@ -28,8 +28,8 @@ def _log():
     return log
 
 
-def test_empty_store():
-    store = SnapshotStore(__import__("tempfile").mkdtemp())
+def test_empty_store(tmp_path):
+    store = SnapshotStore(tmp_path)
     assert store.list_versions() == []
     assert store.latest() is None
     with pytest.raises(FileNotFoundError):

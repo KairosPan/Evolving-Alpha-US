@@ -24,9 +24,12 @@ class SnapshotStore:
             return []
         out: list[int] = []
         for p in self._root.glob("snap_*.json"):
+            parts = p.stem.split("_")
+            if len(parts) != 2:           # ignore foreign files (e.g. snap_0000_extra.json)
+                continue
             try:
-                out.append(int(p.stem.split("_")[1]))
-            except (IndexError, ValueError):
+                out.append(int(parts[1]))
+            except ValueError:
                 continue
         return sorted(out)
 
@@ -43,7 +46,10 @@ class SnapshotStore:
         final = self._path(version)
         tmp = final.with_suffix(".tmp")     # snap_NNNN.tmp -> not matched by snap_*.json glob
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(tmp, final)              # atomic same-dir rename
+        # atomic same-dir rename (gives the atomicity the spec requires). Crash-durability (fsync of
+        # the temp + dir before replace) is deferred — the corrupt-load guard fails loudly on a torn
+        # file from power-loss, so it degrades safely.
+        os.replace(tmp, final)
         return version
 
     def load(self, version: int) -> tuple[HarnessState, EditLog]:
