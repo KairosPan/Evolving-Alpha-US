@@ -26,4 +26,8 @@ class MarketState(BaseModel):
     echelon: list[RunnerRung]                    # runner echelon (tier descending)
     breadth_raw: float                           # raw composite breadth
     sentiment_norm: float | None = Field(default=None, ge=0.0, le=1.0)  # regime-relative; None if insufficient
+    # ── L1 perception features (US-1e) ──
+    sentiment_raw: float = 0.0                    # raw composite (normalized into sentiment_norm)
+    follow_through_rate: float | None = None      # fraction of prior-day gainers still gainers today
+    gap_and_go_count: int = 0                     # gainers that gapped up and held
     as_of: DateTime                              # snapshot timestamp (lookahead audit)
