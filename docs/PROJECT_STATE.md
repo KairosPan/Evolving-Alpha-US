@@ -182,10 +182,20 @@ multiplier capped when regime context is absent). Trailing-only (firewall-clean)
 backward-compatibly. Full suite 174 tests green. *Per-narrative-line phases deferred to US-3 (need
 theme tagging); LLM judge calibration → US-2; wiring the full builder into the eval loop → US-2.*
 
-**Next — US-1f Sizing (L3) + Guard (L4):** `sizing/` (position confidence→tier + risk budget;
-correlation: same-narrative/family = one bet; portfolio: exposure vs the regime risk-gate) and
-`guard/` (stops, dilution/halt/regulatory veto, single-name/single-day/consecutive-loss + MWCB
-circuit-breakers). Then 1g seeds + DecisionPackage.
+**US-1f Sizing (L3) + Guard (L4) — Complete (2026-06-14).** `alpha/sizing/` (position: confidence×
+risk_gate → flat/probe/core/heavy tier; correlation: same-narrative = one bet; portfolio: net
+correlated picks + cap total exposure at `risk_gate × max_total`, `total_exposure_budget` matching
+DecisionPackage §4.1) and `alpha/guard/` (stops: form/regime/time; veto: no-chase in risk-off **and
+on the backside** + reverse-split + data-flag dilution/halt/going-concern/regulatory/SSR; breaker:
+single-name / single-day / consecutive-loss / MWCB). The §6 immutable-core rules made executable.
+Data-dependent flags (dilution/SSR/halt/MWCB) are forward-plumbed; US-3 supplies them. Full suite
+202 tests green.
+
+**Next — US-1g Seeds v1 + DecisionPackage:** the full human-facing `DecisionPackage` schema (§4.1:
+per-candidate pattern/skill_id/entry/exit_stop/size_tier/fill_feasibility/taboo_check/reason/
+confidence + regime_read + portfolio + no_trade_reason) and four **defense-heavy** seed packs
+(runner/swing/event/meme) loaded into `H`. **Final US-1 sub-plan** — after it, US-1 is complete and
+US-2 wires in the LLM agent + Refiner.
 
 **US-1 acceptance gate (whole phase):** Firewall no-leak + baselines reproduce + sizing/guard
 unit-tested. Baseline-only at US-1 (no agent yet — the agent is US-2).
