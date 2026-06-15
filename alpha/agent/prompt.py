@@ -12,6 +12,28 @@ from alpha.universe.universe import CandidateUniverse
 # Bump when the prompt template changes (used by the future LLM cache key to invalidate old records).
 PROMPT_FINGERPRINT = "us2a-v1"
 
+
+def available_data_signals(universe: CandidateUniverse) -> frozenset[str]:
+    """Live OPTIONAL data signals: StockSnapshot enrichment fields (those defaulting to None — rvol,
+    consecutive_up_days, short_interest, days_to_cover, ...) that are non-None for at least one
+    candidate today. Required structural fields (symbol/name/status) are excluded so a skill's
+    depends_on names a true data dependency, never an always-present field. A skill is surfaced only
+    when its depends_on is a subset of these signals."""
+    sigs: set[str] = set()
+    for snap in universe.all():
+        for field, info in snap.__class__.model_fields.items():
+            if info.default is None and getattr(snap, field) is not None:   # optional enrichment, present
+                sigs.add(field)
+    return frozenset(sigs)
+
+
+def _depends_on_satisfied(skill: Skill, signals: frozenset[str]) -> bool:
+    """A skill is eligible to be surfaced iff every data dependency it declares is a live signal.
+    Empty depends_on (the common case) is always satisfied. Enforces the previously-decorative
+    Skill.depends_on (e.g. short_squeeze needs short_interest+days_to_cover; gamma_squeeze needs
+    options_flow)."""
+    return set(skill.depends_on) <= signals
+
 _OUTPUT_CONTRACT = (
     'Output STRICT JSON (no markdown fences): '
     '{"regime_read": "<one of the 6 phases + frontside/backside>", '
@@ -39,7 +61,8 @@ def _skill_line(s: Skill) -> str:
 def build_system_prompt(h: HarnessState, *, injection: str = "full", phase_prior: str | None = None,
                         skill_budget: int = DEFAULT_SKILL_BUDGET,
                         memory_budget: int = DEFAULT_MEMORY_BUDGET,
-                        trial_slots: int = DEFAULT_TRIAL_SLOTS) -> str:
+                        trial_slots: int = DEFAULT_TRIAL_SLOTS,
+                        available_signals: frozenset[str] | None = None) -> str:
     """Render H=(p,K,M) + the regime cycle + the output contract into the system prompt.
 
     injection='full' renders all active skills + all lessons; 'retrieval' renders a budgeted slice
@@ -53,6 +76,12 @@ def build_system_prompt(h: HarnessState, *, injection: str = "full", phase_prior
         skills = [s for s in h.skills.all() if s.status == "active"]
         trials = [s for s in h.skills.all() if s.status == "incubating"]
         lessons = h.memory.all()
+
+    if available_signals is not None:                    # US-3c: enforce Skill.depends_on (None = off)
+        skills = [s for s in skills if _depends_on_satisfied(s, available_signals)]
+        # filtering runs after select_for_prompt's trial-slot budget, so it may leave fewer trials than
+        # trial_slots — acceptable (a data-less trial skill carries no signal worth a slot anyway).
+        trials = [s for s in trials if _depends_on_satisfied(s, available_signals)]
 
     parts: list[str] = [
         "You are a US speculative-momentum trading co-pilot. Read the day's state and the candidate "

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal
 
 from alpha.agent.parse import parse_decision
-from alpha.agent.prompt import build_system_prompt, build_user_prompt
+from alpha.agent.prompt import available_data_signals, build_system_prompt, build_user_prompt
 from alpha.agent.retrieval import DEFAULT_MEMORY_BUDGET, DEFAULT_SKILL_BUDGET, DEFAULT_TRIAL_SLOTS
 from alpha.eval.decision import DecisionPackage
 from alpha.harness.regime import normalize_phase
@@ -54,7 +54,8 @@ class LLMAgentPolicy:
     def decide(self, state: MarketState, universe: CandidateUniverse) -> DecisionPackage:
         system = build_system_prompt(self._harness, injection=self._injection,
                                      phase_prior=self._phase_prior, skill_budget=self._skill_budget,
-                                     memory_budget=self._memory_budget, trial_slots=self._trial_slots)
+                                     memory_budget=self._memory_budget, trial_slots=self._trial_slots,
+                                     available_signals=available_data_signals(universe))
         user = build_user_prompt(state, universe)
         raw = self._llm.complete(system, user)
         pkg = parse_decision(raw, state.date, universe, as_of=state.as_of)
