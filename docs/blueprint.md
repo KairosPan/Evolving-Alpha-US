@@ -87,7 +87,7 @@ A-share concept; the mechanics differ materially.
 |---|---|---|
 | 涨停 limit-up | **LULD halt-up** = transient 5-min volatility pause (price outside band ≥15s; Tier-1 S&P/Russell-1000 vs Tier-2 bands; reopens via auction; **not** a day-lock — runner can keep going, repeated pauses) + extreme % gainer | top % gainer / large up-close |
 | 跌停 limit-down | **LULD halt-down** (same mechanics, downside) + extreme loser | large down-close |
-| (no A-share analog) | **SSR (Reg SHO Rule 201)** = short-sale price test, triggers at −10% intraday vs prior close, restricts shorting to above-NBB for rest of day + next session; does **not** halt or limit price | SSR-flag (US-3); affects short/squeeze logic only |
+| (no A-share analog) | **SSR (Reg SHO Rule 201)** = short-sale price test, triggers at −10% intraday vs prior close, restricts shorting to above-NBB for rest of day + next session; does **not** halt or limit price | SSR-flag = prior-day close-to-close ≤ −10% (daily proxy of the intraday Rule 201 trigger); for this long-only co-pilot, read as a no-chase veto on a one-sided/exhaustion tape (`dont_fight_ssr`), not short-side logic (wired US-3b) |
 | 连板 N consecutive boards | **multi-day runner** (repeated halt-ups / consecutive large up-days) | N consecutive up-days with size |
 | 炸板 failed board | **failed breakout / first red day / gap-up→red-close** | gap-up→red-close, fade-from-high |
 | 一字板 gap-locked (unbuyable) | **true fill-infeasibility** = LULD-locked with no offer / sub-penny-size micro-float with displayed size ≪ intended order. NOT an ordinary gap-up (US gap-ups fill at the higher open). | size-at-offer vs intended order (intraday); daily proxy = extreme gap + near-zero liquidity |

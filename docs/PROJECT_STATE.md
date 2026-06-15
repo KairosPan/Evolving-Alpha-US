@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-15 (US-0 + US-1 + US-2 complete; US-3a runner-tier enrichment live on the walk path; US-3b next).
+> Last updated: 2026-06-15 (US-0 + US-1 + US-2 complete; US-3a runner-tier + US-3b SSR/reverse-split guard-veto (opt-in) shipped; US-3c next).
 
 ---
 
@@ -314,16 +314,35 @@ from the populated universe (dropped the throwaway `model_copy` enrichment + `_l
 acceptance locks prove it end-to-end (both nuke branches discriminated on populated data) on a seeded-harness
 walk; stale "until US-3 enrichment" docstrings refreshed. Full suite **322 tests green**.
 
-**Next — US-3b → US-3f (deferred roadmap):** **3b** SSR + reverse-split + guard-veto wiring
-(`alpha/guard/veto.py` has zero production call sites; SSR = prior-day close ≤ −10%; reverse-split via
-`corp_actions.has_reverse_split_pending`; activates the `dont_fight_ssr` immutable doctrine). **3c** FINRA
+**US-3b SSR + reverse-split + guard-veto wiring — Complete (2026-06-15). The dormant L4 veto is live (opt-in).**
+The guard `veto()` (zero production call sites until now) is wired via a composable `GuardedPolicy` decorator +
+`alpha/guard/screen.py::screen_decision`, fed two PIT-computed flags: **SSR** (`ssr_active` — Reg SHO Rule 201:
+a ≥10% prior-day close-to-close decline restricts chasing the name today) and **reverse_split_pending**
+(`has_reverse_split_pending`). Resolved the corporate-actions firewall trap with a new PIT-by-announce source
+primitive `corporate_actions_known(as_of)` (the ex_date-filtered accessor silently dropped pending future-ex
+splits). `screen_decision` drops vetoed candidates (hard override → never entered/scored), surfaces reasons in
+`DecisionPackage.key_risks`, and finally populates the structured `regime` (previously always `None` on the live
+path). The immutable `dont_fight_ssr` doctrine is activated (seed parenthetical dropped; blueprint SSR row
+reconciled to the long-only reading). **Wired OPT-IN, default OFF** (`LoopConfig.screen`): the regime risk-off/
+backside arm over-fires on the *minimal* `state/builder` (it feeds `GCycle` `sentiment_norm=None`/
+`follow_through=None` → every synthetic day reads backside), so global default-on enforcement waits on wiring the
+richer `features/builder` into the live loop (a later US-3 slice). The other four veto flags
+(`dilution`/`halt_then_dump`/`going_concern`/`regulatory`) stay wired in `veto()` and default `False` (3d/3e/3f
+add their data). Known limitation: `screen` reaches only the HCH `InnerLoop` arm — `compare_harnesses` builds
+Hexpert/Hmin outside `InnerLoop`, so a verdict run must wrap all arms in `GuardedPolicy` symmetrically before
+flipping the default ON. SSR/reverse-split flags are exact + unit-tested; the full opt-in path is acceptance-
+tested end-to-end on a frontside regime. Full suite **339 tests green**.
+
+**Next — US-3c → US-3f (deferred roadmap):** **3c** FINRA
 short-interest → activate the incubating `short_squeeze` seed. **3d** float / dilution / EDGAR → the guard's
 `dilution` veto. **3e** intraday / halts / MWCB (LULD halts = 涨停 analog; `breaker.set_mwcb` has no caller;
 enables fill-feasibility + halt-locked infeasibility). **3f** social / options (gamma squeeze) / per-narrative
 phase tagging. Plus, **orthogonal to US-3**: a live temp=0 Claude/DeepSeek run on captured Alpaca windows is
 what renders the actual HCH-vs-Hexpert verdict via the US-2e procedure (the offline suite validates the
 apparatus; MockLLM ignores prompts; honest expectation = parity). **Deferred §10 methodology** (gate-non-blocking):
-purged & embargoed CV; regime-stratified eval. **Other deferred:** Hcredit (C4) ablation arm; wire L3 sizing /
+purged & embargoed CV; regime-stratified eval. **Other deferred:** wiring the richer `features/builder` into the
+live loop so `GCycle` reads frontside and `LoopConfig.screen` (+ symmetric `GuardedPolicy` on all
+`compare_harnesses` arms) can default ON; Hcredit (C4) ablation arm; wire L3 sizing /
 L4 guard into the agent's `DecisionPackage`; master-dispatch G sub-agents (keeps the `G`-pass a reserved
 no-op); keep-last-K checkpoint pruning.
 
