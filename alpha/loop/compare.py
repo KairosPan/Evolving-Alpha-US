@@ -131,6 +131,10 @@ class MultiWindowReport(BaseModel):
     mean_delta: float = 0.0
     win_rate: float = 0.0                                # fraction of windows with delta > 0
     sign_consistent: bool = False                       # all deltas strictly same sign
+    # A ROLLUP of per-window single-window verdicts (each a within-window CI), NOT a pooled cross-window
+    # significance test — cohort-level inference stays the win_rate / sign-consistency direction diagnostic.
+    verdicts: list[str] = Field(default_factory=list)             # per-window stat-verdict labels
+    verdict_tally: dict[str, int] = Field(default_factory=dict)   # counts by label across windows
 
 
 def multi_window(harness_factory: Callable[[], HarnessState], source,
@@ -145,15 +149,20 @@ def multi_window(harness_factory: Callable[[], HarnessState], source,
     """Run compare_harnesses over each window; aggregate the excess deltas. A direction diagnostic, not
     a significance test (see MultiWindowReport)."""
     deltas: list[float] = []
+    verdicts: list[str] = []
     for (start, end) in windows:
         cr = compare_harnesses(harness_factory, source, start, end, agent_llm_factory=agent_llm_factory,
                                refiner_llm_factory=refiner_llm_factory, store_factory=store_factory,
                                loop_config=loop_config, refiner_config=refiner_config,
                                scorer_factory=scorer_factory, shadow=shadow)
         deltas.append(cr.hch_minus_hexpert_mean_excess)
+        verdicts.append(cr.stat_verdict.verdict if cr.stat_verdict is not None else "insufficient")
     n = len(deltas)
     mean_delta = sum(deltas) / n if n else 0.0
     win_rate = sum(1 for d in deltas if d > 0.0) / n if n else 0.0
     sign_consistent = n > 0 and (all(d > 0.0 for d in deltas) or all(d < 0.0 for d in deltas))
-    return MultiWindowReport(n_windows=n, deltas=deltas, mean_delta=mean_delta,
-                             win_rate=win_rate, sign_consistent=sign_consistent)
+    tally: dict[str, int] = {}
+    for v in verdicts:
+        tally[v] = tally.get(v, 0) + 1
+    return MultiWindowReport(n_windows=n, deltas=deltas, mean_delta=mean_delta, win_rate=win_rate,
+                             sign_consistent=sign_consistent, verdicts=verdicts, verdict_tally=tally)

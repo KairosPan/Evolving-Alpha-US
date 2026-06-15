@@ -108,6 +108,20 @@ def test_stat_verdict_and_contribution_populated():
     assert cr.contribution.offense.n >= 1               # gap_and_go is an offense (pattern) seed skill
 
 
+def test_multi_window_collects_verdict_tally():
+    from alpha.loop.compare import multi_window
+    src = _source(10, 1.15)
+    cal = src.trading_calendar()
+    mw = multi_window(lambda: load_seeds(SEEDS), src, [(cal[0], cal[4]), (cal[5], cal[9])],
+                      agent_llm_factory=lambda: MockLLMClient('{"candidates": '
+                                                              '[{"symbol": "RUN", "pattern": "gap_and_go"}]}'),
+                      refiner_llm_factory=lambda: MockLLMClient('{"ops": []}'),
+                      store_factory=lambda: SnapshotStore(tempfile.mkdtemp()), loop_config=_cfg())
+    assert len(mw.verdicts) == 2                                   # one stat verdict label per window
+    assert sum(mw.verdict_tally.values()) == 2                     # tally totals the windows
+    assert all(v in {"win", "loss", "flat", "insufficient"} for v in mw.verdicts)
+
+
 def test_multi_window_aggregates_deltas():
     from alpha.loop.compare import multi_window, MultiWindowReport
     src = _source(10, 1.15)
