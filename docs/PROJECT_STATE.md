@@ -345,7 +345,7 @@ short-interest days, and `gamma_squeeze` (`depends_on=[options_flow]`) stays cor
 Enforcement defaults OFF (`available_signals=None`) for non-decide callers, so the suite is untouched. `short_squeeze`
 **stays `incubating`** — promotion to `active` is evidence-gated (Refiner on a live run), not declared (lifecycle
 discipline; `test_squeeze_offense_is_incubating` pins it). GateSpec threshold gating + a deterministic
-`HarnessRulePolicy` consumer are deferred (no live consumer yet). Full suite **350 tests green**.
+`HarnessRulePolicy` consumer are deferred (no live consumer yet). Full suite **351 tests green**.
 
 **Next — US-3d → US-3f (deferred roadmap):** **3d** float / dilution / EDGAR → the guard's
 `dilution` veto. **3e** intraday / halts / MWCB (LULD halts = 涨停 analog; `breaker.set_mwcb` has no caller;

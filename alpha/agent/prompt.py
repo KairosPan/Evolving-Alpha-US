@@ -10,15 +10,16 @@ from alpha.state.market import MarketState
 from alpha.universe.universe import CandidateUniverse
 
 # Bump when the prompt template changes (used by the future LLM cache key to invalidate old records).
-PROMPT_FINGERPRINT = "us2a-v1"
+PROMPT_FINGERPRINT = "us3c-v1"
 
 
 def available_data_signals(universe: CandidateUniverse) -> frozenset[str]:
-    """Live OPTIONAL data signals: StockSnapshot enrichment fields (those defaulting to None — rvol,
-    consecutive_up_days, short_interest, days_to_cover, ...) that are non-None for at least one
-    candidate today. Required structural fields (symbol/name/status) are excluded so a skill's
-    depends_on names a true data dependency, never an always-present field. A skill is surfaced only
-    when its depends_on is a subset of these signals."""
+    """Live data signals: StockSnapshot fields with a `= None` default (OHLCV + enrichments — close,
+    prev_close, pct_change, gap_pct, volume, rvol, consecutive_up_days, short_interest, days_to_cover)
+    that are non-None for at least one candidate today. Required fields (symbol/name/status — whose
+    FieldInfo.default is PydanticUndefined, not None) are excluded, so a skill's depends_on names a real
+    data dependency rather than an always-present structural field. A skill is surfaced only when its
+    depends_on is a subset of these signals."""
     sigs: set[str] = set()
     for snap in universe.all():
         for field, info in snap.__class__.model_fields.items():
