@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-15 (US-0 + US-1 complete; US-2a/2b/2c + US-2d compare apparatus complete; US-2 acceptance gate open → US-2e).
+> Last updated: 2026-06-15 (US-0 + US-1 + US-2 complete: agent/refiner/inner-loop/compare + statistical-acceptance procedure built; empirical verdict awaits a live temp=0 run; US-3 next).
 
 ---
 
@@ -283,13 +283,28 @@ frozen seeds is the research frontier; a single short-window delta is NOISE (MDE
 apparatus; the US-2 acceptance GATE remains OPEN** — spec §9/§10 *define* acceptance as the formal
 statistical procedure, which US-2d defers.
 
-**Next — US-2e validation slice (required, acceptance-completing):** the formal statistical layer
-(`alpha/eval/stats.py`: moving-block-bootstrap CI, sign-permutation p-value, MDE sizing, `StatVerdict`;
-`ComparisonReport.stat_verdict` as an additive Optional field) + purged & embargoed CV + regime-stratified
-eval + the **SPEC-REQUIRED (§6/§9/§10) offense-vs-defense + per-family contribution split**. **Then US-3**:
-intraday/halts/short-interest/SSR/social enrichment (unlocking full runner/meme/event offense). Also
-deferred: Hcredit (C4) ablation arm; wire L3 sizing / L4 guard into the agent's `DecisionPackage`;
-master-dispatch G sub-agents (keeps the `G`-pass a reserved no-op); keep-last-K checkpoint pruning.
+**US-2e Statistical acceptance — Complete (2026-06-15). The §9/§10 acceptance PROCEDURE is built.**
+`alpha/eval/stats.py` — `StatVerdict` + `daily_series`/`paired_daily_diff` + moving-block-bootstrap CI +
+sign-permutation p-value + MDE + `verdict`, **deterministic** via local `random.Random(seed)` (CN-pinned
+numbers reproduce). `alpha/eval/contribution.py` — offense (pattern/feature) / defense (failure_detector) /
+unknown + per-family contribution split, resolved against the **evolved HCH H**. `ComparisonReport.stat_verdict`
++ `.contribution` computed inline in `compare_harnesses`; `multi_window` rolls up a per-window verdict tally
+(the temp=0 multi-seed surrogate = multi-window). Adversarial 4-lens plan review folded (a float-equality
+test bug; doc-consistency). Full suite **314 tests green**.
+
+**What this does and does NOT mean:** US-2e **closes the §9/§10 acceptance-METHODOLOGY gate** — the formal
+decision procedure (paired CI + permutation-p + MDE + offense/defense + per-family + multi-window) is built
+and deterministically tested. **The empirical pass/fail verdict is NOT yet rendered** — that needs a **live
+temp=0 LLM run on real Alpaca data** (the offline suite validates the *apparatus*; MockLLM ignores prompts).
+The honest expectation stays **parity** (HCH ≈ Hexpert); beating frozen seeds is the research frontier.
+
+**Next — US-3 (data enrichment) and/or a live-LLM smoke run:** US-3 adds intraday/halts/short-interest/SSR/
+social enrichment (unlocking full runner/meme/event offense); a temp=0 Claude/DeepSeek run on captured
+Alpaca windows is what renders the actual HCH-vs-Hexpert verdict via the now-built procedure. **Deferred §10
+methodology refinements** (gate-non-blocking; the firewall + strict walk-forward already enforce OOS
+no-lookahead): purged & embargoed CV; regime-stratified eval. **Other deferred:** Hcredit (C4) ablation arm;
+wire L3 sizing / L4 guard into the agent's `DecisionPackage`; master-dispatch G sub-agents (keeps the
+`G`-pass a reserved no-op); keep-last-K checkpoint pruning.
 
 ---
 
