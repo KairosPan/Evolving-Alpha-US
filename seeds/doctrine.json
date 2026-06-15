@@ -12,7 +12,7 @@
   {"section": "fill_feasibility", "regime": "all", "immutable": true,
    "guidance": "Do not rank an unbuyable pick ahead of a buyable one; model the realistic entry, not a fantasy fill."},
   {"section": "dont_fight_ssr", "regime": "all", "immutable": true,
-   "guidance": "Respect short-sale restriction and halts; do not fight a one-sided tape (active once US-3 SSR data lands)."},
+   "guidance": "Respect short-sale restriction and halts; do not fight a one-sided tape."},
   {"section": "trend_play", "regime": "trend", "immutable": false,
    "guidance": "Ride the lead runner and first sympathy; add on reclaims; trim into blowoffs; honor the first distribution day."},
   {"section": "ignition_play", "regime": "ignition", "immutable": false,

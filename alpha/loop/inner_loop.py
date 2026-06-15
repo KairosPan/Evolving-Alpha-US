@@ -21,6 +21,7 @@ from alpha.refine.credit import CreditReport, apply_credit, merge_credit_reports
 from alpha.refine.refiner import RefineReport, Refiner, RefinerConfig
 from alpha.refine.signatures import extract_signatures
 from alpha.loop.floor_breaker import _fallback_trip, _shadow_eps_abs, _shadow_trip
+from alpha.guard.screen import GuardedPolicy
 from alpha.state.builder import build_market_state
 from alpha.universe.universe import build_universe
 
@@ -38,6 +39,10 @@ class LoopConfig(BaseModel):
     breaker_mad_c: float = Field(default=2.0, ge=0.0)
     floor_abs: float = Field(default=-0.2, ge=-1.0, le=1.0)
     enable_refine: bool = True
+    screen: bool = False        # US-3b: when True, wrap the agent in GuardedPolicy (L4 hard veto). OFF by
+    #   default — the regime arm over-fires on the minimal state builder (follow_through/sentiment None ->
+    #   GCycle reads backside) until the richer features/builder is on the live path (a later US-3 slice).
+    #   The SSR/reverse-split data-flag vetoes are exact today.
     # shadow/paired breaker (US-2d): active only when an InnerLoop is given a shadow_daily reference series
     breaker_shadow_lambda: float = Field(default=1.0, ge=0.0)
     breaker_shadow_eps_c: float = Field(default=0.25, ge=0.0)
@@ -98,8 +103,9 @@ class InnerLoop:
         """(Re)build agent + refiner from the CURRENT mgr.harness/mgr.tools. Call at startup and after
         EVERY rollback (rollback_to rebinds mgr.harness/mgr.tools to the restored objects)."""
         h = self._mgr.harness
-        self._agent = self._agent_factory(h) if self._agent_factory is not None \
+        base = self._agent_factory(h) if self._agent_factory is not None \
             else LLMAgentPolicy(h, self._agent_llm)
+        self._agent = GuardedPolicy(base, self._source) if self._cfg.screen else base
         self._refiner = Refiner(h, self._refiner_llm, self._mgr.tools, self._refiner_cfg)
 
     def run(self) -> LoopReport:
