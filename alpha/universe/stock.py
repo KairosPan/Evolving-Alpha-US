@@ -21,4 +21,5 @@ class StockSnapshot(BaseModel):
     volume: float | None = None
     rvol: float | None = None              # trailing-only relative volume
     consecutive_up_days: int | None = None
-    # float / short_interest / halts -> None until US-3 enrichment
+    # consecutive_up_days populated by build_universe (US-3a; None = current-day bar absent);
+    # float / short_interest / halts -> None until US-3b+
