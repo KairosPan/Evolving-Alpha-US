@@ -39,3 +39,67 @@ def test_ssr_is_guard_safe():
     src = _src({"KNIFE": [10.0, 8.8, 9.0]})
     gs = GuardedSource(src, AsOfGuard(date(2026, 6, 12)))           # reads only prior-day bars (< as_of)
     assert ssr_active(gs, "KNIFE", date(2026, 6, 12)) is True
+
+
+from alpha.state.market import MarketState
+from alpha.eval.decision import Candidate, DecisionPackage
+from alpha.universe.universe import CandidateUniverse
+from alpha.guard.screen import screen_decision, GuardedPolicy
+
+
+def _state(d=date(2026, 6, 12), *, sn=0.7, ft=0.5, gainers=2, losers=0, fb=0):
+    return MarketState(date=d, gainer_count=gainers, gap_up_count=0, loser_count=losers,
+                       failed_breakout_count=fb, max_runner_tier=1, echelon=[], breadth_raw=1.0,
+                       sentiment_norm=sn, follow_through_rate=ft,
+                       as_of=datetime(d.year, d.month, d.day, 16, 0))
+
+
+def _pkg(*symbols):
+    return DecisionPackage(date=date(2026, 6, 12),
+                           candidates=[Candidate(symbol=s, pattern="gap_and_go") for s in symbols])
+
+
+def test_screen_keeps_clean_candidate_and_populates_regime():
+    src = _src({"CLEAN": [10.0, 11.0, 12.0]})                       # rising -> no SSR
+    out = screen_decision(_pkg("CLEAN"), source=src, state=_state())   # sn=0.7, ft=0.5 -> trend/frontside
+    assert [c.symbol for c in out.candidates] == ["CLEAN"]
+    assert out.regime is not None and out.regime.frontside is True
+    assert out.key_risks == []
+
+
+def test_screen_drops_ssr_candidate_and_records_reason():
+    src = _src({"KNIFE": [10.0, 8.8, 9.0]})                         # prior-day -12% -> SSR
+    out = screen_decision(_pkg("KNIFE"), source=src, state=_state())
+    assert out.candidates == []
+    assert any("KNIFE" in r and "SSR" in r for r in out.key_risks)
+    assert out.no_trade_reason                                       # all vetoed -> no-trade reason set
+
+
+def test_screen_drops_reverse_split_candidate(fake_source):
+    # conftest fake_source: RUN has a pending reverse split (announced 6/9, ex 6/20); RUN rising -> no SSR
+    out = screen_decision(_pkg("RUN"), source=fake_source, state=_state())
+    assert out.candidates == [] and any("reverse split" in r for r in out.key_risks)
+
+
+def test_screen_drops_all_in_risk_off_regime():
+    src = _src({"CLEAN": [10.0, 11.0, 12.0]})
+    out = screen_decision(_pkg("CLEAN"), source=src, state=_state(sn=0.1))   # proxy 0.1 -> washout, risk_gate 0.1
+    assert out.candidates == [] and any("risk-off" in r for r in out.key_risks)
+
+
+def test_screen_is_frozen_safe():
+    src = _src({"CLEAN": [10.0, 11.0, 12.0]})
+    pkg = _pkg("CLEAN", "CLEAN2")
+    out = screen_decision(pkg, source=src, state=_state())
+    assert len(pkg.candidates) == 2                                 # original untouched (frozen rebuild)
+    assert out is not pkg
+
+
+def test_guarded_policy_screens_inner_decision():
+    src = _src({"KNIFE": [10.0, 8.8, 9.0]})
+    class _Stub:
+        def decide(self, state, universe):
+            return _pkg("KNIFE")
+    gp = GuardedPolicy(_Stub(), src)
+    out = gp.decide(_state(), CandidateUniverse.from_stocks([]))
+    assert out.candidates == [] and any("SSR" in r for r in out.key_risks)
