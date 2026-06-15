@@ -9,10 +9,11 @@ from alpha.universe.universe import CandidateUniverse
 def build_market_state(universe: CandidateUniverse, day: Date, *, as_of: DateTime) -> MarketState:
     """Minimal MarketState from the day's universe: breadth counts + runner echelon.
 
-    NOTE: the runner echelon / max_runner_tier are driven by StockSnapshot.consecutive_up_days,
-    which build_universe does not yet populate (multi-day-runner detection is a US-1 enrichment).
-    Until then the echelon is empty over a built universe; the tiering logic is exercised by unit
-    tests with hand-built snapshots. sentiment_norm stays None (regime-relative normalization is US-1).
+    The runner echelon / max_runner_tier are driven by StockSnapshot.consecutive_up_days, which
+    build_universe populates as of US-3a (gainers/gap_ups by a day-anchored trailing-bar probe; losers
+    0; None when a current-day bar is absent). So over a built universe the echelon is now live on the
+    walk path. sentiment_norm stays None here — the regime-relative normalization lives in the richer
+    alpha/features/builder.py build (wired into the eval loop in a later US-3 slice).
     """
     stocks = universe.all()
     gainers = [s for s in stocks if s.status == "gainer"]

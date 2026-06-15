@@ -28,9 +28,9 @@ def extract_signatures(traj: Trajectory, h: HarnessState) -> list[FailureSignatu
     """Per non-continued scored pick, classify the failure. Continued (win) -> no signature.
     nuked split by entry context: chased a top-tier extended runner vs took a laggard.
 
-    NOTE: on real US-2b walks entries come from build_universe (consecutive_up_days=None) and
-    max_runner_tier=0, so nukes resolve to generic_nuke until runner-tier enrichment lands; the
-    chased/laggard discrimination is unit-tested with hand-built snapshots (see plan Task 4 note)."""
+    As of US-3a build_universe populates consecutive_up_days, so on real walks step.entries carry a
+    runner tier and step.market.max_runner_tier is non-zero -> the chased_blowoff / weak_laggard_nuke
+    discrimination is live (it degrades to generic_nuke only when a pick's tier is genuinely unknown)."""
     sigs: list[FailureSignature] = []
     for step in traj.scored_steps():
         max_tier = step.market.max_runner_tier
