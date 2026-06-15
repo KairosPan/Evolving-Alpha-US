@@ -42,9 +42,12 @@ def test_has_dilution_filing_announced_offering():
 
 def test_has_dilution_filing_pit_and_wrong_kind():
     from alpha.data.corp_actions import has_dilution_filing
-    future = pd.DataFrame({"symbol": ["DIL"], "announce_date": [date(2026, 6, 20)],
-                           "ex_date": [date(2026, 7, 1)], "kind": ["shelf"], "ratio": [None]})
-    assert has_dilution_filing(future, "DIL", date(2026, 6, 12)) is False  # announced AFTER as_of -> unknown
+    # DIL's shelf is announced AFTER as_of (PIT); OTHER's atm IS known (6/9<=6/12) but wrong symbol ->
+    # exercises the symbol filter on a NON-empty known frame, not just the empty-frame short-circuit.
+    corp = pd.DataFrame({"symbol": ["DIL", "OTHER"], "announce_date": [date(2026, 6, 20), date(2026, 6, 9)],
+                         "ex_date": [date(2026, 7, 1), date(2026, 6, 20)],
+                         "kind": ["shelf", "atm"], "ratio": [None, None]})
+    assert has_dilution_filing(corp, "DIL", date(2026, 6, 12)) is False    # PIT + symbol filter (non-empty frame)
     split = pd.DataFrame({"symbol": ["DIL"], "announce_date": [date(2026, 6, 9)],
                           "ex_date": [date(2026, 6, 20)], "kind": ["reverse_split"], "ratio": [0.1]})
     assert has_dilution_filing(split, "DIL", date(2026, 6, 12)) is False   # not a dilution kind

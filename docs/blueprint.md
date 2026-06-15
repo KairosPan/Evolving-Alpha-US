@@ -132,7 +132,7 @@ alpha/
                          #   split-vintage firewall; adjusted levels are recomputed when needed)
     snapshot_source.py   # offline PIT source (SnapshotSource)
     capture.py           # window prefetch → store (PIT-correct, idempotent)
-    corp_actions.py      # splits / reverse-splits / delistings — PIT by announcement date
+    corp_actions.py      # splits / reverse-splits / delistings / dilution-filings (ATM/shelf/offering) — PIT by announcement date
   state/
     market.py            # MarketState, RunnerRung (连板梯队 analog), as-of timestamp
     decision.py          # DecisionPackage schema (frozen; the action a_t + DAgger record)
