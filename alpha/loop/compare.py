@@ -108,3 +108,41 @@ def compare_harnesses(harness_factory: Callable[[], HarnessState], source, start
         hch_beats_hexpert=(d_excess > 0.0),
         hch_loop_report=lr,
     )
+
+
+class MultiWindowReport(BaseModel):
+    """Honest-bar DIAGNOSTIC across N (start, end) windows. NOTE: few/short-window excess deltas are
+    NOISE (MDE ~0.26 at ~30 trading days, spec §12) — this surfaces the direction/distribution
+    (win-rate, sign-consistency), it is NOT a significance test. Formal CI/MDE/purged-CV are deferred."""
+    model_config = ConfigDict(frozen=True)
+    n_windows: int
+    deltas: list[float] = Field(default_factory=list)   # hch_minus_hexpert_mean_excess per window
+    mean_delta: float = 0.0
+    win_rate: float = 0.0                                # fraction of windows with delta > 0
+    sign_consistent: bool = False                       # all deltas strictly same sign
+
+
+def multi_window(harness_factory: Callable[[], HarnessState], source,
+                 windows: list[tuple[Date, Date]], *,
+                 agent_llm_factory: Callable[[], LLMClient],
+                 refiner_llm_factory: Callable[[], LLMClient],
+                 store_factory: Callable[[], SnapshotStore],
+                 loop_config: LoopConfig | None = None,
+                 refiner_config: RefinerConfig | None = None,
+                 scorer_factory: Callable[[], object] | None = None,
+                 shadow: bool = False) -> MultiWindowReport:
+    """Run compare_harnesses over each window; aggregate the excess deltas. A direction diagnostic, not
+    a significance test (see MultiWindowReport)."""
+    deltas: list[float] = []
+    for (start, end) in windows:
+        cr = compare_harnesses(harness_factory, source, start, end, agent_llm_factory=agent_llm_factory,
+                               refiner_llm_factory=refiner_llm_factory, store_factory=store_factory,
+                               loop_config=loop_config, refiner_config=refiner_config,
+                               scorer_factory=scorer_factory, shadow=shadow)
+        deltas.append(cr.hch_minus_hexpert_mean_excess)
+    n = len(deltas)
+    mean_delta = sum(deltas) / n if n else 0.0
+    win_rate = sum(1 for d in deltas if d > 0.0) / n if n else 0.0
+    sign_consistent = n > 0 and (all(d > 0.0 for d in deltas) or all(d < 0.0 for d in deltas))
+    return MultiWindowReport(n_windows=n, deltas=deltas, mean_delta=mean_delta,
+                             win_rate=win_rate, sign_consistent=sign_consistent)

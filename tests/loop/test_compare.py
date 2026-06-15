@@ -87,3 +87,20 @@ def test_daily_advantage_mirrors_breaker_formula():
                        MockLLMClient('{"candidates": [{"symbol": "RUN", "pattern": "gap_and_go"}]}')))
     da = daily_advantage(traj)
     assert da and all(isinstance(k, date) for k in da)        # keyed by decision date, one per scored step
+
+
+def test_multi_window_aggregates_deltas():
+    from alpha.loop.compare import multi_window, MultiWindowReport
+    src = _source(10, 1.15)
+    cal = src.trading_calendar()
+    windows = [(cal[0], cal[4]), (cal[5], cal[9])]              # two non-overlapping windows
+    hf = lambda: load_seeds(SEEDS)
+    af = lambda: MockLLMClient('{"candidates": [{"symbol": "RUN", "pattern": "gap_and_go"}]}')
+    mw = multi_window(hf, src, windows, agent_llm_factory=af,
+                      refiner_llm_factory=lambda: MockLLMClient('{"ops": []}'),
+                      store_factory=lambda: SnapshotStore(tempfile.mkdtemp()), loop_config=_cfg())
+    assert isinstance(mw, MultiWindowReport)
+    assert mw.n_windows == 2 and len(mw.deltas) == 2
+    assert 0.0 <= mw.win_rate <= 1.0
+    assert abs(mw.mean_delta - sum(mw.deltas) / 2) < 1e-9
+    assert isinstance(mw.sign_consistent, bool)
