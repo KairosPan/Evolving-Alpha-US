@@ -151,7 +151,39 @@ class InnerLoop:
                 advs = [c.advantage for c in step.outcomes.values()]
                 breaker_days.append((step.date, sum(advs) / len(advs) if advs else 0.0))
 
-            # [Task 5 inserts the BREAKER block here]
+            # capability-floor breaker (fallback path): judge the daily-advantage series; on a trip,
+            # roll back to the latest checkpoint BEFORE the degraded window (1st trip) or freeze.
+            if not frozen and len(breaker_days) >= cfg.breaker_min_days:
+                k = min(len(breaker_days), cfg.breaker_k_max)
+                history = [v for _, v in breaker_days]
+                trip, rolling, thr, reason = _fallback_trip(history, k, cfg.breaker_mad_c, cfg.floor_abs)
+                if trip:
+                    window_start = breaker_days[-k][0]
+                    breaker_trips += 1
+                    target = max((v for v, d in ckpts if d < window_start), default=None)
+                    if breaker_trips == 1 and target is not None:
+                        self._mgr.rollback_to(target)
+                        self._rebind()
+                        ckpts = [(v, d) for v, d in ckpts if v <= target]   # drop discarded-timeline ckpts
+                        breaker_days.clear()                                # re-arm: need breaker_min_days again
+                        last_refined_idx = len(scored_steps)                # drop the discarded window so the
+                        #   next refine is NOT re-fed the degraded evidence that caused this rollback (also
+                        #   makes the same-day refine's window empty, so no `continue` is needed). The final
+                        #   LoopReport.trajectory still contains the pre-rollback steps by design.
+                        breaker_events.append(BreakerEvent(date=cursor, rolling=rolling, baseline=thr,
+                                                           reason=reason, rolled_back_to=target,
+                                                           mode="rollback"))
+                    else:
+                        rolled = None
+                        if target is not None:
+                            self._mgr.rollback_to(target)
+                            self._rebind()
+                            rolled = target
+                        frozen = True
+                        frozen_from = cursor
+                        breaker_events.append(BreakerEvent(date=cursor, rolling=rolling, baseline=thr,
+                                                           reason=reason, rolled_back_to=rolled,
+                                                           mode="frozen"))
 
             # periodic refine: checkpoint BEFORE editing H, over the non-overlapping watermark window
             fresh = scored_steps[last_refined_idx:]
