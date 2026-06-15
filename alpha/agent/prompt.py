@@ -93,5 +93,9 @@ def build_user_prompt(state: MarketState, universe: CandidateUniverse) -> str:
         pct = f"{s.pct_change:+.0f}%" if s.pct_change is not None else "?"
         rvol = f"{s.rvol:.1f}" if s.rvol is not None else "?"
         cud = s.consecutive_up_days if s.consecutive_up_days is not None else "?"
-        lines.append(f"- {s.symbol} ({s.name}) [{s.status}] pct={pct} rvol={rvol} up_days={cud}")
+        line = f"- {s.symbol} ({s.name}) [{s.status}] pct={pct} rvol={rvol} up_days={cud}"
+        if s.short_interest is not None:                 # squeeze fuel — only shown when data is live
+            dtc = f" dtc={s.days_to_cover:.1f}" if s.days_to_cover is not None else ""
+            line += f" si={s.short_interest:.0f}%{dtc}"
+        lines.append(line)
     return head + "\n".join(lines)

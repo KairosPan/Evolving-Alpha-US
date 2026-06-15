@@ -68,3 +68,20 @@ def test_build_universe_missing_day_bar_runner_tier_unknown():
     src = FakeSource(calendar=cal, bars=bars, snapshots=snaps)
     u = build_universe(src, date(2026, 6, 12), gainer_pct=10.0, gap_pct=5.0, rvol_window=2)
     assert u.get("LAG").status == "gainer" and u.get("LAG").consecutive_up_days is None
+
+
+def test_build_universe_populates_short_interest():
+    cal = [date(2026, 6, 11), date(2026, 6, 12)]
+    snaps = {date(2026, 6, 12): pd.DataFrame({
+        "symbol": ["SQZ"], "name": ["Squeezer"], "open": [10.0], "high": [13.0], "low": [10.0],
+        "close": [12.0], "volume": [5], "prev_close": [10.0],
+        "short_interest": [30.0], "days_to_cover": [6.0]})}                 # +20% gainer w/ high SI
+    src = FakeSource(calendar=cal, bars={}, snapshots=snaps)
+    s = build_universe(src, date(2026, 6, 12), gainer_pct=10.0, gap_pct=5.0, rvol_window=2).get("SQZ")
+    assert s.short_interest == 30.0 and s.days_to_cover == 6.0
+
+
+def test_build_universe_short_interest_absent_is_none(fake_source):
+    # conftest fake_source snapshots have no short_interest columns -> fields stay None (never fabricated)
+    s = build_universe(fake_source, date(2026, 6, 12), gainer_pct=10.0, gap_pct=5.0, rvol_window=2).get("RUN")
+    assert s.short_interest is None and s.days_to_cover is None

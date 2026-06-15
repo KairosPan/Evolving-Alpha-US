@@ -128,5 +128,7 @@ def build_universe(source, day: Date, *, gainer_pct: float = 10.0,
             pct_change=pct, gap_pct=gap,
             volume=(float(rec["volume"]) if rec.get("volume") is not None else None),
             rvol=rvol, consecutive_up_days=cud,
+            short_interest=(float(rec["short_interest"]) if rec.get("short_interest") is not None else None),
+            days_to_cover=(float(rec["days_to_cover"]) if rec.get("days_to_cover") is not None else None),
         )
     return CandidateUniverse(stocks)

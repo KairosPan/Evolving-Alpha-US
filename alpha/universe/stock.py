@@ -21,5 +21,7 @@ class StockSnapshot(BaseModel):
     volume: float | None = None
     rvol: float | None = None              # trailing-only relative volume
     consecutive_up_days: int | None = None
-    # consecutive_up_days populated by build_universe (US-3a; None = current-day bar absent);
-    # float / short_interest / halts -> None until US-3b+
+    short_interest: float | None = None    # FINRA short interest as % of float (0-100); US-3c
+    days_to_cover: float | None = None      # short shares / avg daily volume; US-3c
+    # consecutive_up_days populated by build_universe (US-3a); short_interest/days_to_cover (US-3c);
+    # float / halts -> None until US-3d / US-3e
