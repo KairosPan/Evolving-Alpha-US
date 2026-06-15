@@ -57,3 +57,40 @@ def test_stat_verdict_frozen():
     v = StatVerdict(verdict="flat", n_days=3, mean_diff=0.0)
     with pytest.raises(Exception):
         v.verdict = "win"
+
+
+from alpha.eval.stats import moving_block_bootstrap, sign_permutation_pvalue, verdict
+
+
+def test_bootstrap_degenerate_and_empty():
+    assert moving_block_bootstrap([0.3]) == (0.3, 0.3)         # n==1 point CI
+    with pytest.raises(ValueError):
+        moving_block_bootstrap([])
+
+
+def test_bootstrap_deterministic_and_directional():
+    lo1, hi1 = moving_block_bootstrap([0.5] * 10, n_boot=500, seed=0)
+    lo2, hi2 = moving_block_bootstrap([0.5] * 10, n_boot=500, seed=0)
+    assert (lo1, hi1) == (lo2, hi2) == (0.5, 0.5)             # constant series + determinism
+    lo, hi = moving_block_bootstrap([-0.4] * 10, n_boot=500, seed=0)
+    assert lo == hi == -0.4
+
+
+def test_permutation_pvalue_symmetric_high_signal_low():
+    assert sign_permutation_pvalue([]) == 1.0
+    # symmetric mean 0 -> every flip has |mean|>=0 -> all hits -> p == 1.0
+    assert sign_permutation_pvalue([0.5, -0.5] * 8, n_perm=500, seed=0) == 1.0
+    # strong one-sided signal -> almost no flip reaches |mean|>=1.0 -> small p
+    assert sign_permutation_pvalue([1.0] * 10, n_perm=500, seed=0) < 0.05
+
+
+def test_verdict_branches_and_determinism():
+    assert verdict([0.5] * 10, n_boot=500, n_perm=500).verdict == "win"     # CI low > 0
+    assert verdict([-0.5] * 10, n_boot=500, n_perm=500).verdict == "loss"   # CI high < 0
+    assert verdict([0.0] * 10, n_boot=500, n_perm=500).verdict == "flat"    # CI straddles 0
+    short = verdict([0.5, 0.5, 0.5], n_boot=500, n_perm=500)                # n<min_days(8)
+    assert short.verdict == "insufficient" and short.ci_low is not None     # CI still attached (n>=2)
+    assert short.n_days == 3 and short.block_len == _default_block_len(3) and short.n_boot == 500
+    a = verdict([0.5, -0.3, 0.2, 0.4, -0.1, 0.6, 0.1, -0.2, 0.3], seed=0, n_boot=500, n_perm=500)
+    b = verdict([0.5, -0.3, 0.2, 0.4, -0.1, 0.6, 0.1, -0.2, 0.3], seed=0, n_boot=500, n_perm=500)
+    assert a == b                                                            # full StatVerdict equality

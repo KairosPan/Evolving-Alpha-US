@@ -74,3 +74,77 @@ def mde(diffs: list[float], alpha: float = 0.05, power: float = 0.8) -> float:
     nd = statistics.NormalDist()
     z = nd.inv_cdf(1 - alpha / 2) + nd.inv_cdf(power)
     return z * sd / math.sqrt(n)
+
+
+def moving_block_bootstrap(diffs: list[float], block_len: int | None = None,
+                           n_boot: int = DEFAULT_N_BOOT, seed: int = DEFAULT_SEED) -> tuple[float, float]:
+    """95% percentile CI of the resampled MEAN via the moving-block bootstrap (autocorrelation-robust).
+    Deterministic via a LOCAL random.Random(seed). Draw order is load-bearing: per boot, n_blocks ints
+    in sequence. Percentile indices use int() truncation."""
+    n = len(diffs)
+    if n == 0:
+        raise ValueError("moving_block_bootstrap: empty series")
+    if n == 1:
+        return (diffs[0], diffs[0])
+    L = block_len if block_len is not None else _default_block_len(n)
+    L = max(1, min(L, n))
+    rng = random.Random(seed)
+    n_blocks = math.ceil(n / L)
+    max_start = n - L
+    means: list[float] = []
+    for _ in range(n_boot):
+        sample: list[float] = []
+        for _ in range(n_blocks):
+            s = rng.randint(0, max_start)
+            sample.extend(diffs[s:s + L])
+        del sample[n:]                       # truncate to the original length n
+        means.append(sum(sample) / n)
+    means.sort()
+    lo_idx = int(0.025 * n_boot)
+    hi_idx = min(n_boot - 1, int(0.975 * n_boot))
+    return (means[lo_idx], means[hi_idx])
+
+
+def sign_permutation_pvalue(diffs: list[float], n_perm: int = DEFAULT_N_PERM,
+                            seed: int = DEFAULT_SEED) -> float:
+    """Two-sided sign-flip permutation p for mean(diffs) != 0. Each day's diff is flipped +/- with prob
+    0.5 (one rng.random() per day, in diffs order). Add-one smoothed -> never 0. Empty -> 1.0."""
+    n = len(diffs)
+    if n == 0:
+        return 1.0
+    obs = abs(sum(diffs) / n)
+    rng = random.Random(seed)
+    hits = 0
+    for _ in range(n_perm):
+        s = sum(d if rng.random() < 0.5 else -d for d in diffs)
+        if abs(s / n) >= obs:                # >= : ties count as a hit (conservative)
+            hits += 1
+    return (1 + hits) / (1 + n_perm)
+
+
+def verdict(diffs: list[float], min_days: int = DEFAULT_MIN_DAYS, *, block_len: int | None = None,
+            n_boot: int = DEFAULT_N_BOOT, n_perm: int = DEFAULT_N_PERM,
+            seed: int = DEFAULT_SEED) -> StatVerdict:
+    """Paired day-level decision: insufficient (n<min_days) / win (CI_low>0) / loss (CI_high<0) / flat.
+    CI/p/MDE attach whenever n>=2 (even when insufficient), so a small window still reports its
+    uncertainty. The same seed feeds the (independent) bootstrap and permutation RNGs."""
+    n = len(diffs)
+    mean = sum(diffs) / n if n else 0.0
+    ci_lo = ci_hi = p = m = None
+    eff_block = 1
+    if n >= 2:
+        eff_block = block_len if block_len is not None else _default_block_len(n)
+        eff_block = max(1, min(eff_block, n))
+        ci_lo, ci_hi = moving_block_bootstrap(diffs, block_len=eff_block, n_boot=n_boot, seed=seed)
+        p = sign_permutation_pvalue(diffs, n_perm=n_perm, seed=seed)
+        m = mde(diffs)
+    if n < min_days:
+        v: Literal["win", "loss", "flat", "insufficient"] = "insufficient"
+    elif ci_lo is not None and ci_lo > 0:
+        v = "win"
+    elif ci_hi is not None and ci_hi < 0:
+        v = "loss"
+    else:
+        v = "flat"
+    return StatVerdict(verdict=v, n_days=n, mean_diff=mean, ci_low=ci_lo, ci_high=ci_hi, p_value=p,
+                       mde=m, seed=seed, block_len=eff_block, n_boot=n_boot, n_perm=n_perm)
