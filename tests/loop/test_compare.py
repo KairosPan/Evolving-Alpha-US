@@ -89,6 +89,25 @@ def test_daily_advantage_mirrors_breaker_formula():
     assert da and all(isinstance(k, date) for k in da)        # keyed by decision date, one per scored step
 
 
+def test_stat_verdict_and_contribution_populated():
+    from alpha.eval.stats import StatVerdict
+    from alpha.eval.contribution import ContributionReport
+    src = _source(10, 1.15)
+    cr = compare_harnesses(lambda: load_seeds(SEEDS), src, src.trading_calendar()[0],
+                           src.trading_calendar()[-1],
+                           agent_llm_factory=lambda: MockLLMClient('{"candidates": '
+                                                                   '[{"symbol": "RUN", "pattern": "gap_and_go"}]}'),
+                           refiner_llm_factory=lambda: MockLLMClient('{"ops": []}'),
+                           store_factory=lambda: SnapshotStore(tempfile.mkdtemp()), loop_config=_cfg())
+    assert isinstance(cr.stat_verdict, StatVerdict)
+    # same agent script + empty-ops refiner -> HCH==Hexpert picks -> paired diff all 0 -> 'flat' at n_days==8.
+    # A non-zero mean_diff would signal a REAL HCH/Hexpert divergence (breaker trip / dropped step), not float noise.
+    assert cr.stat_verdict.verdict in {"flat", "insufficient"} and abs(cr.stat_verdict.mean_diff) < 1e-9
+    assert cr.stat_verdict.n_days >= 1
+    assert isinstance(cr.contribution, ContributionReport)
+    assert cr.contribution.offense.n >= 1               # gap_and_go is an offense (pattern) seed skill
+
+
 def test_multi_window_aggregates_deltas():
     from alpha.loop.compare import multi_window, MultiWindowReport
     src = _source(10, 1.15)

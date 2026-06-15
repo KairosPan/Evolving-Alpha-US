@@ -8,7 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from alpha.agent.agent import LLMAgentPolicy
 from alpha.eval.baselines import ChaseBiggestGainerPolicy, NoTradePolicy
 from alpha.eval.metrics import EvalReport
+from alpha.eval.contribution import ContributionReport, contribution_split
 from alpha.eval.scorer import ReturnScorer
+from alpha.eval.stats import StatVerdict, daily_series, paired_daily_diff, verdict
 from alpha.eval.trajectory import Trajectory, report_from_trajectory
 from alpha.eval.walk_forward import WalkForwardEval
 from alpha.harness.manager import HarnessManager
@@ -51,6 +53,8 @@ class ComparisonReport(BaseModel):
     hch_minus_hexpert_nuke_rate: float
     hch_beats_hexpert: bool
     hch_loop_report: LoopReport | None = None
+    stat_verdict: StatVerdict | None = None         # paired HCH-Hexpert day-level decision (CI/p/MDE)
+    contribution: ContributionReport | None = None  # HCH offense/defense + per-family split
 
 
 def compare_harnesses(harness_factory: Callable[[], HarnessState], source, start: Date, end: Date, *,
@@ -98,6 +102,11 @@ def compare_harnesses(harness_factory: Callable[[], HarnessState], source, start
         "Hmin_chase": ArmReport(name="Hmin_chase", report=hmin_chase),
         "Hmin_notrade": ArmReport(name="Hmin_notrade", report=hmin_notrade),
     }
+    # §9/§10 acceptance procedure: paired day-level verdict (HCH - Hexpert) + offense/defense split.
+    diffs = paired_daily_diff(daily_series(lr.trajectory), daily_series(hexpert_traj))
+    stat = verdict(diffs)
+    contribution = contribution_split(lr.trajectory, mgr.harness)   # resolve against the evolved HCH H
+
     d_excess = hch_eval.mean_excess - hexpert_eval.mean_excess
     return ComparisonReport(
         arms=arms,
@@ -107,6 +116,8 @@ def compare_harnesses(harness_factory: Callable[[], HarnessState], source, start
         hch_minus_hexpert_nuke_rate=hch_eval.nuke_rate - hexpert_eval.nuke_rate,
         hch_beats_hexpert=(d_excess > 0.0),
         hch_loop_report=lr,
+        stat_verdict=stat,
+        contribution=contribution,
     )
 
 
