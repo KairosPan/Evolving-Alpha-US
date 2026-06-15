@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-15 (US-0 + US-1 + US-2 complete; US-3a runner-tier + US-3b SSR/reverse-split guard-veto (opt-in) shipped; US-3c next).
+> Last updated: 2026-06-15 (US-0 + US-1 + US-2 complete; US-3a runner-tier + US-3b guard-veto + US-3c short-interest/short_squeeze shipped; US-3d next).
 
 ---
 
@@ -333,8 +333,21 @@ Hexpert/Hmin outside `InnerLoop`, so a verdict run must wrap all arms in `Guarde
 flipping the default ON. SSR/reverse-split flags are exact + unit-tested; the full opt-in path is acceptance-
 tested end-to-end on a frontside regime. Full suite **339 tests green**.
 
-**Next — US-3c → US-3f (deferred roadmap):** **3c** FINRA
-short-interest → activate the incubating `short_squeeze` seed. **3d** float / dilution / EDGAR → the guard's
+**US-3c Short-interest + short_squeeze activation — Complete (2026-06-15). The dormant squeeze seed is live.**
+`StockSnapshot` gains `short_interest` (% of float) + `days_to_cover`, filled at the `build_universe` chokepoint
+from the daily snapshot (the US-3a data-on-snapshot pattern; real FINRA ingestion via capture/Alpaca deferred —
+the offline `FakeSource`/`SnapshotSource` mechanism + schema are in place). `build_user_prompt` renders
+`si=…% dtc=…` per candidate when present. The activation makes the previously-**decorative** `Skill.depends_on`
+**enforced**: `build_system_prompt` (on the live `decide` path, which now supplies `available_data_signals(universe)`
+— optional enrichment fields only) surfaces a skill only when every name in its `depends_on` is a live data
+signal. So `short_squeeze` (`depends_on=[short_interest, days_to_cover]`) appears to the agent exactly on
+short-interest days, and `gamma_squeeze` (`depends_on=[options_flow]`) stays correctly hidden until US-3f.
+Enforcement defaults OFF (`available_signals=None`) for non-decide callers, so the suite is untouched. `short_squeeze`
+**stays `incubating`** — promotion to `active` is evidence-gated (Refiner on a live run), not declared (lifecycle
+discipline; `test_squeeze_offense_is_incubating` pins it). GateSpec threshold gating + a deterministic
+`HarnessRulePolicy` consumer are deferred (no live consumer yet). Full suite **350 tests green**.
+
+**Next — US-3d → US-3f (deferred roadmap):** **3d** float / dilution / EDGAR → the guard's
 `dilution` veto. **3e** intraday / halts / MWCB (LULD halts = 涨停 analog; `breaker.set_mwcb` has no caller;
 enables fill-feasibility + halt-locked infeasibility). **3f** social / options (gamma squeeze) / per-narrative
 phase tagging. Plus, **orthogonal to US-3**: a live temp=0 Claude/DeepSeek run on captured Alpaca windows is
