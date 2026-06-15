@@ -20,6 +20,11 @@ def test_ssr_active_when_prior_day_dropped_10pct():
     assert ssr_active(src, "KNIFE", date(2026, 6, 12)) is True
 
 
+def test_ssr_active_at_exact_10pct_boundary():
+    src = _src({"EDGE": [10.0, 9.0, 9.0]})             # exactly -10% prior day -> Reg SHO triggers (<=)
+    assert ssr_active(src, "EDGE", date(2026, 6, 12)) is True
+
+
 def test_ssr_inactive_when_prior_day_drop_below_threshold():
     src = _src({"MILD": [10.0, 9.2, 9.5]})             # -8% prior day -> no SSR
     assert ssr_active(src, "MILD", date(2026, 6, 12)) is False

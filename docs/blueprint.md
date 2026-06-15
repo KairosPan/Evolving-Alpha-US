@@ -307,8 +307,9 @@ distinguish self-evolution that adds edge from self-evolution that only trims ri
 - Stop discipline and fill-feasibility must be checked.
 - Survivorship/PIT awareness (no looking past the as-of cursor).
 - Position and loss circuit-breakers.
-- "Don't fight SSR" is included as a doctrine line but is **inert until SSR data lands in US-3**
-  (documented, not silently assumed live).
+- "Don't fight SSR" is an **active** immutable doctrine line, wired in US-3b via `ssr_active` +
+  `screen_decision` (opt-in `LoopConfig.screen`; global default-on gated on the richer `features/builder`
+  landing so the regime arm reads frontside).
 
 Seeds bootstrapped from this design + established US momentum knowledge.
 
@@ -369,8 +370,8 @@ corp-actions table (`PITStore.get_corp_actions()`) filtered in-process by
 the `MarketDataSource.corporate_actions(start, end)` method, which windows by `ex_date` (for future
 adjustment bookkeeping) and is therefore guarded on `end`. A reverse split announced before `as_of`
 but with a *future* ex-date is "pending" and must be visible to detection — so detection does **not**
-go through the ex-date-windowed guarded query. No consumer wires this in US-0 (reverse-split-pump is
-a US-1 failure-detector); the helper + its test are the foundation.
+go through the ex-date-windowed guarded query — US-3b adds the PIT-by-announce `corporate_actions_known(as_of)`
+source primitive for exactly this, and `screen_decision` is its first live consumer (the reverse-split veto).
 
 ### 8.5 Eval Oracles
 
