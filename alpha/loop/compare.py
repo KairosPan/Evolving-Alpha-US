@@ -44,7 +44,8 @@ class ArmReport(BaseModel):
 
 class ComparisonReport(BaseModel):
     """Three-tier compare (four arms). The North-Star verdict is on the EXCESS (advantage) delta,
-    de-market-beta (spec §7). A later `stat_verdict` can be added as an additive Optional field."""
+    de-market-beta (spec §7). `stat_verdict` (paired day-level CI/p/MDE) and `contribution`
+    (offense/defense + per-family) are additive-Optional fields (US-2e) computed inline in compare_harnesses."""
     model_config = ConfigDict(frozen=True)
     arms: dict[str, ArmReport] = Field(default_factory=dict)
     hch_minus_hexpert_mean_excess: float
