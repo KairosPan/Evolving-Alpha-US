@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-15 (US-0 + US-1 complete; US-2a agent + US-2b Refiner + US-2c InnerLoop complete).
+> Last updated: 2026-06-15 (US-0 + US-1 complete; US-2a/2b/2c + US-2d compare apparatus complete; US-2 acceptance gate open → US-2e).
 
 ---
 
@@ -267,15 +267,29 @@ refine, keeps scoring/trajectory). The **fallback (no-shadow)** breaker path onl
 plan review folded (rollback watermark-advance to avoid re-feeding degraded evidence; pass-count fix;
 doc/scope clarifications). Full suite **285 tests green**.
 
-**Next — US-2d (validate the self-evolution):** the three-way **HCH/Hexpert/Hmin** compare
-(`alpha/loop/compare.py`) — HCH = the self-refining `InnerLoop`; Hexpert = frozen seed `H` + agent, no
-Refiner; Hmin = `ChaseBiggestGainerPolicy`/`NoTradePolicy` — on the same source/horizon/oracle via fresh
-per-arm factories, reporting `mean_excess` deltas + the verdict `hch_beats_hexpert`; **plus** the
-**shadow/paired** breaker path (`_shadow_trip` + `shadow_daily` injection from the Hexpert arm). Honest
-bar: **HCH ≥ Hexpert OOS** (multi-seed, temp=0; parity is the honest expectation, beating frozen is the
-research frontier). Deferred: wire L3 sizing / L4 guard into the agent's `DecisionPackage`;
-master-dispatch G sub-agents (keeps the `G`-pass a reserved no-op); keep-last-K checkpoint pruning. US-3
-then adds intraday/halts/short-interest/SSR/social enrichment.
+**US-2d Compare + shadow breaker — Complete (2026-06-15). The measuring apparatus.** `alpha/loop/floor_breaker.py`
+gained `_shadow_eps_abs`/`_shadow_trip` (paired-diff trip: `mean(diff) < −max(λ·σ, ε)` + a negative-day
+direction gate). `InnerLoop` gained the **shadow path** (`shadow_daily` ctor param + `breaker_shadow_*`
+config + anti-lookahead `d ≤ cur_max` filter; `shadow_daily=None` = the unchanged fallback path).
+`alpha/loop/compare.py`: `compare_harnesses` runs the three TIERS HCH/Hexpert/Hmin via **factory injection**
+(fresh `H`/client/store per arm — counts 2/2/1/1; Hmin = two floor arms so `len(arms)==4`); `ArmReport`/
+`ComparisonReport` with the **excess** verdict `hch_beats_hexpert = (HCH.mean_excess − Hexpert.mean_excess) > 0`;
+`daily_advantage` shadow-series helper; `multi_window` noise-aware aggregator (win-rate / sign across
+windows). When `shadow=True`, Hexpert runs **first** and its series seeds HCH's paired breaker. Adversarial
+4-lens plan review folded (spec-acceptance boundary framing; doc/scope clarifications). Full suite **299 tests green**.
+
+**Honest bar (stated, not yet cleared):** **HCH ≥ Hexpert OOS** — parity is the honest expectation, beating
+frozen seeds is the research frontier; a single short-window delta is NOISE (MDE ~0.26). **US-2d builds the
+apparatus; the US-2 acceptance GATE remains OPEN** — spec §9/§10 *define* acceptance as the formal
+statistical procedure, which US-2d defers.
+
+**Next — US-2e validation slice (required, acceptance-completing):** the formal statistical layer
+(`alpha/eval/stats.py`: moving-block-bootstrap CI, sign-permutation p-value, MDE sizing, `StatVerdict`;
+`ComparisonReport.stat_verdict` as an additive Optional field) + purged & embargoed CV + regime-stratified
+eval + the **SPEC-REQUIRED (§6/§9/§10) offense-vs-defense + per-family contribution split**. **Then US-3**:
+intraday/halts/short-interest/SSR/social enrichment (unlocking full runner/meme/event offense). Also
+deferred: Hcredit (C4) ablation arm; wire L3 sizing / L4 guard into the agent's `DecisionPackage`;
+master-dispatch G sub-agents (keeps the `G`-pass a reserved no-op); keep-last-K checkpoint pruning.
 
 ---
 
