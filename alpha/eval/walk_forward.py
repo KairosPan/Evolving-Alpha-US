@@ -73,12 +73,19 @@ class WalkForwardEval:
 
     def _score(self, decision, days: list[Date], j: int, cursor: Date,
                record: PoolRecord) -> list[ScoredCandidate]:
-        # invariant: j == i - horizon, so j+horizon == i (the current cursor index) — always a valid
-        # index whose membership was recorded THIS iteration; days[j+1]/days[j+horizon] never go OOB.
-        entry_day = days[j + 1]                       # buy next open (t+1)
-        exit_day = days[j + self._horizon]            # sell t+horizon close
-        decision_mem = record.get(days[j])
-        exit_mem = record.get(exit_day)
-        oracle = ReturnOracle(GuardedSource(self._source, AsOfGuard(cursor)))   # as_of>=exit, firewall ok
-        out = self._scorer.score_step(decision, decision_mem, exit_mem, entry_day, exit_day, oracle)
-        return list(out.values())
+        return list(score_decision(self._source, self._scorer, decision, days, j, self._horizon,
+                                   cursor, record).values())
+
+
+def score_decision(source, scorer, decision, days: list[Date], j: int, horizon: int,
+                   cursor: Date, record: PoolRecord) -> dict[str, ScoredCandidate]:
+    """Score decision j (made on days[j]) at its t+horizon exit. Returns {symbol: ScoredCandidate}.
+    Firewall: the oracle reads through GuardedSource(AsOfGuard(cursor)) where cursor == the exit day,
+    so as_of >= exit_day (never future). Shared by WalkForwardEval._score and the US-2c InnerLoop.
+    Invariant: j == i - horizon so j+horizon == cursor's index; days[j+1]/days[j+horizon] never go OOB."""
+    entry_day = days[j + 1]                       # buy next open (t+1)
+    exit_day = days[j + horizon]                  # sell t+horizon close
+    decision_mem = record.get(days[j])
+    exit_mem = record.get(exit_day)
+    oracle = ReturnOracle(GuardedSource(source, AsOfGuard(cursor)))   # as_of>=exit, firewall ok
+    return scorer.score_step(decision, decision_mem, exit_mem, entry_day, exit_day, oracle)
