@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-14 (US-0 + US-1 complete; US-2a agent + US-2b Refiner complete).
+> Last updated: 2026-06-15 (US-0 + US-1 complete; US-2a agent + US-2b Refiner + US-2c InnerLoop complete).
 
 ---
 
@@ -252,13 +252,30 @@ red-line rejected) → audited in `EditLog` → reverted by `HarnessManager` rol
 plan review folded (parse_ops non-list crash; inert-taxonomy deferral; empty-patch hardening). Full suite
 **274 tests green**. *Edits in place — checkpoint/rollback-on-trip is US-2c.*
 
-**Next — US-2c InnerLoop (the loop comes alive):** the interleaved driver — agent decides on live `H` →
-delayed scoring → **online** `apply_credit` (cumulative, per scored step) → checkpoint-before-refine →
-`Refiner.refine()` → the **scorer-aware capability-floor breaker** (rolling daily advantage vs early
-baseline) → rollback-and-rebind / freeze (re-fetch `mgr.tools` after every rollback). Then **US-2d** runs
-the **HCH/Hexpert/Hmin** three-way compare (honest bar: HCH ≥ Hexpert OOS, multi-seed, temp=0). Deferred:
-wire L3 sizing / L4 guard into the agent's `DecisionPackage`; master-dispatch G sub-agents (keeps the
-`G`-pass a reserved no-op). US-3 then adds intraday/halts/short-interest/SSR/social enrichment.
+**US-2c InnerLoop — Complete (2026-06-15). The loop is alive.** `score_decision()` extracted from
+`WalkForwardEval._score` (reusable scoring; behavior preserved). `alpha/loop/floor_breaker.py` — the
+**scorer-aware capability-floor breaker** as pure functions (`_mad`, `_fallback_trip`: trip when
+`mean(last k) < median − c·MAD` on the per-day **advantage** series, with `floor_abs` as the MAD≈0
+backstop; distinct from the `alpha/guard/breaker.py` loss circuit-breaker). `alpha/loop/inner_loop.py` —
+`LoopConfig`/`RefineEvent`/`BreakerEvent`/`LoopReport` + `InnerLoop`: one reset-free pass on a single
+live `H` interleaving **act → delayed-score → online `apply_credit`** (once per newly-scored step,
+cumulative) **→ checkpoint-before-refine → `Refiner.refine()` → breaker**. On a first trip with a
+pre-degradation checkpoint → `rollback_to` + `_rebind` (rebuild agent+refiner on the restored `H`,
+re-fetch `mgr.tools`/`mgr.harness` — the cached-handle hazard) + re-arm (clear evidence, advance the
+refine watermark past the discarded window); second trip / no target → **freeze** (stops credit +
+refine, keeps scoring/trajectory). The **fallback (no-shadow)** breaker path only. Adversarial 4-lens
+plan review folded (rollback watermark-advance to avoid re-feeding degraded evidence; pass-count fix;
+doc/scope clarifications). Full suite **285 tests green**.
+
+**Next — US-2d (validate the self-evolution):** the three-way **HCH/Hexpert/Hmin** compare
+(`alpha/loop/compare.py`) — HCH = the self-refining `InnerLoop`; Hexpert = frozen seed `H` + agent, no
+Refiner; Hmin = `ChaseBiggestGainerPolicy`/`NoTradePolicy` — on the same source/horizon/oracle via fresh
+per-arm factories, reporting `mean_excess` deltas + the verdict `hch_beats_hexpert`; **plus** the
+**shadow/paired** breaker path (`_shadow_trip` + `shadow_daily` injection from the Hexpert arm). Honest
+bar: **HCH ≥ Hexpert OOS** (multi-seed, temp=0; parity is the honest expectation, beating frozen is the
+research frontier). Deferred: wire L3 sizing / L4 guard into the agent's `DecisionPackage`;
+master-dispatch G sub-agents (keeps the `G`-pass a reserved no-op); keep-last-K checkpoint pruning. US-3
+then adds intraday/halts/short-interest/SSR/social enrichment.
 
 ---
 
