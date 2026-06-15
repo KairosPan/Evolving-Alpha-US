@@ -35,12 +35,11 @@ class CandidateUniverse:
         return True
 
 
-# --- append to alpha/universe/universe.py ---
+# --- trailing-bar helpers + build_universe ---
 from datetime import date as Date
 
 import pandas as pd
 
-from alpha.data.calendar import trading_days_between
 from alpha.features.runner import consecutive_up_days
 
 RUNNER_LOOKBACK = 30   # max consecutive-up-days probed (a run of n up-days needs n+1 closes)
