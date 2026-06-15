@@ -35,3 +35,34 @@ def test_guarded_source_blocks_future_corp_actions(fake_source):
     gs = GuardedSource(fake_source, guard)
     with pytest.raises(LookaheadError):
         gs.corporate_actions(date(2026, 6, 1), date(2026, 6, 12))
+
+
+def test_corporate_actions_known_sees_pending_future_ex_split(fake_source):
+    # conftest fake_source: RUN reverse_split announced 6/9, ex 6/20 (pending as of 6/12).
+    from alpha.data.corp_actions import has_reverse_split_pending
+    known = fake_source.corporate_actions_known(date(2026, 6, 12))
+    assert list(known["symbol"]) == ["RUN"]                       # announced <= 6/12, future ex kept
+    # the ex_date-filtered accessor MISSES it (ex 6/20 not in [6/1, 6/12]) -> the trap this primitive fixes
+    assert fake_source.corporate_actions(date(2026, 6, 1), date(2026, 6, 12)).empty
+    assert has_reverse_split_pending(known, "RUN", date(2026, 6, 12)) is True
+
+
+def test_corporate_actions_known_is_guard_safe(fake_source):
+    gs = GuardedSource(fake_source, AsOfGuard(date(2026, 6, 12)))
+    assert list(gs.corporate_actions_known(date(2026, 6, 12))["symbol"]) == ["RUN"]   # as_of == cursor ok
+    with pytest.raises(LookaheadError):
+        gs.corporate_actions_known(date(2026, 6, 13))                                 # future as_of blocked
+
+
+def test_snapshot_source_corporate_actions_known(tmp_path):
+    # SnapshotSource is the production OFFLINE source (PITStore-backed) — lock the new primitive there too.
+    import pandas as pd
+    from alpha.data.pit_store import PITStore
+    from alpha.data.snapshot_source import SnapshotSource
+    from alpha.data.corp_actions import has_reverse_split_pending
+    store = PITStore(tmp_path)
+    store.put_corp_actions(pd.DataFrame({"symbol": ["RS"], "announce_date": [date(2026, 6, 9)],
+                                         "ex_date": [date(2026, 6, 20)], "kind": ["reverse_split"],
+                                         "ratio": [0.1]}))
+    known = SnapshotSource(store).corporate_actions_known(date(2026, 6, 12))
+    assert has_reverse_split_pending(known, "RS", date(2026, 6, 12)) is True   # announced 6/9, ex 6/20 future

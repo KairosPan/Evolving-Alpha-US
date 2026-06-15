@@ -4,6 +4,7 @@ from datetime import date as Date
 
 import pandas as pd
 
+from alpha.data.corp_actions import known_corporate_actions
 from alpha.data.pit_store import PITStore
 
 _EMPTY_BARS = ["date", "open", "high", "low", "close", "volume"]
@@ -44,3 +45,6 @@ class SnapshotSource:
         if df is None or df.empty:
             return pd.DataFrame(columns=["symbol", "announce_date", "ex_date", "kind", "ratio"])
         return df[(df["ex_date"] >= start) & (df["ex_date"] <= end)].reset_index(drop=True)
+
+    def corporate_actions_known(self, as_of: Date) -> pd.DataFrame:
+        return known_corporate_actions(self._store.get_corp_actions(), as_of)

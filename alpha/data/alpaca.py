@@ -79,3 +79,9 @@ class AlpacaSource:
         if df is None or df.empty:
             return pd.DataFrame(columns=cols)
         return df  # field mapping refined during smoke against real payloads
+
+    def corporate_actions_known(self, as_of: Date) -> pd.DataFrame:
+        # smoke-only: the announce-keyed query (NOT the ex_date-filtered corporate_actions, which drops
+        # pending future-ex splits) is refined during smoke against real payloads. Never return a
+        # silently pending-blind frame.
+        raise NotImplementedError("AlpacaSource.corporate_actions_known: announce-window fetch refined during smoke")

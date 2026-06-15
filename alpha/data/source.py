@@ -5,6 +5,7 @@ from typing import Protocol
 
 import pandas as pd
 
+from alpha.data.corp_actions import known_corporate_actions
 from alpha.data.firewall import AsOfGuard
 
 _EMPTY_BARS = ["date", "open", "high", "low", "close", "volume"]
@@ -18,6 +19,7 @@ class MarketDataSource(Protocol):
     def daily_bars(self, symbol: str, start: Date, end: Date) -> pd.DataFrame: ...
     def daily_snapshot(self, day: Date) -> pd.DataFrame: ...
     def corporate_actions(self, start: Date, end: Date) -> pd.DataFrame: ...
+    def corporate_actions_known(self, as_of: Date) -> pd.DataFrame: ...
 
 
 class FakeSource:
@@ -52,6 +54,10 @@ class FakeSource:
             return pd.DataFrame(columns=_EMPTY_CORP)
         return df[(df["ex_date"] >= start) & (df["ex_date"] <= end)].reset_index(drop=True)
 
+    def corporate_actions_known(self, as_of: Date) -> pd.DataFrame:
+        """Corp actions ANNOUNCED by as_of (PIT-by-announcement), incl. future ex_dates (pending)."""
+        return known_corporate_actions(self._corp, as_of)
+
 
 class GuardedSource:
     """Wraps any MarketDataSource; routes every dated fetch through AsOfGuard."""
@@ -74,3 +80,7 @@ class GuardedSource:
     def corporate_actions(self, start: Date, end: Date) -> pd.DataFrame:
         self._guard.check(end)
         return self._inner.corporate_actions(start, end)
+
+    def corporate_actions_known(self, as_of: Date) -> pd.DataFrame:
+        self._guard.check(as_of)
+        return self._inner.corporate_actions_known(as_of)
