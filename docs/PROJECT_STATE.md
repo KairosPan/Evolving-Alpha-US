@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-15 (US-0 + US-1 + US-2 complete: agent/refiner/inner-loop/compare + statistical-acceptance procedure built; empirical verdict awaits a live temp=0 run; US-3 next).
+> Last updated: 2026-06-15 (US-0 + US-1 + US-2 complete; US-3a runner-tier enrichment live on the walk path; US-3b next).
 
 ---
 
@@ -298,13 +298,34 @@ and deterministically tested. **The empirical pass/fail verdict is NOT yet rende
 temp=0 LLM run on real Alpaca data** (the offline suite validates the *apparatus*; MockLLM ignores prompts).
 The honest expectation stays **parity** (HCH ≈ Hexpert); beating frozen seeds is the research frontier.
 
-**Next — US-3 (data enrichment) and/or a live-LLM smoke run:** US-3 adds intraday/halts/short-interest/SSR/
-social enrichment (unlocking full runner/meme/event offense); a temp=0 Claude/DeepSeek run on captured
-Alpaca windows is what renders the actual HCH-vs-Hexpert verdict via the now-built procedure. **Deferred §10
-methodology refinements** (gate-non-blocking; the firewall + strict walk-forward already enforce OOS
-no-lookahead): purged & embargoed CV; regime-stratified eval. **Other deferred:** Hcredit (C4) ablation arm;
-wire L3 sizing / L4 guard into the agent's `DecisionPackage`; master-dispatch G sub-agents (keeps the
-`G`-pass a reserved no-op); keep-last-K checkpoint pruning.
+## US-3 Data enrichment (sub-plans 3a → 3f)
+
+**US-3a Runner-tier enrichment — Complete (2026-06-15). The runner machinery is live on the walk.**
+`build_universe` (`alpha/universe/universe.py`) now populates `StockSnapshot.consecutive_up_days` at the
+single chokepoint — gainers/gap_ups via a **day-anchored** trailing-bar probe (reusing the one RVOL fetch
+per symbol; delegates to the already-tested `alpha/features/runner.py::consecutive_up_days`; returns `None`
+when the current-day bar is absent rather than a stale-positive count); losers `0` by construction. This
+lights up the whole forward-plumbed cascade on the **live walk** (all three `build_universe` consumers —
+`walk_forward`, the US-2c `inner_loop`, and the richer `features/builder`): `MarketState.max_runner_tier`/
+`echelon` (the minimal `state/builder.py`), the `chased_blowoff` / `weak_laggard_nuke` failure-signature
+taxonomy (`refine/signatures.py` — was always `generic_nuke` on real walks), and the agent prompt's
+`up_days` line (`agent/prompt.py` — was always `?`). DRY: the richer `features/builder.py` now reads cud
+from the populated universe (dropped the throwaway `model_copy` enrichment + `_lookback_start`). Cascade +
+acceptance locks prove it end-to-end (both nuke branches discriminated on populated data) on a seeded-harness
+walk; stale "until US-3 enrichment" docstrings refreshed. Full suite **322 tests green**.
+
+**Next — US-3b → US-3f (deferred roadmap):** **3b** SSR + reverse-split + guard-veto wiring
+(`alpha/guard/veto.py` has zero production call sites; SSR = prior-day close ≤ −10%; reverse-split via
+`corp_actions.has_reverse_split_pending`; activates the `dont_fight_ssr` immutable doctrine). **3c** FINRA
+short-interest → activate the incubating `short_squeeze` seed. **3d** float / dilution / EDGAR → the guard's
+`dilution` veto. **3e** intraday / halts / MWCB (LULD halts = 涨停 analog; `breaker.set_mwcb` has no caller;
+enables fill-feasibility + halt-locked infeasibility). **3f** social / options (gamma squeeze) / per-narrative
+phase tagging. Plus, **orthogonal to US-3**: a live temp=0 Claude/DeepSeek run on captured Alpaca windows is
+what renders the actual HCH-vs-Hexpert verdict via the US-2e procedure (the offline suite validates the
+apparatus; MockLLM ignores prompts; honest expectation = parity). **Deferred §10 methodology** (gate-non-blocking):
+purged & embargoed CV; regime-stratified eval. **Other deferred:** Hcredit (C4) ablation arm; wire L3 sizing /
+L4 guard into the agent's `DecisionPackage`; master-dispatch G sub-agents (keeps the `G`-pass a reserved
+no-op); keep-last-K checkpoint pruning.
 
 ---
 
