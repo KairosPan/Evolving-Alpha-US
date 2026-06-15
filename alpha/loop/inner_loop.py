@@ -20,7 +20,7 @@ from alpha.llm.client import LLMClient
 from alpha.refine.credit import CreditReport, apply_credit, merge_credit_reports
 from alpha.refine.refiner import RefineReport, Refiner, RefinerConfig
 from alpha.refine.signatures import extract_signatures
-from alpha.loop.floor_breaker import _fallback_trip
+from alpha.loop.floor_breaker import _fallback_trip, _shadow_eps_abs, _shadow_trip
 from alpha.state.builder import build_market_state
 from alpha.universe.universe import build_universe
 
@@ -38,6 +38,10 @@ class LoopConfig(BaseModel):
     breaker_mad_c: float = Field(default=2.0, ge=0.0)
     floor_abs: float = Field(default=-0.2, ge=-1.0, le=1.0)
     enable_refine: bool = True
+    # shadow/paired breaker (US-2d): active only when an InnerLoop is given a shadow_daily reference series
+    breaker_shadow_lambda: float = Field(default=1.0, ge=0.0)
+    breaker_shadow_eps_c: float = Field(default=0.25, ge=0.0)
+    breaker_shadow_eps_floor: float = Field(default=0.05, ge=0.0)
 
 
 class RefineEvent(BaseModel):
@@ -75,7 +79,8 @@ class InnerLoop:
     def __init__(self, manager: HarnessManager, source, start: Date, end: Date,
                  agent_llm: LLMClient, refiner_llm: LLMClient, config: LoopConfig | None = None,
                  refiner_config: RefinerConfig | None = None, scorer=None,
-                 agent_factory: Callable[[HarnessState], DecisionPolicy] | None = None) -> None:
+                 agent_factory: Callable[[HarnessState], DecisionPolicy] | None = None,
+                 shadow_daily: dict[Date, float] | None = None) -> None:
         self._mgr = manager
         self._source = source
         self._start = start
@@ -86,6 +91,7 @@ class InnerLoop:
         self._refiner_cfg = refiner_config or RefinerConfig()
         self._scorer = scorer or ReturnScorer()   # spec §7: forward-return oracle is PRIMARY (CN defaulted PoolScorer)
         self._agent_factory = agent_factory
+        self._shadow_daily = dict(shadow_daily) if shadow_daily is not None else None
         self._rebind()
 
     def _rebind(self) -> None:
@@ -155,11 +161,29 @@ class InnerLoop:
             # capability-floor breaker (fallback path): judge the daily-advantage series; on a trip,
             # roll back to the latest checkpoint BEFORE the degraded window (1st trip) or freeze.
             if not frozen and len(breaker_days) >= cfg.breaker_min_days:
-                k = min(len(breaker_days), cfg.breaker_k_max)
-                history = [v for _, v in breaker_days]
-                trip, rolling, thr, reason = _fallback_trip(history, k, cfg.breaker_mad_c, cfg.floor_abs)
-                if trip:
+                trip = False
+                rolling = thr = 0.0
+                reason = ""
+                window_start = None
+                if self._shadow_daily is not None:
+                    # SHADOW (paired) path: judge HCH's daily advantage against the frozen-expert reference.
+                    cur_max = breaker_days[-1][0]
+                    own = {d: v for d, v in breaker_days}
+                    shadow = {d: s for d, s in self._shadow_daily.items() if d <= cur_max}   # anti-lookahead
+                    common = sorted(own.keys() & shadow.keys())
+                    if len(common) >= cfg.breaker_min_days:
+                        k = min(len(common), cfg.breaker_k_max)
+                        diffs = [own[d] - shadow[d] for d in common]
+                        eps = _shadow_eps_abs(list(shadow.values()), cfg.breaker_shadow_eps_c,
+                                              cfg.breaker_shadow_eps_floor)
+                        trip, rolling, thr, reason = _shadow_trip(diffs, k, cfg.breaker_shadow_lambda, eps)
+                        window_start = common[-k]
+                else:
+                    k = min(len(breaker_days), cfg.breaker_k_max)
+                    history = [v for _, v in breaker_days]
+                    trip, rolling, thr, reason = _fallback_trip(history, k, cfg.breaker_mad_c, cfg.floor_abs)
                     window_start = breaker_days[-k][0]
+                if trip:
                     breaker_trips += 1
                     target = max((v for v, d in ckpts if d < window_start), default=None)
                     if breaker_trips == 1 and target is not None:
