@@ -322,7 +322,7 @@ Seeds bootstrapped from this design + established US momentum knowledge.
 **AlpacaSource** implements `MarketDataSource` (protocol in `alpha/data/source.py`):
 - `trading_calendar() -> list[Date]` — NYSE/Nasdaq schedule via `/v2/calendar`.
 - `daily_bars(symbol, start, end) -> DataFrame[date,open,high,low,close,volume]` — **RAW/unadjusted**.
-- `daily_snapshot(day) -> DataFrame[symbol,name,open,high,low,close,volume,prev_close,short_interest?,days_to_cover?]`
+- `daily_snapshot(day) -> DataFrame[symbol,name,open,high,low,close,volume,prev_close,short_interest?,days_to_cover?,free_float?]`
   — built by `capture_window` from raw bars + prior close; the optional `short_interest`/`days_to_cover`
   enrichment columns (US-3c) ride here when supplied (real FINRA join deferred). AlpacaSource.daily_snapshot
   raises NotImplementedError (no "top gainers" API endpoint).

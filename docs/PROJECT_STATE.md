@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-15 (US-0 + US-1 + US-2 complete; US-3a runner-tier + US-3b guard-veto + US-3c short-interest/short_squeeze shipped; US-3d next).
+> Last updated: 2026-06-15 (US-0 + US-1 + US-2 complete; US-3a runner-tier + US-3b guard-veto + US-3c short-interest + US-3d float/dilution-veto shipped; US-3e next).
 
 ---
 
@@ -347,13 +347,27 @@ Enforcement defaults OFF (`available_signals=None`) for non-decide callers, so t
 discipline; `test_squeeze_offense_is_incubating` pins it). GateSpec threshold gating + a deterministic
 `HarnessRulePolicy` consumer are deferred (no live consumer yet). Full suite **351 tests green**.
 
-**Next — US-3d → US-3f (deferred roadmap):** **3d** float / dilution / EDGAR → the guard's
-`dilution` veto. **3e** intraday / halts / MWCB (LULD halts = 涨停 analog; `breaker.set_mwcb` has no caller;
+**US-3d Float + dilution-veto activation — Complete (2026-06-15). The dormant dilution guard is live.**
+`StockSnapshot` gains `free_float` (tradeable float, millions of shares), filled at the `build_universe`
+chokepoint from the daily snapshot (US-3c data-on-snapshot pattern; real source deferred) and rendered as
+`float=…M` in the agent prompt (low-float / dilution-pump context). The L4 `dilution` veto — present in
+`veto()` but never set — is **activated**: a new `corp_actions.has_dilution_filing(corp, symbol, as_of)`
+(the US-3b reverse-split pattern: PIT-by-announce over `kind ∈ {atm, shelf, offering}`, reusing
+`known_corporate_actions`/`corporate_actions_known`) is computed in `screen_decision` from the corp frame it
+already fetches, so a candidate with an announced ATM/shelf/offering is dropped with `"dilution / offering /
+ATM-shelf"` surfaced in `key_risks`. Conservative MVP: any announced dilution filing vetoes (open-ended
+overhang; ex_date/withdrawal lifecycle deferred to a real EDGAR feed). Enforcement stays opt-in via
+`GuardedPolicy`/`LoopConfig.screen` (default-off), so the suite is untouched. Acceptance-tested end-to-end on
+a frontside regime. Full suite **358 tests green**.
+
+**Next — US-3e → US-3f (deferred roadmap):** **3e** intraday / halts / MWCB (LULD halts = 涨停 analog; `breaker.set_mwcb` has no caller;
 enables fill-feasibility + halt-locked infeasibility). **3f** social / options (gamma squeeze) / per-narrative
 phase tagging. Plus, **orthogonal to US-3**: a live temp=0 Claude/DeepSeek run on captured Alpaca windows is
 what renders the actual HCH-vs-Hexpert verdict via the US-2e procedure (the offline suite validates the
 apparatus; MockLLM ignores prompts; honest expectation = parity). **Deferred §10 methodology** (gate-non-blocking):
-purged & embargoed CV; regime-stratified eval. **Other deferred:** wiring the richer `features/builder` into the
+purged & embargoed CV; regime-stratified eval. **Other deferred:** a real EDGAR/SEC offerings feed (the offline
+corp-actions dilution mechanism + schema are in place) + the dilution-filing withdrawal/expiry lifecycle +
+float-based L3 sizing; wiring the richer `features/builder` into the
 live loop so `GCycle` reads frontside and `LoopConfig.screen` (+ symmetric `GuardedPolicy` on all
 `compare_harnesses` arms) can default ON; Hcredit (C4) ablation arm; wire L3 sizing /
 L4 guard into the agent's `DecisionPackage`; master-dispatch G sub-agents (keeps the `G`-pass a reserved
