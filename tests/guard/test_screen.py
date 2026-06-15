@@ -108,3 +108,15 @@ def test_guarded_policy_screens_inner_decision():
     gp = GuardedPolicy(_Stub(), src)
     out = gp.decide(_state(), CandidateUniverse.from_stocks([]))
     assert out.candidates == [] and any("SSR" in r for r in out.key_risks)
+
+
+def test_screen_drops_dilution_candidate_and_records_reason(fake_source):
+    # fake_source RUN is a rising gainer (no SSR); attach an announced ATM filing -> dilution veto fires.
+    # (pd, date, FakeSource are already imported at module level.)
+    snap = fake_source.daily_snapshot(date(2026, 6, 12))
+    src = FakeSource(calendar=fake_source.trading_calendar(), bars={},
+                     snapshots={date(2026, 6, 12): snap},
+                     corp_actions=pd.DataFrame({"symbol": ["RUN"], "announce_date": [date(2026, 6, 9)],
+                                                "ex_date": [date(2026, 6, 20)], "kind": ["atm"], "ratio": [None]}))
+    out = screen_decision(_pkg("RUN"), source=src, state=_state())
+    assert out.candidates == [] and any("RUN" in r and "dilution" in r for r in out.key_risks)

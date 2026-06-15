@@ -31,3 +31,20 @@ def test_has_reverse_split_pending_pit():
     assert has_reverse_split_pending(CORP, "RUN", date(2026, 6, 8)) is False
     # after the ex-date => no longer "pending" (already executed)
     assert has_reverse_split_pending(CORP, "RUN", date(2026, 6, 21)) is False
+
+
+def test_has_dilution_filing_announced_offering():
+    from alpha.data.corp_actions import has_dilution_filing
+    corp = pd.DataFrame({"symbol": ["DIL"], "announce_date": [date(2026, 6, 9)],
+                         "ex_date": [date(2026, 6, 20)], "kind": ["atm"], "ratio": [None]})
+    assert has_dilution_filing(corp, "DIL", date(2026, 6, 12)) is True     # announced by as_of -> overhang
+
+
+def test_has_dilution_filing_pit_and_wrong_kind():
+    from alpha.data.corp_actions import has_dilution_filing
+    future = pd.DataFrame({"symbol": ["DIL"], "announce_date": [date(2026, 6, 20)],
+                           "ex_date": [date(2026, 7, 1)], "kind": ["shelf"], "ratio": [None]})
+    assert has_dilution_filing(future, "DIL", date(2026, 6, 12)) is False  # announced AFTER as_of -> unknown
+    split = pd.DataFrame({"symbol": ["DIL"], "announce_date": [date(2026, 6, 9)],
+                          "ex_date": [date(2026, 6, 20)], "kind": ["reverse_split"], "ratio": [0.1]})
+    assert has_dilution_filing(split, "DIL", date(2026, 6, 12)) is False   # not a dilution kind

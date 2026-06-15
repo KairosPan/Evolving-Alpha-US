@@ -5,7 +5,7 @@ from datetime import date as Date
 import pandas as pd
 
 from alpha.data.calendar import prev_trading_day
-from alpha.data.corp_actions import has_reverse_split_pending
+from alpha.data.corp_actions import has_dilution_filing, has_reverse_split_pending
 from alpha.data.firewall import AsOfGuard
 from alpha.data.source import GuardedSource
 from alpha.eval.decision import DecisionPackage
@@ -61,7 +61,8 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState) ->
     for c in decision.candidates:
         ctx = CandidateContext(symbol=c.symbol, regime=regime,
                                ssr=ssr_active(guarded, c.symbol, as_of),
-                               reverse_split_pending=has_reverse_split_pending(corp, c.symbol, as_of))
+                               reverse_split_pending=has_reverse_split_pending(corp, c.symbol, as_of),
+                               dilution=has_dilution_filing(corp, c.symbol, as_of))
         v = veto(ctx)
         if v.vetoed:
             notes.append(f"vetoed {c.symbol}: {'; '.join(v.reasons)}")
