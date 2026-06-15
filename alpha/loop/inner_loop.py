@@ -153,7 +153,18 @@ class InnerLoop:
 
             # [Task 5 inserts the BREAKER block here]
 
-            # [Task 4 inserts the REFINE block here]
+            # periodic refine: checkpoint BEFORE editing H, over the non-overlapping watermark window
+            fresh = scored_steps[last_refined_idx:]
+            n_fresh = sum(len(s.outcomes) for s in fresh)        # count CANDIDATES (empty days add 0)
+            if cfg.enable_refine and not frozen and n_fresh >= cfg.evidence_min and i % cfg.refine_every == 0:
+                ver = self._mgr.checkpoint(label=f"pre-refine {cursor}")
+                ckpts.append((ver, cursor))
+                win_traj = Trajectory(steps=fresh)
+                credit = merge_credit_reports(per_step_credits[last_refined_idx:])
+                sigs = extract_signatures(win_traj, self._mgr.harness)
+                report = self._refiner.refine(win_traj, credit, sigs)
+                refine_events.append(RefineEvent(date=cursor, checkpoint_version=ver, report=report))
+                last_refined_idx = len(scored_steps)             # advance watermark (non-overlapping)
 
         traj = Trajectory(steps=[TrajectoryStep(**d) for d in drafts])
         # n_edits = edits in the LIVE log (after any rollback rebinds mgr.log to the restored, shorter

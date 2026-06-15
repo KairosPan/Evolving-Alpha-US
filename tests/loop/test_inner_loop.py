@@ -60,3 +60,35 @@ def test_skeleton_runs_and_credits_cumulatively():
     assert len(report.trajectory.scored_steps()) == 4
     assert mgr.harness.skills.get("gap_and_go").stats.n == 4  # online credit ran once per scored step
     assert report.refine_events == [] and report.breaker_events == []   # disabled / not tripped
+
+
+def test_refine_fires_after_evidence_and_checkpoints_before():
+    import tempfile
+    src = _source(6)
+    # evidence_min=2 -> refine fires once 2 fresh candidates have scored; refiner rewrites a doctrine line
+    mgr = HarnessManager(
+        HarnessState(doctrine=Doctrine.from_seed_list(
+            [{"section": "trend_play", "regime": "trend", "immutable": False, "guidance": "ride"}]),
+            skills=SkillRegistry.from_skills([Skill(skill_id="gap_and_go", name="G", type="pattern",
+                                                    status="active")]),
+            memory=MemoryStore.from_lessons([])),
+        SnapshotStore(tempfile.mkdtemp()))
+    loop = InnerLoop(mgr, src, src.trading_calendar()[0], src.trading_calendar()[-1],
+                     agent_llm=MockLLMClient("{}"),
+                     refiner_llm=MockLLMClient('{"ops": [{"tool": "rewrite_doctrine", "args": '
+                                               '{"section": "trend_play", "new_guidance": "ride (refined)"}, '
+                                               '"rationale": "evidence"}]}'),
+                     config=LoopConfig(horizon=2, evidence_min=2, refine_every=1),
+                     scorer=ReturnScorer(), agent_factory=lambda h: _PickRun())
+    report = loop.run()
+    assert report.refine_events                              # at least one refine fired
+    ev = report.refine_events[0]
+    assert ev.checkpoint_version is not None                # checkpoint taken BEFORE refining
+    assert report.n_edits >= 1 and "refined" in mgr.harness.doctrine.get("trend_play").guidance
+
+
+def test_no_refine_when_disabled():
+    src = _source(6)
+    loop, mgr = _loop(src, LoopConfig(horizon=2, enable_refine=False))
+    report = loop.run()
+    assert report.refine_events == [] and report.n_edits == 0
