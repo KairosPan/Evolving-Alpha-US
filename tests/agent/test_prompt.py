@@ -111,3 +111,17 @@ def test_depends_on_enforced_on_retrieval_path():
     sp0 = build_system_prompt(_h_squeeze(), phase_prior="trend", injection="retrieval",
                               available_signals=frozenset())
     assert "short_squeeze" not in sp0                                   # no data signal -> hidden in retrieval too
+
+
+def test_user_prompt_renders_free_float_when_present():
+    state = MarketState(date=date(2026, 6, 12), gainer_count=1, gap_up_count=0, loser_count=0,
+                        failed_breakout_count=0, max_runner_tier=1, echelon=[], breadth_raw=1.0,
+                        as_of=datetime(2026, 6, 12, 16, 0))
+    uni = CandidateUniverse.from_stocks([
+        StockSnapshot(symbol="LO", name="Lo", status="gainer", pct_change=20.0, rvol=4.0, free_float=4.0),
+        StockSnapshot(symbol="PLAIN", name="Pl", status="gainer", pct_change=12.0, rvol=2.0),
+    ])
+    up = build_user_prompt(state, uni)
+    assert "float=4M" in up                              # low-float name shows the suffix
+    plain_line = [ln for ln in up.splitlines() if ln.startswith("- PLAIN")][0]
+    assert "float=" not in plain_line                    # no free_float -> no suffix (no noise)

@@ -97,3 +97,18 @@ def test_build_universe_short_interest_nan_is_none():
     src = FakeSource(calendar=cal, bars={}, snapshots=snaps)
     s = build_universe(src, date(2026, 6, 12), gainer_pct=10.0, gap_pct=5.0, rvol_window=2).get("SQZ")
     assert s.short_interest is None and s.days_to_cover is None
+
+
+def test_build_universe_populates_free_float():
+    cal = [date(2026, 6, 11), date(2026, 6, 12)]
+    snaps = {date(2026, 6, 12): pd.DataFrame({
+        "symbol": ["LO"], "name": ["LowFloat"], "open": [10.0], "high": [13.0], "low": [10.0],
+        "close": [12.0], "volume": [5], "prev_close": [10.0], "free_float": [4.5]})}   # 4.5M float
+    src = FakeSource(calendar=cal, bars={}, snapshots=snaps)
+    s = build_universe(src, date(2026, 6, 12), gainer_pct=10.0, gap_pct=5.0, rvol_window=2).get("LO")
+    assert s.free_float == 4.5
+
+
+def test_build_universe_free_float_absent_is_none(fake_source):
+    s = build_universe(fake_source, date(2026, 6, 12), gainer_pct=10.0, gap_pct=5.0, rvol_window=2).get("RUN")
+    assert s.free_float is None        # conftest snapshots have no free_float column -> None, never fabricated

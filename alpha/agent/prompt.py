@@ -10,12 +10,13 @@ from alpha.state.market import MarketState
 from alpha.universe.universe import CandidateUniverse
 
 # Bump when the prompt template changes (used by the future LLM cache key to invalidate old records).
-PROMPT_FINGERPRINT = "us3c-v1"
+PROMPT_FINGERPRINT = "us3d-v1"
 
 
 def available_data_signals(universe: CandidateUniverse) -> frozenset[str]:
     """Live data signals: StockSnapshot fields with a `= None` default (OHLCV + enrichments — close,
-    prev_close, pct_change, gap_pct, volume, rvol, consecutive_up_days, short_interest, days_to_cover)
+    prev_close, pct_change, gap_pct, volume, rvol, consecutive_up_days, short_interest, days_to_cover,
+    free_float)
     that are non-None for at least one candidate today. Required fields (symbol/name/status — whose
     FieldInfo.default is PydanticUndefined, not None) are excluded, so a skill's depends_on names a real
     data dependency rather than an always-present structural field. A skill is surfaced only when its
@@ -127,5 +128,7 @@ def build_user_prompt(state: MarketState, universe: CandidateUniverse) -> str:
         if s.short_interest is not None:                 # squeeze fuel — only shown when data is live
             dtc = f" dtc={s.days_to_cover:.1f}" if s.days_to_cover is not None else ""
             line += f" si={s.short_interest:.0f}%{dtc}"
+        if s.free_float is not None:                      # low-float context (dilution-pump fuel)
+            line += f" float={s.free_float:.0f}M"
         lines.append(line)
     return head + "\n".join(lines)
