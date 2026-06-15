@@ -149,6 +149,7 @@ class InnerLoop:
                 per_step_credits.append(apply_credit(Trajectory(steps=[step]), self._mgr.harness,
                                                      decay=cfg.credit_decay))
                 advs = [c.advantage for c in step.outcomes.values()]
+                # empty outcomes (no oracle data / all dropped) contribute 0.0 — a neutral day, not excluded
                 breaker_days.append((step.date, sum(advs) / len(advs) if advs else 0.0))
 
             # capability-floor breaker (fallback path): judge the daily-advantage series; on a trip,

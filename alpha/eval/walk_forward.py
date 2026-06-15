@@ -82,7 +82,9 @@ def score_decision(source, scorer, decision, days: list[Date], j: int, horizon: 
     """Score decision j (made on days[j]) at its t+horizon exit. Returns {symbol: ScoredCandidate}.
     Firewall: the oracle reads through GuardedSource(AsOfGuard(cursor)) where cursor == the exit day,
     so as_of >= exit_day (never future). Shared by WalkForwardEval._score and the US-2c InnerLoop.
-    Invariant: j == i - horizon so j+horizon == cursor's index; days[j+1]/days[j+horizon] never go OOB."""
+    Invariant: the caller guarantees j+1 < j+horizon <= cursor's index, so days[j+1]/days[j+horizon]
+    never go OOB and cursor >= exit_day keeps as_of >= exit (in walk() j == i-horizon exactly; in the
+    InnerLoop a matured decision can be scored at i >= j+horizon, still with cursor >= exit_day)."""
     entry_day = days[j + 1]                       # buy next open (t+1)
     exit_day = days[j + horizon]                  # sell t+horizon close
     decision_mem = record.get(days[j])
