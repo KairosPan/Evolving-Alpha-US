@@ -308,8 +308,9 @@ distinguish self-evolution that adds edge from self-evolution that only trims ri
 - Survivorship/PIT awareness (no looking past the as-of cursor).
 - Position and loss circuit-breakers.
 - "Don't fight SSR" is an **active** immutable doctrine line, wired in US-3b via `ssr_active` +
-  `screen_decision` (opt-in `LoopConfig.screen`; global default-on gated on the richer `features/builder`
-  landing so the regime arm reads frontside).
+  `screen_decision`. The richer `features/builder` is now on the live path (the unified `state/builder`
+  threads `follow_through`/`sentiment` so the regime arm reads frontside on genuine uptrends), so
+  `LoopConfig.screen` **defaults ON** and `compare_harnesses` guards all arms symmetrically.
 
 Seeds bootstrapped from this design + established US momentum knowledge.
 

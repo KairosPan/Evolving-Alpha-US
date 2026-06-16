@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-16 (US-0 + US-1 + US-2 complete; US-3a–US-3f shipped — the US-3 daily-cadence enrichment arc is complete; next: per-narrative + the live temp=0 verdict run).
+> Last updated: 2026-06-16 (US-0 + US-1 + US-2 complete; US-3a–US-3f shipped — the US-3 daily-cadence enrichment arc is complete; **richer-state perception wired into the live drivers + `LoopConfig.screen` now defaults ON** with a symmetric `compare_harnesses` guard; next: the live temp=0 verdict run, then per-narrative phases).
 
 ---
 
@@ -325,12 +325,12 @@ splits). `screen_decision` drops vetoed candidates (hard override → never ente
 path). The immutable `dont_fight_ssr` doctrine is activated (seed parenthetical dropped; blueprint SSR row
 reconciled to the long-only reading). **Wired OPT-IN, default OFF** (`LoopConfig.screen`): the regime risk-off/
 backside arm over-fires on the *minimal* `state/builder` (it feeds `GCycle` `sentiment_norm=None`/
-`follow_through=None` → every synthetic day reads backside), so global default-on enforcement waits on wiring the
-richer `features/builder` into the live loop (a later US-3 slice). The other four veto flags
+`follow_through=None` → every synthetic day reads backside), so global default-on enforcement waited on wiring the
+richer `features/builder` into the live loop — **done 2026-06-16 (see "Richer-state perception wiring" below); `screen` now defaults ON.** The other four veto flags
 (`dilution`/`halt_then_dump`/`going_concern`/`regulatory`) stay wired in `veto()` and default `False` (3d/3e/3f
-add their data). Known limitation: `screen` reaches only the HCH `InnerLoop` arm — `compare_harnesses` builds
-Hexpert/Hmin outside `InnerLoop`, so a verdict run must wrap all arms in `GuardedPolicy` symmetrically before
-flipping the default ON. SSR/reverse-split flags are exact + unit-tested; the full opt-in path is acceptance-
+add their data). Known limitation (**resolved 2026-06-16**): `screen` reached only the HCH `InnerLoop` arm — `compare_harnesses` built
+Hexpert/Hmin outside `InnerLoop`, so a verdict run had to wrap all arms in `GuardedPolicy` symmetrically before
+flipping the default ON; the richer-state slice does exactly this. SSR/reverse-split flags are exact + unit-tested; the full opt-in path is acceptance-
 tested end-to-end on a frontside regime. Full suite **339 tests green**.
 
 **US-3c Short-interest + short_squeeze activation — Complete (2026-06-15). The dormant squeeze seed is live.**
@@ -389,6 +389,28 @@ short_squeeze (3c) and gamma_squeeze (3f). Full suite **367 tests green**. **Hon
 options-flow / social feeds (offline mechanism + schema in place); per-narrative-line phase tagging (a separate
 architecture piece — narrative clustering + a per-line regime read; today's `GCycle` returns one global phase).
 
+**Richer-state perception wiring + screen-default-on — Complete (2026-06-16). The L4 guard is always live (and correct, not over-firing).**
+The two live drivers (`WalkForwardEval.walk`, `InnerLoop.run`) used the *minimal* `state/builder` (which left
+`sentiment_norm`/`follow_through_rate` `None`, so `GCycle` fell back to a low-confidence breadth proxy that read
+even a genuine runner as **backside** — the reason US-3b kept `screen` opt-in/default-off). This slice **unifies**
+the two builders: `state/builder.build_market_state(universe, day, *, as_of, history=(), prev_gainers=frozenset(),
+min_samples=…)` now computes the full feature set (`follow_through` + `sentiment_raw`/`sentiment_norm` +
+`gap_and_go`) from the **prebuilt** universe (back-compat defaults reproduce the old minimal output), and
+`features/builder` becomes a thin delegating shim (`DEFAULT_MIN_SAMPLES` relocated to the leaf `features/sentiment`
+to break the would-be shim cycle). Both drivers thread `history` (append `sentiment_raw`) and `prev_gainers` (prior
+gainer set) forward, so a persistent runner gets `follow_through=1.0` ⇒ `GCycle` reads **trend/frontside** ⇒ the
+regime veto no longer over-fires. With that fixed, **`LoopConfig.screen` defaults ON**, and `compare_harnesses`
+wraps all four non-HCH arms (both Hexpert walks + both Hmin runs) in `GuardedPolicy` when `cfg.screen` — matching
+HCH's auto-guard for a fair, symmetric comparison (the prior US-3b "known limitation"). The synthetic runner trips
+no data veto (no prior drop → no SSR; close=high>prev → no halt-then-dump; no corp actions), so it is **kept**;
+three orthogonal apparatus tests (credit / breaker-freeze / shadow-fallback, which calibrate on a scheduled
+advantage series) are pinned `screen=False`. Bootstrap honesty: day 1 has `prev_gainers` empty ⇒ `ft=None` (reads
+backside, like the minimal builder) ⇒ a runner reads frontside from **day 2** onward; `sentiment_norm` stays `None`
+until `history` reaches `min_samples` (60) — synthetic windows keep the breadth proxy (correct, not a regression).
+Adversarial 4-lens plan review folded (the `DEFAULT_MIN_SAMPLES` relocation/cycle; the `test_screen_wiring`
+over-fire test breaks on Task 1 not Task 2; an SSR-calendar bug in the acceptance fixture caught during execution).
+Acceptance: frontside **keeps** the clean runner AND still **drops** a real SSR name. Full suite **373 tests green**.
+
 **Next (orthogonal to the enrichment arc):** a live temp=0 Claude/DeepSeek run on captured Alpaca windows is
 what renders the actual HCH-vs-Hexpert verdict via the US-2e procedure (the offline suite validates the
 apparatus; MockLLM ignores prompts; honest expectation = parity). **Deferred §10 methodology** (gate-non-blocking):
@@ -398,9 +420,7 @@ real LULD halts / halt-count (intraday tick
 feed) + MWCB / `Breaker` portfolio wiring (P&L state machine + index-crash monitor) + intraday fill-feasibility
 (size-at-offer); a real EDGAR/SEC offerings feed (the offline
 corp-actions dilution mechanism + schema are in place) + the dilution-filing withdrawal/expiry lifecycle +
-float-based L3 sizing; wiring the richer `features/builder` into the
-live loop so `GCycle` reads frontside and `LoopConfig.screen` (+ symmetric `GuardedPolicy` on all
-`compare_harnesses` arms) can default ON; Hcredit (C4) ablation arm; wire L3 sizing /
+float-based L3 sizing; Hcredit (C4) ablation arm; wire L3 sizing /
 L4 guard into the agent's `DecisionPackage`; master-dispatch G sub-agents (keeps the `G`-pass a reserved
 no-op); keep-last-K checkpoint pruning.
 
