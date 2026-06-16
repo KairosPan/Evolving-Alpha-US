@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-16 (US-0 + US-1 + US-2 complete; US-3a–US-3f shipped — the US-3 daily-cadence enrichment arc is complete; **richer-state perception wired into the live drivers + `LoopConfig.screen` now defaults ON** with a symmetric `compare_harnesses` guard; **`scripts/run_verdict.py` verdict harness built + offline-verified (380 tests)** — only the live temp=0 run remains, needing real keys + a captured window; next after that: per-narrative phases).
+> Last updated: 2026-06-16 (US-0 + US-1 + US-2 complete; US-3a–US-3f shipped — the US-3 daily-cadence enrichment arc is complete; **richer-state perception wired into the live drivers + `LoopConfig.screen` now defaults ON** with a symmetric `compare_harnesses` guard; **`scripts/run_verdict.py` verdict harness built + offline-verified**; **L3 sizing wired into the live DecisionPackage** (size_tier + portfolio, verdict-neutral; 387 tests) — only the live temp=0 run remains, needing real keys + a captured window; next after that: per-narrative phases).
 
 ---
 
@@ -425,6 +425,26 @@ LLM keys (absent here) to run: (1) `python scripts/capture_window.py <start> <en
 the offline PIT DB, then (2) set `ALPHA_AGENT_*`/`ALPHA_REFINER_*` + keys and
 `python scripts/run_verdict.py verdict_pit <start> <end> --windows N`. Honest expectation = parity (HCH ≈ Hexpert).
 
+**L3 sizing → live DecisionPackage — Complete (2026-06-16). The §4.1 decision surface is now sizing-complete.**
+The built-but-unwired L3 sizing layer (`alpha/sizing/{position,correlation,portfolio}.py`, US-1f) is now on the
+live path via a composable `SizingPolicy` decorator (`alpha/sizing/policy.py`) mirroring the L4 `GuardedPolicy`:
+`size_decision(decision, *, state)` assigns each candidate a `size_tier` (`flat/probe/core/heavy` from
+`confidence × (decision.regime or GCycle().read(state)).risk_gate`) and attaches the `Portfolio` plan
+(`total_exposure_budget = risk_gate × max_total`, correlated groups). Composed `SizingPolicy(GuardedPolicy(base))`
+in `InnerLoop._rebind` so it sizes the **post-veto survivors** (portfolio reflects only kept names); the
+`compare_harnesses` `_guard` helper became `_wrap` (L4 guard inner, L3 sizing outer) across all four non-HCH
+arms. `LoopConfig.size` defaults ON. **Verdict-NEUTRAL (independently verified):** the entire
+scoring/breaker/stats/contribution path is equal-weighted and never reads `size_tier`/`portfolio`, so this
+enriches the human-confirmation surface (+ the DAgger record) **without changing the HCH-vs-Hexpert numbers** —
+acceptance proves the per-step advantages are identical with sizing on vs off; **zero existing tests changed**.
+Firewall-clean (reads only the in-hand decision + state). **Honest deferrals:** correlation **netting** is
+wired but dormant until narrative/theme tagging supplies the key (the narrative key is `candidate.family`,
+which the agent does not set yet → `""` → each name is its own bet, `correlated_groups` empty — the US-3f
+`depends_on` pattern); `fill_feasibility` (no `eval/fill` module — needs the intraday inference path) and
+per-candidate `taboo_check` (the guard drops vetoed candidates rather than soft-annotating kept ones) stay
+deferred. Adversarial 4-lens plan review (0 blocking architectural issues; folded the one real item — a
+planted-broken acceptance `_run` helper). Full suite **387 tests green**.
+
 **Next (orthogonal):** execute the verdict run above once keys + a captured window are available (the only
 remaining step to render the long-promised empirical HCH-vs-Hexpert number); then per-narrative-line phases.
 **Deferred §10 methodology** (gate-non-blocking):
@@ -434,8 +454,8 @@ real LULD halts / halt-count (intraday tick
 feed) + MWCB / `Breaker` portfolio wiring (P&L state machine + index-crash monitor) + intraday fill-feasibility
 (size-at-offer); a real EDGAR/SEC offerings feed (the offline
 corp-actions dilution mechanism + schema are in place) + the dilution-filing withdrawal/expiry lifecycle +
-float-based L3 sizing; Hcredit (C4) ablation arm; wire L3 sizing /
-L4 guard into the agent's `DecisionPackage`; master-dispatch G sub-agents (keeps the `G`-pass a reserved
+float-based L3 sizing (size_tier is wired; share-count sizing off float needs the float feed); Hcredit (C4)
+ablation arm; master-dispatch G sub-agents (keeps the `G`-pass a reserved
 no-op); keep-last-K checkpoint pruning.
 
 ---

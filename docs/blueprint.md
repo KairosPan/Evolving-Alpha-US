@@ -71,7 +71,10 @@ paper's two loops: regime labels, decay-weighted stats, dormant-skill revival, a
   pricing, social-sentiment ingestion (US-3 enrichment), the outer-loop LoRA training (US-2+),
   multi-market abstraction (CN is reference-only).
 - **In scope (not deferred):** the sizing/portfolio (§4 L3) and risk-guard/veto (§4 L4) layers —
-  these are survival-critical and ship in US-1.
+  these are survival-critical and ship in US-1. Both are now **wired into the live `DecisionPackage`**:
+  L4 guard via `GuardedPolicy`/`screen_decision` (US-3b) and L3 sizing via `SizingPolicy`/`size_decision`
+  (2026-06-16) — composed `SizingPolicy(GuardedPolicy(agent))` so sizing acts on the post-veto survivors;
+  L3 sizing is verdict-neutral (scoring is equal-weighted and never reads `size_tier`/`portfolio`).
 
 ---
 
