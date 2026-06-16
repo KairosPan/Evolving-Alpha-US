@@ -299,7 +299,7 @@ distinguish self-evolution that adds edge from self-evolution that only trims ri
 | **Swing** (mid/large) | **Fully functional** — base breakout, pullback-to-MA, RS-leader continuation, sector rotation, earnings-gap continuation; failures: failed breakout, distribution cluster, leader breakdown | US-1 |
 | **Runner** (low-float) | Defense seeds + **daily proxies** (multi-day up-days, gap%, daily RVOL, gap-up-hold); failures: parabolic blowoff, first red day, dilution/ATM, reverse-split pump, **halt-then-dump (US-3e daily proxy)** | Halt-resumption / VWAP-reclaim / ORB / halt count / MWCB → **US-3 intraday-feed deferred** |
 | **Event/catalyst** | Defense seeds + **news-tag proxy** (Alpaca news); failures: fade-on-event, gap-fill | Earnings-calendar proximity, surprise% vs whisper → **US-3** |
-| **Meme/squeeze** | Defense seeds + **short_squeeze offense activated** (US-3c: `short_interest`%/`days_to_cover` on the snapshot → `depends_on`-gated, surfaced when data is live; stays incubating pending evidence) | borrow, social → **US-3f**; `gamma_squeeze` options_flow → **US-3f** |
+| **Meme/squeeze** | Defense seeds + **both squeeze offenses activated** (US-3c `short_squeeze` via `short_interest`/`days_to_cover`; US-3f `gamma_squeeze` via `options_flow`) — `depends_on`-gated, surfaced when data is live; both stay incubating pending evidence; `social_sentiment` rendered (US-3f) | real options-flow / social / borrow feeds + per-narrative-line phase tagging → deferred |
 
 **Shared immutable-core doctrine** (Refiner can never edit):
 - Respect the regime (no chasing in risk-off).

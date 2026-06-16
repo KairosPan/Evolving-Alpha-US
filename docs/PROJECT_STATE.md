@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-15 (US-0 + US-1 + US-2 complete; US-3a–US-3e shipped (runner-tier, guard-veto, short-interest, dilution, halt-then-dump); US-3f next).
+> Last updated: 2026-06-16 (US-0 + US-1 + US-2 complete; US-3a–US-3f shipped — the US-3 daily-cadence enrichment arc is complete; next: per-narrative + the live temp=0 verdict run).
 
 ---
 
@@ -373,11 +373,28 @@ breaker needing a P&L state machine + index-crash monitor, not a per-candidate v
 already covered by the regime arm of `veto()`); and intraday **fill-feasibility**. Acceptance-tested end-to-end
 on a frontside regime. Full suite **361 tests green**.
 
-**Next — US-3f (deferred roadmap):** **3f** social / options (gamma squeeze) / per-narrative
-phase tagging. Plus, **orthogonal to US-3**: a live temp=0 Claude/DeepSeek run on captured Alpaca windows is
+**US-3f Options-flow + social → gamma_squeeze activation — Complete (2026-06-16). The US-3 enrichment arc is closed.**
+`StockSnapshot` gains `options_flow` (near-the-money call-flow score) + `social_sentiment`, filled at the
+`build_universe` chokepoint from the daily snapshot (US-3c data-on-snapshot pattern; real feeds deferred) and
+rendered as `optflow=…`/`social=…` in the agent prompt. Adding `options_flow` (a None-default field whose name
+matches `gamma_squeeze.depends_on`) **auto-activates** the last incubating offense seed, `gamma_squeeze`,
+through the **generic** `depends_on` enforcement built in US-3c (`available_data_signals` + `_depends_on_satisfied`
++ the `build_system_prompt` filter, fed by `decide`) — **no machinery or seed change**: on an options-flow day
+`gamma_squeeze` surfaces to the agent; otherwise it stays hidden (as does `short_squeeze` without short data).
+`social_euphoria_top` is `active`/no-`depends_on`, so `social_sentiment` is rendered context (US-3d `free_float`
+pattern). `gamma_squeeze` **stays `incubating`** — promotion to `active` is evidence-gated (lifecycle discipline;
+`test_squeeze_offense_is_incubating` pins it). With this, **every US-3 daily-cadence enrichment is live**:
+runner-tier (3a), the four guard-veto data flags — SSR/reverse-split (3b), dilution (3d), halt-then-dump (3e) —
+short_squeeze (3c) and gamma_squeeze (3f). Full suite **367 tests green**. **Honestly deferred:** real
+options-flow / social feeds (offline mechanism + schema in place); per-narrative-line phase tagging (a separate
+architecture piece — narrative clustering + a per-line regime read; today's `GCycle` returns one global phase).
+
+**Next (orthogonal to the enrichment arc):** a live temp=0 Claude/DeepSeek run on captured Alpaca windows is
 what renders the actual HCH-vs-Hexpert verdict via the US-2e procedure (the offline suite validates the
 apparatus; MockLLM ignores prompts; honest expectation = parity). **Deferred §10 methodology** (gate-non-blocking):
-purged & embargoed CV; regime-stratified eval. **Other deferred:** real LULD halts / halt-count (intraday tick
+purged & embargoed CV; regime-stratified eval. **Other deferred:** real options-flow / social-sentiment feeds +
+per-narrative-line phase tagging (narrative clustering + a per-line regime read; today's `GCycle` is global);
+real LULD halts / halt-count (intraday tick
 feed) + MWCB / `Breaker` portfolio wiring (P&L state machine + index-crash monitor) + intraday fill-feasibility
 (size-at-offer); a real EDGAR/SEC offerings feed (the offline
 corp-actions dilution mechanism + schema are in place) + the dilution-filing withdrawal/expiry lifecycle +

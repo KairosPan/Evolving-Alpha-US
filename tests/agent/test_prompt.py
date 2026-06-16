@@ -140,3 +140,10 @@ def test_user_prompt_renders_options_flow_and_social_when_present():
     assert "optflow=3.5" in up and "social=0.8" in up      # meme name shows the suffixes
     plain_line = [ln for ln in up.splitlines() if ln.startswith("- PLAIN")][0]
     assert "optflow=" not in plain_line and "social=" not in plain_line   # no data -> no suffix (no noise)
+
+
+def test_depends_on_enforced_shows_gamma_squeeze_with_options_flow():
+    sp = build_system_prompt(_h_squeeze(), phase_prior="trend", injection="full",
+                             available_signals=frozenset({"options_flow"}))
+    assert "gamma_squeeze" in sp                          # options_flow live -> gamma_squeeze surfaces
+    assert "short_squeeze" not in sp                      # short_interest/days_to_cover absent -> hidden
