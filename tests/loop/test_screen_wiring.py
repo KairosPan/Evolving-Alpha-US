@@ -38,11 +38,10 @@ def test_screen_off_by_default_keeps_entries():
     assert any(s.entries for s in lr.trajectory.steps)             # RUN enters normally (apparatus unchanged)
 
 
-def test_screen_on_vetoes_backside_entries():
-    # the minimal state builder feeds GCycle sentiment_norm=None/ft=0 -> single-gainer reads backside,
-    # so the wired veto drops every RUN pick (entries empty) and records reasons. This demonstrates the
-    # opt-in wiring; the SSR/reverse-split discrimination is unit-tested in tests/guard/test_screen.py.
+def test_screen_on_keeps_frontside_runner():
+    # the richer state builder threads prev_gainers -> follow_through=1.0 on day 2+ -> GCycle reads frontside,
+    # so the wired veto NO LONGER over-fires on a clean persistent runner (this is the fix the wiring delivers;
+    # SSR / reverse-split / halt-then-dump data vetoes are exercised in tests/guard/test_screen.py).
     lr = _loop(_source(6), screen=True).run()
-    assert all(not s.entries for s in lr.trajectory.steps)         # all vetoed -> no entries
-    assert any(s.decision.key_risks for s in lr.trajectory.steps)  # veto reasons surfaced
-    assert any(s.decision.regime is not None for s in lr.trajectory.steps)  # structured regime populated
+    assert any(s.entries for s in lr.trajectory.steps)             # frontside runner kept despite screen on
+    assert any(s.decision.regime is not None for s in lr.trajectory.steps)  # structured regime still populated

@@ -124,12 +124,20 @@ class InnerLoop:
         breaker_trips = 0
         frozen = False
         frozen_from: Date | None = None
+        # regime context threaded forward across the run; a breaker rollback does NOT rewind these (the
+        # regime read is a forward-only s_t-side input, not part of H — and sentiment_norm is None on the
+        # short windows where rollbacks are exercised, so no normalized value can drift).
+        history: list[float] = []                  # prior-day sentiment_raw
+        prev_gainers: frozenset[str] = frozenset()
 
         for i, cursor in enumerate(days):
             guarded = GuardedSource(self._source, AsOfGuard(cursor))
             universe = build_universe(guarded, cursor)
             state = build_market_state(universe, cursor,
-                                       as_of=DateTime(cursor.year, cursor.month, cursor.day, 16, 0))
+                                       as_of=DateTime(cursor.year, cursor.month, cursor.day, 16, 0),
+                                       history=history, prev_gainers=prev_gainers)
+            history.append(state.sentiment_raw)    # forward-only: feeds next day's sentiment_norm percentile
+            prev_gainers = frozenset(s.symbol for s in universe.by_status("gainer"))
             record.record(cursor, classify_day(guarded.daily_snapshot(cursor)))
             decision = self._agent.decide(state, universe)
             entries = {c.symbol: snap for c in decision.candidates

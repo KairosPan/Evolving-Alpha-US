@@ -45,11 +45,16 @@ class WalkForwardEval:
         markets: list = []
         universes: list = []
         scored_by_day: dict = {}
+        history: list[float] = []                 # prior-day sentiment_raw (regime-relative context)
+        prev_gainers: frozenset[str] = frozenset()
         for i, cursor in enumerate(days):
             guarded = GuardedSource(self._source, AsOfGuard(cursor))
             universe = build_universe(guarded, cursor)
             state = build_market_state(universe, cursor,
-                                       as_of=DateTime(cursor.year, cursor.month, cursor.day, 16, 0))
+                                       as_of=DateTime(cursor.year, cursor.month, cursor.day, 16, 0),
+                                       history=history, prev_gainers=prev_gainers)
+            history.append(state.sentiment_raw)   # forward-only: feeds next day's sentiment_norm percentile
+            prev_gainers = frozenset(s.symbol for s in universe.by_status("gainer"))
             record.record(cursor, classify_day(guarded.daily_snapshot(cursor)))
             decision = policy.decide(state, universe)
             decisions.append(decision); markets.append(state); universes.append(universe)

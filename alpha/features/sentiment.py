@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+DEFAULT_MIN_SAMPLES = 60   # regime-relative normalization needs >= this many trailing sentiment_raw days
+
 
 def raw_sentiment(gainer_count: int, max_runner_tier: int, follow_through: float,
                   failed_breakout_rate: float, loser_count: int) -> float:
