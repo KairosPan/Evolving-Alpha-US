@@ -17,6 +17,7 @@ from alpha.harness.manager import HarnessManager
 from alpha.harness.snapshot import SnapshotStore
 from alpha.harness.state import HarnessState
 from alpha.guard.screen import GuardedPolicy
+from alpha.sizing.policy import SizingPolicy
 from alpha.llm.client import LLMClient
 from alpha.loop.inner_loop import InnerLoop, LoopConfig, LoopReport
 from alpha.refine.refiner import RefinerConfig
@@ -77,14 +78,17 @@ def compare_harnesses(harness_factory: Callable[[], HarnessState], source, start
     scorer_factory = scorer_factory or (lambda: ReturnScorer())
     wf = WalkForwardEval(source, start, end, horizon=cfg.horizon, scorer=scorer_factory())
 
-    # HCH (InnerLoop) auto-wraps its agent in GuardedPolicy via _rebind when cfg.screen. WalkForwardEval
-    # has no loop_config hook, so to put the Hexpert/Hmin arms under the SAME L4 guard (a fair comparison
-    # once screen defaults on), wrap each policy here, at the call site, before handing it to wf.walk/run.
-    def _guard(policy):
-        return GuardedPolicy(policy, source) if cfg.screen else policy
+    # HCH (InnerLoop) auto-wraps its agent in GuardedPolicy (L4) + SizingPolicy (L3) via _rebind when
+    # cfg.screen / cfg.size. WalkForwardEval has no loop_config hook, so to put the Hexpert/Hmin arms under
+    # the SAME guard+sizing (a fair, symmetric comparison), wrap each policy here before wf.walk/run — in the
+    # SAME order as _rebind: L4 guard inner, L3 sizing outer (size the post-veto survivors). Sizing is
+    # verdict-neutral, so wrapping the non-HCH arms does not change their numbers; it keeps the chain uniform.
+    def _wrap(policy):
+        p = GuardedPolicy(policy, source) if cfg.screen else policy
+        return SizingPolicy(p) if cfg.size else p
 
     # Hexpert FIRST when shadow (its series seeds HCH); frozen H = bare agent walk, no Refiner/manager.
-    hexpert_traj = wf.walk(_guard(LLMAgentPolicy(harness_factory(), agent_llm_factory()))) if shadow else None
+    hexpert_traj = wf.walk(_wrap(LLMAgentPolicy(harness_factory(), agent_llm_factory()))) if shadow else None
 
     # HCH = self-refining InnerLoop (optionally shadow-gated against the Hexpert reference series)
     mgr = HarnessManager(harness_factory(), store_factory())
@@ -96,12 +100,12 @@ def compare_harnesses(harness_factory: Callable[[], HarnessState], source, start
 
     # Hexpert (reuse the shadow pre-run trajectory, else run it now)
     if hexpert_traj is None:
-        hexpert_traj = wf.walk(_guard(LLMAgentPolicy(harness_factory(), agent_llm_factory())))
+        hexpert_traj = wf.walk(_wrap(LLMAgentPolicy(harness_factory(), agent_llm_factory())))
     hexpert_eval = report_from_trajectory(hexpert_traj, horizon=cfg.horizon)
 
     # Hmin floor baselines (deterministic, no LLM/H/store)
-    hmin_chase = wf.run(_guard(ChaseBiggestGainerPolicy()))
-    hmin_notrade = wf.run(_guard(NoTradePolicy()))
+    hmin_chase = wf.run(_wrap(ChaseBiggestGainerPolicy()))
+    hmin_notrade = wf.run(_wrap(NoTradePolicy()))
 
     arms = {
         "HCH": ArmReport(name="HCH", report=hch_eval, n_refines=len(lr.refine_events),

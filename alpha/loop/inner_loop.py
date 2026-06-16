@@ -22,6 +22,7 @@ from alpha.refine.refiner import RefineReport, Refiner, RefinerConfig
 from alpha.refine.signatures import extract_signatures
 from alpha.loop.floor_breaker import _fallback_trip, _shadow_eps_abs, _shadow_trip
 from alpha.guard.screen import GuardedPolicy
+from alpha.sizing.policy import SizingPolicy
 from alpha.state.builder import build_market_state
 from alpha.universe.universe import build_universe
 
@@ -43,6 +44,10 @@ class LoopConfig(BaseModel):
     #   follow_through/sentiment so the regime arm reads frontside on genuine uptrends (no longer over-fires);
     #   the SSR / reverse-split / dilution / halt-then-dump data-flag vetoes are exact. Set screen=False to
     #   run an unguarded baseline (compare_harnesses wraps all arms symmetrically when this is True).
+    size: bool = True           # L3 sizing ON by default — assign size_tier (confidence x risk_gate) +
+    #   attach the portfolio plan (exposure budget + correlated groups). VERDICT-NEUTRAL: scoring is
+    #   equal-weighted and never reads size, so this enriches the decision surface without changing the
+    #   HCH-vs-Hexpert numbers. Set size=False to emit unsized decisions.
     # shadow/paired breaker (US-2d): active only when an InnerLoop is given a shadow_daily reference series
     breaker_shadow_lambda: float = Field(default=1.0, ge=0.0)
     breaker_shadow_eps_c: float = Field(default=0.25, ge=0.0)
@@ -105,7 +110,8 @@ class InnerLoop:
         h = self._mgr.harness
         base = self._agent_factory(h) if self._agent_factory is not None \
             else LLMAgentPolicy(h, self._agent_llm)
-        self._agent = GuardedPolicy(base, self._source) if self._cfg.screen else base
+        policy = GuardedPolicy(base, self._source) if self._cfg.screen else base
+        self._agent = SizingPolicy(policy) if self._cfg.size else policy   # size OUTSIDE guard (post-veto)
         self._refiner = Refiner(h, self._refiner_llm, self._mgr.tools, self._refiner_cfg)
 
     def run(self) -> LoopReport:
