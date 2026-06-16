@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-16 (US-0 + US-1 + US-2 complete; US-3a–US-3f shipped — the US-3 daily-cadence enrichment arc is complete; **richer-state perception wired into the live drivers + `LoopConfig.screen` now defaults ON** with a symmetric `compare_harnesses` guard; next: the live temp=0 verdict run, then per-narrative phases).
+> Last updated: 2026-06-16 (US-0 + US-1 + US-2 complete; US-3a–US-3f shipped — the US-3 daily-cadence enrichment arc is complete; **richer-state perception wired into the live drivers + `LoopConfig.screen` now defaults ON** with a symmetric `compare_harnesses` guard; **`scripts/run_verdict.py` verdict harness built + offline-verified (380 tests)** — only the live temp=0 run remains, needing real keys + a captured window; next after that: per-narrative phases).
 
 ---
 
@@ -411,9 +411,23 @@ Adversarial 4-lens plan review folded (the `DEFAULT_MIN_SAMPLES` relocation/cycl
 over-fire test breaks on Task 1 not Task 2; an SSR-calendar bug in the acceptance fixture caught during execution).
 Acceptance: frontside **keeps** the clean runner AND still **drops** a real SSR name. Full suite **373 tests green**.
 
-**Next (orthogonal to the enrichment arc):** a live temp=0 Claude/DeepSeek run on captured Alpaca windows is
-what renders the actual HCH-vs-Hexpert verdict via the US-2e procedure (the offline suite validates the
-apparatus; MockLLM ignores prompts; honest expectation = parity). **Deferred §10 methodology** (gate-non-blocking):
+**Verdict runner built — Complete (2026-06-16). The harness for the empirical verdict is in place (run needs keys/data).**
+`scripts/run_verdict.py` wires a captured PIT source (`SnapshotSource` over a `PITStore`) through
+`compare_harnesses`/`multi_window` with per-role **temp=0** `make_client` clients (`ALPHA_LLM_TEMPERATURE`
+default 0) and prints the `StatVerdict` + offense/defense/by-family `contribution` + per-arm report. The core
+`run_verdict(source, …)` takes any source + injectable LLM factories (tests drive it with MockLLM);
+`split_windows` is the temp=0 multi-seed surrogate (independent windows, each ≥ horizon+1 days). `screen`
+defaults ON, so all four arms are guarded symmetrically (the production posture from the richer-state wiring).
+Offline-verified 6 ways (in-memory, multi-window, on-disk capture→SnapshotSource round-trip, shadow path,
+formatters, window-split edges) + a live CLI mock run; holistic review folded the shadow-path test gap. Full
+suite **380 tests green**. **The actual pass/fail verdict is still NOT rendered** — that needs real APCA +
+LLM keys (absent here) to run: (1) `python scripts/capture_window.py <start> <end> verdict_pit SYM…` to build
+the offline PIT DB, then (2) set `ALPHA_AGENT_*`/`ALPHA_REFINER_*` + keys and
+`python scripts/run_verdict.py verdict_pit <start> <end> --windows N`. Honest expectation = parity (HCH ≈ Hexpert).
+
+**Next (orthogonal):** execute the verdict run above once keys + a captured window are available (the only
+remaining step to render the long-promised empirical HCH-vs-Hexpert number); then per-narrative-line phases.
+**Deferred §10 methodology** (gate-non-blocking):
 purged & embargoed CV; regime-stratified eval. **Other deferred:** real options-flow / social-sentiment feeds +
 per-narrative-line phase tagging (narrative clustering + a per-line regime read; today's `GCycle` is global);
 real LULD halts / halt-count (intraday tick
@@ -446,4 +460,9 @@ python scripts/smoke_alpaca.py AAPL 2026-06-01 2026-06-12
 
 # Build offline PIT snapshot DB
 python scripts/capture_window.py 2026-06-01 2026-06-12 snap AAPL MSFT NVDA
+
+# Render the empirical HCH-vs-Hexpert verdict at temperature=0 (needs APCA + LLM keys + a captured PIT DB)
+export ALPHA_AGENT_PROVIDER=openai_compat ALPHA_AGENT_MODEL=deepseek-chat        # + DEEPSEEK_API_KEY
+export ALPHA_REFINER_PROVIDER=anthropic   ALPHA_REFINER_MODEL=claude-sonnet-4-6  # + ANTHROPIC_API_KEY
+python scripts/run_verdict.py verdict_pit 2026-01-02 2026-03-31 --windows 3
 ```
