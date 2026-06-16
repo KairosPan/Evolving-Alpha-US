@@ -1,7 +1,7 @@
 # Evolving-Alpha-US — Project State
 
 > **One-page compressed context for session restart.**
-> Last updated: 2026-06-15 (US-0 + US-1 + US-2 complete; US-3a runner-tier + US-3b guard-veto + US-3c short-interest + US-3d float/dilution-veto shipped; US-3e next).
+> Last updated: 2026-06-15 (US-0 + US-1 + US-2 complete; US-3a–US-3e shipped (runner-tier, guard-veto, short-interest, dilution, halt-then-dump); US-3f next).
 
 ---
 
@@ -360,12 +360,26 @@ overhang; ex_date/withdrawal lifecycle deferred to a real EDGAR feed). Enforceme
 `GuardedPolicy`/`LoopConfig.screen` (default-off), so the suite is untouched. Acceptance-tested end-to-end on
 a frontside regime. Full suite **358 tests green**.
 
-**Next — US-3e → US-3f (deferred roadmap):** **3e** intraday / halts / MWCB (LULD halts = 涨停 analog; `breaker.set_mwcb` has no caller;
-enables fill-feasibility + halt-locked infeasibility). **3f** social / options (gamma squeeze) / per-narrative
+**US-3e Halt-then-dump veto (daily proxy) — Complete (2026-06-15). The last daily-cadence guard flag is live.**
+The dormant L4 `halt_then_dump` veto is activated with a **daily-OHLC proxy** (`alpha/guard/screen.py::halt_then_dump_proxy`):
+a name whose intraday high spiked ≥15% above its prior close (a likely LULD halt-up) but round-tripped to
+close at/below the prior close is a failed spike → vetoed. `screen_decision` fetches the day's snapshot once
+(guard-safe) and slots `halt_then_dump=…` into the `CandidateContext` — the US-3b/3d one-line pattern; `veto()`
+already fires `"halt-then-dump"`. Distinct from `failed_breakout` (gap-at-open): this keys on the intraday HIGH
+spike. Opt-in via `GuardedPolicy`/`LoopConfig.screen` (default-off); suite untouched. **Honestly deferred (need
+an intraday feed / new architecture):** real LULD halts + halt-count (tick data); the **MWCB** market-wide
+circuit breaker (`alpha/guard/breaker.py::Breaker.set_mwcb` has zero production callers — a portfolio-level loss
+breaker needing a P&L state machine + index-crash monitor, not a per-candidate veto; market-wide risk-off is
+already covered by the regime arm of `veto()`); and intraday **fill-feasibility**. Acceptance-tested end-to-end
+on a frontside regime. Full suite **361 tests green**.
+
+**Next — US-3f (deferred roadmap):** **3f** social / options (gamma squeeze) / per-narrative
 phase tagging. Plus, **orthogonal to US-3**: a live temp=0 Claude/DeepSeek run on captured Alpaca windows is
 what renders the actual HCH-vs-Hexpert verdict via the US-2e procedure (the offline suite validates the
 apparatus; MockLLM ignores prompts; honest expectation = parity). **Deferred §10 methodology** (gate-non-blocking):
-purged & embargoed CV; regime-stratified eval. **Other deferred:** a real EDGAR/SEC offerings feed (the offline
+purged & embargoed CV; regime-stratified eval. **Other deferred:** real LULD halts / halt-count (intraday tick
+feed) + MWCB / `Breaker` portfolio wiring (P&L state machine + index-crash monitor) + intraday fill-feasibility
+(size-at-offer); a real EDGAR/SEC offerings feed (the offline
 corp-actions dilution mechanism + schema are in place) + the dilution-filing withdrawal/expiry lifecycle +
 float-based L3 sizing; wiring the richer `features/builder` into the
 live loop so `GCycle` reads frontside and `LoopConfig.screen` (+ symmetric `GuardedPolicy` on all
