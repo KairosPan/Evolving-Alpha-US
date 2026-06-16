@@ -50,6 +50,16 @@ def test_run_verdict_multi_window():
     assert len(mw.deltas) == 3 and len(mw.verdicts) == 3
 
 
+def test_run_verdict_shadow_path():
+    # shadow=True runs Hexpert FIRST and seeds HCH's paired breaker with its daily_advantage series — a
+    # distinct compare_harnesses path; smoke it through run_verdict so the --shadow flag has coverage.
+    src, start, end = _fake()
+    cr = rv.run_verdict(src, start, end, shadow=True, agent_llm_factory=_AGENT, refiner_llm_factory=_REFINER)
+    assert isinstance(cr, ComparisonReport)
+    assert set(cr.arms) == {"HCH", "Hexpert", "Hmin_chase", "Hmin_notrade"}
+    assert cr.stat_verdict is not None
+
+
 def test_run_verdict_through_captured_pit_store():
     # the real CLI path: FakeSource -> capture_window -> PITStore (on disk) -> SnapshotSource -> verdict.
     src, start, end = _fake()
@@ -81,3 +91,5 @@ def test_split_windows_partitions_contiguously():
     assert all(a[1] < b[0] for a, b in zip(wins, wins[1:]))     # contiguous, non-overlapping, ordered
     # a too-short span collapses to one window (never a sub-horizon slice)
     assert rv.split_windows(cal, start, cal[2], 3, horizon=2) == [(start, cal[2])]
+    # requesting more windows than the data supports is capped at len(days)//(horizon+1) = 12//3 = 4
+    assert len(rv.split_windows(cal, start, end, 10, horizon=2)) == 4
