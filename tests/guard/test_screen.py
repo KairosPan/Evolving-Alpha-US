@@ -129,6 +129,9 @@ def test_halt_then_dump_proxy():
     assert halt_then_dump_proxy({"prev_close": 10.0, "high": 10.5, "close": 9.0}) is False   # no >=15% intraday spike
     assert halt_then_dump_proxy(None) is False                                               # missing -> never fabricate
     assert halt_then_dump_proxy({"prev_close": None, "high": 13.0, "close": 9.0}) is False   # missing prev_close
+    assert halt_then_dump_proxy({"prev_close": float("nan"), "high": 13.0, "close": 9.0}) is False  # NaN -> missing
+    assert halt_then_dump_proxy({"prev_close": 0.0, "high": 1.0, "close": 0.0}) is False     # prev<=0 guard
+    assert halt_then_dump_proxy({}) is False                                                 # missing keys (.get -> None)
 
 
 def test_screen_drops_halt_then_dump_candidate_and_records_reason():
