@@ -131,6 +131,8 @@ def build_universe(source, day: Date, *, gainer_pct: float = 10.0,
             short_interest=_opt_float(rec.get("short_interest")),
             days_to_cover=_opt_float(rec.get("days_to_cover")),
             free_float=_opt_float(rec.get("free_float")),
+            options_flow=_opt_float(rec.get("options_flow")),
+            social_sentiment=_opt_float(rec.get("social_sentiment")),
         )
     return CandidateUniverse(stocks)
 

@@ -10,7 +10,7 @@ from alpha.data.firewall import AsOfGuard
 
 _EMPTY_BARS = ["date", "open", "high", "low", "close", "volume"]
 _EMPTY_SNAP = ["symbol", "name", "open", "high", "low", "close", "volume", "prev_close",
-               "short_interest", "days_to_cover", "free_float"]
+               "short_interest", "days_to_cover", "free_float", "options_flow", "social_sentiment"]
 _EMPTY_CORP = ["symbol", "announce_date", "ex_date", "kind", "ratio"]
 
 
