@@ -120,3 +120,22 @@ def test_screen_drops_dilution_candidate_and_records_reason(fake_source):
                                                 "ex_date": [date(2026, 6, 20)], "kind": ["atm"], "ratio": [None]}))
     out = screen_decision(_pkg("RUN"), source=src, state=_state())
     assert out.candidates == [] and any("RUN" in r and "dilution" in r for r in out.key_risks)
+
+
+def test_halt_then_dump_proxy():
+    from alpha.guard.screen import halt_then_dump_proxy
+    assert halt_then_dump_proxy({"prev_close": 10.0, "high": 13.0, "close": 9.5}) is True    # +30% spike, closed red
+    assert halt_then_dump_proxy({"prev_close": 10.0, "high": 13.0, "close": 12.0}) is False  # spiked but held green
+    assert halt_then_dump_proxy({"prev_close": 10.0, "high": 10.5, "close": 9.0}) is False   # no >=15% intraday spike
+    assert halt_then_dump_proxy(None) is False                                               # missing -> never fabricate
+    assert halt_then_dump_proxy({"prev_close": None, "high": 13.0, "close": 9.0}) is False   # missing prev_close
+
+
+def test_screen_drops_halt_then_dump_candidate_and_records_reason():
+    # SPIKE spiked >=15% intraday (high 13 vs prev 10) then round-tripped to close red (9.5) -> halt-then-dump.
+    cal = [date(2026, 6, 11), date(2026, 6, 12)]
+    snap = pd.DataFrame({"symbol": ["SPIKE"], "name": ["Spiker"], "open": [10.0], "high": [13.0],
+                         "low": [9.0], "close": [9.5], "volume": [9], "prev_close": [10.0]})
+    src = FakeSource(calendar=cal, bars={}, snapshots={date(2026, 6, 12): snap})
+    out = screen_decision(_pkg("SPIKE"), source=src, state=_state())
+    assert out.candidates == [] and any("SPIKE" in r and "halt-then-dump" in r for r in out.key_risks)

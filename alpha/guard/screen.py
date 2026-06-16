@@ -14,6 +14,30 @@ from alpha.regime.classifier import GCycle
 from alpha.state.market import MarketState
 
 SSR_DROP_PCT = -10.0   # Reg SHO Rule 201: a >=10% prior-day decline restricts short sales the next session
+HALT_SPIKE_PCT = 0.15   # an intraday high >=15% above prior close ~ a LULD halt-up (Tier-1 band) event
+
+
+def _num(value) -> float | None:
+    """None-and-NaN-safe scalar float (snapshot rows can carry NaN)."""
+    return None if value is None or pd.isna(value) else float(value)
+
+
+def halt_then_dump_proxy(row) -> bool:
+    """Daily-OHLC proxy for a halt-then-dump: the name spiked intraday >= HALT_SPIKE_PCT above its prior
+    close (a likely LULD halt-up) but round-tripped to close at/below the prior close — a failed spike, do
+    not chase it long. `row` is a daily-snapshot record (dict) or None. Real intraday LULD halts/halt-count
+    need a tick feed (deferred); this is the daily-cadence proxy. Missing/NaN data -> False (never fabricated).
+
+    Distinct from failed_breakout (gap-up at the OPEN that closes red): this keys on the intraday HIGH
+    spike (the halt-up signature), so it also catches names that opened flat, spiked, and dumped."""
+    if row is None:
+        return False
+    prev, high, close = _num(row.get("prev_close")), _num(row.get("high")), _num(row.get("close"))
+    if prev is None or high is None or close is None or prev <= 0:
+        return False
+    spiked = (high - prev) / prev >= HALT_SPIKE_PCT
+    dumped = close <= prev
+    return spiked and dumped
 
 
 def _prior_day_pct(source, symbol: str, prev: Date) -> float | None:
@@ -57,12 +81,16 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState) ->
     guarded = GuardedSource(source, AsOfGuard(as_of))
     regime = GCycle().read(state)
     corp = guarded.corporate_actions_known(as_of)
+    snap = guarded.daily_snapshot(as_of)               # day's OHLC for the halt-then-dump proxy (guard-safe)
+    rows = ({str(r["symbol"]): r for r in snap.to_dict("records")}
+            if snap is not None and not snap.empty else {})
     kept, notes = [], []
     for c in decision.candidates:
         ctx = CandidateContext(symbol=c.symbol, regime=regime,
                                ssr=ssr_active(guarded, c.symbol, as_of),
                                reverse_split_pending=has_reverse_split_pending(corp, c.symbol, as_of),
-                               dilution=has_dilution_filing(corp, c.symbol, as_of))
+                               dilution=has_dilution_filing(corp, c.symbol, as_of),
+                               halt_then_dump=halt_then_dump_proxy(rows.get(c.symbol)))
         v = veto(ctx)
         if v.vetoed:
             notes.append(f"vetoed {c.symbol}: {'; '.join(v.reasons)}")
