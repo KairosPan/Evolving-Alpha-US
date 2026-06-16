@@ -194,8 +194,10 @@ class InnerLoop:
                         window_start = common[-k]
                 else:
                     k = min(len(breaker_days), cfg.breaker_k_max)
-                    history = [v for _, v in breaker_days]
-                    trip, rolling, thr, reason = _fallback_trip(history, k, cfg.breaker_mad_c, cfg.floor_abs)
+                    adv_series = [v for _, v in breaker_days]   # NOT `history` — that name is the outer
+                    #   sentiment_raw accumulator threaded to build_market_state; rebinding it here would
+                    #   corrupt sentiment_norm once history reaches min_samples on a long run.
+                    trip, rolling, thr, reason = _fallback_trip(adv_series, k, cfg.breaker_mad_c, cfg.floor_abs)
                     window_start = breaker_days[-k][0]
                 if trip:
                     breaker_trips += 1

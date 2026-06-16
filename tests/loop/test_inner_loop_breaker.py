@@ -89,3 +89,28 @@ def test_breaker_rolls_back_to_pre_degradation_checkpoint():
     modes = [e.mode for e in report.breaker_events]
     assert modes and modes[0] == "rollback"
     assert report.breaker_events[0].rolled_back_to is not None
+
+
+def test_history_threading_survives_fallback_breaker(monkeypatch):
+    # Regression: the fallback breaker computes a LOCAL advantage series; it must NOT clobber the outer
+    # sentiment_raw `history` accumulator threaded into build_market_state (a name-collision bug would
+    # rebind it on every breaker-check day). Spy on the history kwarg length: it must grow by exactly one
+    # per day (the bug replaces it with the advantage list, jumping its length). screen=False isolates the
+    # threading from guard vetoes.
+    import alpha.loop.inner_loop as il
+    real = il.build_market_state
+    seen: list[int] = []
+
+    def _spy(universe, day, *, history, **kw):
+        seen.append(len(list(history)))
+        return real(universe, day, history=history, **kw)
+
+    monkeypatch.setattr(il, "build_market_state", _spy)
+    cal = [date(2026, 6, d) for d in range(1, 10)]                 # 9 days
+    sched = {cal[k]: (0.3 if k < 3 else -0.9) for k in range(9)}   # degrade -> fallback breaker fires
+    cfg = LoopConfig(horizon=2, enable_refine=False, breaker_min_days=3, breaker_k_max=3,
+                     breaker_mad_c=2.0, floor_abs=0.0, screen=False)
+    loop, _ = _loop(_source(9), cfg, sched)
+    report = loop.run()
+    assert report.breaker_events                                   # the fallback breaker path executed
+    assert seen == list(range(9))                                  # +1 per day, never replaced (bug -> jump)
