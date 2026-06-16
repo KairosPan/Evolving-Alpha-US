@@ -46,8 +46,10 @@ def _advantages(lr):
 
 def test_l3_sizing_is_verdict_neutral_but_enriches_surface():
     on, off = _run(True), _run(False)
-    # surface enriched with sizing on, absent with sizing off
+    # surface enriched with sizing on (size_tier + portfolio), absent with sizing off
     assert any(c.size_tier is not None for s in on.trajectory.steps for c in s.decision.candidates)
     assert all(c.size_tier is None for s in off.trajectory.steps for c in s.decision.candidates)
+    assert any(s.decision.portfolio is not None for s in on.trajectory.steps)
+    assert all(s.decision.portfolio is None for s in off.trajectory.steps)
     # verdict-neutral: the scored advantages are identical on vs off
     assert _advantages(on) == _advantages(off) and _advantages(on)   # non-empty + equal

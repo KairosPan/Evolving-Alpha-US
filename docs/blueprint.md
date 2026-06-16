@@ -177,9 +177,13 @@ reference/cn/   # copied CN system — reference during rebuild, DELETED when do
 **Decision pipeline (execution order):**
 ```
 data → features → regime (G_cycle) → universe →
-agent (master-dispatch + G sub-agents) → sizing (L3) → guard (L4 veto) →
+agent (master-dispatch + G sub-agents) → guard (L4 veto) → sizing (L3) →
 DecisionPackage → human confirmation
 ```
+
+(Execution order: the L4 guard veto runs **before** L3 sizing — `SizingPolicy(GuardedPolicy(agent))` — so
+sizing acts only on the post-veto survivors and the portfolio's exposure budget reflects exactly the names
+that are entered. The L3/L4 labels are layer identities, not execution sequence.)
 
 Self-evolution machinery (`harness/`, `refine/`, `loop/`, `eval/`) wraps this pipeline.
 
