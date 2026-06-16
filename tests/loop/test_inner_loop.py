@@ -52,7 +52,9 @@ def _loop(src, cfg):
 
 def test_skeleton_runs_and_credits_cumulatively():
     src = _source(6)
-    loop, mgr = _loop(src, LoopConfig(horizon=2, enable_refine=False))
+    loop, mgr = _loop(src, LoopConfig(horizon=2, enable_refine=False, screen=False))   # unguarded apparatus
+    #   baseline: credit-once-per-scored-step is an apparatus invariant; the L4 guard (now default-on, which
+    #   vetoes the bootstrap day) is exercised in tests/loop/test_screen_*.py.
     report = loop.run()
     assert isinstance(report, LoopReport)
     assert len(report.trajectory.steps) == 6                  # one step per day

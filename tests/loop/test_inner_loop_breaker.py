@@ -65,7 +65,8 @@ def test_breaker_freezes_without_checkpoint():
     cal = [date(2026, 6, d) for d in range(1, 8)]               # 7 days
     sched = {cal[0]: 0.3, cal[1]: 0.3, cal[2]: 0.3, cal[3]: -0.9, cal[4]: -0.9}
     cfg = LoopConfig(horizon=2, enable_refine=False, breaker_min_days=3, breaker_k_max=3,
-                     breaker_mad_c=2.0, floor_abs=0.0)
+                     breaker_mad_c=2.0, floor_abs=0.0, screen=False)   # unguarded: the breaker calibrates on
+    #   the scheduled advantage series; the L4 guard (default-on) is exercised in tests/loop/test_screen_*.py.
     loop, mgr = _loop(_source(7), cfg, sched)
     report = loop.run()
     assert report.frozen_from is not None

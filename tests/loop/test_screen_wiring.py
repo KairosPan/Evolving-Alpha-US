@@ -33,9 +33,9 @@ def _loop(src, *, screen):
                      MockLLMClient('{"ops": []}'), config=cfg)
 
 
-def test_screen_off_by_default_keeps_entries():
+def test_screen_off_keeps_entries():
     lr = _loop(_source(6), screen=False).run()
-    assert any(s.entries for s in lr.trajectory.steps)             # RUN enters normally (apparatus unchanged)
+    assert any(s.entries for s in lr.trajectory.steps)             # explicit unguarded baseline enters normally
 
 
 def test_screen_on_keeps_frontside_runner():

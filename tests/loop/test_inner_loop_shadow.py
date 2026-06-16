@@ -75,7 +75,8 @@ def test_shadow_none_uses_fallback_path():
     src = _source(8)
     cal = src.trading_calendar()
     own = {cal[k]: (0.3 if k < 3 else -0.9) for k in range(8)}  # degrade -> fallback floor_abs trip
-    cfg = LoopConfig(horizon=2, enable_refine=False, breaker_min_days=3, breaker_k_max=3, floor_abs=0.0)
+    cfg = LoopConfig(horizon=2, enable_refine=False, breaker_min_days=3, breaker_k_max=3, floor_abs=0.0,
+                     screen=False)   # unguarded: the fallback breaker calibrates on the scheduled series
     loop = _loop(src, cfg, own, shadow_daily=None)
     report = loop.run()
     assert report.breaker_events and "shadow" not in report.breaker_events[-1].reason   # fallback, not shadow

@@ -39,10 +39,10 @@ class LoopConfig(BaseModel):
     breaker_mad_c: float = Field(default=2.0, ge=0.0)
     floor_abs: float = Field(default=-0.2, ge=-1.0, le=1.0)
     enable_refine: bool = True
-    screen: bool = False        # US-3b: when True, wrap the agent in GuardedPolicy (L4 hard veto). OFF by
-    #   default — the regime arm over-fires on the minimal state builder (follow_through/sentiment None ->
-    #   GCycle reads backside) until the richer features/builder is on the live path (a later US-3 slice).
-    #   The SSR/reverse-split data-flag vetoes are exact today.
+    screen: bool = True         # L4 hard veto ON by default — the richer state builder now feeds GCycle
+    #   follow_through/sentiment so the regime arm reads frontside on genuine uptrends (no longer over-fires);
+    #   the SSR / reverse-split / dilution / halt-then-dump data-flag vetoes are exact. Set screen=False to
+    #   run an unguarded baseline (compare_harnesses wraps all arms symmetrically when this is True).
     # shadow/paired breaker (US-2d): active only when an InnerLoop is given a shadow_daily reference series
     breaker_shadow_lambda: float = Field(default=1.0, ge=0.0)
     breaker_shadow_eps_c: float = Field(default=0.25, ge=0.0)
