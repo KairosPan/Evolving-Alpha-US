@@ -4,6 +4,7 @@
 
 # Claude Code local settings (keep shared config, ignore personal/local)
 .claude/settings.local.json
+.mcp.json
 
 # Python
 __pycache__/
@@ -33,3 +34,8 @@ __pycache__/
 /snap/
 /runs/
 *.parquet
+
+# Secrets / local credentials — NEVER commit (Alpaca + LLM keys)
+.env
+.env.*
+*.env

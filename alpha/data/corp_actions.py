@@ -1,4 +1,12 @@
 # alpha/data/corp_actions.py
+#
+# Source-agnostic PIT helpers over the normalized corp-actions frame (COLUMNS below). The `announce_date`
+# column is the point-in-time availability key — the day the action became known to us. For the Alpaca
+# source it is populated from `process_date` (the day Alpaca processed/published the action): Alpaca's
+# corporate-actions feed exposes NO real announcement date, and process_date is the earliest day an action
+# is retrievable, so keying on it is conservative against announcement latency and never leaks the future
+# (see alpha/data/alpaca.py:_normalize_corp). The dilution kinds (atm/shelf/offering) are NOT in Alpaca's
+# feed — they are EDGAR filings, deferred to a real EDGAR source; Alpaca supplies reverse_split / delist.
 from __future__ import annotations
 
 from datetime import date as Date
@@ -9,7 +17,10 @@ COLUMNS = ["symbol", "announce_date", "ex_date", "kind", "ratio"]
 
 
 def known_corporate_actions(corp: pd.DataFrame, as_of: Date) -> pd.DataFrame:
-    """Corporate actions whose ANNOUNCEMENT is known by as_of (never keyed on ex_date)."""
+    """Corporate actions whose ANNOUNCEMENT is known by as_of (never keyed on ex_date).
+
+    `announce_date` is the availability key (Alpaca: process_date), so this is the true PIT set of
+    actions retrievable as of as_of, including those whose ex_date is still in the future (pending)."""
     if corp is None or corp.empty:
         return pd.DataFrame(columns=COLUMNS)
     return corp[corp["announce_date"] <= as_of].reset_index(drop=True)
