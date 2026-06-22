@@ -19,6 +19,18 @@
   produce and display a real one.</span></div>
 {% endif %}
 
+{% if runs %}
+<div class="filters" style="margin-bottom:18px;">
+  <div class="fgroup">
+    <span class="eyebrow">Run · {{ runs|length }} stored</span>
+    <div class="chips">
+      {% for r in runs %}<a class="chip{% if r == selected %} is-on{% endif %}" href="/verdict?run={{ r }}"
+         {% if r == selected %}aria-current="true"{% endif %}>{{ r }}</a>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div class="headline" style="margin-bottom:18px;">
   <div>
     <p class="eyebrow" style="margin:0 0 4px;">HCH − Hexpert · mean excess</p>
@@ -66,9 +78,9 @@
       <div class="kv"><span class="k">Verdict</span><span class="v">{{ sv.verdict }}</span></div>
       <div class="kv"><span class="k">Paired days</span><span class="v">{{ sv.n_days }}</span></div>
       <div class="kv"><span class="k">Mean diff</span><span class="v {{ 'up' if sv.mean_diff > 0 else ('down' if sv.mean_diff < 0 else '') }}">{{ "%+.4f"|format(sv.mean_diff) }}</span></div>
-      <div class="kv"><span class="k">95% CI</span><span class="v">[{{ "%+.4f"|format(sv.ci_low) }}, {{ "%+.4f"|format(sv.ci_high) }}]</span></div>
-      <div class="kv"><span class="k">p-value</span><span class="v">{{ "%.3f"|format(sv.p_value) }}</span></div>
-      <div class="kv"><span class="k">MDE</span><span class="v">{{ "%.3f"|format(sv.mde) }}</span></div>
+      <div class="kv"><span class="k">95% CI</span><span class="v">{% if sv.ci_low is not none and sv.ci_high is not none %}[{{ "%+.4f"|format(sv.ci_low) }}, {{ "%+.4f"|format(sv.ci_high) }}]{% else %}n/a{% endif %}</span></div>
+      <div class="kv"><span class="k">p-value</span><span class="v">{{ "%.3f"|format(sv.p_value) if sv.p_value is not none else "n/a" }}</span></div>
+      <div class="kv"><span class="k">MDE</span><span class="v">{{ "%.3f"|format(sv.mde) if sv.mde is not none else "n/a" }}</span></div>
     </div>
   </section>
 </div>

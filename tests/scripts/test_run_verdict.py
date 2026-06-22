@@ -60,6 +60,35 @@ def test_run_verdict_shadow_path():
     assert cr.stat_verdict is not None
 
 
+def test_comparison_to_view_matches_console_shape():
+    # the --json mapper must produce exactly the dict shape the console's verdict page consumes
+    from alpha_web.sample import sample_verdict
+    src, start, end = _fake()
+    cr = rv.run_verdict(src, start, end, agent_llm_factory=_AGENT, refiner_llm_factory=_REFINER)
+    view = rv.comparison_to_view(cr, start=start, end=end, horizon=2, screen=True)
+    assert set(view) == set(sample_verdict())                       # same top-level contract
+    for name in ("HCH", "Hexpert", "Hmin_chase", "Hmin_notrade"):
+        assert {"n_decisions", "n_candidates", "mean_excess", "hit_rate", "nuke_rate"} <= set(view["arms"][name])
+    assert {"refines", "trips", "frozen_from"} <= set(view["arms"]["HCH"])   # HCH evolution counters
+    assert {"verdict", "n_days", "mean_diff", "ci_low", "ci_high", "p_value", "mde"} <= set(view["stat_verdict"])
+    assert view["window"]["start"] == start.isoformat()
+
+
+def test_run_verdict_json_flag_writes_console_file(tmp_path, monkeypatch):
+    # the CLI --json path: write a file the console can read back
+    import json
+    src, start, end = _fake()
+    out = tmp_path / "v.json"
+    monkeypatch.setattr(sys, "argv", ["run_verdict", "PIT", start.isoformat(), end.isoformat(),
+                                      "--json", str(out)])
+    monkeypatch.setattr(rv, "SnapshotSource", lambda *_a, **_k: src)        # bypass the on-disk PIT load
+    monkeypatch.setattr(rv, "PITStore", lambda *_a, **_k: None)
+    monkeypatch.setattr(rv, "make_client", lambda role: _AGENT() if role == "agent" else _REFINER())
+    rv.main()
+    data = json.loads(out.read_text())
+    assert {"window", "arms", "headline", "stat_verdict"} <= set(data)
+
+
 def test_run_verdict_through_captured_pit_store():
     # the real CLI path: FakeSource -> capture_window -> PITStore (on disk) -> SnapshotSource -> verdict.
     src, start, end = _fake()

@@ -22,6 +22,7 @@ this measures the production posture. Determinism: `make_client` reads ALPHA_LLM
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import tempfile
 from datetime import date as Date
@@ -122,6 +123,43 @@ def format_comparison(cr: ComparisonReport, *, header: str = "") -> str:
     return "\n".join(lines)
 
 
+def comparison_to_view(cr: ComparisonReport, *, start: Date, end: Date, horizon: int,
+                       screen: bool) -> dict:
+    """Map a ComparisonReport to the flat UI dict the web console's verdict page consumes (the shape of
+    `alpha_web.sample.sample_verdict()`, NOT ComparisonReport's own shape). Write this with `--json` and
+    point `ALPHA_WEB_VERDICT` (or drop several into `ALPHA_WEB_VERDICTS_DIR`) at it to browse a real run."""
+    def arm(a) -> dict:
+        r = a.report
+        d = {"n_decisions": r.n_decisions, "n_candidates": r.n_candidates,
+             "mean_excess": r.mean_excess, "hit_rate": r.hit_rate, "nuke_rate": r.nuke_rate}
+        if a.n_refines is not None:                       # HCH-only evolution counters
+            d.update(refines=a.n_refines, trips=a.n_breaker_trips,
+                     frozen_from=a.frozen_from.isoformat() if a.frozen_from is not None else None)
+        return d
+
+    v = cr.stat_verdict
+    stat = ({"verdict": v.verdict, "n_days": v.n_days, "mean_diff": v.mean_diff, "ci_low": v.ci_low,
+             "ci_high": v.ci_high, "p_value": v.p_value, "mde": v.mde} if v is not None else
+            {"verdict": "insufficient", "n_days": 0, "mean_diff": 0.0,
+             "ci_low": None, "ci_high": None, "p_value": None, "mde": None})
+
+    c = cr.contribution
+    def bucket(b) -> dict:
+        return {"n": b.n, "hit_rate": b.hit_rate, "nuke_rate": b.nuke_rate, "expectancy": b.expectancy}
+    contribution = ({"offense": bucket(c.offense), "defense": bucket(c.defense),
+                     "unknown": bucket(c.unknown)} if c is not None else None)
+
+    return {
+        "window": {"start": start.isoformat(), "end": end.isoformat(), "horizon": horizon,
+                   "windows": 1, "screen": screen},
+        "arms": {name: arm(a) for name, a in cr.arms.items()},
+        "headline": {"hch_minus_hexpert": cr.hch_minus_hexpert_mean_excess,
+                     "hch_beats_hexpert": cr.hch_beats_hexpert},
+        "stat_verdict": stat,
+        "contribution": contribution,
+    }
+
+
 def format_multi(mw: MultiWindowReport) -> str:
     lines = [f"MULTI-WINDOW ({mw.n_windows} windows; temp=0 multi-seed surrogate)",
              f"  deltas      = {[round(d, 4) for d in mw.deltas]}",
@@ -139,6 +177,8 @@ def main() -> None:
     ap.add_argument("--windows", type=int, default=1, help="split into N independent windows (multi-seed surrogate)")
     ap.add_argument("--horizon", type=int, default=2, help="hold horizon (>=2; no same-day round-trip)")
     ap.add_argument("--shadow", action="store_true", help="seed HCH's paired breaker with the Hexpert series")
+    ap.add_argument("--json", metavar="PATH", help="also write the console JSON (web verdict view) to PATH "
+                    "(single comparison; pair with --windows 1, the default)")
     args = ap.parse_args()
 
     source = SnapshotSource(PITStore(Path(args.pit_root)))
@@ -158,8 +198,15 @@ def main() -> None:
                          windows=args.windows, shadow=args.shadow)
     if isinstance(result, MultiWindowReport):
         print(format_multi(result))
+        if args.json:
+            print(f"  NOTE: --json needs a single comparison; re-run with --windows 1 to emit {args.json} (skipped).")
     else:
         print(format_comparison(result))
+        if args.json:
+            view = comparison_to_view(result, start=args.start, end=args.end,
+                                      horizon=args.horizon, screen=LoopConfig().screen)
+            Path(args.json).write_text(json.dumps(view, indent=2), encoding="utf-8")
+            print(f"  wrote console JSON -> {args.json}  (ALPHA_WEB_VERDICT={args.json} python -m alpha_web)")
 
 
 if __name__ == "__main__":

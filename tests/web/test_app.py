@@ -158,3 +158,82 @@ def test_single_decision_file_overrides_the_store(client, tmp_path, monkeypatch)
     monkeypatch.setenv("ALPHA_WEB_DECISION", str(f))
     r = client.get("/decisions")
     assert r.status_code == 200 and "FILEX" in r.text and "DIRX" not in r.text
+
+
+# ── verdict store browsing (ALPHA_WEB_VERDICTS_DIR) ────────────────────────────
+def test_verdict_store_browse_by_run(client, tmp_path, monkeypatch):
+    import json
+    from alpha_web import sample
+    from alpha.eval.verdict_store import VerdictStore
+    store = VerdictStore(tmp_path)
+    a = sample.sample_verdict(); a["headline"]["hch_minus_hexpert"] = 0.0111
+    b = sample.sample_verdict(); b["headline"]["hch_minus_hexpert"] = -0.0222
+    store.put("2026Q1", a)
+    store.put("2026Q2", b)
+    monkeypatch.setenv("ALPHA_WEB_VERDICTS_DIR", str(tmp_path))
+    r = client.get("/verdict")
+    assert r.status_code == 200 and "Sample verdict" not in r.text
+    assert "2026Q1" in r.text and "2026Q2" in r.text          # picker lists both runs
+    assert "-0.0222" in r.text                                 # latest (2026Q2) shown by default
+    r1 = client.get("/verdict?run=2026Q1")
+    assert r1.status_code == 200 and "+0.0111" in r1.text
+
+
+def test_verdict_null_stat_fields_render(client, tmp_path, monkeypatch):
+    # a real "insufficient" verdict has null ci/p/mde — must render n/a, not 500
+    import json
+    from alpha_web import sample
+    v = sample.sample_verdict()
+    v["stat_verdict"] = {"verdict": "insufficient", "n_days": 0, "mean_diff": 0.0,
+                         "ci_low": None, "ci_high": None, "p_value": None, "mde": None}
+    f = tmp_path / "v.json"
+    f.write_text(json.dumps(v), encoding="utf-8")
+    monkeypatch.setenv("ALPHA_WEB_VERDICT", str(f))
+    r = client.get("/verdict")
+    assert r.status_code == 200 and "insufficient" in r.text and "n/a" in r.text
+
+
+def test_single_verdict_file_overrides_dir(client, tmp_path, monkeypatch):
+    import json
+    from alpha_web import sample
+    from alpha.eval.verdict_store import VerdictStore
+    VerdictStore(tmp_path / "store").put("dirrun", sample.sample_verdict())
+    one = sample.sample_verdict(); one["headline"]["hch_minus_hexpert"] = 0.0777
+    f = tmp_path / "one.json"
+    f.write_text(json.dumps(one), encoding="utf-8")
+    monkeypatch.setenv("ALPHA_WEB_VERDICTS_DIR", str(tmp_path / "store"))
+    monkeypatch.setenv("ALPHA_WEB_VERDICT", str(f))
+    r = client.get("/verdict")
+    assert r.status_code == 200 and "+0.0777" in r.text and "dirrun" not in r.text
+
+
+def test_run_verdict_json_output_renders_in_console(client, tmp_path, monkeypatch):
+    # end-to-end: run_verdict (offline) -> comparison_to_view -> file -> console renders it cleanly
+    import sys, json
+    import pandas as pd
+    from datetime import date
+    from pathlib import Path
+    from alpha.data.source import FakeSource
+    from alpha.llm.client import MockLLMClient
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+    import run_verdict as rv
+
+    n = 6
+    cal = [date(2026, 6, d) for d in range(1, 1 + n)]
+    snaps, px, closes = {}, 10.0, []
+    for d in cal:
+        prev = px; px = px * 1.15; closes.append(px)
+        snaps[d] = pd.DataFrame({"symbol": ["RUN"], "name": ["RUN"], "open": [prev], "high": [px],
+                                 "low": [prev], "close": [px], "volume": [1], "prev_close": [prev]})
+    bars = {"RUN": pd.DataFrame({"date": cal, "open": [10.0] + closes[:-1], "high": closes,
+                                 "low": [10.0] + closes[:-1], "close": closes, "volume": [1] * n})}
+    src = FakeSource(calendar=cal, bars=bars, snapshots=snaps)
+    cr = rv.run_verdict(src, cal[0], cal[-1],
+                        agent_llm_factory=lambda: MockLLMClient('{"candidates": [{"symbol": "RUN", "pattern": "gap_and_go"}]}'),
+                        refiner_llm_factory=lambda: MockLLMClient('{"ops": []}'))
+    view = rv.comparison_to_view(cr, start=cal[0], end=cal[-1], horizon=2, screen=True)
+    f = tmp_path / "v.json"
+    f.write_text(json.dumps(view), encoding="utf-8")
+    monkeypatch.setenv("ALPHA_WEB_VERDICT", str(f))
+    r = client.get("/verdict")
+    assert r.status_code == 200 and "wired artifact" not in r.text and "HCH" in r.text

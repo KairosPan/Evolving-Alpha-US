@@ -19,6 +19,7 @@ from fastapi.templating import Jinja2Templates
 
 from alpha.eval.decision import DecisionPackage
 from alpha.eval.decision_store import DecisionStore
+from alpha.eval.verdict_store import VerdictStore
 from alpha_web import data_access as da
 from alpha_web import sample
 
@@ -93,18 +94,43 @@ def _decision_context(selected_iso: str = "") -> dict:
 _VERDICT_KEYS = {"window", "arms", "headline", "stat_verdict"}
 
 
-def _load_verdict() -> tuple[dict, bool, str]:
-    p = os.environ.get("ALPHA_WEB_VERDICT")
-    if p and Path(p).exists():
+def _validated_verdict(data: dict) -> dict:
+    missing = _VERDICT_KEYS - set(data)
+    if missing:
+        raise ValueError(f"missing keys {sorted(missing)}")
+    return data
+
+
+def _verdict_context(selected_label: str = "") -> dict:
+    """Resolve which verdict `/verdict` renders, with run browsing. Precedence mirrors decisions:
+      1. ALPHA_WEB_VERDICT       — a single view-dict file (back-compat override).
+      2. ALPHA_WEB_VERDICTS_DIR  — a VerdictStore; browse by `?run=` (defaults to the latest label).
+      3. the badged SAMPLE.
+    Mis-shaped/stale JSON falls back to the SAMPLE with a human-readable error, never a 500."""
+    base = {"report": None, "is_sample": True, "load_error": "", "runs": [], "selected": None}
+
+    f = os.environ.get("ALPHA_WEB_VERDICT")
+    if f and Path(f).exists():
         try:
-            data = json.loads(Path(p).read_text("utf-8"))
-            missing = _VERDICT_KEYS - set(data)
-            if missing:
-                raise ValueError(f"missing keys {sorted(missing)}")
-            return data, False, ""
+            return {**base, "report": _validated_verdict(json.loads(Path(f).read_text("utf-8"))),
+                    "is_sample": False}
         except Exception as e:
-            return sample.sample_verdict(), True, f"{Path(p).name}: {type(e).__name__}."
-    return sample.sample_verdict(), True, ""
+            return {**base, "report": sample.sample_verdict(), "load_error": f"{Path(f).name}: {type(e).__name__}."}
+
+    d = os.environ.get("ALPHA_WEB_VERDICTS_DIR")
+    if d:
+        store = VerdictStore(d)
+        runs = store.names()
+        if runs:
+            sel = selected_label if selected_label in runs else runs[-1]
+            try:
+                return {**base, "report": _validated_verdict(store.get(sel)), "is_sample": False,
+                        "runs": runs, "selected": sel}
+            except Exception as e:
+                return {**base, "report": sample.sample_verdict(), "runs": runs, "selected": sel,
+                        "load_error": f"{sel}: {type(e).__name__}."}
+
+    return {**base, "report": sample.sample_verdict()}
 
 
 def create_app() -> FastAPI:
@@ -158,10 +184,8 @@ def create_app() -> FastAPI:
         return render(request, "decisions.html", {"active": "decisions", **_decision_context(date)})
 
     @app.get("/verdict")
-    def verdict(request: Request):
-        report, is_sample, load_error = _load_verdict()
-        return render(request, "verdict.html",
-                      {"active": "verdict", "report": report, "is_sample": is_sample, "load_error": load_error})
+    def verdict(request: Request, run: str = ""):
+        return render(request, "verdict.html", {"active": "verdict", **_verdict_context(run)})
 
     return app
 
