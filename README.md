@@ -119,26 +119,27 @@ python -m alpha_web         # serves http://127.0.0.1:8100  (ALPHA_WEB_HOST / AL
 ```
 
 The **Deck** opens on the six-phase regime cycle (the signature phase ring) and live brain counts;
-**Doctrine / Memory / Skills** browse the seeds with in-place filters; **Decisions / Verdict** render
-real artifacts when wired, else a clearly-badged SAMPLE built from the real models.
+**Doctrine / Memory / Skills** browse the seeds with in-place filters; **Decisions / Verdict /
+Evolution** render real artifacts when wired, else a clearly-badged SAMPLE built from the real models.
 
-Browse a run's real daily decisions by date — produce them once, then point the console at the store:
-
-```bash
-# 1. capture a PIT window, then produce + persist a package per trading day (needs the agent LLM key)
-python scripts/capture_window.py 2026-01-02 2026-01-31 snap AAPL MSFT NVDA TSLA AMD
-python scripts/save_decisions.py snap 2026-01-02 2026-01-31 decisions
-
-# 2. browse them in the console (date picker on the Decisions page)
-ALPHA_WEB_DECISIONS_DIR=decisions python -m alpha_web
-```
-
-Or wire a single artifact directly (overrides the store):
+Produce real artifacts from a captured PIT window, then point the console at them:
 
 ```bash
-ALPHA_WEB_DECISION=decision.json python -m alpha_web   # one DecisionPackage.model_dump_json()
-ALPHA_WEB_VERDICT=verdict.json   python -m alpha_web   # a dict in alpha_web.sample.sample_verdict() shape
+python scripts/capture_window.py 2026-01-02 2026-01-31 snap AAPL MSFT NVDA TSLA AMD   # market data only
+
+python scripts/save_decisions.py snap 2026-01-02 2026-01-31 decisions   # a DecisionPackage per day
+python scripts/run_verdict.py    snap 2026-01-02 2026-01-31 --json verdict.json   # the HCH-vs-Hexpert verdict
+python scripts/save_evolution.py snap 2026-01-02 2026-01-31 evolution.json   # the Refiner's edit trajectory
+
+ALPHA_WEB_DECISIONS_DIR=decisions \
+ALPHA_WEB_VERDICTS_DIR=verdicts \
+ALPHA_WEB_EVOLUTION=evolution.json \
+  python -m alpha_web
 ```
+
+`save_decisions` / `save_evolution` / `run_verdict` need the agent (and, for the verdict/evolution,
+refiner) LLM keys; see `scripts/run_verdict.py`. The Decisions and Verdict pages get a picker to browse
+by date / run; a single-file `ALPHA_WEB_DECISION` / `ALPHA_WEB_VERDICT` overrides its directory.
 
 ---
 

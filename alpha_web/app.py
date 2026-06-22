@@ -30,6 +30,7 @@ NAV = [
     {"path": "/skills", "key": "skills", "label": "Skills"},
     {"path": "/decisions", "key": "decisions", "label": "Decisions"},
     {"path": "/verdict", "key": "verdict", "label": "Verdict"},
+    {"path": "/evolution", "key": "evolution", "label": "Evolution"},
 ]
 
 SKILL_STATUSES = ["active", "incubating", "dormant", "retired"]
@@ -50,6 +51,7 @@ def _make_templates() -> Jinja2Templates:
         ring=da.ring_segments(),
         tape_regime=sample.sample_regime(),       # the omnipresent regime read (sample state)
         tape_state=sample.sample_market_state(),
+        fmt_val=lambda v: ", ".join(map(str, v)) if isinstance(v, list) else str(v),
     )
     return t
 
@@ -133,6 +135,22 @@ def _verdict_context(selected_label: str = "") -> dict:
     return {**base, "report": sample.sample_verdict()}
 
 
+def _evolution_context() -> dict:
+    """Resolve the Evolution page artifact: a single run's edit trajectory via ALPHA_WEB_EVOLUTION
+    (the JSON `scripts/save_evolution.py` writes), else the badged SAMPLE. Mis-shaped JSON falls back."""
+    base = {"evo": None, "is_sample": True, "load_error": ""}
+    f = os.environ.get("ALPHA_WEB_EVOLUTION")
+    if f and Path(f).exists():
+        try:
+            data = json.loads(Path(f).read_text("utf-8"))
+            if "edits" not in data:
+                raise ValueError("missing 'edits'")
+            return {**base, "evo": data, "is_sample": False}
+        except Exception as e:
+            return {**base, "evo": sample.sample_evolution(), "load_error": f"{Path(f).name}: {type(e).__name__}."}
+    return {**base, "evo": sample.sample_evolution()}
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Evolving-Alpha-US · Regime Instrument")
     app.mount("/static", StaticFiles(directory=str(da.STATIC_DIR)), name="static")
@@ -186,6 +204,10 @@ def create_app() -> FastAPI:
     @app.get("/verdict")
     def verdict(request: Request, run: str = ""):
         return render(request, "verdict.html", {"active": "verdict", **_verdict_context(run)})
+
+    @app.get("/evolution")
+    def evolution(request: Request):
+        return render(request, "evolution.html", {"active": "evolution", **_evolution_context()})
 
     return app
 

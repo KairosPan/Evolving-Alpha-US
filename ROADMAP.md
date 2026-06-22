@@ -61,18 +61,19 @@ is missing. Best delivered as `CompositeSource` backends (§2).
 
 ## 6. Web console (`alpha_web`) — follow-ups (the read-only console shipped 2026-06-22)
 
-The "Regime Instrument" console (FastAPI + Jinja2 + HTMX) is built and reviewed. Done: **persist the
-live daily `DecisionPackage`** — `alpha/eval/decision_store.py::DecisionStore` (atomic by-date JSON) +
-`scripts/save_decisions.py` (act-only producer over a captured window) + console date-browsing
-(`ALPHA_WEB_DECISIONS_DIR`, date picker, `?date=`). Remaining:
+The "Regime Instrument" console (FastAPI + Jinja2 + HTMX) is built, reviewed, and its data-wiring
+follow-ups are **all done** — every console page now reads real artifacts a run produced:
 
-- [ ] **`run_verdict.py --json out.json`** that dumps exactly the `alpha_web.sample.sample_verdict()`
-  shape, so the on-page two-step (`capture_window` → `run_verdict` → `ALPHA_WEB_VERDICT`) becomes
-  literally true (today `run_verdict` only prints a text report; the console needs a JSON in the UI shape).
-- [ ] **Evolution/edit-log view** — surface `EditRecord`s (how the Refiner changed doctrine/skills over
-  time); the data exists in the harness but has no console page yet.
-- [ ] **Verdict store** (twin of `DecisionStore`) so `/verdict` can browse multiple runs by window,
-  once `run_verdict --json` exists to feed it.
+- ✅ **Decision store + browse** — `alpha/eval/decision_store.py::DecisionStore` (atomic by-date JSON) +
+  `scripts/save_decisions.py` (act-only producer) + `/decisions` date-picker (`ALPHA_WEB_DECISIONS_DIR`).
+- ✅ **`run_verdict.py --json` + verdict store + browse** — `comparison_to_view()` dumps the console
+  view dict; `alpha/eval/verdict_store.py::VerdictStore` + `/verdict` run-picker (`ALPHA_WEB_VERDICTS_DIR`).
+- ✅ **Evolution / edit-log view** — `scripts/save_evolution.py` dumps the Refiner's `EditRecord`
+  trajectory; the `/evolution` page renders the timeline (`ALPHA_WEB_EVOLUTION`).
+
+Optional future polish (not blocking): a live daily production loop that writes the stores
+automatically (instead of the on-demand producer scripts); HTMX-swap the date/run pickers; auth +
+non-localhost serving if it ever leaves the desk.
 
 ## 7. Known tradeoffs / review leftovers (accepted — no action planned)
 

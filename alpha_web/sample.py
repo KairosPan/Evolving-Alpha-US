@@ -136,3 +136,39 @@ def sample_verdict() -> dict:
             "unknown": {"n": 15, "hit_rate": 0.40, "nuke_rate": 0.13, "expectancy": -0.0030},
         },
     }
+
+
+def sample_evolution() -> dict:
+    """A SAMPLE inner-loop edit trajectory in the shape `scripts/save_evolution.py` writes: the audit
+    of how the Refiner changed H (doctrine / skills / memory) across a run. Each entry is an
+    `EditRecord.model_dump()`. A real run replaces this (set `ALPHA_WEB_EVOLUTION`)."""
+    edits = [
+        {"seq": 0, "tool": "promote_skill", "target_kind": "skill", "target_id": "short_squeeze",
+         "op": "promote", "summary": "incubating → active",
+         "payload": {"status": {"before": "incubating", "after": "active"}},
+         "rationale": "Cleared the evidence gate: positive expectancy over 7 short-interest days, nuke-rate 0.05."},
+        {"seq": 1, "tool": "patch_skill", "target_kind": "skill", "target_id": "gap_and_go",
+         "op": "update", "summary": "tightened the chase taboo",
+         "payload": {"taboo": {"before": ["chase extended far above VWAP"],
+                                "after": ["chase extended >8% above VWAP", "enter in risk-off / backside"]}},
+         "rationale": "Two chased_blowoff nukes on extended gap-and-go entries — codify the distance bound."},
+        {"seq": 2, "tool": "rewrite_doctrine", "target_kind": "doctrine", "target_id": "trend_play",
+         "op": "rewrite", "summary": "add the first-distribution-day exit",
+         "payload": {"guidance": {
+             "before": "Ride the lead runner and first sympathy; add on reclaims; trim into blowoffs.",
+             "after": "Ride the lead runner and first sympathy; add on reclaims; trim into blowoffs; honor the first distribution day."}},
+         "rationale": "Held through a leader breakdown on volume; encode the first-distribution-day trim."},
+        {"seq": 3, "tool": "process_memory", "target_kind": "memory", "target_id": "weak_laggard_nuke",
+         "op": "create", "summary": "new lesson",
+         "payload": {"lesson": "In an ignition, the edge is the lead runner and first sympathy — not the fifth laggard."},
+         "rationale": "Recurring weak_laggard_nuke signature across ignition-phase decisions."},
+        {"seq": 4, "tool": "retire_skill", "target_kind": "skill", "target_id": "reverse_split_pump",
+         "op": "retire", "summary": "active → dormant",
+         "payload": {"status": {"before": "active", "after": "dormant"}},
+         "rationale": "No qualifying setups in-window; decayed importance — parked to cut prompt noise."},
+    ]
+    return {
+        "window": {"start": "2026-01-02", "end": "2026-03-31"},
+        "summary": {"refines": 3, "breaker_trips": 0, "frozen_from": None, "n_edits": len(edits)},
+        "edits": edits,
+    }

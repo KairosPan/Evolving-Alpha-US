@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Evolution{% endblock %}
+{% set op_class = {"create": "up", "promote": "up", "revive": "up",
+                   "update": "gold", "rewrite": "gold",
+                   "retire": "down", "demote": "down"} %}
+
+{% macro payload_diff(payload) %}
+<div class="evo-diff">
+  {% for key, val in payload.items() %}
+  <div class="diff-row">
+    <span class="diff-key">{{ key }}</span>
+    {% if val is mapping and ("before" in val or "after" in val) %}
+    <span class="diff-ba"><span class="before">{{ fmt_val(val.before) }}</span><span class="arrow">→</span><span class="after">{{ fmt_val(val.after) }}</span></span>
+    {% else %}
+    <span class="diff-val">{{ fmt_val(val) }}</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="page-head">
+  <p class="eyebrow">the inner loop · how H rewrote itself</p>
+  <h1 class="page-title">Evolution</h1>
+  <p class="page-lede">Every change the Refiner made to the harness over a run — promote a skill that
+    earned its keep, tighten a taboo a loss exposed, retire what decayed, rewrite a play. Each edit is
+    audited, attributed to a reason, and reversible.</p>
+</div>
+
+{% if load_error %}
+<div class="banner err">⚠ <span><b>Couldn't read the wired artifact.</b> {{ load_error }} Showing the sample instead.</span></div>
+{% elif is_sample %}
+<div class="banner">◆ <span><b>Sample evolution.</b> No run is wired. Produce one with
+  <code>scripts/save_evolution.py</code> and set <code>ALPHA_WEB_EVOLUTION</code>.</span></div>
+{% endif %}
+
+<section class="panel" style="margin-bottom:22px;">
+  <div class="panel-head"><h2>This run</h2><span class="eyebrow">{{ evo.window.start }} → {{ evo.window.end }}</span></div>
+  <div class="panel-pad grid cols-3">
+    <div class="stat"><span class="num">{{ evo.summary.n_edits }}</span><span class="lab">Edits to H</span></div>
+    <div class="stat"><span class="num">{{ evo.summary.refines }}</span><span class="lab">Refine passes</span></div>
+    <div class="stat"><span class="num">{{ evo.summary.breaker_trips }}</span><span class="lab">Breaker trips<br><span class="sub">{{ ("frozen " ~ evo.summary.frozen_from) if evo.summary.frozen_from else "none" }}</span></span></div>
+  </div>
+</section>
+
+{% if evo.edits %}
+<p class="eyebrow">{{ evo.edits|length }} edit{{ "" if evo.edits|length == 1 else "s" }} · in sequence</p>
+<div class="evo">
+  {% for e in evo.edits %}
+  <div class="evo-item">
+    <span class="evo-seq">{{ "%02d"|format(e.seq) }}</span>
+    <div class="evo-card">
+      <div class="evo-top">
+        <span class="op op--{{ op_class.get(e.op, 'gold') }}">{{ e.op }}</span>
+        <span class="evo-target">{{ e.target_kind }} · <b>{{ e.target_id }}</b></span>
+        <span class="evo-tool">{{ e.tool }}</span>
+      </div>
+      {% if e.summary %}<div class="evo-summary">{{ e.summary }}</div>{% endif %}
+      {% if e.payload %}{{ payload_diff(e.payload) }}{% endif %}
+      {% if e.rationale %}<div class="evo-why"><span class="k">why</span>{{ e.rationale }}</div>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="panel panel-pad">
+  <p class="muted" style="margin:0;">No edits in this run — H held steady. No promotion, retirement, or
+    rewrite cleared its evidence gate over this window (the honest common case on short windows).</p>
+</div>
+{% endif %}
+{% endblock %}

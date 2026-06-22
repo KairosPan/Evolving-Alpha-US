@@ -18,7 +18,7 @@ def test_health(client):
     assert r.status_code == 200 and r.json()["ok"] is True
 
 
-@pytest.mark.parametrize("path", ["/", "/doctrine", "/memory", "/skills", "/decisions", "/verdict"])
+@pytest.mark.parametrize("path", ["/", "/doctrine", "/memory", "/skills", "/decisions", "/verdict", "/evolution"])
 def test_pages_render(client, path):
     r = client.get(path)
     assert r.status_code == 200
@@ -237,3 +237,44 @@ def test_run_verdict_json_output_renders_in_console(client, tmp_path, monkeypatc
     monkeypatch.setenv("ALPHA_WEB_VERDICT", str(f))
     r = client.get("/verdict")
     assert r.status_code == 200 and "wired artifact" not in r.text and "HCH" in r.text
+
+
+# ── evolution / edit-log view (ALPHA_WEB_EVOLUTION) ────────────────────────────
+def test_evolution_shows_sample_edits(client):
+    body = client.get("/evolution").text
+    assert "sample" in body.lower()                         # honest badge
+    assert "promote" in body and "short_squeeze" in body    # a sample edit + its target
+    assert "Refine passes" in body                          # run summary
+
+
+def test_evolution_wired_file_renders(client, tmp_path, monkeypatch):
+    import json
+    evo = {"window": {"start": "2026-01-02", "end": "2026-01-31"},
+           "summary": {"refines": 1, "breaker_trips": 0, "frozen_from": None, "n_edits": 1},
+           "edits": [{"seq": 0, "tool": "promote_skill", "target_kind": "skill", "target_id": "base_breakout",
+                      "op": "promote", "summary": "incubating → active", "payload": None,
+                      "rationale": "earned promotion"}]}
+    f = tmp_path / "evo.json"
+    f.write_text(json.dumps(evo), encoding="utf-8")
+    monkeypatch.setenv("ALPHA_WEB_EVOLUTION", str(f))
+    r = client.get("/evolution")
+    assert r.status_code == 200 and "base_breakout" in r.text and "Sample evolution" not in r.text
+
+
+def test_evolution_empty_edits_renders_held_steady(client, tmp_path, monkeypatch):
+    import json
+    evo = {"window": {"start": "2026-01-02", "end": "2026-01-05"},
+           "summary": {"refines": 0, "breaker_trips": 0, "frozen_from": None, "n_edits": 0}, "edits": []}
+    f = tmp_path / "evo.json"
+    f.write_text(json.dumps(evo), encoding="utf-8")
+    monkeypatch.setenv("ALPHA_WEB_EVOLUTION", str(f))
+    r = client.get("/evolution")
+    assert r.status_code == 200 and "held steady" in r.text.lower()
+
+
+def test_evolution_malformed_falls_back(client, tmp_path, monkeypatch):
+    f = tmp_path / "bad.json"
+    f.write_text("{ not json", encoding="utf-8")
+    monkeypatch.setenv("ALPHA_WEB_EVOLUTION", str(f))
+    r = client.get("/evolution")
+    assert r.status_code == 200 and "wired artifact" in r.text
