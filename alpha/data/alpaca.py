@@ -195,14 +195,27 @@ class AlpacaSource:
 
     def _get_json(self, path: str, params: dict) -> dict:
         import json
+        import urllib.error
         import urllib.parse
         import urllib.request
         url = f"{_DATA_BASE}{path}?{urllib.parse.urlencode(params)}"
         req = urllib.request.Request(url, headers={
             "APCA-API-KEY-ID": self._key, "APCA-API-SECRET-KEY": self._secret,
             "accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=30) as resp:   # nosec - fixed Alpaca host
-            return json.loads(resp.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:   # nosec - fixed Alpaca host
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:                          # 4xx/5xx with a response body
+            try:
+                body = e.read().decode("utf-8", "replace")[:300]
+            except Exception:
+                body = ""
+            hint = (" — check the APCA key's entitlement for this data product" if e.code in (401, 403)
+                    else " — rate limited, back off and retry" if e.code == 429 else "")
+            raise RuntimeError(f"Alpaca GET {path} failed: HTTP {e.code} {e.reason}{hint}. "
+                               f"Response: {body}") from e
+        except urllib.error.URLError as e:                           # DNS/connection/timeout, no response
+            raise RuntimeError(f"Alpaca GET {path} failed: network error ({e.reason}).") from e
 
     def _fetch_corp_actions(self, start: Date, end: Date) -> dict:
         """All corporate actions with process_date in [start, end], merged across pages."""

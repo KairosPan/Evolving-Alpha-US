@@ -194,3 +194,34 @@ def test_init_requires_keys(monkeypatch):
     monkeypatch.delenv("APCA_API_SECRET_KEY", raising=False)
     with pytest.raises(RuntimeError):
         AlpacaSource()
+
+
+def test_get_json_http_error_is_actionable(alpaca, monkeypatch):
+    # a 403 (e.g. key not entitled to the corp-actions data product) must surface an actionable
+    # RuntimeError naming the status + endpoint, NOT a bare urllib traceback.
+    import io
+    import urllib.error
+    import urllib.request
+
+    def boom(*a, **k):
+        raise urllib.error.HTTPError("https://data.alpaca.markets/v1/corporate-actions", 403,
+                                     "Forbidden", {}, io.BytesIO(b'{"message":"not subscribed"}'))
+
+    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    with pytest.raises(RuntimeError) as ei:
+        alpaca._get_json("/v1/corporate-actions", {"symbols": "AAPL"})
+    msg = str(ei.value)
+    assert "403" in msg and "/v1/corporate-actions" in msg
+    assert "entitle" in msg.lower()                              # actionable hint for 401/403
+
+
+def test_get_json_network_error_is_actionable(alpaca, monkeypatch):
+    import urllib.error
+    import urllib.request
+
+    def boom(*a, **k):
+        raise urllib.error.URLError("name resolution failed")
+
+    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    with pytest.raises(RuntimeError, match="network"):
+        alpaca._get_json("/v1/corporate-actions", {"symbols": "AAPL"})
