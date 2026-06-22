@@ -15,7 +15,11 @@ _SNAP_COLS = ["symbol", "name", "open", "high", "low", "close", "volume", "prev_
 _CORP_COLS = ["symbol", "announce_date", "ex_date", "kind", "ratio"]
 
 # corporate_actions[_known]: how far back to scan process_date for "still-known/pending" actions.
-_KNOWN_LOOKBACK_DAYS = 365
+# BOUND / EXPLICIT ASSUMPTION: a pending action whose process_date precedes as_of by more than this
+# window is omitted from the known set. 730d is generous (Alpaca processes corp actions within
+# days/weeks of the event), but it IS a finite horizon — a reverse split processed >2y before its
+# still-future ex_date would be missed. Widen here if that ever matters.
+_KNOWN_LOOKBACK_DAYS = 730
 
 
 def _resolve_feed() -> str:

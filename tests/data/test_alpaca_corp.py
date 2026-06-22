@@ -8,11 +8,11 @@ windowing logic is testable with zero network and without the optional `alpaca-p
 from __future__ import annotations
 
 import math
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
-from alpha.data.alpaca import AlpacaSource, _normalize_corp
+from alpha.data.alpaca import _KNOWN_LOOKBACK_DAYS, AlpacaSource, _normalize_corp
 
 NORM_COLS = ["symbol", "announce_date", "ex_date", "kind", "ratio"]
 
@@ -135,6 +135,8 @@ def test_corporate_actions_known_returns_pending_future_ex(alpaca):
     assert list(known["symbol"]) == ["RUN"]                # ex 6/20 future, still known (announce 6/9)
     assert calls[0][0] == "/v1/corporate-actions"
     assert calls[0][1]["end"] == "2026-06-12"              # query end == as_of: never reads the future
+    # the lookback horizon is explicit: fetch start = as_of - _KNOWN_LOOKBACK_DAYS (bounds the known set)
+    assert calls[0][1]["start"] == (date(2026, 6, 12) - timedelta(days=_KNOWN_LOOKBACK_DAYS)).isoformat()
 
 
 def test_corporate_actions_is_ex_date_windowed(alpaca):
