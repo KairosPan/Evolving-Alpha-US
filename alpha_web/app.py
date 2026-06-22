@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import date as Date
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -17,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from alpha.eval.decision import DecisionPackage
+from alpha.eval.decision_store import DecisionStore
 from alpha_web import data_access as da
 from alpha_web import sample
 
@@ -55,16 +57,37 @@ def _is_htmx(request: Request) -> bool:
     return request.headers.get("HX-Request") == "true"
 
 
-def _load_decision() -> tuple[DecisionPackage, bool, str]:
-    """(package, is_sample, load_error). A mis-shaped/stale wired artifact falls back to the SAMPLE
-    with a human-readable error rather than 500-ing — the path is operator-supplied, not adversarial."""
-    p = os.environ.get("ALPHA_WEB_DECISION")
-    if p and Path(p).exists():
+def _decision_context(selected_iso: str = "") -> dict:
+    """Resolve which DecisionPackage `/decisions` renders, with date browsing. Precedence:
+      1. ALPHA_WEB_DECISION  — a single package file (back-compat override).
+      2. ALPHA_WEB_DECISIONS_DIR — a DecisionStore; browse by `?date=` (defaults to the latest).
+      3. the badged SAMPLE.
+    A mis-shaped/stale artifact falls back to the SAMPLE with a human-readable error, never a 500 —
+    the path is operator-supplied, not adversarial. Returns the decisions.html context fragment."""
+    base = {"pkg": None, "is_sample": True, "load_error": "", "dates": [], "selected": None}
+
+    f = os.environ.get("ALPHA_WEB_DECISION")
+    if f and Path(f).exists():
         try:
-            return DecisionPackage.model_validate_json(Path(p).read_text("utf-8")), False, ""
+            return {**base, "pkg": DecisionPackage.model_validate_json(Path(f).read_text("utf-8")),
+                    "is_sample": False}
         except Exception as e:
-            return sample.sample_decision(), True, f"{Path(p).name}: {type(e).__name__}."
-    return sample.sample_decision(), True, ""
+            return {**base, "pkg": sample.sample_decision(), "load_error": f"{Path(f).name}: {type(e).__name__}."}
+
+    d = os.environ.get("ALPHA_WEB_DECISIONS_DIR")
+    if d:
+        store = DecisionStore(d)
+        dates = [x.isoformat() for x in store.dates()]
+        if dates:
+            sel = selected_iso if selected_iso in dates else dates[-1]
+            try:
+                return {**base, "pkg": store.get(Date.fromisoformat(sel)), "is_sample": False,
+                        "dates": dates, "selected": sel}
+            except Exception as e:
+                return {**base, "pkg": sample.sample_decision(), "dates": dates, "selected": sel,
+                        "load_error": f"{sel}: {type(e).__name__}."}
+
+    return {**base, "pkg": sample.sample_decision()}
 
 
 _VERDICT_KEYS = {"window", "arms", "headline", "stat_verdict"}
@@ -131,10 +154,8 @@ def create_app() -> FastAPI:
         return render(request, "skills.html", ctx)
 
     @app.get("/decisions")
-    def decisions(request: Request):
-        pkg, is_sample, load_error = _load_decision()
-        return render(request, "decisions.html",
-                      {"active": "decisions", "pkg": pkg, "is_sample": is_sample, "load_error": load_error})
+    def decisions(request: Request, date: str = ""):
+        return render(request, "decisions.html", {"active": "decisions", **_decision_context(date)})
 
     @app.get("/verdict")
     def verdict(request: Request):

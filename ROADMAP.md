@@ -61,16 +61,18 @@ is missing. Best delivered as `CompositeSource` backends (§2).
 
 ## 6. Web console (`alpha_web`) — follow-ups (the read-only console shipped 2026-06-22)
 
-The "Regime Instrument" console (FastAPI + Jinja2 + HTMX) is built and reviewed; these make it
-read *real* data end-to-end instead of the badged SAMPLE:
+The "Regime Instrument" console (FastAPI + Jinja2 + HTMX) is built and reviewed. Done: **persist the
+live daily `DecisionPackage`** — `alpha/eval/decision_store.py::DecisionStore` (atomic by-date JSON) +
+`scripts/save_decisions.py` (act-only producer over a captured window) + console date-browsing
+(`ALPHA_WEB_DECISIONS_DIR`, date picker, `?date=`). Remaining:
 
 - [ ] **`run_verdict.py --json out.json`** that dumps exactly the `alpha_web.sample.sample_verdict()`
   shape, so the on-page two-step (`capture_window` → `run_verdict` → `ALPHA_WEB_VERDICT`) becomes
   literally true (today `run_verdict` only prints a text report; the console needs a JSON in the UI shape).
-- [ ] **Persist the live daily `DecisionPackage`** (a writer + a `decisions/` store) so `/decisions`
-  reads the real package by date rather than a one-off `ALPHA_WEB_DECISION` file.
 - [ ] **Evolution/edit-log view** — surface `EditRecord`s (how the Refiner changed doctrine/skills over
   time); the data exists in the harness but has no console page yet.
+- [ ] **Verdict store** (twin of `DecisionStore`) so `/verdict` can browse multiple runs by window,
+  once `run_verdict --json` exists to feed it.
 
 ## 7. Known tradeoffs / review leftovers (accepted — no action planned)
 

@@ -120,10 +120,23 @@ python -m alpha_web         # serves http://127.0.0.1:8100  (ALPHA_WEB_HOST / AL
 
 The **Deck** opens on the six-phase regime cycle (the signature phase ring) and live brain counts;
 **Doctrine / Memory / Skills** browse the seeds with in-place filters; **Decisions / Verdict** render
-a real artifact when wired, else a clearly-badged SAMPLE built from the real models:
+real artifacts when wired, else a clearly-badged SAMPLE built from the real models.
+
+Browse a run's real daily decisions by date — produce them once, then point the console at the store:
 
 ```bash
-ALPHA_WEB_DECISION=decision.json python -m alpha_web   # a DecisionPackage.model_dump_json()
+# 1. capture a PIT window, then produce + persist a package per trading day (needs the agent LLM key)
+python scripts/capture_window.py 2026-01-02 2026-01-31 snap AAPL MSFT NVDA TSLA AMD
+python scripts/save_decisions.py snap 2026-01-02 2026-01-31 decisions
+
+# 2. browse them in the console (date picker on the Decisions page)
+ALPHA_WEB_DECISIONS_DIR=decisions python -m alpha_web
+```
+
+Or wire a single artifact directly (overrides the store):
+
+```bash
+ALPHA_WEB_DECISION=decision.json python -m alpha_web   # one DecisionPackage.model_dump_json()
 ALPHA_WEB_VERDICT=verdict.json   python -m alpha_web   # a dict in alpha_web.sample.sample_verdict() shape
 ```
 

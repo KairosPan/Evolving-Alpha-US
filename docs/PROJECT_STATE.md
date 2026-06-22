@@ -2,7 +2,7 @@
 
 > **One-page compressed context for session restart.** This file is the append-only record of **what's
 > built**; the forward-looking backlog of **what's left** lives in **`ROADMAP.md`** (repo root).
-> Last updated: 2026-06-22 (US-0 + US-1 + US-2 complete; US-3a–US-3f shipped — the US-3 daily-cadence enrichment arc is complete; **richer-state perception wired into the live drivers + `LoopConfig.screen` now defaults ON** with a symmetric `compare_harnesses` guard; **`scripts/run_verdict.py` verdict harness built + offline-verified**; **L3 sizing wired into the live DecisionPackage** (size_tier + portfolio, verdict-neutral); **2026-06-22: Alpaca corp-actions data-source wiring — live-verified — + `ALPHA_DATA_SOURCE` multi-source switching + M1/M2 hardening shipped (`main` @ 7945672, 413 tests)**; **2026-06-22: `alpha_web/` "Regime Instrument" web console built** — FastAPI + Jinja2 + HTMX (the documented `alpha_web/` UI), read-only, offline (vendored htmx, no build step); reads the live seeds (doctrine/memory/skills) and renders a `DecisionPackage` + the HCH-vs-Hexpert verdict, real-artifact (`ALPHA_WEB_DECISION`/`ALPHA_WEB_VERDICT`) or a badged SAMPLE built from the real models; signature = the six-phase thermal regime ring; an adversarial 4-lens review (14 verified findings) was folded in (incl. two real `/decisions` 500s on no-trade/baseline packages, now guarded). 443 tests; remaining/planned work now tracked in `ROADMAP.md`).
+> Last updated: 2026-06-22 (US-0 + US-1 + US-2 complete; US-3a–US-3f shipped — the US-3 daily-cadence enrichment arc is complete; **richer-state perception wired into the live drivers + `LoopConfig.screen` now defaults ON** with a symmetric `compare_harnesses` guard; **`scripts/run_verdict.py` verdict harness built + offline-verified**; **L3 sizing wired into the live DecisionPackage** (size_tier + portfolio, verdict-neutral); **2026-06-22: Alpaca corp-actions data-source wiring — live-verified — + `ALPHA_DATA_SOURCE` multi-source switching + M1/M2 hardening shipped (`main` @ 7945672, 413 tests)**; **2026-06-22: `alpha_web/` "Regime Instrument" web console built** — FastAPI + Jinja2 + HTMX (the documented `alpha_web/` UI), read-only, offline (vendored htmx, no build step); reads the live seeds (doctrine/memory/skills) and renders a `DecisionPackage` + the HCH-vs-Hexpert verdict, real-artifact (`ALPHA_WEB_DECISION`/`ALPHA_WEB_VERDICT`) or a badged SAMPLE built from the real models; signature = the six-phase thermal regime ring; an adversarial 4-lens review (14 verified findings) was folded in (incl. two real `/decisions` 500s on no-trade/baseline packages, now guarded). **Then ROADMAP §6 "persist the daily DecisionPackage" shipped: `alpha/eval/decision_store.py::DecisionStore` (atomic by-date JSON) + `scripts/save_decisions.py` (act-only producer mirroring the InnerLoop perception path) + console date-browsing via `ALPHA_WEB_DECISIONS_DIR` (date picker, `?date=`; single-file `ALPHA_WEB_DECISION` overrides).** 455 tests; remaining/planned work now tracked in `ROADMAP.md`).
 
 ---
 
@@ -493,4 +493,8 @@ python -m pip install -e ".[web]"
 python -m alpha_web
 # optionally render real artifacts instead of the SAMPLE:
 ALPHA_WEB_DECISION=decision.json ALPHA_WEB_VERDICT=verdict.json python -m alpha_web
+
+# Produce + persist real daily DecisionPackages, then browse them by date in the console
+python scripts/save_decisions.py verdict_pit 2026-01-02 2026-01-31 decisions   # needs the agent LLM key
+ALPHA_WEB_DECISIONS_DIR=decisions python -m alpha_web
 ```

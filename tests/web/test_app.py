@@ -115,3 +115,46 @@ def test_wrong_shape_verdict_falls_back_gracefully(client, tmp_path, monkeypatch
     monkeypatch.setenv("ALPHA_WEB_VERDICT", str(f))
     r = client.get("/verdict")
     assert r.status_code == 200 and "wired artifact" in r.text
+
+
+# ── decisions store browsing (ALPHA_WEB_DECISIONS_DIR) ─────────────────────────
+def _store_with(tmp_path, rows):
+    from alpha.eval.decision import Candidate, DecisionPackage
+    from alpha.eval.decision_store import DecisionStore
+    store = DecisionStore(tmp_path)
+    for d, sym in rows:
+        store.put(DecisionPackage(date=d, candidates=[Candidate(symbol=sym, pattern="gap_and_go",
+                                                                size_tier="probe")]))
+    return store
+
+
+def test_decisions_store_defaults_to_latest_and_lists_dates(client, tmp_path, monkeypatch):
+    from datetime import date
+    _store_with(tmp_path, [(date(2026, 2, 2), "AAA"), (date(2026, 2, 3), "BBB"), (date(2026, 2, 4), "CCC")])
+    monkeypatch.setenv("ALPHA_WEB_DECISIONS_DIR", str(tmp_path))
+    r = client.get("/decisions")
+    assert r.status_code == 200 and "Sample package" not in r.text
+    assert "CCC" in r.text and "2026-02-04" in r.text     # latest is shown
+    assert "2026-02-02" in r.text and "2026-02-03" in r.text   # all dates offered in the picker
+
+
+def test_decisions_store_selects_requested_date(client, tmp_path, monkeypatch):
+    from datetime import date
+    _store_with(tmp_path, [(date(2026, 2, 2), "AAA"), (date(2026, 2, 4), "CCC")])
+    monkeypatch.setenv("ALPHA_WEB_DECISIONS_DIR", str(tmp_path))
+    r = client.get("/decisions?date=2026-02-02")
+    assert r.status_code == 200 and "AAA" in r.text and "CCC" not in r.text
+
+
+def test_single_decision_file_overrides_the_store(client, tmp_path, monkeypatch):
+    from datetime import date
+    from alpha.eval.decision import Candidate, DecisionPackage
+    _store_with(tmp_path / "store", [(date(2026, 2, 2), "DIRX")])
+    f = tmp_path / "one.json"
+    f.write_text(DecisionPackage(date=date(2026, 9, 9),
+                                 candidates=[Candidate(symbol="FILEX", pattern="x")]).model_dump_json(),
+                 encoding="utf-8")
+    monkeypatch.setenv("ALPHA_WEB_DECISIONS_DIR", str(tmp_path / "store"))
+    monkeypatch.setenv("ALPHA_WEB_DECISION", str(f))
+    r = client.get("/decisions")
+    assert r.status_code == 200 and "FILEX" in r.text and "DIRX" not in r.text

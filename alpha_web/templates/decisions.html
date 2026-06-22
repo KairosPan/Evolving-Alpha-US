@@ -19,6 +19,18 @@
   <code>size_tier(confidence, risk_gate)</code> mapping.</span></div>
 {% endif %}
 
+{% if dates %}
+<div class="filters" style="margin-bottom:18px;">
+  <div class="fgroup">
+    <span class="eyebrow">Session · {{ dates|length }} stored package{{ "" if dates|length == 1 else "s" }}</span>
+    <div class="chips">
+      {% for d in dates %}<a class="chip{% if d == selected %} is-on{% endif %}" href="/decisions?date={{ d }}"
+         {% if d == selected %}aria-current="true"{% endif %}>{{ d }}</a>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div class="grid deck" style="margin-bottom:18px;">
   <section class="panel">
     <div class="panel-head"><h2>Regime read</h2><span class="eyebrow">gates every size</span></div>
@@ -81,8 +93,8 @@
     <div class="ticket-body">
       <div class="line"><span class="k">Pattern</span><span class="t">{{ c.pattern }} <span class="muted">· {{ c.family }}</span></span></div>
       <div class="line"><span class="k">Conviction</span><span class="t">{{ conf_bar(c.confidence) }}</span></div>
-      <div class="line"><span class="k">Entry</span><span class="t">{{ c.entry }}</span></div>
-      <div class="line"><span class="k">Exit</span><span class="t">{{ c.exit_stop }}</span></div>
+      {% if c.entry %}<div class="line"><span class="k">Entry</span><span class="t">{{ c.entry }}</span></div>{% endif %}
+      {% if c.exit_stop %}<div class="line"><span class="k">Exit</span><span class="t">{{ c.exit_stop }}</span></div>{% endif %}
       {% if c.counterview %}<div class="line"><span class="k">Counter</span><span class="t counter">{{ c.counterview }}</span></div>{% endif %}
       {% if c.taboo_check %}
       <div class="line"><span class="k">Guards</span><span class="t">
