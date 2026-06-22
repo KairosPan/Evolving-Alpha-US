@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Memory{% endblock %}
+{% block content %}
+<div class="page-head">
+  <p class="eyebrow">M · what the losses taught</p>
+  <h1 class="page-title">Memory</h1>
+  <p class="page-lede">Episodic lessons keyed to a failure signature, a family, and the phases where
+    they bite. The retriever surfaces the relevant ones into the agent's prompt before it decides —
+    so the system stops repeating the mistakes it has already paid for.</p>
+</div>
+<div id="filterpanel">
+  {% include "partials/memory_list.html" %}
+</div>
+{% endblock %}

@@ -1,0 +1,70 @@
+{% from "_macros.html" import phase_pill, chip, status_dot %}
+{# Panel = filter bar + list, swapped as a whole (#filterpanel) so chip states re-render. #}
+{% set T = "#filterpanel" %}
+{% set ofam = "status=" ~ sel.status ~ "&type=" ~ sel.type ~ "&phase=" ~ sel.phase %}
+{% set osta = "family=" ~ sel.family ~ "&type=" ~ sel.type ~ "&phase=" ~ sel.phase %}
+{% set otyp = "family=" ~ sel.family ~ "&status=" ~ sel.status ~ "&phase=" ~ sel.phase %}
+{% set ophs = "family=" ~ sel.family ~ "&status=" ~ sel.status ~ "&type=" ~ sel.type %}
+
+<div class="filters">
+  <div class="fgroup">
+    <span class="eyebrow">Family</span>
+    <div class="chips">
+      {{ chip("/skills?" ~ ofam, "all", not sel.family, T) }}
+      {% for f in families %}{{ chip("/skills?family=" ~ f ~ "&" ~ ofam, f, sel.family == f, T) }}{% endfor %}
+    </div>
+  </div>
+  <div class="fgroup">
+    <span class="eyebrow">Status</span>
+    <div class="chips">
+      {{ chip("/skills?" ~ osta, "all", not sel.status, T) }}
+      {% for s in skill_statuses %}{{ chip("/skills?status=" ~ s ~ "&" ~ osta, s, sel.status == s, T) }}{% endfor %}
+    </div>
+  </div>
+  <div class="fgroup">
+    <span class="eyebrow">Kind</span>
+    <div class="chips">
+      {{ chip("/skills?" ~ otyp, "all", not sel.type, T) }}
+      {% for t in skill_types %}{{ chip("/skills?type=" ~ t ~ "&" ~ otyp, t.replace("_", " "), sel.type == t, T) }}{% endfor %}
+    </div>
+  </div>
+  <div class="fgroup">
+    <span class="eyebrow">Phase</span>
+    <div class="chips">
+      {{ chip("/skills?" ~ ophs, "all", not sel.phase, T) }}
+      {% for p in phases %}{{ chip("/skills?phase=" ~ p.key ~ "&" ~ ophs, p.label, sel.phase == p.key, T) }}{% endfor %}
+    </div>
+  </div>
+</div>
+
+<p class="eyebrow">{{ skills|length }} skill{{ "" if skills|length == 1 else "s" }}</p>
+<div class="cardlist">
+  {% for s in skills %}
+  <div class="card">
+    <div class="top">
+      <span class="name">{{ s.name }}</span>
+      {{ status_dot(s.status) }}
+    </div>
+    <div class="meta" style="margin-top:0;">
+      <span class="tag">{{ s.type.replace("_", " ") }}</span>
+      {% if s.family %}<span class="tag fam">{{ s.family }}</span>{% endif %}
+      <span class="section" style="margin-left:auto;">{{ s.skill_id }}</span>
+    </div>
+    <div class="play">
+      {% if s.trigger %}<div class="row"><span class="k">Trigger</span><span class="t">{{ s.trigger }}</span></div>{% endif %}
+      {% if s.entry %}<div class="row"><span class="k">Entry</span><span class="t">{{ s.entry }}</span></div>{% endif %}
+      {% if s.exit_stop %}<div class="row"><span class="k">Exit</span><span class="t">{{ s.exit_stop }}</span></div>{% endif %}
+    </div>
+    {% if s.taboo %}
+    <div class="taboos">{% for t in s.taboo %}<span class="taboo">{{ t }}</span>{% endfor %}</div>
+    {% endif %}
+    <div class="meta">
+      {% if s.applies_all_phases %}<span class="tag">all phases</span>
+      {% else %}{% for ph in s.phases %}{{ phase_pill(ph) }}{% endfor %}{% endif %}
+      {% for d in s.depends_on %}<span class="tag" style="color:var(--ignition);">needs: {{ d }}</span>{% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div class="card"><div class="body muted">No skills match this filter. Clear a chip to widen the search.</div></div>
+  {% endfor %}
+</div>

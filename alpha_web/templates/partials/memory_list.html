@@ -1,0 +1,54 @@
+{% from "_macros.html" import phase_pill, chip %}
+{# Panel = filter bar + list. Targeted as a whole (#filterpanel) so chip states re-render on swap. #}
+{% set T = "#filterpanel" %}
+{% set ofam = "outcome=" ~ sel.outcome ~ "&phase=" ~ sel.phase %}
+{% set oout = "family=" ~ sel.family ~ "&phase=" ~ sel.phase %}
+{% set ophs = "family=" ~ sel.family ~ "&outcome=" ~ sel.outcome %}
+
+<div class="filters">
+  <div class="fgroup">
+    <span class="eyebrow">Family</span>
+    <div class="chips">
+      {{ chip("/memory?" ~ ofam, "all", not sel.family, T) }}
+      {% for f in families %}{{ chip("/memory?family=" ~ f ~ "&" ~ ofam, f, sel.family == f, T) }}{% endfor %}
+    </div>
+  </div>
+  <div class="fgroup">
+    <span class="eyebrow">Outcome</span>
+    <div class="chips">
+      {{ chip("/memory?" ~ oout, "all", not sel.outcome, T) }}
+      {% for o in outcomes %}{{ chip("/memory?outcome=" ~ o ~ "&" ~ oout, o, sel.outcome == o, T) }}{% endfor %}
+    </div>
+  </div>
+  <div class="fgroup">
+    <span class="eyebrow">Phase</span>
+    <div class="chips">
+      {{ chip("/memory?" ~ ophs, "all", not sel.phase, T) }}
+      {% for p in phases %}{{ chip("/memory?phase=" ~ p.key ~ "&" ~ ophs, p.label, sel.phase == p.key, T) }}{% endfor %}
+    </div>
+  </div>
+</div>
+
+<p class="eyebrow">{{ lessons|length }} lesson{{ "" if lessons|length == 1 else "s" }}</p>
+<div class="cardlist">
+  {% for l in lessons %}
+  <div class="card">
+    <div class="top">
+      <span class="section">{{ l.lesson_id }}</span>
+      <span class="pill" style="color: {{ 'var(--down)' if l.outcome == 'loss' else ('var(--up)' if l.outcome == 'win' else 'var(--fg-dim)') }};">{{ l.outcome }}</span>
+    </div>
+    <div class="body">{{ l.lesson }}</div>
+    {% if l.failure_signature %}
+    <div class="sig"><span class="k">Failure signature</span>{{ l.failure_signature }}</div>
+    {% endif %}
+    <div class="meta">
+      {% if l.family %}<span class="tag fam">{{ l.family }}</span>{% endif %}
+      {% if l.applies_all_phases %}<span class="tag">all phases</span>
+      {% else %}{% for ph in l.phases %}{{ phase_pill(ph) }}{% endfor %}{% endif %}
+      {% if l.named_analog %}<span class="tag">analog: {{ l.named_analog }}</span>{% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div class="card"><div class="body muted">No lessons match this filter. Clear a chip to widen the search.</div></div>
+  {% endfor %}
+</div>

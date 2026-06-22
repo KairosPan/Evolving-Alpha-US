@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% from "_macros.html" import phase_ring, phase_pill %}
+{% block title %}Deck{% endblock %}
+{% set fam_hue = {"runner": "var(--trend)", "swing": "var(--recovery)", "event": "var(--ignition)", "meme": "var(--flush)"} %}
+
+{% block content %}
+<div class="page-head">
+  <p class="eyebrow">The continual harness · H = (doctrine, skills, memory)</p>
+  <h1 class="page-title">Read the cycle.<br>Size to the regime.</h1>
+  <p class="page-lede">A self-evolving co-pilot for US speculative momentum. It perceives the tape,
+    reads where the speculation cycle stands, and proposes a sized, guarded decision — then learns
+    from what the future does. You confirm. It never trades.</p>
+</div>
+
+<div class="grid deck">
+  <section class="panel rise">
+    <div class="panel-head">
+      <h2>Regime</h2>
+      <span class="eyebrow">G&#95;cycle read</span>
+    </div>
+    <div class="panel-pad">
+      {{ phase_ring(regime.phase) }}
+      <p class="muted" style="text-align:center; margin:14px auto 18px; max-width:46ch;">
+        {{ phase_by_key[regime.phase].tagline }}
+      </p>
+      <div class="gate">
+        <div class="kv"><span class="k">Risk appetite (gate)</span><span class="v">{{ "%.2f"|format(regime.risk_gate) }}</span></div>
+        <div class="track"><span class="fill" style="width: {{ (regime.risk_gate * 100)|round|int }}%"></span></div>
+      </div>
+      <div style="margin-top:18px;">
+        <div class="kv"><span class="k">Gainers / Losers</span><span class="v">{{ market.gainer_count }} / {{ market.loser_count }}</span></div>
+        <div class="kv"><span class="k">Gap-ups · held</span><span class="v">{{ market.gap_up_count }} · {{ market.gap_and_go_count }}</span></div>
+        <div class="kv"><span class="k">Failed-breakout rate</span><span class="v">{{ "%.2f"|format(market.failed_breakout_count / market.gainer_count) if market.gainer_count else "—" }}</span></div>
+        <div class="kv"><span class="k">Follow-through</span><span class="v">{{ "%.2f"|format(market.follow_through_rate) if market.follow_through_rate is not none else "—" }}</span></div>
+        <div class="kv"><span class="k">Top runner echelon</span><span class="v">tier {{ market.max_runner_tier }}</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel rise">
+    <div class="panel-head">
+      <h2>The brain</h2>
+      <span class="eyebrow">live seeds</span>
+    </div>
+    <div class="panel-pad">
+      <div class="grid cols-3" style="gap:14px; margin-bottom:20px;">
+        <a class="stat" href="/doctrine"><span class="num">{{ stats.doctrine.total }}</span><span class="lab">Doctrine<br><span class="sub">{{ stats.doctrine.immutable }} red-lines</span></span></a>
+        <a class="stat" href="/memory"><span class="num">{{ stats.memory.total }}</span><span class="lab">Lessons<br><span class="sub">{{ stats.memory.by_outcome.get("loss", 0) }} from losses</span></span></a>
+        <a class="stat" href="/skills"><span class="num">{{ stats.skills.total }}</span><span class="lab">Skills<br><span class="sub">{{ stats.skills.active }} active · {{ stats.skills.incubating }} incubating</span></span></a>
+      </div>
+
+      <p class="eyebrow">Skills by family</p>
+      <div class="bars">
+        {% set fammax = (stats.skills.by_family.values()|list|max) %}
+        {% for fam in families %}
+        {% set n = stats.skills.by_family.get(fam, 0) %}
+        <div class="barrow" style="--c: {{ fam_hue[fam] }};">
+          <span class="lab">{{ fam }}</span>
+          <span class="track"><span class="fill" style="width: {{ (n / fammax * 100)|round|int if fammax else 0 }}%;"></span></span>
+          <span class="n">{{ n }}</span>
+        </div>
+        {% endfor %}
+      </div>
+
+      <p class="eyebrow" style="margin-top:20px;">Skills by kind</p>
+      <div class="bars">
+        {% set kindmax = (stats.skills.by_type.values()|list|max) %}
+        {% for kind, n in stats.skills.by_type.items() %}
+        <div class="barrow" style="--c: var(--gold);">
+          <span class="lab">{{ kind.replace("_", " ") }}</span>
+          <span class="track"><span class="fill" style="width: {{ (n / kindmax * 100)|round|int if kindmax else 0 }}%;"></span></span>
+          <span class="n">{{ n }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+</div>
+
+<section class="panel rise" style="margin-top:18px;">
+  <div class="panel-head">
+    <h2>The cycle</h2>
+    <span class="eyebrow">six phases · enter only on the frontside</span>
+  </div>
+  <div class="panel-pad">
+    <div class="cycle">
+      {% for p in phases %}
+      <div class="station ph--{{ p.key }}{% if p.key == regime.phase %} on{% endif %}">
+        <span class="n">{{ "%02d"|format(loop.index) }}</span>
+        <div class="nm">{{ p.label }}</div>
+        <div class="tg">{{ p.tagline }}</div>
+        <span class="side">{{ "frontside · risk-on" if p.frontside else "backside · sell pops" }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

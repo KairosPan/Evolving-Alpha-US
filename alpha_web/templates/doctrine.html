@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "_macros.html" import phase_pill %}
+{% block title %}Doctrine{% endblock %}
+
+{% macro doctrine_card(e, sealed=False) %}
+<div class="card{% if sealed %} sealed{% endif %}">
+  <div class="top">
+    <span class="section">{{ e.section }}</span>
+    {% if sealed %}
+    <span class="seal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      Red-line
+    </span>
+    {% endif %}
+  </div>
+  <div class="body">{{ e.guidance }}</div>
+  <div class="meta">
+    {% if e.applies_all_phases %}<span class="tag">all phases</span>
+    {% else %}{% for ph in e.phases %}{{ phase_pill(ph) }}{% endfor %}{% endif %}
+    {% if e.family %}<span class="tag fam">{{ e.family }}</span>{% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="page-head">
+  <p class="eyebrow">p · the rulebook</p>
+  <h1 class="page-title">Doctrine</h1>
+  <p class="page-lede">The constitution the co-pilot reasons inside. Red-lines are write-protected —
+    the discipline that survives every edit. The plays below them are evolvable: the Refiner tunes
+    them against what the realized future rewards.</p>
+</div>
+
+<div class="page-head">
+  <p class="eyebrow">{{ immutable|length }} red-lines · immutable</p>
+  <div class="cardlist">
+    {% for e in immutable %}{{ doctrine_card(e, sealed=True) }}{% endfor %}
+  </div>
+</div>
+
+<div>
+  <p class="eyebrow">{{ mutable|length }} plays · evolvable by phase</p>
+  <div class="cardlist">
+    {% for e in mutable %}{{ doctrine_card(e) }}{% endfor %}
+  </div>
+</div>
+{% endblock %}

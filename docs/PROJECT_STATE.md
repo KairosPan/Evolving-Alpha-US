@@ -2,7 +2,7 @@
 
 > **One-page compressed context for session restart.** This file is the append-only record of **what's
 > built**; the forward-looking backlog of **what's left** lives in **`ROADMAP.md`** (repo root).
-> Last updated: 2026-06-22 (US-0 + US-1 + US-2 complete; US-3a–US-3f shipped — the US-3 daily-cadence enrichment arc is complete; **richer-state perception wired into the live drivers + `LoopConfig.screen` now defaults ON** with a symmetric `compare_harnesses` guard; **`scripts/run_verdict.py` verdict harness built + offline-verified**; **L3 sizing wired into the live DecisionPackage** (size_tier + portfolio, verdict-neutral); **2026-06-22: Alpaca corp-actions data-source wiring — live-verified — + `ALPHA_DATA_SOURCE` multi-source switching + M1/M2 hardening shipped (`main` @ 7945672, 413 tests)**; remaining/planned work now tracked in `ROADMAP.md`).
+> Last updated: 2026-06-22 (US-0 + US-1 + US-2 complete; US-3a–US-3f shipped — the US-3 daily-cadence enrichment arc is complete; **richer-state perception wired into the live drivers + `LoopConfig.screen` now defaults ON** with a symmetric `compare_harnesses` guard; **`scripts/run_verdict.py` verdict harness built + offline-verified**; **L3 sizing wired into the live DecisionPackage** (size_tier + portfolio, verdict-neutral); **2026-06-22: Alpaca corp-actions data-source wiring — live-verified — + `ALPHA_DATA_SOURCE` multi-source switching + M1/M2 hardening shipped (`main` @ 7945672, 413 tests)**; **2026-06-22: `alpha_web/` "Regime Instrument" web console built** — FastAPI + Jinja2 + HTMX (the documented `alpha_web/` UI), read-only, offline (vendored htmx, no build step); reads the live seeds (doctrine/memory/skills) and renders a `DecisionPackage` + the HCH-vs-Hexpert verdict, real-artifact (`ALPHA_WEB_DECISION`/`ALPHA_WEB_VERDICT`) or a badged SAMPLE built from the real models; signature = the six-phase thermal regime ring; an adversarial 4-lens review (14 verified findings) was folded in (incl. two real `/decisions` 500s on no-trade/baseline packages, now guarded). 443 tests; remaining/planned work now tracked in `ROADMAP.md`).
 
 ---
 
@@ -50,7 +50,7 @@ all-English code and docs.
 | Testing | pytest ≥ 8.0 |
 | LLM (agent) | Cheap model (Haiku 4.5 or DeepSeek) via `ALPHA_AGENT_*` env vars |
 | LLM (refiner) | Claude Opus/Sonnet via `ALPHA_REFINER_*` env vars |
-| Web UI | FastAPI + HTMX (US-3, `alpha_web/`) |
+| Web UI | FastAPI + Jinja2 + HTMX — `alpha_web/` "Regime Instrument" console (**built**; `pip install -e ".[web]"` then `python -m alpha_web`) |
 
 ---
 
@@ -487,4 +487,10 @@ python scripts/capture_window.py 2026-06-01 2026-06-12 snap AAPL MSFT NVDA
 export ALPHA_AGENT_PROVIDER=openai_compat ALPHA_AGENT_MODEL=deepseek-chat        # + DEEPSEEK_API_KEY
 export ALPHA_REFINER_PROVIDER=anthropic   ALPHA_REFINER_MODEL=claude-sonnet-4-6  # + ANTHROPIC_API_KEY
 python scripts/run_verdict.py verdict_pit 2026-01-02 2026-03-31 --windows 3
+
+# Serve the Regime Instrument web console (read-only; offline; http://127.0.0.1:8100)
+python -m pip install -e ".[web]"
+python -m alpha_web
+# optionally render real artifacts instead of the SAMPLE:
+ALPHA_WEB_DECISION=decision.json ALPHA_WEB_VERDICT=verdict.json python -m alpha_web
 ```

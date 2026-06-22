@@ -1,0 +1,64 @@
+{# Reusable instrument parts. #}
+
+{% macro phase_pill(key) -%}
+  {%- set p = phase_by_key[key] -%}
+  <span class="pill phase-pill ph--{{ key }}"><span class="dot"></span>{{ p.label }}</span>
+{%- endmacro %}
+
+{% macro status_dot(status) -%}
+  <span class="status {{ status }}"><span class="dot"></span>{{ status }}</span>
+{%- endmacro %}
+
+{% macro size_gauge(tier) -%}
+  {%- set levels = {"flat": 0, "probe": 1, "core": 2, "heavy": 3} -%}
+  {%- if tier in levels -%}
+  <span class="gauge tier--{{ tier }}" title="size tier: {{ tier }}">
+    {% for i in range(1, 4) %}<span class="seg{% if i <= levels[tier] %} on{% endif %}"></span>{% endfor %}
+    <span class="tier">{{ tier }}</span>
+  </span>
+  {%- else -%}
+  <span class="gauge tier--flat" title="not sized"><span class="tier">unsized</span></span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro conf_bar(confidence) -%}
+  <span class="conf" title="conviction">
+    <span class="track"><span class="fill" style="width: {{ (confidence * 100) | round | int }}%"></span></span>
+    {{ "%.2f"|format(confidence) }}
+  </span>
+{%- endmacro %}
+
+{% macro phase_ring(active) -%}
+  <div class="ringwrap">
+    <div style="position: relative; width: 168px; height: 168px;">
+      <svg class="ring" viewBox="0 0 120 120" width="168" height="168" role="img"
+           aria-label="Regime cycle, current phase {{ phase_by_key[active].label }}">
+        {% for s in ring.segments %}
+        <circle class="seg ph--{{ s.phase.key }}{% if s.phase.key == active %} on{% endif %}"
+                cx="{{ ring.cx }}" cy="{{ ring.cy }}" r="{{ ring.r }}" style="stroke: var(--c);"
+                stroke-dasharray="{{ s.dasharray }}"
+                transform="rotate({{ s.rotate }} {{ ring.cx }} {{ ring.cy }})"></circle>
+        {% endfor %}
+        {% for s in ring.segments if s.phase.key == active %}
+        <circle class="marker pulse ph--{{ s.phase.key }}" cx="{{ s.mx }}" cy="{{ s.my }}" r="4.4"></circle>
+        {% endfor %}
+      </svg>
+      <div class="ring-core" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+        <div class="ph ph--{{ active }}" style="color: var(--c);">{{ phase_by_key[active].label }}</div>
+      </div>
+    </div>
+    <div class="ring-legend">
+      {% for p in phases %}
+      <span class="li ph--{{ p.key }}{% if p.key == active %} on{% endif %}"><span class="d"></span>{{ p.label }}</span>
+      {% endfor %}
+    </div>
+  </div>
+{%- endmacro %}
+
+{# A filter chip. hx-get drives the in-place swap (target wraps the whole panel so chip states
+   re-render); a plain click still works without JS (server returns the full page). #}
+{% macro chip(href, label, on, target, count=None) -%}
+  <a class="chip{% if on %} is-on{% endif %}" href="{{ href }}"
+     hx-get="{{ href }}" hx-target="{{ target }}" hx-push-url="true"
+     {% if on %}aria-current="true"{% endif %}>{{ label }}{% if count is not none %} <span class="count">{{ count }}</span>{% endif %}</a>
+{%- endmacro %}

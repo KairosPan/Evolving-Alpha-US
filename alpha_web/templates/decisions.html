@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% from "_macros.html" import phase_pill, size_gauge, conf_bar %}
+{% block title %}Decision{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <p class="eyebrow">a&#95;t · the day's package · {{ pkg.date }}</p>
+  <h1 class="page-title">Decision</h1>
+  <p class="page-lede">The co-pilot's proposed action: ranked, sized, and guarded picks plus the
+    portfolio risk it implies. A human confirms or rejects each one — that confirmation is the
+    training label. Nothing here is an order.</p>
+</div>
+
+{% if load_error %}
+<div class="banner err">⚠ <span><b>Couldn't read the wired artifact.</b> {{ load_error }} Showing the sample instead.</span></div>
+{% elif is_sample %}
+<div class="banner">◆ <span><b>Sample package.</b> No live decision is wired. Set <code>ALPHA_WEB_DECISION</code> to a
+  <code>DecisionPackage</code> JSON to render a real one. Every size tier below is the actual
+  <code>size_tier(confidence, risk_gate)</code> mapping.</span></div>
+{% endif %}
+
+<div class="grid deck" style="margin-bottom:18px;">
+  <section class="panel">
+    <div class="panel-head"><h2>Regime read</h2><span class="eyebrow">gates every size</span></div>
+    <div class="panel-pad">
+      {% if pkg.regime %}
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+        {{ phase_pill(pkg.regime.phase) }}
+        <span class="pill {{ 'up' if pkg.regime.frontside else 'down' }}" style="border-color:var(--line-2);">
+          {{ 'frontside' if pkg.regime.frontside else 'backside' }}</span>
+      </div>
+      {% if pkg.regime_read %}<p class="muted" style="margin:0 0 14px;">{{ pkg.regime_read }}</p>{% endif %}
+      <div class="kv"><span class="k">Risk-gate</span><span class="v">{{ "%.2f"|format(pkg.regime.risk_gate) }}</span></div>
+      <div class="kv"><span class="k">Read confidence</span><span class="v">{{ "%.2f"|format(pkg.regime.confidence) }}</span></div>
+      {% elif pkg.regime_read %}
+      <p class="muted" style="margin:0;">{{ pkg.regime_read }}</p>
+      {% else %}
+      <p class="muted" style="margin:0;">No structured regime read on this package (no-trade / parse failure).</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Portfolio</h2><span class="eyebrow">L3 sizing</span></div>
+    <div class="panel-pad">
+      {% if pkg.portfolio %}
+      <div class="kv"><span class="k">Total exposure budget</span><span class="v">{{ "%.2f"|format(pkg.portfolio.total_exposure_budget) }} units</span></div>
+      <p class="eyebrow" style="margin:16px 0 8px;">Correlated groups · one netted bet each</p>
+      {% for grp in pkg.portfolio.correlated_groups %}
+        <div class="meta" style="margin:0 0 8px;">{% for sym in grp %}<span class="tag" style="font-weight:700;color:var(--fg);">{{ sym }}</span>{% if not loop.last %}<span class="muted">+</span>{% endif %}{% endfor %}</div>
+      {% else %}<p class="muted">No correlated stacks.</p>{% endfor %}
+      {% else %}
+      <p class="muted">No portfolio sizing on this package.</p>
+      {% endif %}
+      {% if pkg.key_risks %}
+      <p class="eyebrow" style="margin:16px 0 8px;">Key risks</p>
+      <ul style="margin:0; padding-left:18px; color:var(--fg-dim);">
+        {% for r in pkg.key_risks %}<li style="margin-bottom:6px;">{{ r }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+  </section>
+</div>
+
+{% if not pkg.candidates %}
+<div class="panel panel-pad">
+  <p class="eyebrow" style="margin:0 0 8px;">No candidates · no-trade</p>
+  <p class="muted" style="margin:0;">{{ pkg.no_trade_reason or "The co-pilot proposed no entries for this session. Cash is a position." }}</p>
+</div>
+{% else %}
+<p class="eyebrow">{{ pkg.candidates|length }} candidate{{ "" if pkg.candidates|length == 1 else "s" }} · ranked</p>
+<div class="grid cols-2">
+  {% for c in pkg.candidates %}
+  <div class="ticket{% if c.size_tier == 'flat' %} flat{% endif %}">
+    <div class="ticket-head">
+      <span class="sym">{{ c.symbol }}</span>
+      <span class="co">{{ c.name }}</span>
+      <span class="spacer"></span>
+      {{ size_gauge(c.size_tier) }}
+    </div>
+    <div class="ticket-body">
+      <div class="line"><span class="k">Pattern</span><span class="t">{{ c.pattern }} <span class="muted">· {{ c.family }}</span></span></div>
+      <div class="line"><span class="k">Conviction</span><span class="t">{{ conf_bar(c.confidence) }}</span></div>
+      <div class="line"><span class="k">Entry</span><span class="t">{{ c.entry }}</span></div>
+      <div class="line"><span class="k">Exit</span><span class="t">{{ c.exit_stop }}</span></div>
+      {% if c.counterview %}<div class="line"><span class="k">Counter</span><span class="t counter">{{ c.counterview }}</span></div>{% endif %}
+      {% if c.taboo_check %}
+      <div class="line"><span class="k">Guards</span><span class="t">
+        {% for tc in c.taboo_check %}
+        <span class="pill" style="color:{{ 'var(--down)' if tc.status == 'fail' else 'var(--up)' }}; border-color:var(--line-2); margin:0 6px 6px 0;">
+          {{ "⊘" if tc.status == "fail" else "✓" }} {{ tc.rule }}</span>
+        {% endfor %}
+      </span></div>
+      {% endif %}
+      {% if c.fill_feasibility and not c.fill_feasibility.buyable %}
+      <div class="line"><span class="k">Fill</span><span class="t"><span class="unbuyable">⚠ unbuyable — {{ c.fill_feasibility.reason }}</span></span></div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

@@ -59,7 +59,20 @@ is missing. Best delivered as `CompositeSource` backends (§2).
 - [ ] **Master-dispatch `G` sub-agents** (keeps the `G`-pass a reserved no-op today).
 - [ ] **Keep-last-K checkpoint pruning.**
 
-## 6. Known tradeoffs / review leftovers (accepted — no action planned)
+## 6. Web console (`alpha_web`) — follow-ups (the read-only console shipped 2026-06-22)
+
+The "Regime Instrument" console (FastAPI + Jinja2 + HTMX) is built and reviewed; these make it
+read *real* data end-to-end instead of the badged SAMPLE:
+
+- [ ] **`run_verdict.py --json out.json`** that dumps exactly the `alpha_web.sample.sample_verdict()`
+  shape, so the on-page two-step (`capture_window` → `run_verdict` → `ALPHA_WEB_VERDICT`) becomes
+  literally true (today `run_verdict` only prints a text report; the console needs a JSON in the UI shape).
+- [ ] **Persist the live daily `DecisionPackage`** (a writer + a `decisions/` store) so `/decisions`
+  reads the real package by date rather than a one-off `ALPHA_WEB_DECISION` file.
+- [ ] **Evolution/edit-log view** — surface `EditRecord`s (how the Refiner changed doctrine/skills over
+  time); the data exists in the harness but has no console page yet.
+
+## 7. Known tradeoffs / review leftovers (accepted — no action planned)
 
 - **M3** (review 2026-06-22): a `worthless_removal` delist whose `process_date == entry_day` is skipped by
   `ReturnOracle._delisted_between`'s strict `ex_date > entry_day`. Accepted — bar-disappearance is the

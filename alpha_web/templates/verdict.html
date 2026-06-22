@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Verdict{% endblock %}
+{% set order = [("HCH","HCH · evolved"), ("Hexpert","Hexpert · frozen seeds"), ("Hmin_chase","Hmin · chase"), ("Hmin_notrade","Hmin · no-trade")] %}
+{% set sv = report.stat_verdict %}
+
+{% block content %}
+<div class="page-head">
+  <p class="eyebrow">§9 / §10 · does evolving beat the frozen expert?</p>
+  <h1 class="page-title">Verdict</h1>
+  <p class="page-lede">The headline comparison: the continually-evolving harness (HCH) against the
+    frozen seed expert (H_expert) and two floors, scored on point-in-time data at temperature&nbsp;0.
+    The honest bar is parity — beating frozen seeds is the frontier.</p>
+</div>
+
+{% if load_error %}
+<div class="banner err">⚠ <span><b>Couldn't read the wired artifact.</b> {{ load_error }} Showing the sample instead.</span></div>
+{% elif is_sample %}
+<div class="banner">◆ <span><b>Sample verdict.</b> No live run is wired — see “Render a live verdict” below for how to
+  produce and display a real one.</span></div>
+{% endif %}
+
+<div class="headline" style="margin-bottom:18px;">
+  <div>
+    <p class="eyebrow" style="margin:0 0 4px;">HCH − Hexpert · mean excess</p>
+    <span class="big {{ 'up' if report.headline.hch_minus_hexpert > 0 else ('down' if report.headline.hch_minus_hexpert < 0 else '') }}">{{ "%+.4f"|format(report.headline.hch_minus_hexpert) }}</span>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    <span class="verdict-chip {{ sv.verdict }}">{{ sv.verdict }}</span>
+    <span class="muted">HCH beats Hexpert: <b class="{{ 'up' if report.headline.hch_beats_hexpert else 'down' }}">{{ "yes" if report.headline.hch_beats_hexpert else "no" }}</b></span>
+  </div>
+  <span class="spacer" style="flex:1;"></span>
+  <div class="muted" style="font-family:var(--mono); font-size:12px; text-align:right;">
+    {{ report.window.start }} → {{ report.window.end }}<br>
+    horizon {{ report.window.horizon }} · {{ report.window.windows }} window{{ "" if report.window.windows == 1 else "s" }} · screen {{ "on" if report.window.screen else "off" }}
+  </div>
+</div>
+
+<div class="grid deck">
+  <section class="panel">
+    <div class="panel-head"><h2>Arms</h2><span class="eyebrow">excess vs same-day baseline</span></div>
+    <table class="arms">
+      <thead><tr><th class="arm">Arm</th><th>n&#95;dec</th><th>cand</th><th>mean excess</th><th>hit</th><th>nuke</th></tr></thead>
+      <tbody>
+        {% for key, label in order %}{% if key in report.arms %}{% set a = report.arms[key] %}
+        <tr {% if key == "HCH" %}class="hero"{% endif %}>
+          <td class="arm">{{ label }}</td>
+          <td>{{ a.n_decisions }}</td>
+          <td>{{ a.n_candidates }}</td>
+          <td class="{{ 'up' if a.mean_excess > 0 else ('down' if a.mean_excess < 0 else '') }}">{{ "%+.4f"|format(a.mean_excess) }}</td>
+          <td>{{ "%.2f"|format(a.hit_rate) }}</td>
+          <td>{{ "%.2f"|format(a.nuke_rate) }}</td>
+        </tr>
+        {% endif %}{% endfor %}
+      </tbody>
+    </table>
+    {% if report.arms.HCH.refines is defined %}
+    <div class="panel-pad" style="border-top:1px solid var(--line);">
+      <span class="muted" style="font-family:var(--mono); font-size:12px;">HCH evolution: {{ report.arms.HCH.refines }} refines · {{ report.arms.HCH.trips }} breaker trip{{ "" if report.arms.HCH.trips == 1 else "s" }} · frozen-from {{ report.arms.HCH.frozen_from if report.arms.HCH.frozen_from is not none else "—" }}</span>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Statistic</h2><span class="eyebrow">paired, day-level</span></div>
+    <div class="panel-pad">
+      <div class="kv"><span class="k">Verdict</span><span class="v">{{ sv.verdict }}</span></div>
+      <div class="kv"><span class="k">Paired days</span><span class="v">{{ sv.n_days }}</span></div>
+      <div class="kv"><span class="k">Mean diff</span><span class="v {{ 'up' if sv.mean_diff > 0 else ('down' if sv.mean_diff < 0 else '') }}">{{ "%+.4f"|format(sv.mean_diff) }}</span></div>
+      <div class="kv"><span class="k">95% CI</span><span class="v">[{{ "%+.4f"|format(sv.ci_low) }}, {{ "%+.4f"|format(sv.ci_high) }}]</span></div>
+      <div class="kv"><span class="k">p-value</span><span class="v">{{ "%.3f"|format(sv.p_value) }}</span></div>
+      <div class="kv"><span class="k">MDE</span><span class="v">{{ "%.3f"|format(sv.mde) }}</span></div>
+    </div>
+  </section>
+</div>
+
+{% if report.contribution %}
+<section class="panel" style="margin-top:18px;">
+  <div class="panel-head"><h2>Contribution</h2><span class="eyebrow">HCH · resolved vs the evolved H</span></div>
+  <div class="panel-pad grid cols-3">
+    {% for bucket in ["offense", "defense", "unknown"] %}{% set b = report.contribution[bucket] %}
+    <div>
+      <p class="eyebrow" style="margin-bottom:10px;">{{ bucket }}</p>
+      <div class="kv"><span class="k">n</span><span class="v">{{ b.n }}</span></div>
+      <div class="kv"><span class="k">hit</span><span class="v">{{ "%.2f"|format(b.hit_rate) }}</span></div>
+      <div class="kv"><span class="k">nuke</span><span class="v">{{ "%.2f"|format(b.nuke_rate) }}</span></div>
+      <div class="kv"><span class="k">expectancy</span><span class="v {{ 'up' if b.expectancy > 0 else ('down' if b.expectancy < 0 else '') }}">{{ "%+.4f"|format(b.expectancy) }}</span></div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="panel" style="margin-top:18px;">
+  <div class="panel-head"><h2>Render a live verdict</h2><span class="eyebrow">two steps · needs the live + LLM keys</span></div>
+  <div class="panel-pad">
+    <div class="cmd"><span class="c"># 1. capture a point-in-time window (market data only, no LLM)</span>
+python scripts/capture_window.py 2026-01-02 2026-03-31 verdict_pit AAPL MSFT NVDA TSLA AMD
+
+<span class="c"># 2. render the verdict at temperature 0 (prints the report to the terminal)</span>
+python scripts/run_verdict.py verdict_pit 2026-01-02 2026-03-31 --windows 3</span></div>
+    <p class="muted" style="margin:12px 0 0; font-size:13px;">Needs <code>pip install -e ".[live]"</code>, <code>APCA_*</code> keys, and per-role LLM keys (see <code>scripts/run_verdict.py</code>). To display a run here, save a JSON in <code>alpha_web.sample.sample_verdict()</code>'s shape and set <code>ALPHA_WEB_VERDICT</code> to it.</p>
+  </div>
+</section>
+{% endblock %}

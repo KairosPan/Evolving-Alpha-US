@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Skills{% endblock %}
+{% block content %}
+<div class="page-head">
+  <p class="eyebrow">K · the playbook</p>
+  <h1 class="page-title">Skills</h1>
+  <p class="page-lede">Patterns to press and failure-detectors to respect, each scoped to a family
+    and the phases where it works. New skills enter <b>incubating</b> and must earn promotion against
+    the realized future; the ones that decay are retired. This is the library that evolves.</p>
+</div>
+<div id="filterpanel">
+  {% include "partials/skill_list.html" %}
+</div>
+{% endblock %}

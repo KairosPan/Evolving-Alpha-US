@@ -103,7 +103,29 @@ python -m pytest \
   tests/universe/test_build_universe.py::test_rvol_uses_only_trailing_bars -v
 ```
 
-Expected output: all tests pass (40 tests at US-0 baseline).
+Expected output: all tests pass.
+
+---
+
+## Web Console (`alpha_web`)
+
+A local, read-only **"Regime Instrument"** dashboard onto the co-pilot's evolving mind and its
+outputs. It renders the real seeds (doctrine / memory / skills), a day's `DecisionPackage`, and the
+HCH-vs-Hexpert verdict. Decision-support only — it shows, it never trades.
+
+```bash
+pip install -e ".[web]"     # fastapi + uvicorn + jinja2 (offline; no build step)
+python -m alpha_web         # serves http://127.0.0.1:8100  (ALPHA_WEB_HOST / ALPHA_WEB_PORT to override)
+```
+
+The **Deck** opens on the six-phase regime cycle (the signature phase ring) and live brain counts;
+**Doctrine / Memory / Skills** browse the seeds with in-place filters; **Decisions / Verdict** render
+a real artifact when wired, else a clearly-badged SAMPLE built from the real models:
+
+```bash
+ALPHA_WEB_DECISION=decision.json python -m alpha_web   # a DecisionPackage.model_dump_json()
+ALPHA_WEB_VERDICT=verdict.json   python -m alpha_web   # a dict in alpha_web.sample.sample_verdict() shape
+```
 
 ---
 
