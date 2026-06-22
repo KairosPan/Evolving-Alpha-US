@@ -1,7 +1,8 @@
 # Evolving-Alpha-US — Project State
 
-> **One-page compressed context for session restart.**
-> Last updated: 2026-06-16 (US-0 + US-1 + US-2 complete; US-3a–US-3f shipped — the US-3 daily-cadence enrichment arc is complete; **richer-state perception wired into the live drivers + `LoopConfig.screen` now defaults ON** with a symmetric `compare_harnesses` guard; **`scripts/run_verdict.py` verdict harness built + offline-verified**; **L3 sizing wired into the live DecisionPackage** (size_tier + portfolio, verdict-neutral; 387 tests) — only the live temp=0 run remains, needing real keys + a captured window; next after that: per-narrative phases).
+> **One-page compressed context for session restart.** This file is the append-only record of **what's
+> built**; the forward-looking backlog of **what's left** lives in **`ROADMAP.md`** (repo root).
+> Last updated: 2026-06-22 (US-0 + US-1 + US-2 complete; US-3a–US-3f shipped — the US-3 daily-cadence enrichment arc is complete; **richer-state perception wired into the live drivers + `LoopConfig.screen` now defaults ON** with a symmetric `compare_harnesses` guard; **`scripts/run_verdict.py` verdict harness built + offline-verified**; **L3 sizing wired into the live DecisionPackage** (size_tier + portfolio, verdict-neutral); **2026-06-22: Alpaca corp-actions data-source wiring — live-verified — + `ALPHA_DATA_SOURCE` multi-source switching + M1/M2 hardening shipped (`main` @ 7945672, 413 tests)**; remaining/planned work now tracked in `ROADMAP.md`).
 
 ---
 
@@ -445,7 +446,8 @@ per-candidate `taboo_check` (the guard drops vetoed candidates rather than soft-
 deferred. Adversarial 4-lens plan review (0 blocking architectural issues; folded the one real item — a
 planted-broken acceptance `_run` helper). Full suite **387 tests green**.
 
-**Next (orthogonal):** execute the verdict run above once keys + a captured window are available (the only
+**Next (orthogonal)** — *the live, maintained backlog now lives in `ROADMAP.md`; the list below is the
+2026-06-16 snapshot, kept as history*: execute the verdict run above once keys + a captured window are available (the only
 remaining step to render the long-promised empirical HCH-vs-Hexpert number); then per-narrative-line phases.
 **Deferred §10 methodology** (gate-non-blocking):
 purged & embargoed CV; regime-stratified eval. **Other deferred:** real options-flow / social-sentiment feeds +
