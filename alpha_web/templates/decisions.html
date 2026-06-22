@@ -56,7 +56,7 @@
     <div class="panel-head"><h2>Portfolio</h2><span class="eyebrow">L3 sizing</span></div>
     <div class="panel-pad">
       {% if pkg.portfolio %}
-      <div class="kv"><span class="k">Total exposure budget</span><span class="v">{{ "%.2f"|format(pkg.portfolio.total_exposure_budget) }} units</span></div>
+      <div class="kv"><span class="k">Netted exposure</span><span class="v">{{ "%.2f"|format(pkg.portfolio.total_exposure) }} / {{ "%.2f"|format(pkg.portfolio.total_exposure_budget) }} units{% if pkg.portfolio.capped %} <span class="down">· capped</span>{% endif %}</span></div>
       <p class="eyebrow" style="margin:16px 0 8px;">Correlated groups · one netted bet each</p>
       {% for grp in pkg.portfolio.correlated_groups %}
         <div class="meta" style="margin:0 0 8px;">{% for sym in grp %}<span class="tag" style="font-weight:700;color:var(--fg);">{{ sym }}</span>{% if not loop.last %}<span class="muted">+</span>{% endif %}{% endfor %}</div>
@@ -87,6 +87,7 @@
     <div class="ticket-head">
       <span class="sym">{{ c.symbol }}</span>
       <span class="co">{{ c.name }}</span>
+      {% if c.narrative %}<span class="tag" title="correlation narrative">◇ {{ c.narrative }}</span>{% endif %}
       <span class="spacer"></span>
       {{ size_gauge(c.size_tier) }}
     </div>

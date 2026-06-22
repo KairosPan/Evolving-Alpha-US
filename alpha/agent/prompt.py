@@ -10,7 +10,7 @@ from alpha.state.market import MarketState
 from alpha.universe.universe import CandidateUniverse
 
 # Bump when the prompt template changes (used by the future LLM cache key to invalidate old records).
-PROMPT_FINGERPRINT = "us3f-v1"
+PROMPT_FINGERPRINT = "us5-v1"
 
 
 def available_data_signals(universe: CandidateUniverse) -> frozenset[str]:
@@ -40,7 +40,9 @@ _OUTPUT_CONTRACT = (
     'Output STRICT JSON (no markdown fences): '
     '{"regime_read": "<one of the 6 phases + frontside/backside>", '
     '"candidates": [{"symbol": "<MUST be a ticker from the candidate universe>", '
-    '"pattern": "<the matched skill_id>", "reason": "<brief>", "confidence": <0..1>}], '
+    '"pattern": "<the matched skill_id>", "reason": "<brief>", "confidence": <0..1>, '
+    '"narrative": "<short sympathy/theme key, e.g. ai-compute; the SAME key on two names means they '
+    'are ONE correlated bet (sized together, not stacked); empty if the name stands alone>"}], '
     '"no_trade_reason": "<reason if no trade, else empty string>"}'
 )
 

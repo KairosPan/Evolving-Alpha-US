@@ -43,7 +43,8 @@ def parse_decision(raw: str, day: Date, universe: CandidateUniverse,
         seen.add(snap.symbol)
         cands.append(Candidate(symbol=snap.symbol, name=snap.name,
                                pattern=str(c.get("pattern") or ""), reason=str(c.get("reason") or ""),
-                               confidence=_clamp01(c.get("confidence", 0.5))))
+                               confidence=_clamp01(c.get("confidence", 0.5)),
+                               narrative=str(c.get("narrative") or "").strip().lower()))
     return DecisionPackage(date=day, as_of=as_of, candidates=cands,
                            no_trade_reason=str(data.get("no_trade_reason") or ""),
                            regime_read=str(data.get("regime_read") or "").strip())

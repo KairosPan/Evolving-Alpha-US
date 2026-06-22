@@ -36,6 +36,15 @@ def test_malformed_is_no_trade():
     assert pkg.as_of == datetime(2026, 6, 12, 16, 0)     # as_of stamped even on the no-trade path
 
 
+def test_parses_narrative_for_correlation_netting():
+    raw = ('{"candidates": ['
+           '{"symbol": "RUN", "pattern": "gap_and_go", "confidence": 0.8, "narrative": "AI-Compute"}, '
+           '{"symbol": "MOON", "pattern": "short_squeeze", "confidence": 0.6}]}')   # no narrative -> ""
+    pkg = parse_decision(raw, date(2026, 6, 12), _uni())
+    narratives = {c.symbol: c.narrative for c in pkg.candidates}
+    assert narratives == {"RUN": "ai-compute", "MOON": ""}    # normalized (lowercased/stripped)
+
+
 def test_prose_wrapped_json_extracted():
     raw = 'Here is my call:\n```json\n{"candidates": [{"symbol": "RUN", "pattern": "p"}]}\n```'
     pkg = parse_decision(raw, date(2026, 6, 12), _uni())

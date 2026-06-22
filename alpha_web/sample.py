@@ -13,7 +13,9 @@ from alpha.eval.decision import (
     Candidate, DecisionPackage, FillFeasibility, Portfolio, TabooCheck,
 )
 from alpha.regime.classifier import GCycle, RegimeRead
-from alpha.sizing.position import size_tier
+from alpha.sizing.correlation import Pick
+from alpha.sizing.portfolio import plan_portfolio
+from alpha.sizing.position import SizingConfig, size_tier
 from alpha.state.market import MarketState, RunnerRung
 
 _AS_OF = DateTime(2026, 3, 17, 16, 0, 0)
@@ -57,10 +59,10 @@ def sample_decision() -> DecisionPackage:
     rg = reg.risk_gate
 
     def cand(symbol, name, pattern, skill_id, family, conf, entry, exit_stop, counterview,
-             taboos, fill=None):
+             taboos, fill=None, narrative=""):
         return Candidate(
             symbol=symbol, name=name, pattern=pattern, skill_id=skill_id, family=family,
-            confidence=conf, size_tier=size_tier(conf, rg),
+            confidence=conf, size_tier=size_tier(conf, rg), narrative=narrative,
             reason=counterview.split(".")[0] + "." if counterview else "",
             entry=entry, exit_stop=exit_stop, counterview=counterview,
             fill_feasibility=fill or FillFeasibility(buyable=True, reason=""),
@@ -72,12 +74,14 @@ def sample_decision() -> DecisionPackage:
              "Buy the opening-range-high reclaim that holds VWAP.",
              "Lose VWAP / opening-range low.",
              "Lead AI-compute runner, day 5. Extended ~12% over VWAP — a failed reclaim flips this to no-trade.",
-             [("chase extended far above VWAP", "pass"), ("enter in risk-off / backside", "pass")]),
+             [("chase extended far above VWAP", "pass"), ("enter in risk-off / backside", "pass")],
+             narrative="ai-compute"),
         cand("CHPS", "Chipset Labs", "Pullback to Moving Average", "pullback_to_ma", "swing", 0.80,
              "Buy the reclaim of the rising 10 EMA.",
              "Decisive loss of the 10 EMA.",
              "First sympathy to GPUX — same AI-compute narrative, so it is netted into one bet, not stacked.",
-             [("catch a knife below a broken MA", "pass")]),
+             [("catch a knife below a broken MA", "pass")],
+             narrative="ai-compute"),
         cand("BIOX", "Biox Therapeutics", "Earnings Gap Continuation", "earnings_gap_continuation", "event", 0.45,
              "Buy the gap-and-hold above the opening range.",
              "Lose the gap / fill.",
@@ -90,6 +94,10 @@ def sample_decision() -> DecisionPackage:
              [("chase a parabolic squeeze top", "fail")],
              fill=FillFeasibility(buyable=False, reason="Halted (LULD) at the open; no realistic entry.")),
     ]
+
+    # the portfolio is the REAL netting of these picks (GPUX+CHPS net to one ai-compute bet)
+    plan = plan_portfolio([Pick(symbol=c.symbol, narrative=c.narrative, confidence=c.confidence)
+                           for c in candidates], rg, SizingConfig())
 
     return DecisionPackage(
         date=_DAY,
@@ -104,8 +112,10 @@ def sample_decision() -> DecisionPackage:
             "Tape is frontside but extended; one distribution day on the leaders flips the gate.",
         ],
         portfolio=Portfolio(
-            total_exposure_budget=round(4.0 * rg, 2),     # max_total_exposure (4.0) gated by risk appetite
-            correlated_groups=[["GPUX", "CHPS"]],
+            total_exposure_budget=plan.total_exposure_budget,
+            correlated_groups=plan.correlated_groups,
+            total_exposure=plan.total_exposure,
+            capped=plan.capped,
         ),
     )
 

@@ -50,9 +50,12 @@ is missing. Best delivered as `CompositeSource` backends (§2).
 
 ## 5. Larger architecture
 
-- [ ] **Per-narrative-line phase tagging** (narrative clustering + a per-line regime read; today's `GCycle`
-  is global). Also **unlocks L3 correlation netting** — the dormant netting needs the narrative key
-  (`candidate.family`, which the agent does not set yet → each name is its own bet).
+- ✅ **L3 correlation netting activated** (2026-06-22) — the agent now emits a per-candidate
+  `narrative` (sympathy/theme key); `size_decision` nets same-narrative picks to one bet and surfaces
+  `total_exposure` + `capped` (the "one correlated bet" doctrine is now executable + shown on the
+  console). **Still open:** a true **per-narrative-line regime read** (a per-line `GCycle` vs today's
+  global one) needs theme-level market breadth we don't have offline — deferred until a theme/sector
+  feed lands (a §3-style data source).
 - [ ] **Intraday path**: real LULD halts / halt-count (tick feed), **MWCB / `Breaker` portfolio wiring**
   (P&L state machine + index-crash monitor), and **intraday fill-feasibility** (size-at-offer; the
   `eval/fill` module + per-candidate `taboo_check` are deferred for the same reason).

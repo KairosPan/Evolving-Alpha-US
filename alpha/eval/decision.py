@@ -36,6 +36,9 @@ class Candidate(BaseModel):
     # ── full DecisionPackage fields (US-1g, §4.1); all optional so US-1d construction still validates
     skill_id: str = ""
     family: str = ""                                  # runner|swing|event|meme (or "")
+    narrative: str = ""                               # sympathy/theme key for L3 correlation netting
+                                                      #   (e.g. "ai-compute"); "" = the name stands alone.
+                                                      #   Finer than family; the agent sets it (US-5).
     entry: str = ""
     exit_stop: str = ""
     size_tier: SizeTier | None = None                # from L3 sizing
@@ -49,6 +52,8 @@ class Portfolio(BaseModel):
     model_config = ConfigDict(frozen=True)
     total_exposure_budget: float = 0.0
     correlated_groups: list[list[str]] = Field(default_factory=list)
+    total_exposure: float = 0.0      # netted exposure actually taken (same-narrative names = one bet)
+    capped: bool = False             # raw netted exposure exceeded the risk-gated budget
 
 
 class DecisionPackage(BaseModel):

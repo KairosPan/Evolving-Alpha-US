@@ -62,6 +62,12 @@ def test_decisions_page_renders_sample_ticket(client):
     assert any(t in body.lower() for t in ("probe", "core", "heavy"))
 
 
+def test_decisions_page_shows_narrative_and_netted_exposure(client):
+    body = client.get("/decisions").text
+    assert "ai-compute" in body          # the shared narrative (chip + correlated group)
+    assert "Netted exposure" in body     # L3 netting surfaced
+
+
 def test_verdict_page_renders(client):
     body = client.get("/verdict").text
     assert "HCH" in body and "Hexpert" in body

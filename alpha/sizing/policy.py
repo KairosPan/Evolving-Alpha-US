@@ -18,18 +18,20 @@ def size_decision(decision: DecisionPackage, *, state: MarketState,
     enriches the human-confirmation surface (+ the DAgger record). FIREWALL-CLEAN: reads only the decision
     + state (no source fetch). Frozen models -> rebuilt via model_copy.
 
-    Narrative key for correlation is candidate.family (the agent does not set it yet -> "" -> each name is
-    its own bet, correlated_groups empty); netting auto-activates when family/narrative tagging lands.
-    DEFERRED (not this slice): fill_feasibility (needs the intraday inference path — no eval/fill module)
-    and per-candidate taboo_check (the L4 guard drops vetoed candidates rather than soft-annotating kept ones).
+    The correlation key is candidate.narrative (the sympathy/theme tag the agent emits, US-5): same
+    narrative -> one netted bet, so the portfolio reflects the "one correlated bet" doctrine. Untagged
+    ("") names stand alone. DEFERRED: fill_feasibility (needs the intraday inference path — no eval/fill
+    module), per-candidate taboo_check (the L4 guard drops vetoed candidates rather than soft-annotating),
+    and a per-narrative-line regime read (needs theme-level market breadth we don't have offline).
     """
     regime = decision.regime or GCycle().read(state)
     rg = regime.risk_gate
     sized = [c.model_copy(update={"size_tier": size_tier(c.confidence, rg)}) for c in decision.candidates]
-    plan = plan_portfolio([Pick(symbol=c.symbol, narrative=c.family, confidence=c.confidence)
+    plan = plan_portfolio([Pick(symbol=c.symbol, narrative=c.narrative, confidence=c.confidence)
                            for c in sized], rg, config)
     portfolio = Portfolio(total_exposure_budget=plan.total_exposure_budget,
-                          correlated_groups=plan.correlated_groups)
+                          correlated_groups=plan.correlated_groups,
+                          total_exposure=plan.total_exposure, capped=plan.capped)
     return decision.model_copy(update={"candidates": sized, "portfolio": portfolio})
 
 

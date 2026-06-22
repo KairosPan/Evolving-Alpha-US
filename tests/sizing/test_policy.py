@@ -39,6 +39,28 @@ def test_size_decision_falls_back_to_gcycle_when_regime_absent():
     assert out.portfolio is not None
 
 
+def test_size_decision_nets_same_narrative_to_one_bet():
+    # the narrative key now comes from candidate.narrative (set by the agent), activating L3 netting
+    regime = RegimeRead(phase="trend", confidence=0.7, frontside=True, risk_gate=0.9)
+    out = size_decision(_pkg(
+        Candidate(symbol="GPUX", confidence=0.9, narrative="ai-compute"),
+        Candidate(symbol="CHPS", confidence=0.9, narrative="ai-compute"),
+        Candidate(symbol="SOLO", confidence=0.9, narrative=""), regime=regime), state=_state())
+    assert out.portfolio.correlated_groups == [["CHPS", "GPUX"]]      # the two ai-compute names = one bet
+    # netted: ai-compute (one bet, heavy=1.0) + SOLO (heavy=1.0) = 2.0, NOT 3.0
+    assert out.portfolio.total_exposure == 2.0
+    assert out.portfolio.capped is False
+
+
+def test_size_decision_distinct_narratives_do_not_net():
+    regime = RegimeRead(phase="trend", confidence=0.7, frontside=True, risk_gate=0.9)
+    out = size_decision(_pkg(Candidate(symbol="A", confidence=0.9, narrative="x"),
+                             Candidate(symbol="B", confidence=0.9, narrative="y"), regime=regime),
+                        state=_state())
+    assert out.portfolio.correlated_groups == []                     # different themes -> two bets
+    assert out.portfolio.total_exposure == 2.0                       # 1.0 + 1.0
+
+
 def test_sizing_policy_sizes_inner_decision():
     class _Stub:
         def decide(self, state, universe):
