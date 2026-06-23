@@ -19,6 +19,8 @@
       <span class="mark">Evolving&#8209;<em>Alpha</em></span>
       <span class="sub">US · Regime Instrument</span>
     </a>
+    {% set b = brain_badge() %}
+    <span class="brain-badge">{{ "live · %d edits"|format(b.edit_count) if b.is_live else "seed baseline" }}</span>
     <div class="rail-label">Console</div>
     {% for item in nav %}
     <a class="nav-item {% if item.key == active %}is-active{% endif %}" href="{{ item.path }}"

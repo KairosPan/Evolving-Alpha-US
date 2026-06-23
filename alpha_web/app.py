@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from datetime import date as Date
 from pathlib import Path
 
@@ -20,18 +21,30 @@ from fastapi.templating import Jinja2Templates
 from alpha.eval.decision import DecisionPackage
 from alpha.eval.decision_store import DecisionStore
 from alpha.eval.verdict_store import VerdictStore
+from alpha.meta.store import LiveBrainStore, SessionStore
 from alpha_web import data_access as da
 from alpha_web import sample
 
 NAV = [
-    {"path": "/", "key": "deck", "label": "Deck"},
+    {"path": "/", "key": "teach", "label": "Teach"},
+    {"path": "/deck", "key": "deck", "label": "Deck"},
     {"path": "/doctrine", "key": "doctrine", "label": "Doctrine"},
     {"path": "/memory", "key": "memory", "label": "Memory"},
     {"path": "/skills", "key": "skills", "label": "Skills"},
     {"path": "/decisions", "key": "decisions", "label": "Decisions"},
     {"path": "/verdict", "key": "verdict", "label": "Verdict"},
-    {"path": "/evolution", "key": "evolution", "label": "Evolution"},
+    {"path": "/evolution", "key": "evolution", "label": "Autonomous"},
 ]
+
+_MUTATION_LOCK = threading.Lock()
+
+
+def _brain_store() -> LiveBrainStore:
+    return LiveBrainStore(os.environ.get("ALPHA_LIVE_BRAIN_DIR", "./state/brain"))
+
+
+def _session_store() -> SessionStore:
+    return SessionStore(os.environ.get("ALPHA_SESSIONS_DIR", "./state/sessions"))
 
 SKILL_STATUSES = ["active", "incubating", "dormant", "retired"]
 SKILL_TYPES = ["pattern", "failure_detector", "feature"]
@@ -52,6 +65,7 @@ def _make_templates() -> Jinja2Templates:
         tape_regime=sample.sample_regime(),       # the omnipresent regime read (sample state)
         tape_state=sample.sample_market_state(),
         fmt_val=lambda v: ", ".join(map(str, v)) if isinstance(v, list) else str(v),
+        brain_badge=da.brain_badge,
     )
     return t
 
@@ -163,13 +177,17 @@ def create_app() -> FastAPI:
     def health() -> JSONResponse:
         return JSONResponse({"ok": True})
 
-    @app.get("/")
+    @app.get("/deck")
     def deck(request: Request):
         state = da.load_brain()
         return render(request, "dashboard.html", {
             "active": "deck", "stats": da.brain_stats(state),
             "regime": sample.sample_regime(), "market": sample.sample_market_state(),
         })
+
+    @app.get("/")
+    def cockpit(request: Request):
+        return render(request, "cockpit.html", {"active": "teach", "sessions": _session_store().list()[:20]})
 
     @app.get("/doctrine")
     def doctrine(request: Request):

@@ -18,7 +18,7 @@ def test_health(client):
     assert r.status_code == 200 and r.json()["ok"] is True
 
 
-@pytest.mark.parametrize("path", ["/", "/doctrine", "/memory", "/skills", "/decisions", "/verdict", "/evolution"])
+@pytest.mark.parametrize("path", ["/", "/deck", "/doctrine", "/memory", "/skills", "/decisions", "/verdict", "/evolution"])
 def test_pages_render(client, path):
     r = client.get(path)
     assert r.status_code == 200
@@ -27,7 +27,7 @@ def test_pages_render(client, path):
 
 
 def test_dashboard_shows_brain_counts_and_the_phase_cycle(client):
-    body = client.get("/").text
+    body = client.get("/deck").text            # deck moved from / to /deck
     assert "16" in body and "12" in body          # skills / doctrine counts
     for phase in ("Washout", "Recovery", "Ignition", "Trend", "Distribution", "Flush"):
         assert phase in body                       # the six-phase cycle is on the deck
