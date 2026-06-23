@@ -107,3 +107,22 @@ def test_apply_on_already_applied_session_is_rejected(client, monkeypatch):
     sess.status = "applied"; store.put(sess)
     r = client.post(f"/evolve/{sess.session_id}/apply")
     assert r.status_code == 200 and "not open" in r.text.lower()
+
+
+def test_rollback_restores_pre_apply_brain(client, monkeypatch):
+    store, sess, sid_skill = _seed_session_with_one_edit(client, monkeypatch)
+    eid = sess.edits[0].edit_id
+    client.post(f"/evolve/{sess.session_id}/edit/{eid}", data={"action": "accept"})
+    client.post(f"/evolve/{sess.session_id}/apply")
+    r = client.post(f"/evolve/rollback/{sess.session_id}")
+    assert r.status_code == 200
+    from alpha.meta.store import LiveBrainStore
+    import os
+    assert LiveBrainStore(os.environ["ALPHA_LIVE_BRAIN_DIR"]).edit_count() == 0
+    assert "rolled back" in store.get(sess.session_id).notes[0].lower()
+
+
+def test_session_detail_page_renders(client, monkeypatch):
+    store, sess, _ = _seed_session_with_one_edit(client, monkeypatch)
+    r = client.get(f"/evolve/sessions/{sess.session_id}")
+    assert r.status_code == 200 and sess.session_id in r.text

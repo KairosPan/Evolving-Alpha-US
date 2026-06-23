@@ -303,6 +303,36 @@ def create_app() -> FastAPI:
         return render(request, "partials/apply_result.html",
                       {"error": "", "session": sess, "applied": applied})
 
+    @app.post("/evolve/{session_id}/direction/regenerate")
+    def regenerate_directions(request: Request, session_id: str, comment: str = Form("")):
+        store = _session_store()
+        sess = store.get(session_id)
+        agent, _ = _meta_agent()
+        sess.directions = agent.propose_directions(sess.sources[0], comment=comment or None)
+        store.put(sess)
+        return render(request, "partials/directions.html", {"error": "", "directions": sess.directions, "session": sess})
+
+    @app.get("/evolve/sessions")
+    def sessions_index(request: Request):
+        return render(request, "cockpit.html", {"active": "teach", "sessions": _session_store().list()[:50]})
+
+    @app.get("/evolve/sessions/{session_id}")
+    def session_detail(request: Request, session_id: str):
+        sess = _session_store().get(session_id)
+        return render(request, "session_detail.html", {"active": "teach", "session": sess})
+
+    @app.post("/evolve/rollback/{session_id}")
+    def rollback(request: Request, session_id: str):
+        sstore = _session_store()
+        sess = sstore.get(session_id)
+        if sess and sess.snapshot_before:
+            with _MUTATION_LOCK:
+                _brain_store().restore(sess.snapshot_before)
+            sess.notes.append("rolled back to pre-apply snapshot")
+            sstore.put(sess)
+        return render(request, "partials/apply_result.html",
+                      {"error": "rolled back" if sess else "no snapshot", "session": sess, "applied": []})
+
     @app.post("/evolve/ingest")
     def ingest(request: Request, text: str = Form(""), url: str = Form("")):
         if url.strip():
