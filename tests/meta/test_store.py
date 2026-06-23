@@ -1,4 +1,5 @@
-from alpha.meta.store import LiveBrainStore
+from alpha.meta.store import LiveBrainStore, SessionStore
+from alpha.meta.models import Session
 from alpha.harness.edit_log import EditLog
 
 
@@ -32,3 +33,17 @@ def test_snapshot_and_restore(tmp_path):
     assert store.edit_count() == 1
     store.restore(snap)
     assert store.edit_count() == 0                      # rolled back to pre-edit
+
+
+def test_session_store_put_get_list_newest_first(tmp_path):
+    store = SessionStore(tmp_path)
+    store.put(Session(session_id="20260101T000000000000-aaaa"))
+    store.put(Session(session_id="20260102T000000000000-bbbb", status="applied"))
+    assert store.get("20260102T000000000000-bbbb").status == "applied"
+    assert store.get("missing") is None
+    ids = [s.session_id for s in store.list()]
+    assert ids == ["20260102T000000000000-bbbb", "20260101T000000000000-aaaa"]
+
+
+def test_session_store_missing_dir_is_empty(tmp_path):
+    assert SessionStore(tmp_path / "nope").list() == []

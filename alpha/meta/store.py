@@ -62,3 +62,34 @@ class LiveBrainStore:
 
     def restore(self, snapshot_path: str) -> None:
         _atomic_write(self._brain, Path(snapshot_path).read_text(encoding="utf-8"))
+
+
+from alpha.meta.models import Session
+
+
+class SessionStore:
+    """Flat by-id store of teaching Sessions (atomic write, newest-first listing)."""
+
+    def __init__(self, root: str | Path) -> None:
+        self._root = Path(root)
+
+    def _path(self, session_id: str) -> Path:
+        return self._root / f"{session_id}.json"
+
+    def put(self, session: Session) -> Path:
+        p = self._path(session.session_id)
+        _atomic_write(p, session.model_dump_json())
+        return p
+
+    def get(self, session_id: str) -> Session | None:
+        p = self._path(session_id)
+        if not p.exists():
+            return None
+        return Session.model_validate_json(p.read_text(encoding="utf-8"))
+
+    def list(self) -> list[Session]:
+        if not self._root.is_dir():
+            return []
+        out = [Session.model_validate_json(p.read_text(encoding="utf-8"))
+               for p in self._root.glob("*.json")]
+        return sorted(out, key=lambda s: s.session_id, reverse=True)
