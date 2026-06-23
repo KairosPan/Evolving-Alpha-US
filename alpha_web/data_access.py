@@ -7,6 +7,7 @@ the regime colour language; its membership/order/frontside set mirrors `alpha.re
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from alpha.harness.loader import load_seeds
 from alpha.harness.memory import Lesson
 from alpha.harness.skill import Skill
 from alpha.harness.state import HarnessState
+from alpha.meta.store import LiveBrainStore
 
 # ── locations ────────────────────────────────────────────────────────────────
 WEB_DIR = Path(__file__).resolve().parent
@@ -48,9 +50,26 @@ PHASES: list[Phase] = [
 PHASE_BY_KEY: dict[str, Phase] = {p.key: p for p in PHASES}
 
 
+def _live_store() -> LiveBrainStore | None:
+    root = os.environ.get("ALPHA_LIVE_BRAIN_DIR")
+    return LiveBrainStore(root) if root else None
+
+
 def load_brain(seeds_dir: str | Path = SEEDS_DIR) -> HarnessState:
-    """Assemble the live HarnessState H=(doctrine, skills, memory) from the shipped seeds."""
+    """The live brain: prefer the LiveBrainStore (ALPHA_LIVE_BRAIN_DIR) when it exists, else the
+    frozen seeds. Side-effect-free: a GET never writes (init-from-seeds happens only on apply)."""
+    store = _live_store()
+    if store is not None and store.is_live():
+        return store.load()[0]
     return load_seeds(seeds_dir)
+
+
+def brain_badge() -> dict:
+    """Live-vs-seed status + edit count for the console badge."""
+    store = _live_store()
+    if store is not None and store.is_live():
+        return {"is_live": True, "edit_count": store.edit_count()}
+    return {"is_live": False, "edit_count": 0}
 
 
 # ── stats ────────────────────────────────────────────────────────────────────

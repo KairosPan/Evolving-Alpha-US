@@ -4,3 +4,9 @@ import pytest
 
 pytest.importorskip("fastapi", reason="install the web extra: pip install -e '.[web]'")
 pytest.importorskip("jinja2", reason="install the web extra: pip install -e '.[web]'")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_state(tmp_path, monkeypatch):
+    monkeypatch.setenv("ALPHA_LIVE_BRAIN_DIR", str(tmp_path / "brain"))
+    monkeypatch.setenv("ALPHA_SESSIONS_DIR", str(tmp_path / "sessions"))

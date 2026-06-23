@@ -68,3 +68,22 @@ def test_split_doctrine_separates_redlines_from_plays():
     assert immutable and all(e.immutable for e in immutable)
     assert mutable and all(not e.immutable for e in mutable)
     assert any(e.section == "trend_play" for e in mutable)
+
+
+def test_load_brain_prefers_live_store_when_present(tmp_path, monkeypatch):
+    from alpha_web import data_access as da
+    from alpha.meta.store import LiveBrainStore
+    store = LiveBrainStore(tmp_path / "brain")
+    h, log = store.load()
+    log.append("patch_skill", "skill", h.skills.all()[0].skill_id, "update", "x", rationale="r")
+    store.save(h, log)
+    monkeypatch.setenv("ALPHA_LIVE_BRAIN_DIR", str(tmp_path / "brain"))
+    assert da.brain_badge() == {"is_live": True, "edit_count": 1}
+    da.load_brain()                      # must not raise and must not write seeds over the store
+    assert LiveBrainStore(tmp_path / "brain").edit_count() == 1
+
+
+def test_brain_badge_seed_baseline_when_empty(tmp_path, monkeypatch):
+    from alpha_web import data_access as da
+    monkeypatch.setenv("ALPHA_LIVE_BRAIN_DIR", str(tmp_path / "empty"))
+    assert da.brain_badge() == {"is_live": False, "edit_count": 0}

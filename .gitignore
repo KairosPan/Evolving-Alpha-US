@@ -44,3 +44,6 @@ __pycache__/
 .env
 .env.*
 *.env
+
+# Live brain + teaching sessions (regenerable local state)
+/state/
