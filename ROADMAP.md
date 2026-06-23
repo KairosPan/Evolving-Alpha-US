@@ -6,8 +6,9 @@ which records **what's built** (the append-only status log).
 **Discipline (avoid drift):** every item lives in exactly one place. Not-yet-done → here. Done → moved
 out of here and recorded in `docs/PROJECT_STATE.md`. When an item ships, delete it from this file.
 
-Status as of 2026-06-22: `main` @ `7945672`, 413 tests green. Alpaca data source is live-verified and
-vendor-swappable (`ALPHA_DATA_SOURCE`).
+Status as of 2026-06-23: `main` @ `38f0879`, 520 tests green. Alpaca data source is live-verified and
+vendor-swappable (`ALPHA_DATA_SOURCE`); the **interactive teaching cockpit** shipped (§6) — the console
+is no longer read-only.
 
 ---
 
@@ -84,6 +85,37 @@ follow-ups are **all done** — every console page now reads real artifacts a ru
 Optional future polish (not blocking): a live daily production loop that writes the stores
 automatically (instead of the on-demand producer scripts); HTMX-swap the date/run pickers; auth +
 non-localhost serving if it ever leaves the desk.
+
+### Teaching cockpit (the meta-agent channel) — shipped 2026-06-23, follow-ups open
+
+✅ **Interactive teaching cockpit shipped** (`main` @ `38f0879`, subagent-driven build + opus whole-branch
+review) — Evolution is now the **home page**: paste text/URL → LLM (Claude, or DeepSeek as refiner)
+proposes *directions* → a dry-run *edit queue* against `H=(doctrine,skills,memory)` → accept/reject/comment
+per edit → **apply** commits through the same gated meta-tools the autonomous Refiner uses, into a
+persistent **live brain** (seeds stay frozen as the `Hexpert` baseline); each round a rollback-able
+*session*. Spec: `docs/superpowers/specs/2026-06-23-meta-agent-teaching-cockpit-design.md`. Open
+follow-ups (also in spec §11):
+
+- [ ] **Self-learning channel** — the agent's **second learning channel**: a reflection→directions stage
+  on top of the Refiner's evidence path, surfaced into the *same* cockpit, so the agent proposes
+  evolutions from its **own task runs** (realized-outcome trajectories), not just from human-fed content.
+  Teaching (human→agent) ships today; self-learning (agent→itself) is the headline next step. Own
+  brainstorm→spec→plan arc.
+- [ ] **Image / chart ingestion** (Claude vision) — teach from a screenshot or `复盘` chart; extend the LLM
+  client for image content blocks + upload handling.
+- [ ] **`tweak` action** — manual inline arg-editing of a proposed edit (no LLM); the spec §8 route table
+  lists it, but v1 shipped `accept` / `reject` / `comment→re-propose` + `apply` only.
+- [ ] **Auto-resume an in-flight draft on `GET /`** — today a refresh starts a fresh cockpit (drafts persist
+  + are browsable); render partials matching `Session.status` and re-validate dangling `target_id`s.
+- [ ] **Post-apply red-line lint** — flag a taught skill/lesson whose `taboo`/`entry` contradicts an
+  immutable doctrine red-line (only doctrine *text* is write-protected today).
+- [ ] **General meta-agent core** — lift teach + self-learn off the trading-specific `doctrine/skills/memory`
+  onto a domain-agnostic representation (trading = the first instance).
+- [ ] **Branchable named brains** ("aggressive" vs "disciplined") + snapshot retention/pruning.
+- [ ] **SSRF IP-range hardening** — **BLOCKING precondition before any non-localhost / multi-user serving.**
+  The http(s) **scheme allowlist is DONE** (`38f0879`, closed the `file://` Local-File-Disclosure vector);
+  still required: reject private/loopback/link-local ranges + the cloud-metadata IP `169.254.169.254`
+  (DNS-rebinding-safe).
 
 ## 7. Known tradeoffs / review leftovers (accepted — no action planned)
 
