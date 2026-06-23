@@ -248,13 +248,23 @@ def create_app() -> FastAPI:
     def choose_direction(request: Request, session_id: str, direction_id: str = Form(...), comment: str = Form("")):
         store = _session_store()
         sess = store.get(session_id)
-        if sess is None:
+        if sess is None or not sess.sources:
             return render(request, "partials/edit_queue.html", {"error": "session not found", "session": None, "edits": []})
         sess.chosen_direction_id = direction_id
         sess.direction_comment = comment
         direction = next((d for d in sess.directions if d.direction_id == direction_id), None)
-        agent, _ = _meta_agent()
-        sess.edits = agent.expand_to_edits(sess.sources[0], direction, comment=comment or None)
+        if direction is None:
+            return render(request, "partials/edit_queue.html",
+                          {"error": "that direction is no longer available — start a new session",
+                           "session": sess, "edits": []})
+        try:
+            agent, _ = _meta_agent()
+            sess.edits = agent.expand_to_edits(sess.sources[0], direction, comment=comment or None)
+        except Exception as e:
+            if _llm_unavailable(e):
+                return render(request, "partials/edit_queue.html",
+                              {"error": "the model is unavailable — try again", "session": sess, "edits": []})
+            raise
         store.put(sess)
         return render(request, "partials/edit_queue.html", {"error": "", "session": sess, "edits": sess.edits})
 
@@ -272,8 +282,19 @@ def create_app() -> FastAPI:
             row.status = "rejected"
         elif action == "comment" and comment.strip():
             direction = next((d for d in sess.directions if d.direction_id == sess.chosen_direction_id), None)
-            agent, _ = _meta_agent()
-            new_row = agent.repropose_edit(sess.sources[0], direction, row, comment.strip())
+            if direction is None or not sess.sources:
+                row.apply_reason = "direction no longer available — accept, reject, or start a new session"
+                store.put(sess)
+                return render(request, "partials/edit_row.html", {"e": row, "session": sess})
+            try:
+                agent, _ = _meta_agent()
+                new_row = agent.repropose_edit(sess.sources[0], direction, row, comment.strip())
+            except Exception as e:
+                if _llm_unavailable(e):
+                    row.apply_reason = "the model is unavailable — try again"
+                    store.put(sess)
+                    return render(request, "partials/edit_row.html", {"e": row, "session": sess})
+                raise
             sess.edits = [new_row if e.edit_id == edit_id else e for e in sess.edits]
             row = new_row
         store.put(sess)
@@ -307,8 +328,17 @@ def create_app() -> FastAPI:
     def regenerate_directions(request: Request, session_id: str, comment: str = Form("")):
         store = _session_store()
         sess = store.get(session_id)
-        agent, _ = _meta_agent()
-        sess.directions = agent.propose_directions(sess.sources[0], comment=comment or None)
+        if sess is None or not sess.sources:
+            return render(request, "partials/directions.html",
+                          {"error": "session not found — start a new one", "directions": [], "session": None})
+        try:
+            agent, _ = _meta_agent()
+            sess.directions = agent.propose_directions(sess.sources[0], comment=comment or None)
+        except Exception as e:
+            if _llm_unavailable(e):
+                return render(request, "partials/directions.html",
+                              {"error": "the model is unavailable — try again", "directions": [], "session": sess})
+            raise
         store.put(sess)
         return render(request, "partials/directions.html", {"error": "", "directions": sess.directions, "session": sess})
 

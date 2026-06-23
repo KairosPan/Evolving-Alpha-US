@@ -12,8 +12,8 @@
             hx-target="#row-{{ e.edit_id }}" hx-swap="outerHTML">Reject</button>
     <input name="comment" placeholder="comment → re-propose"
            hx-post="/evolve/{{ session.session_id }}/edit/{{ e.edit_id }}" hx-vals='{"action":"comment"}'
-           hx-trigger="keyup[key=='Enter']" hx-target="#row-{{ e.edit_id }}" hx-swap="outerHTML" hx-indicator="#spinR">
-    <span id="spinR" class="htmx-indicator">·thinking·</span>
+           hx-trigger="keyup[key=='Enter']" hx-target="#row-{{ e.edit_id }}" hx-swap="outerHTML" hx-indicator="#spinR-{{ e.edit_id }}">
+    <span id="spinR-{{ e.edit_id }}" class="htmx-indicator">·thinking·</span>
   </div>
   {% endif %}
 </div>

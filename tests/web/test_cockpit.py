@@ -126,3 +126,42 @@ def test_session_detail_page_renders(client, monkeypatch):
     store, sess, _ = _seed_session_with_one_edit(client, monkeypatch)
     r = client.get(f"/evolve/sessions/{sess.session_id}")
     assert r.status_code == 200 and sess.session_id in r.text
+
+
+# ── "never 500" invariant tests ────────────────────────────────────────────────
+
+def test_choose_direction_bogus_id_returns_200_graceful(client, monkeypatch):
+    """choose_direction with a stale/bogus direction_id must NOT 500."""
+    store, sess, _ = _seed_session_with_one_edit(client, monkeypatch)
+    r = client.post(
+        f"/evolve/{sess.session_id}/direction",
+        data={"direction_id": "bogus-does-not-exist", "comment": ""},
+    )
+    assert r.status_code == 200
+    assert "no longer available" in r.text.lower() or "start a new session" in r.text.lower()
+
+
+def test_regenerate_directions_missing_session_returns_200_graceful(client, monkeypatch):
+    """regenerate_directions with a non-existent session_id must NOT 500."""
+    monkeypatch.setenv("ALPHA_REFINER_PROVIDER", "mock")
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE", '{"directions": []}')
+    r = client.post("/evolve/non-existent-session/direction/regenerate", data={"comment": ""})
+    assert r.status_code == 200
+    assert "not found" in r.text.lower() or "start a new" in r.text.lower()
+
+
+def test_edit_action_comment_stale_direction_returns_200_graceful(client, monkeypatch):
+    """edit_action comment branch with a stale chosen_direction_id must NOT 500."""
+    store, sess, _ = _seed_session_with_one_edit(client, monkeypatch)
+    # corrupt the chosen_direction_id so it resolves to None
+    sess.chosen_direction_id = "stale-direction-id"
+    store.put(sess)
+    eid = sess.edits[0].edit_id
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE", '{"ops": []}')
+    r = client.post(
+        f"/evolve/{sess.session_id}/edit/{eid}",
+        data={"action": "comment", "comment": "rethink this"},
+    )
+    assert r.status_code == 200
+    # must not have 500'd; row should still be rendered with a note
+    assert "500" not in r.text
