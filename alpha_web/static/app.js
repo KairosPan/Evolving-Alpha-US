@@ -7,3 +7,13 @@ document.body.addEventListener("htmx:beforeRequest", (e) => {
 document.body.addEventListener("htmx:afterSwap", (e) => {
   if (e.detail.target) e.detail.target.style.opacity = "";
 });
+
+// Cockpit loading-state affordance: disable submitting button while a request is pending
+document.body.addEventListener('htmx:beforeRequest', (e) => {
+  const btn = e.detail.elt.querySelector('button[type=submit]') || e.detail.elt;
+  if (btn && btn.tagName === 'BUTTON') btn.disabled = true;
+});
+document.body.addEventListener('htmx:afterRequest', (e) => {
+  const btn = e.detail.elt.querySelector('button[type=submit]') || e.detail.elt;
+  if (btn && btn.tagName === 'BUTTON') btn.disabled = false;
+});
