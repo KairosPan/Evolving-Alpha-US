@@ -50,3 +50,38 @@ def test_direction_expands_to_edit_queue(client, monkeypatch):
                     data={"direction_id": sess.directions[0].direction_id, "comment": ""})
     assert r.status_code == 200 and "patch_skill" in r.text and sid_skill in r.text
     assert store.get(sess.session_id).edits                      # persisted
+
+
+def _seed_session_with_one_edit(client, monkeypatch):
+    from alpha.harness.loader import load_seeds
+    sid_skill = load_seeds("seeds").skills.all()[0].skill_id
+    monkeypatch.setenv("ALPHA_REFINER_PROVIDER", "mock")
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE", '{"directions": [{"title": "t"}]}')
+    client.post("/evolve/ingest", data={"text": "writeup"})
+    import os
+    from alpha.meta.store import SessionStore
+    store = SessionStore(os.environ["ALPHA_SESSIONS_DIR"])
+    sess = store.list()[0]
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE",
+                       '{"ops": [{"tool": "patch_skill", "args": {"skill_id": "%s", "notes": "n"}, "rationale": "r"}]}' % sid_skill)
+    client.post(f"/evolve/{sess.session_id}/direction",
+                data={"direction_id": sess.directions[0].direction_id, "comment": ""})
+    return store, store.get(sess.session_id), sid_skill
+
+
+def test_accept_marks_row_accepted(client, monkeypatch):
+    store, sess, _ = _seed_session_with_one_edit(client, monkeypatch)
+    eid = sess.edits[0].edit_id
+    r = client.post(f"/evolve/{sess.session_id}/edit/{eid}", data={"action": "accept"})
+    assert r.status_code == 200 and "accepted" in r.text
+    assert store.get(sess.session_id).edits[0].status == "accepted"
+
+
+def test_comment_reproposes_row_keeping_id(client, monkeypatch):
+    store, sess, sid_skill = _seed_session_with_one_edit(client, monkeypatch)
+    eid = sess.edits[0].edit_id
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE",
+                       '{"ops": [{"tool": "patch_skill", "args": {"skill_id": "%s", "notes": "revised"}, "rationale": "r2"}]}' % sid_skill)
+    r = client.post(f"/evolve/{sess.session_id}/edit/{eid}", data={"action": "comment", "comment": "tighter"})
+    assert r.status_code == 200 and "revised" in r.text
+    assert store.get(sess.session_id).edits[0].edit_id == eid

@@ -257,6 +257,27 @@ def create_app() -> FastAPI:
         store.put(sess)
         return render(request, "partials/edit_queue.html", {"error": "", "session": sess, "edits": sess.edits})
 
+    @app.post("/evolve/{session_id}/edit/{edit_id}")
+    def edit_action(request: Request, session_id: str, edit_id: str,
+                    action: str = Form(...), comment: str = Form("")):
+        store = _session_store()
+        sess = store.get(session_id)
+        row = next((e for e in (sess.edits if sess else []) if e.edit_id == edit_id), None)
+        if row is None:
+            return render(request, "partials/edit_row.html", {"e": None, "session": sess})
+        if action == "accept":
+            row.status = "accepted"
+        elif action == "reject":
+            row.status = "rejected"
+        elif action == "comment" and comment.strip():
+            direction = next((d for d in sess.directions if d.direction_id == sess.chosen_direction_id), None)
+            agent, _ = _meta_agent()
+            new_row = agent.repropose_edit(sess.sources[0], direction, row, comment.strip())
+            sess.edits = [new_row if e.edit_id == edit_id else e for e in sess.edits]
+            row = new_row
+        store.put(sess)
+        return render(request, "partials/edit_row.html", {"e": row, "session": sess})
+
     @app.post("/evolve/ingest")
     def ingest(request: Request, text: str = Form(""), url: str = Form("")):
         if url.strip():
