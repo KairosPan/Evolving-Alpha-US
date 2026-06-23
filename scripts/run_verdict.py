@@ -59,17 +59,19 @@ def split_windows(calendar: list[Date], start: Date, end: Date, n: int, *, horiz
 
 
 def run_verdict(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS_DIR, horizon: int = 2,
-                windows: int = 1, shadow: bool = False, agent_llm_factory=None, refiner_llm_factory=None):
+                windows: int = 1, shadow: bool = False, screen: bool = True,
+                agent_llm_factory=None, refiner_llm_factory=None):
     """Run the §9/§10 comparison over the captured `source`. Returns a ComparisonReport (windows<=1) or a
     MultiWindowReport (windows>1). Factories default to temp=0 `make_client` clients; tests inject MockLLM.
 
     All arms get a FRESH H / LLM client / store (factory injection — no cross-arm pollution). `screen`
-    defaults ON via LoopConfig(), so HCH and the Hexpert/Hmin arms are guarded symmetrically."""
+    defaults ON (production posture), so HCH and the Hexpert/Hmin arms are guarded symmetrically; pass
+    screen=False (CLI --no-screen) for the raw-agent-skill diagnostic that bypasses the L4 regime veto."""
     agent_llm_factory = agent_llm_factory or (lambda: make_client("agent"))
     refiner_llm_factory = refiner_llm_factory or (lambda: make_client("refiner"))
     harness_factory = lambda: load_seeds(seeds_dir)
     store_factory = lambda: SnapshotStore(tempfile.mkdtemp())
-    cfg = LoopConfig(horizon=horizon)                 # screen defaults ON (production posture)
+    cfg = LoopConfig(horizon=horizon, screen=screen)  # screen ON = production posture; OFF = raw-skill
     kw = dict(agent_llm_factory=agent_llm_factory, refiner_llm_factory=refiner_llm_factory,
               store_factory=store_factory, loop_config=cfg, shadow=shadow)
     wins = split_windows(source.trading_calendar(), start, end, windows, horizon=horizon)
@@ -177,15 +179,18 @@ def main() -> None:
     ap.add_argument("--windows", type=int, default=1, help="split into N independent windows (multi-seed surrogate)")
     ap.add_argument("--horizon", type=int, default=2, help="hold horizon (>=2; no same-day round-trip)")
     ap.add_argument("--shadow", action="store_true", help="seed HCH's paired breaker with the Hexpert series")
+    ap.add_argument("--no-screen", action="store_true", help="bypass the L4 regime veto (raw-agent-skill "
+                    "diagnostic, NOT the production posture)")
     ap.add_argument("--json", metavar="PATH", help="also write the console JSON (web verdict view) to PATH "
                     "(single comparison; pair with --windows 1, the default)")
     args = ap.parse_args()
 
     source = SnapshotSource(PITStore(Path(args.pit_root)))
+    screen = not args.no_screen
     temp = os.environ.get("ALPHA_LLM_TEMPERATURE", "0")
     print("=== Evolving-Alpha-US verdict run ===")
     print(f"window: {args.start} .. {args.end}   horizon={args.horizon}  windows={args.windows}  "
-          f"screen={LoopConfig().screen}  shadow={args.shadow}")
+          f"screen={screen}  shadow={args.shadow}")
     for role in ("agent", "refiner"):
         prov = os.environ.get(f"ALPHA_{role.upper()}_PROVIDER", "(default)")
         model = os.environ.get(f"ALPHA_{role.upper()}_MODEL", "(default)")
@@ -195,7 +200,7 @@ def main() -> None:
     print()
 
     result = run_verdict(source, args.start, args.end, horizon=args.horizon,
-                         windows=args.windows, shadow=args.shadow)
+                         windows=args.windows, shadow=args.shadow, screen=screen)
     if isinstance(result, MultiWindowReport):
         print(format_multi(result))
         if args.json:
@@ -204,7 +209,7 @@ def main() -> None:
         print(format_comparison(result))
         if args.json:
             view = comparison_to_view(result, start=args.start, end=args.end,
-                                      horizon=args.horizon, screen=LoopConfig().screen)
+                                      horizon=args.horizon, screen=screen)
             Path(args.json).write_text(json.dumps(view, indent=2), encoding="utf-8")
             print(f"  wrote console JSON -> {args.json}  (ALPHA_WEB_VERDICT={args.json} python -m alpha_web)")
 

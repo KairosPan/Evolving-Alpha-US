@@ -13,11 +13,18 @@ vendor-swappable (`ALPHA_DATA_SOURCE`).
 
 ## 1. Next (highest leverage, doable now)
 
-- [ ] **Render the empirical HCH-vs-Hexpert verdict** — the one first-class step still owed. The apparatus
-  (`scripts/run_verdict.py`) is built + offline-verified; it needs a live temp=0 run on a captured window.
-  Requires: `pip install -e ".[live]"`, `APCA_*` keys (done — `.env.alpaca`), and LLM keys
-  (`DEEPSEEK_API_KEY` + `ANTHROPIC_API_KEY`). Flow: `capture_window` → `run_verdict` (commands in
-  `docs/PROJECT_STATE.md` → Common Commands). Honest expectation: parity (HCH ≈ Hexpert).
+- ✅ **Render the empirical HCH-vs-Hexpert verdict** (2026-06-22) — DONE. Live temp=0 run (DeepSeek for
+  both agent + Refiner) over a real Alpaca Q1-2026 PIT window. **Verdict = `flat` (parity)** in both the
+  production posture (screen ON) and the raw-skill diagnostic (screen OFF) — HCH ≈ Hexpert, HCH leaning
+  marginally positive but inside the noise band; the capability breaker froze HCH the moment it slipped.
+  Full numbers + method + caveats: `docs/findings/2026-06-22-us-hch-vs-hexpert-verdict.md`.
+- [ ] **Recalibrate `GCycle` for the US tape (frontside / follow-through).** The verdict run surfaced a
+  real A-share→US transfer gap: GCycle's `follow_through_rate ≥ 0.4` frontside test is the **连板
+  (consecutive limit-up)** signature — abundant in a 10%-limit market, structurally rare in the US, so
+  ~35/59 days read "distribution" (backside) → the immutable `no_chase_risk_off` veto suppresses ~all new
+  longs → the production-posture verdict is thin-by-construction. Recalibrate the phase thresholds / the
+  frontside definition against US data (the Refiner is meant to calibrate these vs the oracle in US-2; a
+  manual US prior is the faster first step) so the production posture can trade. See the findings doc §4.
 
 ## 2. Data-source layer (pluggable; mechanism shipped 2026-06-22)
 

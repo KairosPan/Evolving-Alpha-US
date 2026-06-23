@@ -35,6 +35,11 @@ __pycache__/
 /runs/
 *.parquet
 
+# Verdict run artifacts (PIT stores + rendered outputs — regenerable, keep local, never commit)
+/verdict_pit*/
+/verdict_*.json
+/verdict_universe.txt
+
 # Secrets / local credentials — NEVER commit (Alpaca + LLM keys)
 .env
 .env.*

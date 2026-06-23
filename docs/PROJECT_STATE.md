@@ -421,10 +421,25 @@ default 0) and prints the `StatVerdict` + offense/defense/by-family `contributio
 defaults ON, so all four arms are guarded symmetrically (the production posture from the richer-state wiring).
 Offline-verified 6 ways (in-memory, multi-window, on-disk capture→SnapshotSource round-trip, shadow path,
 formatters, window-split edges) + a live CLI mock run; holistic review folded the shadow-path test gap. Full
-suite **380 tests green**. **The actual pass/fail verdict is still NOT rendered** — that needs real APCA +
-LLM keys (absent here) to run: (1) `python scripts/capture_window.py <start> <end> verdict_pit SYM…` to build
-the offline PIT DB, then (2) set `ALPHA_AGENT_*`/`ALPHA_REFINER_*` + keys and
-`python scripts/run_verdict.py verdict_pit <start> <end> --windows N`. Honest expectation = parity (HCH ≈ Hexpert).
+suite **380 tests green**. (Run rendered live 2026-06-22 — next entry.)
+
+**Empirical HCH-vs-Hexpert verdict RENDERED — Complete (2026-06-22). ROADMAP §1 closed.** First live,
+deterministic (temp=0) run with **real DeepSeek driving both the agent and the Refiner** over a real Alpaca
+**Q1-2026** PIT window (`2026-01-02..2026-03-27`). Universe = a **liquidity-ranked broad 800-name**
+cross-section (`scripts/capture_broad.py`: batch multi-symbol bars → rank by dollar-volume → `capture_window`),
+because a narrow hand-picked basket makes the breadth-based regime read meaningless. **Result = `flat`
+(parity) in BOTH postures:** production (screen ON) HCH +0.0052 vs Hexpert −0.0055 → paired mean_diff +0.0005,
+CI [−0.0001, +0.0014], `flat`; raw-skill (screen OFF, new `--no-screen` flag) HCH −0.0090 vs Hexpert −0.0168 →
+paired mean_diff +0.0043, CI [−0.0027, +0.0085], `flat`. HCH ≈ Hexpert (leans marginally positive, inside
+noise) — the CN §1 "self-evolution net-neutral, not harmful" conclusion reproduces on US data, and HCH never
+degrades below frozen (the self-relative capability breaker froze HCH at 2026-02-10 in the screen-OFF run when
+it began to slip). Surfaced an **A-share→US transfer gap**: GCycle's `follow_through_rate≥0.4` frontside test
+is the 连板 signature (rare in the US) → 35/59 days read backside → the production posture trades thin (now a
+ROADMAP §1 follow-up). Hmin_chase's screen-OFF +0.35 is one **reverse-split RAW-print artifact** (SOXS
+2026-03-03 +1936%, median −0.005), which screen-ON's reverse-split veto correctly drops — agent arms
+uncontaminated. Console JSON written (`verdict_screenON.json` / `verdict_screenOFF.json`). Full method +
+numbers + caveats: **`docs/findings/2026-06-22-us-hch-vs-hexpert-verdict.md`**. (Keys live only in gitignored
+`.env.alpaca` / `.env.deepseek`.)
 
 **L3 sizing → live DecisionPackage — Complete (2026-06-16). The §4.1 decision surface is now sizing-complete.**
 The built-but-unwired L3 sizing layer (`alpha/sizing/{position,correlation,portfolio}.py`, US-1f) is now on the
