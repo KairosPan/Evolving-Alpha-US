@@ -11,9 +11,10 @@ import json
 import os
 import threading
 from datetime import date as Date
+from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Form, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -21,6 +22,11 @@ from fastapi.templating import Jinja2Templates
 from alpha.eval.decision import DecisionPackage
 from alpha.eval.decision_store import DecisionStore
 from alpha.eval.verdict_store import VerdictStore
+from alpha.harness.metatools import MetaTools
+from alpha.llm.config import make_client
+from alpha.meta import ingest as meta_ingest
+from alpha.meta.agent import MetaAgent
+from alpha.meta.models import Session, new_session_id
 from alpha.meta.store import LiveBrainStore, SessionStore
 from alpha_web import data_access as da
 from alpha_web import sample
@@ -37,6 +43,16 @@ NAV = [
 ]
 
 _MUTATION_LOCK = threading.Lock()
+
+
+def _meta_agent():
+    """Fresh per request: load the live brain, bind MetaTools, attach the refiner LLM."""
+    h, log = _brain_store().load()
+    return MetaAgent(MetaTools(h, log), make_client("refiner")), (h, log)
+
+
+def _llm_unavailable(exc: Exception) -> bool:
+    return "missing" in str(exc).lower() and "API_KEY" in str(exc)
 
 
 def _brain_store() -> LiveBrainStore:
@@ -226,6 +242,31 @@ def create_app() -> FastAPI:
     @app.get("/evolution")
     def evolution(request: Request):
         return render(request, "evolution.html", {"active": "evolution", **_evolution_context()})
+
+    @app.post("/evolve/ingest")
+    def ingest(request: Request, text: str = Form(""), url: str = Form("")):
+        if url.strip():
+            try:
+                source = meta_ingest.fetch_url(url.strip())
+            except meta_ingest.IngestError as e:
+                return render(request, "partials/directions.html",
+                              {"error": f"{e} — paste the text instead.", "directions": [], "session": None})
+        else:
+            source = meta_ingest.from_text(text, title="pasted text")
+        try:
+            agent, _ = _meta_agent()
+        except RuntimeError as e:
+            if _llm_unavailable(e):
+                return render(request, "partials/directions.html",
+                              {"error": "No API key — set your key or use mock mode.", "directions": [], "session": None})
+            raise
+        dirs = agent.propose_directions(source)
+        sess = Session(session_id=new_session_id(),
+                       created_at=datetime.now(timezone.utc).isoformat(),
+                       sources=[source], directions=dirs)
+        _session_store().put(sess)
+        return render(request, "partials/directions.html",
+                      {"error": "", "directions": dirs, "session": sess})
 
     return app
 

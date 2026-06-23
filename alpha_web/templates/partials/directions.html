@@ -1,0 +1,16 @@
+{% if error %}<p class="banner warn">{{ error }}</p>{% endif %}
+{% if directions %}
+<h2>Pick a direction</h2>
+<div class="directions">
+  {% for d in directions %}
+  <form class="dir-card" hx-post="/evolve/{{ session.session_id }}/direction" hx-target="#stage" hx-swap="innerHTML" hx-indicator="#spin2">
+    <input type="hidden" name="direction_id" value="{{ d.direction_id }}">
+    <h3>{{ d.title }}</h3>
+    <p>{{ d.summary }}</p>
+    {% if d.rationale %}<p class="muted">{{ d.rationale }}</p>{% endif %}
+    <label>Comment <input name="comment" placeholder="optional steer…"></label>
+    <button type="submit">Expand to edits <span id="spin2" class="htmx-indicator">·thinking·</span></button>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}
