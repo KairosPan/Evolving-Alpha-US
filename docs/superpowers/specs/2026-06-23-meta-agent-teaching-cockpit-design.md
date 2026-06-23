@@ -371,12 +371,13 @@ a per-request rebind hazard and a double-write without buying version-tree navig
 - **General meta-agent core:** lift teach + self-learn off the trading-specific `doctrine/skills/memory`
   onto a domain-agnostic representation; trading becomes the first instance.
 - **Branchable named brains**; snapshot retention/pruning if a version tree is reintroduced; multi-user /
-  auth / non-localhost. **Blocking precondition (security):** before any non-localhost or multi-user
-  serving, the URL-ingestion path (`ingest.fetch_url`/`_urllib_fetcher`) MUST be hardened against SSRF —
-  scheme allowlist (http/https only) + reject private/loopback/link-local ranges and the cloud-metadata
-  IP `169.254.169.254`. It is intentionally unguarded today because the operator-supplied URL on a
-  localhost single-user tool carries no privilege boundary; that assumption breaks the moment the console
-  is exposed.
+  auth / non-localhost. **Blocking precondition (security):** the URL-ingestion path
+  (`ingest.fetch_url`) now enforces a **scheme allowlist (http/https only)** — done in response to the
+  push security review, closing the `file://`/`ftp://` Local-File-Disclosure vector. STILL REQUIRED
+  before any non-localhost or multi-user serving: reject private/loopback/link-local ranges and the
+  cloud-metadata IP `169.254.169.254` (DNS-rebinding-safe). The remaining SSRF surface is acceptable only
+  because the operator-supplied URL on a localhost single-user tool carries no privilege boundary; that
+  assumption breaks the moment the console is exposed.
 
 ---
 

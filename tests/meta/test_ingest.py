@@ -19,3 +19,12 @@ def test_fetch_url_failure_raises_ingesterror():
         raise OSError("no network")
     with pytest.raises(IngestError):
         fetch_url("http://example.com/a", fetcher=boom)
+
+
+def test_fetch_url_rejects_non_http_schemes_no_file_disclosure():
+    """Security: file:// / ftp:// must be rejected (no Local File Disclosure via urlopen)."""
+    import pytest as _pytest
+    from alpha.meta.ingest import fetch_url, IngestError
+    for bad in ("file:///etc/passwd", "ftp://example.com/x", "gopher://x", "data:text/plain,hi"):
+        with _pytest.raises(IngestError):
+            fetch_url(bad)            # no fetcher injected -> must be blocked BEFORE any real fetch

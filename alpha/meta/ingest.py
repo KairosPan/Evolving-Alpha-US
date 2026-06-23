@@ -3,7 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from typing import Callable
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
+
+# Only fetch over http(s). Blocks file:// / ftp:// / gopher:// / data: — closing the Local File
+# Disclosure / SSRF-by-scheme vector that urllib.urlopen otherwise honors. (Private-IP-range SSRF
+# blocking is a separate hardening still gated on non-localhost serving — see the spec roadmap.)
+_ALLOWED_SCHEMES = ("http", "https")
 
 from alpha.meta.models import LessonSource
 
@@ -60,6 +66,10 @@ def _urllib_fetcher(url: str) -> str:
 
 
 def fetch_url(url: str, *, fetcher: Callable[[str], str] | None = None) -> LessonSource:
+    scheme = urlparse(url).scheme.lower()
+    if scheme not in _ALLOWED_SCHEMES:
+        raise IngestError(f"only http(s) URLs are allowed (got {scheme or 'no'} scheme) — "
+                          "paste the text instead")
     fetch = fetcher or _urllib_fetcher
     try:
         raw = fetch(url)
