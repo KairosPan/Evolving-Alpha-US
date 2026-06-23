@@ -34,3 +34,19 @@ class MetaAgent:
     def propose_directions(self, source: LessonSource, *, comment: str | None = None) -> list[ProposedDirection]:
         system, user = prompts.build_directions_prompt(self.h, source, comment)
         return prompts.parse_directions(self.llm.complete(system, user))
+
+    def _preview(self, op: RefineOp) -> ProposedEdit:
+        scratch = copy.deepcopy(self.h)
+        rec, reason = try_apply_op(MetaTools(scratch, EditLog()), scratch, op, allowed=ALL_TOOLS,
+                                   min_retire_samples=self._retire_min, min_promote_samples=self._promote_min)
+        if rec is not None:
+            return ProposedEdit(edit_id=new_edit_id(), tool=op.tool, target_kind=rec.target_kind,
+                                target_id=rec.target_id, op=rec.op, summary=rec.summary,
+                                payload=rec.payload, rationale=op.rationale, args=dict(op.args))
+        return ProposedEdit(edit_id=new_edit_id(), tool=op.tool, target_kind=_KIND.get(op.tool, ""),
+                            rationale=op.rationale, args=dict(op.args), status="failed", apply_reason=reason)
+
+    def expand_to_edits(self, source: LessonSource, direction: ProposedDirection, *,
+                        comment: str | None = None) -> list[ProposedEdit]:
+        system, user = prompts.build_edits_prompt(self.h, source, direction, comment)
+        return [self._preview(op) for op in parse_ops(self.llm.complete(system, user))]

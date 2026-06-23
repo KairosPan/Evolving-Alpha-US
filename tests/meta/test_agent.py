@@ -40,3 +40,24 @@ def test_propose_directions_parses_cards():
     dirs = agent.propose_directions(_src())
     assert [d.title for d in dirs] == ["lean into squeezes", "tighten stops"]
     assert all(d.direction_id for d in dirs)
+
+
+def test_expand_to_edits_previews_without_mutating_live_brain():
+    h0 = load_seeds("seeds")
+    sid = h0.skills.all()[0].skill_id
+    scripted = ('{"ops": [{"tool": "patch_skill", "args": {"skill_id": "%s", "notes": "from article"}, '
+                '"rationale": "the article shows this"}]}') % sid
+    agent = MetaAgent(MetaTools(h0, EditLog()), MockLLMClient(scripted))
+    direction = ProposedDirection(direction_id="d1", title="tighten")
+    edits = agent.expand_to_edits(_src(), direction)
+    assert len(edits) == 1
+    e = edits[0]
+    assert e.status == "proposed" and e.op == "update" and e.target_id == sid
+    assert e.payload["after"] == {"notes": "from article"}
+    assert h0.skills.get(sid).notes != "from article"          # live brain NOT mutated by preview
+
+
+def test_expand_to_edits_bad_op_becomes_failed_row_not_a_crash():
+    agent, _ = _agent('{"ops": [{"tool": "patch_skill", "args": {"skill_id": "nope", "notes": "x"}, "rationale": "r"}]}')
+    edits = agent.expand_to_edits(_src(), ProposedDirection(direction_id="d1", title="t"))
+    assert len(edits) == 1 and edits[0].status == "failed" and edits[0].apply_reason
