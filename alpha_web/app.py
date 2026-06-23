@@ -23,6 +23,7 @@ from alpha.eval.decision import DecisionPackage
 from alpha.eval.decision_store import DecisionStore
 from alpha.eval.verdict_store import VerdictStore
 from alpha.harness.metatools import MetaTools
+from alpha.llm.client import MockLLMClient
 from alpha.llm.config import make_client
 from alpha.meta import ingest as meta_ingest
 from alpha.meta.agent import MetaAgent
@@ -277,6 +278,30 @@ def create_app() -> FastAPI:
             row = new_row
         store.put(sess)
         return render(request, "partials/edit_row.html", {"e": row, "session": sess})
+
+    @app.post("/evolve/{session_id}/apply")
+    def apply_session(request: Request, session_id: str):
+        sstore = _session_store()
+        sess = sstore.get(session_id)
+        if sess is None or sess.status != "open":
+            return render(request, "partials/apply_result.html",
+                          {"error": "session is not open", "session": sess, "applied": []})
+        with _MUTATION_LOCK:
+            bstore = _brain_store()
+            h, log = bstore.load()
+            if not bstore.is_live():
+                bstore.save(h, log)                       # materialize before snapshot
+            sess.snapshot_before = bstore.snapshot(session_id)
+            # apply makes NO LLM call, so it needs no API key — pass a mock client.
+            agent = MetaAgent(MetaTools(h, log), MockLLMClient("{}"))
+            accepted = [e for e in sess.edits if e.status == "accepted"]
+            applied, _ = agent.apply(accepted)
+            bstore.save(h, log)
+            sess.applied_seqs = [r.seq for r in applied]
+            sess.status = "applied"
+            sstore.put(sess)
+        return render(request, "partials/apply_result.html",
+                      {"error": "", "session": sess, "applied": applied})
 
     @app.post("/evolve/ingest")
     def ingest(request: Request, text: str = Form(""), url: str = Form("")):

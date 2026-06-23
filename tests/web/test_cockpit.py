@@ -85,3 +85,25 @@ def test_comment_reproposes_row_keeping_id(client, monkeypatch):
     r = client.post(f"/evolve/{sess.session_id}/edit/{eid}", data={"action": "comment", "comment": "tighter"})
     assert r.status_code == 200 and "revised" in r.text
     assert store.get(sess.session_id).edits[0].edit_id == eid
+
+
+def test_apply_mutates_live_brain_and_finalizes_session(client, monkeypatch):
+    store, sess, sid_skill = _seed_session_with_one_edit(client, monkeypatch)
+    eid = sess.edits[0].edit_id
+    client.post(f"/evolve/{sess.session_id}/edit/{eid}", data={"action": "accept"})
+    r = client.post(f"/evolve/{sess.session_id}/apply")
+    assert r.status_code == 200 and "applied" in r.text.lower()
+    final = store.get(sess.session_id)
+    assert final.status == "applied" and final.applied_seqs == [0]
+    # the live brain now reflects the edit
+    from alpha.meta.store import LiveBrainStore
+    import os
+    h, _ = LiveBrainStore(os.environ["ALPHA_LIVE_BRAIN_DIR"]).load()
+    assert h.skills.get(sid_skill).notes == "n"
+
+
+def test_apply_on_already_applied_session_is_rejected(client, monkeypatch):
+    store, sess, _ = _seed_session_with_one_edit(client, monkeypatch)
+    sess.status = "applied"; store.put(sess)
+    r = client.post(f"/evolve/{sess.session_id}/apply")
+    assert r.status_code == 200 and "not open" in r.text.lower()

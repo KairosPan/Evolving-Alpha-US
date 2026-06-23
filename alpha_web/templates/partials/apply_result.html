@@ -1,0 +1,9 @@
+{% if error %}<p class="banner warn">{{ error }}</p>
+{% else %}
+<h2>Applied</h2>
+<p>{{ applied|length }} edit(s) committed to the live brain.</p>
+<ul>{% for r in applied %}<li><code>{{ r.tool }}</code> {{ r.target_id }} (seq {{ r.seq }})</li>{% endfor %}</ul>
+<form hx-post="/evolve/rollback/{{ session.session_id }}" hx-target="#stage" hx-swap="innerHTML">
+  <button type="submit">Roll back this session</button>
+</form>
+{% endif %}
