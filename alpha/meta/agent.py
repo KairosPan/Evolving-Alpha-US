@@ -65,3 +65,15 @@ class MetaAgent:
             else:
                 e.status, e.apply_reason = "failed", reason
         return applied, accepted
+
+    def repropose_edit(self, source: LessonSource, direction: ProposedDirection,
+                       prior_edit: ProposedEdit, comment: str) -> ProposedEdit:
+        system, user = prompts.build_reedit_prompt(self.h, source, direction, prior_edit, comment)
+        ops = parse_ops(self.llm.complete(system, user))
+        if not ops:
+            prior_edit.status, prior_edit.apply_reason, prior_edit.user_comment = (
+                "failed", "model returned no usable edit", comment)
+            return prior_edit
+        out = self._preview(ops[0])
+        out.edit_id, out.user_comment = prior_edit.edit_id, comment
+        return out

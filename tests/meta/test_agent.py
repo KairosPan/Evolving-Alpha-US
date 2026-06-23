@@ -73,3 +73,23 @@ def test_apply_mutates_live_brain_and_marks_rows():
     applied, rows = agent.apply([e])
     assert len(applied) == 1 and h0.skills.get(sid).notes == "applied now"
     assert rows[0].status == "applied" and rows[0].applied_seq == 0 and len(tools.log) == 1
+
+
+def test_repropose_edit_replaces_one_row_keeping_id():
+    h0 = load_seeds("seeds")
+    sid = h0.skills.all()[0].skill_id
+    scripted = ('{"ops": [{"tool": "patch_skill", "args": {"skill_id": "%s", "notes": "revised"}, '
+                '"rationale": "operator asked"}]}') % sid
+    agent = MetaAgent(MetaTools(h0, EditLog()), MockLLMClient(scripted))
+    prior = ProposedEdit(edit_id="keep-me", tool="patch_skill", target_id=sid,
+                         args={"skill_id": sid, "notes": "old"}, rationale="r")
+    out = agent.repropose_edit(_src(), ProposedDirection(direction_id="d1", title="t"), prior, "make it tighter")
+    assert out.edit_id == "keep-me" and out.user_comment == "make it tighter"
+    assert out.payload["after"] == {"notes": "revised"} and out.status == "proposed"
+
+
+def test_repropose_edit_no_op_returns_failed_keeping_id():
+    agent, _ = _agent('{"ops": []}')
+    prior = ProposedEdit(edit_id="keep-me", tool="patch_skill", args={"skill_id": "x"}, rationale="r")
+    out = agent.repropose_edit(_src(), ProposedDirection(direction_id="d1", title="t"), prior, "no")
+    assert out.edit_id == "keep-me" and out.status == "failed"
