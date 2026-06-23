@@ -1,0 +1,10 @@
+{% if error %}<p class="banner warn">{{ error }}</p>{% endif %}
+{% if session %}
+<h2>Edit queue</h2>
+<div id="queue">
+  {% for e in edits %}{% include "partials/edit_row.html" %}{% endfor %}
+</div>
+<form hx-post="/evolve/{{ session.session_id }}/apply" hx-target="#stage" hx-swap="innerHTML" hx-indicator="#spinA">
+  <button type="submit">Apply accepted edits <span id="spinA" class="htmx-indicator">·applying·</span></button>
+</form>
+{% endif %}

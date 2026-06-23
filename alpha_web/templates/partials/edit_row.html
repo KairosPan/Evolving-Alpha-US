@@ -1,0 +1,19 @@
+<div class="edit-row st-{{ e.status }}" id="row-{{ e.edit_id }}">
+  <div class="edit-head"><code>{{ e.tool }}</code> · {{ e.target_kind }} · <strong>{{ e.target_id or '—' }}</strong>
+    <span class="pill">{{ e.status }}</span></div>
+  {% if e.payload %}<pre class="diff">{{ e.payload }}</pre>{% endif %}
+  <p class="muted">{{ e.rationale }}</p>
+  {% if e.apply_reason %}<p class="banner warn">{{ e.apply_reason }}</p>{% endif %}
+  {% if e.status != 'failed' %}
+  <div class="edit-actions">
+    <button hx-post="/evolve/{{ session.session_id }}/edit/{{ e.edit_id }}" hx-vals='{"action":"accept"}'
+            hx-target="#row-{{ e.edit_id }}" hx-swap="outerHTML">Accept</button>
+    <button hx-post="/evolve/{{ session.session_id }}/edit/{{ e.edit_id }}" hx-vals='{"action":"reject"}'
+            hx-target="#row-{{ e.edit_id }}" hx-swap="outerHTML">Reject</button>
+    <input name="comment" placeholder="comment → re-propose"
+           hx-post="/evolve/{{ session.session_id }}/edit/{{ e.edit_id }}" hx-vals='{"action":"comment"}'
+           hx-trigger="keyup[key=='Enter']" hx-target="#row-{{ e.edit_id }}" hx-swap="outerHTML" hx-indicator="#spinR">
+    <span id="spinR" class="htmx-indicator">·thinking·</span>
+  </div>
+  {% endif %}
+</div>

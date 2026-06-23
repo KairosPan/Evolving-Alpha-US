@@ -243,6 +243,20 @@ def create_app() -> FastAPI:
     def evolution(request: Request):
         return render(request, "evolution.html", {"active": "evolution", **_evolution_context()})
 
+    @app.post("/evolve/{session_id}/direction")
+    def choose_direction(request: Request, session_id: str, direction_id: str = Form(...), comment: str = Form("")):
+        store = _session_store()
+        sess = store.get(session_id)
+        if sess is None:
+            return render(request, "partials/edit_queue.html", {"error": "session not found", "session": None, "edits": []})
+        sess.chosen_direction_id = direction_id
+        sess.direction_comment = comment
+        direction = next((d for d in sess.directions if d.direction_id == direction_id), None)
+        agent, _ = _meta_agent()
+        sess.edits = agent.expand_to_edits(sess.sources[0], direction, comment=comment or None)
+        store.put(sess)
+        return render(request, "partials/edit_queue.html", {"error": "", "session": sess, "edits": sess.edits})
+
     @app.post("/evolve/ingest")
     def ingest(request: Request, text: str = Form(""), url: str = Form("")):
         if url.strip():

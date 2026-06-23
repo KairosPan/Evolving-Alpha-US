@@ -31,3 +31,22 @@ def test_ingest_missing_key_shows_graceful_panel(client, monkeypatch):
     monkeypatch.setenv("ALPHA_REFINER_PROVIDER", "anthropic")
     r = client.post("/evolve/ingest", data={"text": "x"})
     assert r.status_code == 200 and ("set your key" in r.text.lower() or "mock mode" in r.text.lower())
+
+
+def test_direction_expands_to_edit_queue(client, monkeypatch):
+    from alpha.harness.loader import load_seeds
+    sid_skill = load_seeds("seeds").skills.all()[0].skill_id
+    monkeypatch.setenv("ALPHA_REFINER_PROVIDER", "mock")
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE", '{"directions": [{"title": "tighten"}]}')
+    ingest = client.post("/evolve/ingest", data={"text": "writeup"})
+    # grab the session + direction ids the server just created
+    from alpha.meta.store import SessionStore
+    import os
+    store = SessionStore(os.environ["ALPHA_SESSIONS_DIR"])
+    sess = store.list()[0]
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE",
+                       '{"ops": [{"tool": "patch_skill", "args": {"skill_id": "%s", "notes": "n"}, "rationale": "r"}]}' % sid_skill)
+    r = client.post(f"/evolve/{sess.session_id}/direction",
+                    data={"direction_id": sess.directions[0].direction_id, "comment": ""})
+    assert r.status_code == 200 and "patch_skill" in r.text and sid_skill in r.text
+    assert store.get(sess.session_id).edits                      # persisted
