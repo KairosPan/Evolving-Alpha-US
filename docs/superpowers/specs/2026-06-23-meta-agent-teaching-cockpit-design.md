@@ -49,8 +49,9 @@ red-line in spirit. A post-apply "red-line lint" that flags such contradictions 
 **In (v1):**
 - Ingest a *lesson source*: pasted text, or a URL fetched + stripped to readable text.
 - Two-stage propose loop driven by the refiner LLM (Claude): directions → concrete edit queue.
-- Per-edit **accept / reject** (pure state), **tweak** (edit the args inline, no LLM), and **comment →
-  re-propose that one row** (a scoped single-op LLM call).
+- Per-edit **accept / reject** (pure state) and **comment → re-propose that one row** (a scoped
+  single-op LLM call). (**tweak** — manual inline arg-editing, no LLM — was deferred during build; the
+  loop is complete without it. See §11.)
 - **Regenerate** at direction granularity (whole queue) carrying accumulated comments.
 - Each candidate edit previewed as a **dry-run** (apply on a throwaway brain copy); gate failures show
   inline, never apply.
@@ -257,7 +258,7 @@ sub-task of the cockpit slice (§10).
 | `POST /evolve/ingest` | text/url → create+persist an `open` `Session` + `LessonSource`; `propose_directions`; return directions partial. |
 | `POST /evolve/{session_id}/direction` | `{direction_id, comment}` → `expand_to_edits`; persist; return edit-queue partial. |
 | `POST /evolve/{session_id}/direction/regenerate` | `{comment}` → re-`propose_directions`. |
-| `POST /evolve/{session_id}/edit/{edit_id}` | `accept`/`reject` (pure state) **or** `tweak` (mutate `args`, no LLM) **or** `comment` → `repropose_edit` (scoped 1-op LLM). Return the row partial. |
+| `POST /evolve/{session_id}/edit/{edit_id}` | `accept`/`reject` (pure state) **or** `comment` → `repropose_edit` (scoped 1-op LLM). Return the row partial. (`tweak` — mutate `args`, no LLM — deferred to §11; not in the shipped route.) |
 | `POST /evolve/{session_id}/apply` | under a mutation lock: copy current brain → `snapshot_before`; `apply` accepted edits; persist live brain atomically; set `status='applied'`; return result partial. |
 | `GET /evolve/sessions[/{session_id}]` | browse session history. |
 | `POST /evolve/rollback/{session_id}` | under the lock: restore `snapshot_before` into `LiveBrainStore`; append a note. |
@@ -364,10 +365,18 @@ a per-request rebind hazard and a double-write without buying version-tree navig
   dangling `target_id`s against the current brain).
 - **Post-apply red-line lint:** flag a taught skill/lesson whose `taboo`/`entry` contradicts an immutable
   doctrine section.
+- **`tweak` action:** manual inline arg-editing of a proposed edit (no LLM), per the §8 route table.
+  Deferred during the v1 build — `accept` / `reject` / `comment→re-propose` + `apply` already close the
+  loop. Until then the `edit` route accepts only `accept` / `reject` / `comment`.
 - **General meta-agent core:** lift teach + self-learn off the trading-specific `doctrine/skills/memory`
   onto a domain-agnostic representation; trading becomes the first instance.
 - **Branchable named brains**; snapshot retention/pruning if a version tree is reintroduced; multi-user /
-  auth / non-localhost.
+  auth / non-localhost. **Blocking precondition (security):** before any non-localhost or multi-user
+  serving, the URL-ingestion path (`ingest.fetch_url`/`_urllib_fetcher`) MUST be hardened against SSRF —
+  scheme allowlist (http/https only) + reject private/loopback/link-local ranges and the cloud-metadata
+  IP `169.254.169.254`. It is intentionally unguarded today because the operator-supplied URL on a
+  localhost single-user tool carries no privilege boundary; that assumption breaks the moment the console
+  is exposed.
 
 ---
 
