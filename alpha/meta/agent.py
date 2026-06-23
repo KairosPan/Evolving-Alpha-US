@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 
-from alpha.harness.edit_log import EditLog
+from alpha.harness.edit_log import EditLog, EditRecord
 from alpha.harness.metatools import MetaTools
 from alpha.llm.client import LLMClient
 from alpha.meta import prompts
@@ -50,3 +50,18 @@ class MetaAgent:
                         comment: str | None = None) -> list[ProposedEdit]:
         system, user = prompts.build_edits_prompt(self.h, source, direction, comment)
         return [self._preview(op) for op in parse_ops(self.llm.complete(system, user))]
+
+    def apply(self, accepted: list[ProposedEdit]) -> tuple[list[EditRecord], list[ProposedEdit]]:
+        applied: list[EditRecord] = []
+        for e in accepted:
+            if e.status != "accepted":
+                continue
+            op = RefineOp(tool=e.tool, args=dict(e.args), rationale=e.rationale)
+            rec, reason = try_apply_op(self.tools, self.h, op, allowed=ALL_TOOLS,
+                                       min_retire_samples=self._retire_min, min_promote_samples=self._promote_min)
+            if rec is not None:
+                e.status, e.applied_seq, e.apply_reason = "applied", rec.seq, ""
+                applied.append(rec)
+            else:
+                e.status, e.apply_reason = "failed", reason
+        return applied, accepted

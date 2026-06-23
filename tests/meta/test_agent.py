@@ -61,3 +61,15 @@ def test_expand_to_edits_bad_op_becomes_failed_row_not_a_crash():
     agent, _ = _agent('{"ops": [{"tool": "patch_skill", "args": {"skill_id": "nope", "notes": "x"}, "rationale": "r"}]}')
     edits = agent.expand_to_edits(_src(), ProposedDirection(direction_id="d1", title="t"))
     assert len(edits) == 1 and edits[0].status == "failed" and edits[0].apply_reason
+
+
+def test_apply_mutates_live_brain_and_marks_rows():
+    h0 = load_seeds("seeds")
+    sid = h0.skills.all()[0].skill_id
+    tools = MetaTools(h0, EditLog())
+    agent = MetaAgent(tools, MockLLMClient("{}"))
+    e = ProposedEdit(edit_id="e1", tool="patch_skill", target_id=sid,
+                     args={"skill_id": sid, "notes": "applied now"}, rationale="r", status="accepted")
+    applied, rows = agent.apply([e])
+    assert len(applied) == 1 and h0.skills.get(sid).notes == "applied now"
+    assert rows[0].status == "applied" and rows[0].applied_seq == 0 and len(tools.log) == 1
