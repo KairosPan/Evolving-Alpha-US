@@ -4,6 +4,7 @@ import copy
 
 from alpha.harness.edit_log import EditLog, EditRecord
 from alpha.harness.metatools import MetaTools
+from alpha.harness.state import HarnessState
 from alpha.llm.client import LLMClient
 from alpha.meta import prompts
 from alpha.meta.models import (
@@ -18,6 +19,20 @@ _KIND = {
     "process_memory": "memory", "update_memory": "memory", "demote_memory": "memory",
     "rewrite_doctrine": "doctrine",
 }
+
+
+def preview_op(harness: HarnessState, op: RefineOp, *, retire_min: int = 5, promote_min: int = 3) -> ProposedEdit:
+    """Dry-run one op on a deepcopy of the brain; never mutates `harness`. Returns a ProposedEdit
+    (status 'proposed' with payload on success, 'failed' + apply_reason on rejection)."""
+    scratch = copy.deepcopy(harness)
+    rec, reason = try_apply_op(MetaTools(scratch, EditLog()), scratch, op, allowed=ALL_TOOLS,
+                               min_retire_samples=retire_min, min_promote_samples=promote_min)
+    if rec is not None:
+        return ProposedEdit(edit_id=new_edit_id(), tool=op.tool, target_kind=rec.target_kind,
+                            target_id=rec.target_id, op=rec.op, summary=rec.summary,
+                            payload=rec.payload, rationale=op.rationale, args=dict(op.args))
+    return ProposedEdit(edit_id=new_edit_id(), tool=op.tool, target_kind=_KIND.get(op.tool, ""),
+                        rationale=op.rationale, args=dict(op.args), status="failed", apply_reason=reason)
 
 
 class MetaAgent:
@@ -36,15 +51,7 @@ class MetaAgent:
         return prompts.parse_directions(self.llm.complete(system, user))
 
     def _preview(self, op: RefineOp) -> ProposedEdit:
-        scratch = copy.deepcopy(self.h)
-        rec, reason = try_apply_op(MetaTools(scratch, EditLog()), scratch, op, allowed=ALL_TOOLS,
-                                   min_retire_samples=self._retire_min, min_promote_samples=self._promote_min)
-        if rec is not None:
-            return ProposedEdit(edit_id=new_edit_id(), tool=op.tool, target_kind=rec.target_kind,
-                                target_id=rec.target_id, op=rec.op, summary=rec.summary,
-                                payload=rec.payload, rationale=op.rationale, args=dict(op.args))
-        return ProposedEdit(edit_id=new_edit_id(), tool=op.tool, target_kind=_KIND.get(op.tool, ""),
-                            rationale=op.rationale, args=dict(op.args), status="failed", apply_reason=reason)
+        return preview_op(self.h, op, retire_min=self._retire_min, promote_min=self._promote_min)
 
     def expand_to_edits(self, source: LessonSource, direction: ProposedDirection, *,
                         comment: str | None = None) -> list[ProposedEdit]:
