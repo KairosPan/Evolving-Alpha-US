@@ -54,3 +54,13 @@ def test_sonia_offline_shows_a_friendly_banner(client):
     webapp.set_sonia_client(SoniaClient(base_url="http://127.0.0.1:9", timeout=0.2))
     r = client.post("/evolve/message", data={"text": "hi"})
     assert r.status_code == 200 and "unavailable" in r.text.lower()
+
+
+def test_mutating_routes_dont_500_when_sonia_down(client):
+    webapp.set_sonia_client(SoniaClient(base_url="http://127.0.0.1:9", timeout=0.2))
+    for r in (
+        client.post("/evolve/s1/edit/e1", data={"action": "accept"}),
+        client.post("/evolve/s1/message/m1/apply"),
+        client.post("/evolve/rollback/s1/m1"),
+    ):
+        assert r.status_code == 200 and "unavailable" in r.text.lower()
