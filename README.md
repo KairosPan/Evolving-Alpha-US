@@ -143,6 +143,43 @@ by date / run; a single-file `ALPHA_WEB_DECISION` / `ALPHA_WEB_VERDICT` override
 
 ---
 
+## Sonia teaching cockpit (two processes)
+
+The **Sonia meta-agent** is a standalone FastAPI service (port 8810) that owns the live brain and
+all gated apply/rollback operations. The **web console** (`alpha_web`, port 8100) acts as a thin
+chat client: it calls Sonia over HTTP and reads the brain read-only.
+
+```bash
+pip install -e '.[web,sonia]'
+
+# terminal 1 — the meta-agent (needs DEEPSEEK_API_KEY, or ALPHA_SONIA_PROVIDER=mock for offline):
+DEEPSEEK_API_KEY=... python -m sonia                       # :8810
+
+# terminal 2 — the console (chat cockpit at /):
+ALPHA_SONIA_URL=http://127.0.0.1:8810 python -m alpha_web  # :8100
+```
+
+Sonia (`deepseek-v4-pro` by default, text-only) owns the live brain and the gated apply/rollback;
+the console is a thin chat client that calls Sonia over HTTP and reads the brain read-only.
+
+**Mock / offline mode** (no LLM key required):
+
+```bash
+ALPHA_SONIA_PROVIDER=mock \
+  ALPHA_MOCK_RESPONSE='{"ops":[{"action":"update_skill","name":"test","content":"hello"}]}' \
+  python -m sonia &
+
+ALPHA_SONIA_URL=http://127.0.0.1:8810 python -m alpha_web
+```
+
+Type a message → an assistant bubble with an edit card appears → click **Accept** → the brain
+badge `edit_count` increments → click **Rollback** → it decrements.
+
+**Manual real-key smoke** (requires `DEEPSEEK_API_KEY` and external paid calls — not run in CI):
+send one real teaching message and confirm a coherent prose reply.
+
+---
+
 ## Data Setup (Offline Backtesting)
 
 The system ships with a `FakeSource` for fully offline tests. For real data, use Alpaca:
