@@ -53,3 +53,24 @@ class OpenAICompatClient:
                 else:
                     raise
         raise last  # pragma: no cover
+
+    def chat(self, system: str, messages: list) -> str:
+        if self._client is None:
+            raise RuntimeError("openai not installed (pip install openai)")
+        msgs = [{"role": "system", "content": system}]
+        for m in messages:
+            msgs.append({"role": m.role, "content": m.text})
+        last: Exception | None = None
+        for attempt in range(self._max_retries + 1):
+            try:
+                resp = self._client.chat.completions.create(
+                    model=self.model, messages=msgs, temperature=self.temperature,
+                )
+                return resp.choices[0].message.content or ""
+            except Exception as e:           # noqa: BLE001 — transient: back off
+                last = e
+                if attempt < self._max_retries:
+                    self._sleep(self._backoff * (2 ** attempt))
+                else:
+                    raise
+        raise last  # pragma: no cover
