@@ -18,9 +18,16 @@ class MockLLMClient:
             raise ValueError("scripted must be non-empty")
         self._i = 0
         self.calls: list[tuple[str, str]] = []
+        self.chat_calls: list = []
 
     def complete(self, system: str, user: str) -> str:
         self.calls.append((system, user))
+        r = self._responses[min(self._i, len(self._responses) - 1)]
+        self._i += 1
+        return r
+
+    def chat(self, system: str, messages: list) -> str:
+        self.chat_calls.append((system, list(messages)))
         r = self._responses[min(self._i, len(self._responses) - 1)]
         self._i += 1
         return r
