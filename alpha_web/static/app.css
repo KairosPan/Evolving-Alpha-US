@@ -110,6 +110,29 @@ a { color: inherit; text-decoration: none; }
 .rail-foot { margin-top: auto; padding: 14px 10px 0; color: var(--fg-faint); font-size: 11px; }
 .rail-foot code { font-family: var(--mono); color: var(--fg-dim); }
 
+/* Brain drawer (inline rail accordion) */
+.nav-group { display: flex; flex-direction: column; }
+.nav-group-toggle { width: 100%; background: none; border: none; cursor: pointer; font: inherit; text-align: left; }
+.nav-group-toggle .caret { margin-left: auto; font-size: 10px; color: var(--fg-faint); transition: transform .15s; }
+.nav-group.is-open .nav-group-toggle .caret { transform: rotate(180deg); }
+.nav-sub { display: none; flex-direction: column; gap: 2px; padding: 2px 0 4px 27px; }
+.nav-group.is-open .nav-sub { display: flex; }
+.nav-subitem {
+  padding: 6px 11px; border-radius: var(--r-sm); color: var(--fg-dim);
+  font-size: 13px; font-weight: 500; transition: background .15s, color .15s;
+}
+.nav-subitem:hover { background: rgba(255,255,255,.04); color: var(--fg); }
+.nav-subitem.is-active { background: var(--gold-soft); color: var(--fg); box-shadow: inset 2px 0 0 var(--gold); }
+
+/* Brain component stub pages */
+.brain-stub { padding: 8px 4px; max-width: 44rem; }
+.brain-stub h1 { font-family: var(--serif); font-size: 28px; margin: 0 0 6px; }
+.brain-stub .blurb { color: var(--fg-dim); margin: 0 0 18px; }
+.brain-stub .empty-state {
+  border: 1px dashed var(--line); border-radius: var(--r-sm);
+  padding: 14px 16px; color: var(--fg-faint); font-size: 13px;
+}
+
 .main { display: flex; flex-direction: column; min-width: 0; }
 
 /* ── the tape (omnipresent regime strip) ────────────────────────────────── */

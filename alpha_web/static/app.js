@@ -17,3 +17,12 @@ document.body.addEventListener('htmx:afterRequest', (e) => {
   const btn = e.detail.elt.querySelector('button[type=submit]') || e.detail.elt;
   if (btn && btn.tagName === 'BUTTON') btn.disabled = false;
 });
+
+// Brain drawer: toggle the rail accordion open/closed without navigating.
+document.querySelectorAll(".nav-group-toggle").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const group = btn.closest(".nav-group");
+    const open = group.classList.toggle("is-open");
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+});
