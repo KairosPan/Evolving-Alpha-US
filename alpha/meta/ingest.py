@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from html.parser import HTMLParser
+from io import BytesIO
 from typing import Callable
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -11,7 +13,7 @@ from urllib.request import Request, urlopen
 # blocking is a separate hardening still gated on non-localhost serving — see the spec roadmap.)
 _ALLOWED_SCHEMES = ("http", "https")
 
-from alpha.meta.models import LessonSource
+from alpha.meta.models import Attachment, LessonSource
 
 
 class IngestError(Exception):
@@ -78,3 +80,63 @@ def fetch_url(url: str, *, fetcher: Callable[[str], str] | None = None) -> Lesso
     parser = _TextExtractor()
     parser.feed(raw)
     return LessonSource(kind="url", url=url, title=parser.title, text=parser.text(), fetched_at=_now())
+
+
+# ---------------------------------------------------------------------------
+# ingest_attachments — file/URL ingestion for the chat cockpit composer
+# ---------------------------------------------------------------------------
+
+_URL_RE = re.compile(r"https?://[^\s)>\]]+")
+_TEXT_EXT = {".txt", ".md", ".csv"}
+_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+_MAX_TEXT = 50_000
+
+
+def _ext(name: str) -> str:
+    return ("." + name.rsplit(".", 1)[-1].lower()) if "." in name else ""
+
+
+def _cap(text: str) -> str:
+    return text if len(text) <= _MAX_TEXT else text[:_MAX_TEXT] + "\n\n[... truncated ...]"
+
+
+def _pdf_text(data: bytes) -> str:
+    try:
+        import pypdf
+    except ImportError as e:
+        raise IngestError("PDF support needs pypdf (pip install -e '.[web]')") from e
+    reader = pypdf.PdfReader(BytesIO(data))
+    return "\n".join((page.extract_text() or "") for page in reader.pages)
+
+
+def ingest_attachments(text: str, files=None, *, fetcher=None) -> tuple[str, list[Attachment]]:
+    """(clean_text, attachments) from composer text + uploaded (filename, bytes) files. txt/md/csv
+    decoded, pdf via pypdf, images rejected (no vision), unknown rejected; http(s) URLs in `text`
+    fetched via the scheme-allowlisted fetch_url. Never raises — bad inputs become note attachments."""
+    out: list[Attachment] = []
+    for name, data in (files or []):
+        ext = _ext(name)
+        if ext in _IMAGE_EXT:
+            out.append(Attachment(kind="file", name=name, mime="image",
+                                  text=f"[image '{name}' attached — Sonia can't read images; describe it in text]"))
+            continue
+        try:
+            if ext == ".pdf":
+                body = _pdf_text(data)
+            elif ext in _TEXT_EXT:
+                body = data.decode("utf-8", errors="replace")
+            else:
+                out.append(Attachment(kind="file", name=name,
+                                      text=f"[unsupported file '{name}' — paste the text instead]"))
+                continue
+        except IngestError as e:
+            out.append(Attachment(kind="file", name=name, text=f"[{e}]"))
+            continue
+        out.append(Attachment(kind="file", name=name, text=_cap(body)))
+    for url in _URL_RE.findall(text or ""):
+        try:
+            src = fetch_url(url, fetcher=fetcher)
+            out.append(Attachment(kind="url", name=url, text=_cap(src.text)))
+        except IngestError as e:
+            out.append(Attachment(kind="url", name=url, text=f"[{e}]"))
+    return (text or "").strip(), out
