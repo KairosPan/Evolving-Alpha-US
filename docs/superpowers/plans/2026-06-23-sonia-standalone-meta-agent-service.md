@@ -1321,7 +1321,6 @@ This is the atomic cutover: the new chat cockpit replaces the v1 teaching front 
 Replace the entire contents of `tests/web/test_cockpit.py` with:
 
 ```python
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -1334,11 +1333,10 @@ from sonia.app import create_app as create_sonia
 
 @pytest.fixture(autouse=True)
 def _wire_sonia(monkeypatch):
-    # Drive the real Sonia app in-process via ASGITransport, with a mock copilot + isolated state.
+    # Drive the real Sonia app in-process via an injected sync TestClient, mock copilot + isolated state.
     monkeypatch.setenv("ALPHA_SONIA_PROVIDER", "mock")
     monkeypatch.setenv("ALPHA_MOCK_RESPONSE", "let's discuss the squeeze setup")
-    webapp.set_sonia_client(SoniaClient(base_url="http://sonia",
-                                        transport=httpx.ASGITransport(app=create_sonia())))
+    webapp.set_sonia_client(SoniaClient(client=TestClient(create_sonia())))
     yield
     webapp.set_sonia_client(None)
 
@@ -1553,7 +1551,7 @@ _SONIA: SoniaClient | None = None
 
 
 def set_sonia_client(client) -> None:
-    """Test seam: inject an in-process SoniaClient (ASGITransport). None → use ALPHA_SONIA_URL."""
+    """Test seam: inject an in-process SoniaClient (sync, wrapping a Sonia TestClient). None → use ALPHA_SONIA_URL."""
     global _SONIA
     _SONIA = client
 
@@ -1592,9 +1590,9 @@ Delete `_meta_agent()`, `_MUTATION_LOCK`, and the v1 routes (`/evolve/ingest`, `
                           banner="Sonia service unavailable — start it with `python -m sonia`"))
 
     @app.post("/evolve/message")
-    async def message(request: Request, session_id: str = Form(""), text: str = Form("")):
-        form = await request.form()
-        uploads = [(f.filename, await f.read()) for f in form.getlist("files") if getattr(f, "filename", "")]
+    def message(request: Request, session_id: str = Form(""), text: str = Form(""),
+                files: list[UploadFile] = File(default=[])):
+        uploads = [(f.filename, f.file.read()) for f in files if f.filename]
         clean, attachments = ingest_attachments(text, uploads)
         try:
             out = _sonia().chat(session_id or None, clean, attachments)
@@ -1653,7 +1651,7 @@ Create `alpha_web/templates/partials/_two_turns.html` (the `beforeend` payload f
 {% with m = assistant %}{% include "partials/message_assistant.html" %}{% endwith %}
 ```
 
-(`Form` and `Request` are already imported in `app.py`; ensure `from fastapi import Form` is present.)
+(`Request` is already imported in `app.py`; ensure `from fastapi import Form, File, UploadFile` is present. The `/evolve/message` route is a SYNC `def` — FastAPI parses the multipart body before calling it, and `f.file.read()` is the sync read on the `UploadFile`'s underlying file. This avoids calling the sync `SoniaClient` from an async route.)
 
 - [ ] **Step 4: Run the full suite to verify green**
 
