@@ -105,8 +105,13 @@ def _pdf_text(data: bytes) -> str:
         import pypdf
     except ImportError as e:
         raise IngestError("PDF support needs pypdf (pip install -e '.[web]')") from e
-    reader = pypdf.PdfReader(BytesIO(data))
-    return "\n".join((page.extract_text() or "") for page in reader.pages)
+    try:
+        reader = pypdf.PdfReader(BytesIO(data))
+        return "\n".join((page.extract_text() or "") for page in reader.pages)
+    except IngestError:
+        raise
+    except Exception as e:
+        raise IngestError(f"could not read PDF: {type(e).__name__}") from e
 
 
 def ingest_attachments(text: str, files=None, *, fetcher=None) -> tuple[str, list[Attachment]]:

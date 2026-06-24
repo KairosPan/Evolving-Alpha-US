@@ -39,3 +39,16 @@ def test_pdf_text_extraction_when_pypdf_present():
     buf = io.BytesIO(); w.write(buf)
     _, atts = ingest_attachments("", files=[("doc.pdf", buf.getvalue())])
     assert atts[0].kind == "file" and atts[0].name == "doc.pdf"   # parses without raising
+
+
+def test_corrupt_pdf_becomes_friendly_note_not_a_crash():
+    """A corrupt/invalid PDF must never raise — it must become a note attachment."""
+    import pytest
+    pytest.importorskip("pypdf")
+    # Bytes that begin with %PDF- but are otherwise pure garbage, reliably making
+    # pypdf raise PdfStreamError / PdfReadError during parse.
+    corrupt = b"%PDF-1.4\n" + b"\x00\xff\xfe\xfd" * 64
+    _, atts = ingest_attachments("", files=[("bad.pdf", corrupt)])
+    assert len(atts) == 1
+    assert atts[0].kind == "file" and atts[0].name == "bad.pdf"
+    assert "could not read PDF" in atts[0].text
