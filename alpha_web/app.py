@@ -302,6 +302,16 @@ def create_app() -> FastAPI:
     def sessions_index(request: Request):
         return render(request, "cockpit.html", _cockpit_ctx(request, None))
 
+    @app.post("/evolve/{session_id}/delete")
+    def delete_session(request: Request, session_id: str):
+        # The delete button hx-swaps this into its own <li> (outerHTML); return EMPTY (200, not 204 —
+        # HTMX skips the swap on 204) so the row vanishes. No full document → no nesting.
+        try:
+            _sonia().delete_session(session_id)
+        except httpx.HTTPError:
+            return _unavailable(request)
+        return Response(status_code=200, content="")
+
     @app.get("/evolve/sessions/{session_id}")
     def session_detail(request: Request, session_id: str):
         try:

@@ -68,6 +68,22 @@ def test_session_link_is_plain_navigation_not_fragment_swap(client):
     assert 'href="/evolve/sessions/' in body
 
 
+def test_session_list_has_a_delete_control(client):
+    client.post("/evolve/message", data={"text": "hello there"})
+    body = client.get("/").text
+    assert "/delete" in body and "hx-confirm" in body.lower()
+
+
+def test_delete_session_via_console_removes_it(client):
+    import re
+    client.post("/evolve/message", data={"text": "to be deleted"})
+    sid = re.search(r"/evolve/sessions/([\w-]+)", client.get("/").text).group(1)
+    r = client.post(f"/evolve/{sid}/delete")
+    assert r.status_code == 200
+    assert "<html" not in r.text.lower()          # empty partial → HTMX removes the <li>, no nesting
+    assert sid not in client.get("/").text        # gone from the list
+
+
 def test_sonia_offline_shows_a_friendly_banner(client):
     webapp.set_sonia_client(SoniaClient(base_url="http://127.0.0.1:9", timeout=0.2))
     r = client.post("/evolve/message", data={"text": "hi"})
@@ -80,5 +96,6 @@ def test_mutating_routes_dont_500_when_sonia_down(client):
         client.post("/evolve/s1/edit/e1", data={"action": "accept"}),
         client.post("/evolve/s1/message/m1/apply"),
         client.post("/evolve/rollback/s1/m1"),
+        client.post("/evolve/s1/delete"),
     ):
         assert r.status_code == 200 and "unavailable" in r.text.lower()

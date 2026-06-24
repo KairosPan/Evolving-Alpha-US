@@ -74,7 +74,12 @@ class SessionStore:
         self._root = Path(root)
 
     def _path(self, session_id: str) -> Path:
-        return self._root / f"{session_id}.json"
+        # A session_id reaches here straight from a URL path param; never let `..`/absolute paths
+        # escape the store dir (the id feeds unlink/read/write). Reject anything that resolves out.
+        p = (self._root / f"{session_id}.json").resolve()
+        if not p.is_relative_to(self._root.resolve()):
+            raise ValueError(f"invalid session_id: {session_id!r}")
+        return p
 
     def put(self, session: Session) -> Path:
         p = self._path(session.session_id)
@@ -86,6 +91,10 @@ class SessionStore:
         if not p.exists():
             return None
         return Session.model_validate_json(p.read_text(encoding="utf-8"))
+
+    def delete(self, session_id: str) -> None:
+        """Hard-delete a session record. Idempotent: a missing id is a no-op."""
+        self._path(session_id).unlink(missing_ok=True)
 
     def list(self) -> list[Session]:
         if not self._root.is_dir():

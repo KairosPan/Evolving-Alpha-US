@@ -1,3 +1,5 @@
+import pytest
+
 from alpha.meta.store import LiveBrainStore, SessionStore
 from alpha.meta.models import Session
 from alpha.harness.edit_log import EditLog
@@ -47,3 +49,20 @@ def test_session_store_put_get_list_newest_first(tmp_path):
 
 def test_session_store_missing_dir_is_empty(tmp_path):
     assert SessionStore(tmp_path / "nope").list() == []
+
+
+def test_session_store_delete_removes_and_is_idempotent(tmp_path):
+    store = SessionStore(tmp_path)
+    store.put(Session(session_id="20260101T000000000000-aaaa"))
+    assert store.get("20260101T000000000000-aaaa") is not None
+    store.delete("20260101T000000000000-aaaa")
+    assert store.get("20260101T000000000000-aaaa") is None
+    store.delete("20260101T000000000000-aaaa")          # missing id: no error
+    assert store.list() == []
+
+
+def test_session_store_rejects_path_traversal(tmp_path):
+    store = SessionStore(tmp_path / "sessions")
+    for bad in ("../evil", "../../etc/passwd", "/etc/passwd"):
+        with pytest.raises(ValueError):
+            store.delete(bad)

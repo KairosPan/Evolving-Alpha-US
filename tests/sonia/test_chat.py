@@ -18,6 +18,15 @@ def test_new_then_list_sessions(client):
     assert any(s["session_id"] == sid for s in client.get("/sessions").json())
 
 
+def test_delete_session_removes_from_list_and_is_idempotent(client):
+    sid = client.post("/sessions/new").json()["session_id"]
+    assert any(s["session_id"] == sid for s in client.get("/sessions").json())
+    r = client.post(f"/sessions/{sid}/delete")
+    assert r.status_code == 200 and r.json()["deleted"] == sid
+    assert all(s["session_id"] != sid for s in client.get("/sessions").json())
+    assert client.post(f"/sessions/{sid}/delete").status_code == 200      # idempotent
+
+
 def test_chat_appends_two_turns_and_persists(client):
     r = client.post("/chat", json={"text": "high short interest writeup"})
     body = r.json()

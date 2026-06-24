@@ -41,6 +41,9 @@ class SoniaClient:
     def get_session(self, sid: str) -> dict:
         return self._request("GET", f"/sessions/{sid}")
 
+    def delete_session(self, sid: str) -> dict:
+        return self._request("POST", f"/sessions/{sid}/delete")
+
     def chat(self, session_id: str | None, text: str, attachments: list) -> dict:
         return self._request("POST", "/chat", json={
             "session_id": session_id,

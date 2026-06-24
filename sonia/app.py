@@ -61,6 +61,11 @@ def create_app() -> FastAPI:
             return JSONResponse({"error": "not found"}, status_code=404)
         return s.model_dump()
 
+    @app.post("/sessions/{sid}/delete")
+    def delete_session(sid: str):
+        _session_store().delete(sid)        # idempotent; touches only the session record, not the brain
+        return {"deleted": sid}
+
     @app.post("/chat")
     def chat(body: ChatIn):
         sstore = _session_store()

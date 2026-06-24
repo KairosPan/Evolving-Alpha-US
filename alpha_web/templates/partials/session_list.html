@@ -1,5 +1,9 @@
 <ul class="session-list">
   {% for s in sessions %}
-  <li><a href="/evolve/sessions/{{ s.session_id }}">{{ s.title or s.session_id }}</a></li>
+  <li><a href="/evolve/sessions/{{ s.session_id }}">{{ s.title or s.session_id }}</a>
+    <button class="del" title="Delete conversation"
+            hx-post="/evolve/{{ s.session_id }}/delete"
+            hx-target="closest li" hx-swap="outerHTML"
+            hx-confirm="Delete this conversation?">&times;</button></li>
   {% endfor %}
 </ul>
