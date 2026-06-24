@@ -8,7 +8,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from alpha.harness.metatools import MetaTools
+from alpha.llm.client import MockLLMClient
 from alpha.llm.config import make_client
+from alpha.meta.agent import MetaAgent
 from alpha.meta.models import Attachment, Message, Session, new_message_id, new_session_id, now_iso
 from alpha.meta.sonia_agent import SoniaAgent
 from alpha.meta.store import LiveBrainStore, SessionStore
@@ -28,6 +30,10 @@ class ChatIn(BaseModel):
     session_id: str | None = None
     text: str = ""
     attachments: list[Attachment] = []
+
+
+class EditAction(BaseModel):
+    action: str  # "accept" | "reject"
 
 
 def create_app() -> FastAPI:
@@ -77,6 +83,56 @@ def create_app() -> FastAPI:
         sstore.put(sess)
         return {"session_id": sess.session_id, "user_message": user_msg.model_dump(),
                 "assistant_message": asst.model_dump()}
+
+    def _find(sess: Session, mid: str) -> Message | None:
+        return next((m for m in sess.messages if m.message_id == mid), None)
+
+    @app.post("/sessions/{sid}/edit/{eid}")
+    def edit_action(sid: str, eid: str, body: EditAction):
+        sstore = _session_store()
+        sess = sstore.get(sid)
+        if sess is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        for m in sess.messages:
+            for e in m.edits:
+                if e.edit_id == eid:
+                    e.status = "accepted" if body.action == "accept" else "rejected"
+                    sstore.put(sess)
+                    return e.model_dump()
+        return JSONResponse({"error": "edit not found"}, status_code=404)
+
+    @app.post("/sessions/{sid}/messages/{mid}/apply")
+    def apply_message(sid: str, mid: str):
+        with _MUTATION_LOCK:
+            sstore = _session_store()
+            sess = sstore.get(sid)
+            msg = _find(sess, mid) if sess else None
+            if msg is None:
+                return JSONResponse({"error": "not found"}, status_code=404)
+            accepted = [e for e in msg.edits if e.status == "accepted"]
+            bstore = _brain_store()
+            h, log = bstore.load()
+            if not bstore.is_live():
+                bstore.save(h, log)                                   # materialize before snapshot
+            msg.snapshot_before = bstore.snapshot(f"{sid}-{mid}")
+            applied, _rows = MetaAgent(MetaTools(h, log), MockLLMClient("{}")).apply(accepted)
+            bstore.save(h, log)
+            msg.applied_seqs = [r.seq for r in applied]
+            sstore.put(sess)
+            return {"applied": len(applied), "edits": [e.model_dump() for e in msg.edits]}
+
+    @app.post("/sessions/{sid}/messages/{mid}/rollback")
+    def rollback_message(sid: str, mid: str):
+        with _MUTATION_LOCK:
+            sstore = _session_store()
+            sess = sstore.get(sid)
+            msg = _find(sess, mid) if sess else None
+            if msg is None or not msg.snapshot_before:
+                return JSONResponse({"error": "nothing to roll back"}, status_code=404)
+            _brain_store().restore(msg.snapshot_before)
+            sess.notes.append(f"rolled back {mid}")
+            sstore.put(sess)
+            return {"ok": True}
 
     return app
 
