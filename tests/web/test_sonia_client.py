@@ -4,6 +4,8 @@ import pytest
 
 pytest.importorskip("fastapi", reason="install: pip install -e '.[web,sonia]'")
 
+from fastapi.testclient import TestClient
+
 from sonia.app import create_app as create_sonia
 from alpha_web.sonia_client import SoniaClient
 
@@ -18,7 +20,7 @@ def _isolate(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def sonia():
-    return SoniaClient(base_url="http://sonia", transport=httpx.ASGITransport(app=create_sonia()))
+    return SoniaClient(client=TestClient(create_sonia()))
 
 
 def test_healthz_roundtrips_in_process(sonia):
