@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<section class="brain-stub">
+  <h1>{{ title }}</h1>
+  <p class="blurb">{{ blurb }}</p>
+  <div class="empty-state">Not yet built &mdash; read-only preview. Sonia will manage {{ title|lower }} in a later round.</div>
+</section>
+{% endblock %}

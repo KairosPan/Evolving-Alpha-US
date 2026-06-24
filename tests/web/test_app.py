@@ -18,7 +18,7 @@ def test_health(client):
     assert r.status_code == 200 and r.json()["ok"] is True
 
 
-@pytest.mark.parametrize("path", ["/", "/deck", "/doctrine", "/memory", "/skills", "/decisions", "/verdict", "/evolution"])
+@pytest.mark.parametrize("path", ["/", "/deck", "/doctrine", "/memory", "/skills", "/workflow", "/connector", "/subagent", "/decisions", "/verdict", "/evolution"])
 def test_pages_render(client, path):
     r = client.get(path)
     assert r.status_code == 200
@@ -309,3 +309,18 @@ def test_brain_drawer_auto_expands_only_on_brain_pages(client):
 def test_active_brain_child_is_marked(client):
     body = client.get("/memory").text
     assert 'class="nav-subitem is-active"' in body        # the open drawer highlights Memory
+
+
+@pytest.mark.parametrize("path,title,needle", [
+    ("/workflow", "Workflow", "playbooks"),
+    ("/connector", "Connector", "connections"),
+    ("/subagent", "Subagent", "sub-agents"),
+])
+def test_brain_stub_pages_render_readonly(client, path, title, needle):
+    r = client.get(path)
+    assert r.status_code == 200
+    assert "<!doctype html>" in r.text.lower()             # full page, not a fragment
+    assert title in r.text                                 # component name
+    assert needle in r.text                                # the one-line blurb
+    assert "not yet built" in r.text.lower()               # honest read-only empty state
+    assert "nav-group is-open" in r.text                   # opens under the Brain drawer

@@ -55,6 +55,12 @@ NAV = [
 
 BRAIN_KEYS = {"doctrine", "memory", "workflow", "skills", "connector", "subagent"}
 
+_BRAIN_STUBS = {
+    "workflow":  ("Workflow",  "Named multi-step playbooks Sonia composes from skills."),
+    "connector": ("Connector", "External data/tool connections the agent draws on (Alpaca, EDGAR, MCP feeds…)."),
+    "subagent":  ("Subagent",  "Specialized dispatch sub-agents the master agent delegates to."),
+}
+
 SKILL_STATUSES = ["active", "incubating", "dormant", "retired"]
 SKILL_TYPES = ["pattern", "failure_detector", "feature"]
 OUTCOMES = ["win", "loss", "principle"]
@@ -232,6 +238,22 @@ def create_app() -> FastAPI:
     @app.get("/evolution")
     def evolution(request: Request):
         return render(request, "evolution.html", {"active": "evolution", **_evolution_context()})
+
+    def _brain_stub(request: Request, key: str):
+        title, blurb = _BRAIN_STUBS[key]
+        return render(request, "brain_stub.html", {"active": key, "title": title, "blurb": blurb})
+
+    @app.get("/workflow")
+    def workflow(request: Request):
+        return _brain_stub(request, "workflow")
+
+    @app.get("/connector")
+    def connector(request: Request):
+        return _brain_stub(request, "connector")
+
+    @app.get("/subagent")
+    def subagent(request: Request):
+        return _brain_stub(request, "subagent")
 
     import httpx
 
