@@ -50,6 +50,24 @@ def test_accept_then_apply_then_rollback(client, monkeypatch):
     assert "<html" in sessions.lower()
 
 
+def test_new_chat_redirects_instead_of_nesting(client):
+    # Regression: the New-chat button targets #thread, so /evolve/new must NOT return a whole
+    # cockpit document (that nested the entire page inside itself). It should redirect via HTMX.
+    r = client.post("/evolve/new")
+    assert "<html" not in r.text.lower()
+    assert "hx-redirect" in {k.lower() for k in r.headers}
+
+
+def test_session_link_is_plain_navigation_not_fragment_swap(client):
+    # Regression: session links used to hx-swap a full cockpit document into #cockpit, nesting the
+    # whole page on every click. They must be plain full-page navigations instead.
+    client.post("/evolve/message", data={"text": "hello there"})
+    body = client.get("/").text
+    assert 'hx-target="#cockpit"' not in body
+    assert 'hx-get="/evolve/sessions/' not in body      # not an HTMX fragment swap of any kind
+    assert 'href="/evolve/sessions/' in body
+
+
 def test_sonia_offline_shows_a_friendly_banner(client):
     webapp.set_sonia_client(SoniaClient(base_url="http://127.0.0.1:9", timeout=0.2))
     r = client.post("/evolve/message", data={"text": "hi"})

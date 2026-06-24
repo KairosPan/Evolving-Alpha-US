@@ -13,7 +13,7 @@ from datetime import date as Date
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -312,11 +312,16 @@ def create_app() -> FastAPI:
 
     @app.post("/evolve/new")
     def new_chat(request: Request):
+        # The New-chat button is HTMX-posted into #thread; returning a full cockpit document would
+        # nest the whole page inside itself. Instead, create the session and tell HTMX to navigate
+        # to a fresh full-page render of it (consistent with GET /evolve/sessions/{id}).
         try:
-            _sonia().new_session()
+            s = _sonia().new_session()
+            sid = s.get("session_id", "") if isinstance(s, dict) else ""
         except httpx.HTTPError:
-            pass
-        return render(request, "cockpit.html", _cockpit_ctx(request, None))
+            sid = ""
+        target = f"/evolve/sessions/{sid}" if sid else "/"
+        return Response(status_code=204, headers={"HX-Redirect": target})
 
     return app
 
