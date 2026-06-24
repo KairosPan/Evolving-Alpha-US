@@ -5,12 +5,13 @@ from typing import Literal
 
 from alpha.llm.client import LLMClient, MockLLMClient
 
-Role = Literal["agent", "refiner"]
+Role = Literal["agent", "refiner", "sonia"]
 
 # (provider, model) defaults per role: agent cheap (many rollouts), refiner Claude (edits H).
 _DEFAULTS: dict[str, tuple[str, str]] = {
     "agent": ("openai_compat", "deepseek-chat"),
     "refiner": ("anthropic", "claude-sonnet-4-6"),
+    "sonia": ("openai_compat", "deepseek-v4-pro"),
 }
 
 
