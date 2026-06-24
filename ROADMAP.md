@@ -6,9 +6,10 @@ which records **what's built** (the append-only status log).
 **Discipline (avoid drift):** every item lives in exactly one place. Not-yet-done → here. Done → moved
 out of here and recorded in `docs/PROJECT_STATE.md`. When an item ships, delete it from this file.
 
-Status as of 2026-06-23: `main` @ `38f0879`, 520 tests green. Alpaca data source is live-verified and
-vendor-swappable (`ALPHA_DATA_SOURCE`); the **interactive teaching cockpit** shipped (§6) — the console
-is no longer read-only.
+Status as of 2026-06-24: `main` @ `fc133e7`, 539 tests green. Alpaca data source is live-verified and
+vendor-swappable (`ALPHA_DATA_SOURCE`); the teaching cockpit shipped (§6) and was then **rewritten as
+"Sonia" — a standalone meta-agent service** (separate process, `deepseek-v4-pro` text-only, owns the
+brain + gated apply; the console is a thin sync HTTP client).
 
 ---
 
@@ -86,27 +87,49 @@ Optional future polish (not blocking): a live daily production loop that writes 
 automatically (instead of the on-demand producer scripts); HTMX-swap the date/run pickers; auth +
 non-localhost serving if it ever leaves the desk.
 
-### Teaching cockpit (the meta-agent channel) — shipped 2026-06-23, follow-ups open
+### Teaching cockpit (the meta-agent channel) — v1 shipped 2026-06-23, rewritten as "Sonia" service, follow-ups open
 
 ✅ **Interactive teaching cockpit shipped** (`main` @ `38f0879`, subagent-driven build + opus whole-branch
 review) — Evolution is now the **home page**: paste text/URL → LLM (Claude, or DeepSeek as refiner)
 proposes *directions* → a dry-run *edit queue* against `H=(doctrine,skills,memory)` → accept/reject/comment
 per edit → **apply** commits through the same gated meta-tools the autonomous Refiner uses, into a
 persistent **live brain** (seeds stay frozen as the `Hexpert` baseline); each round a rollback-able
-*session*. Spec: `docs/superpowers/specs/2026-06-23-meta-agent-teaching-cockpit-design.md`. Open
-follow-ups (also in spec §11):
+*session*. Spec: `docs/superpowers/specs/2026-06-23-meta-agent-teaching-cockpit-design.md`.
+
+✅ **v2 — "Sonia" standalone meta-agent service shipped** (2026-06-23, `main` @ `fc133e7`, 539 tests;
+subagent-driven build + opus whole-branch review + live two-process smoke). The v1 teaching *front* was
+replaced by a ChatGPT-style **chat cockpit** talking to **Sonia** — a separate FastAPI process
+(`python -m sonia`, :8810, `deepseek-v4-pro` **text-only**) that owns the live brain + gated apply/rollback
++ the conversation thread; `alpha_web` (:8100) is a thin **sync** httpx client (brain read-only). Spec:
+`docs/superpowers/specs/2026-06-23-sonia-standalone-meta-agent-service-design.md`. **Sonia-service
+follow-ups (non-blocking, from the final review — all bounded by the single-user/localhost threat model):**
+
+- [ ] **Widen Sonia `/chat`'s `try` to include the brain load** — `_brain_store().load()` sits outside the
+  `try` that wraps `make_client` + `respond`, so a corrupt `brain.json` would 500 (atomic writes make this
+  unlikely; one-line fix).
+- [ ] **`edit_action` under `_MUTATION_LOCK`** — the accept/reject route writes session state without the
+  lock, while the design says all mutating routes serialize on it (touches only the session JSON, not the
+  brain → the race is theoretical on a single-user tool; one-line fix).
+- [ ] **File-count / aggregate-size cap in `ingest_attachments`** — each file's extracted text is capped at
+  ~50k chars, but the *number* of files is unbounded (abuse-hardening; pairs with the SSRF item below,
+  needed before any multi-user serving).
+- [ ] **Distinguish "Sonia 404" from "Sonia unavailable" in the console banner** — both surface as one
+  `httpx.HTTPError` today, so a stale session/edit id (Sonia returns 404) reads as a service outage; split
+  `ConnectError` (down) from `HTTPStatusError` 404 (stale id → "refresh / new chat").
+
+**Broader meta-agent follow-ups (also in spec §11):**
 
 - [ ] **Self-learning channel** — the agent's **second learning channel**: a reflection→directions stage
   on top of the Refiner's evidence path, surfaced into the *same* cockpit, so the agent proposes
   evolutions from its **own task runs** (realized-outcome trajectories), not just from human-fed content.
   Teaching (human→agent) ships today; self-learning (agent→itself) is the headline next step. Own
   brainstorm→spec→plan arc.
-- [ ] **Image / chart ingestion** (Claude vision) — teach from a screenshot or `复盘` chart; extend the LLM
-  client for image content blocks + upload handling.
+- [ ] **Image / chart ingestion (vision)** — teach from a screenshot or `复盘` chart. Deferred in v2:
+  `deepseek-v4-pro` has **no vision via the API** (verified vs DeepSeek's API ref + NVIDIA NIM card), and
+  Sonia rejects images with a friendly note today; needs a vision-capable copilot (Claude, or a future
+  multimodal endpoint) + image content blocks + re-enabling the composer's image upload.
 - [ ] **`tweak` action** — manual inline arg-editing of a proposed edit (no LLM); the spec §8 route table
   lists it, but v1 shipped `accept` / `reject` / `comment→re-propose` + `apply` only.
-- [ ] **Auto-resume an in-flight draft on `GET /`** — today a refresh starts a fresh cockpit (drafts persist
-  + are browsable); render partials matching `Session.status` and re-validate dangling `target_id`s.
 - [ ] **Post-apply red-line lint** — flag a taught skill/lesson whose `taboo`/`entry` contradicts an
   immutable doctrine red-line (only doctrine *text* is write-protected today).
 - [ ] **General meta-agent core** — lift teach + self-learn off the trading-specific `doctrine/skills/memory`
