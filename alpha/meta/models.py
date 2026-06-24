@@ -19,6 +19,14 @@ def new_direction_id() -> str:
     return uuid4().hex[:6]
 
 
+def new_message_id() -> str:
+    return uuid4().hex[:8]
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 class LessonSource(BaseModel):
     kind: Literal["text", "url"]
     url: str | None = None
@@ -51,11 +59,32 @@ class ProposedEdit(BaseModel):
     applied_seq: int | None = None
 
 
+class Attachment(BaseModel):
+    kind: Literal["file", "url"]
+    name: str = ""
+    mime: str = ""
+    text: str = ""
+
+
+class Message(BaseModel):
+    message_id: str
+    role: Literal["user", "assistant"]
+    created_at: str = ""
+    text: str = ""
+    attachments: list[Attachment] = Field(default_factory=list)
+    directions: list[ProposedDirection] = Field(default_factory=list)
+    edits: list[ProposedEdit] = Field(default_factory=list)
+    snapshot_before: str | None = None
+    applied_seqs: list[int] = Field(default_factory=list)
+
+
 class Session(BaseModel):
     session_id: str
     created_at: str = ""
+    title: str = ""
     channel: str = "teach"
     status: Literal["open", "applied", "discarded"] = "open"
+    messages: list[Message] = Field(default_factory=list)
     sources: list[LessonSource] = Field(default_factory=list)
     directions: list[ProposedDirection] = Field(default_factory=list)
     chosen_direction_id: str | None = None
