@@ -284,3 +284,28 @@ def test_evolution_malformed_falls_back(client, tmp_path, monkeypatch):
     monkeypatch.setenv("ALPHA_WEB_EVOLUTION", str(f))
     r = client.get("/evolution")
     assert r.status_code == 200 and "wired artifact" in r.text
+
+
+# ── brain accordion group ──────────────────────────────────────────────────────
+def test_brain_group_lists_six_children_in_order(client):
+    body = client.get("/").text
+    # The six brain components appear, in the spec order, as sub-item links.
+    order = ["/doctrine", "/memory", "/workflow", "/skills", "/connector", "/subagent"]
+    positions = [body.index(f'href="{p}"') for p in order]
+    assert positions == sorted(positions)                 # strictly increasing == in order
+    assert 'class="nav-group' in body                     # the drawer group is rendered
+    assert "Brain" in body
+
+
+def test_brain_drawer_auto_expands_only_on_brain_pages(client):
+    open_body = client.get("/doctrine").text              # doctrine is a brain component
+    assert "nav-group is-open" in open_body
+    assert 'aria-expanded="true"' in open_body
+    collapsed = client.get("/deck").text                  # deck is NOT a brain component
+    assert "nav-group is-open" not in collapsed
+    assert 'aria-expanded="false"' in collapsed
+
+
+def test_active_brain_child_is_marked(client):
+    body = client.get("/memory").text
+    assert 'class="nav-subitem is-active"' in body        # the open drawer highlights Memory

@@ -25,10 +25,27 @@
     <span class="brain-badge">{{ "live · %d edits"|format(b.edit_count) if b.is_live else "seed baseline" }}</span>
     <div class="rail-label">Console</div>
     {% for item in nav %}
+    {% if item.children %}
+    {% set group_open = active in brain_keys %}
+    <div class="nav-group {% if group_open %}is-open{% endif %}">
+      <button type="button" class="nav-item nav-group-toggle"
+              aria-expanded="{{ 'true' if group_open else 'false' }}" aria-controls="nav-{{ item.key }}">
+        <span class="idx">{{ "%02d"|format(loop.index) }}</span>{{ item.label }}
+        <span class="caret" aria-hidden="true">&#9662;</span>
+      </button>
+      <div class="nav-sub" id="nav-{{ item.key }}">
+        {% for c in item.children %}
+        <a class="nav-subitem {% if c.key == active %}is-active{% endif %}" href="{{ c.path }}"
+           {% if c.key == active %}aria-current="page"{% endif %}>{{ c.label }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
     <a class="nav-item {% if item.key == active %}is-active{% endif %}" href="{{ item.path }}"
        {% if item.key == active %}aria-current="page"{% endif %}>
       <span class="idx">{{ "%02d"|format(loop.index) }}</span>{{ item.label }}
     </a>
+    {% endif %}
     {% endfor %}
     <div class="rail-foot">
       Decision&#8209;support only. It shows; it never trades.<br>

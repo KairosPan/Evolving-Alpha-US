@@ -40,13 +40,20 @@ def _sonia() -> SoniaClient:
 NAV = [
     {"path": "/", "key": "teach", "label": "Teach"},
     {"path": "/deck", "key": "deck", "label": "Deck"},
-    {"path": "/doctrine", "key": "doctrine", "label": "Doctrine"},
-    {"path": "/memory", "key": "memory", "label": "Memory"},
-    {"path": "/skills", "key": "skills", "label": "Skills"},
+    {"key": "brain", "label": "Brain", "children": [
+        {"path": "/doctrine",  "key": "doctrine",  "label": "Doctrine"},
+        {"path": "/memory",    "key": "memory",    "label": "Memory"},
+        {"path": "/workflow",  "key": "workflow",  "label": "Workflow"},
+        {"path": "/skills",    "key": "skills",    "label": "Skill"},
+        {"path": "/connector", "key": "connector", "label": "Connector"},
+        {"path": "/subagent",  "key": "subagent",  "label": "Subagent"},
+    ]},
     {"path": "/decisions", "key": "decisions", "label": "Decisions"},
     {"path": "/verdict", "key": "verdict", "label": "Verdict"},
     {"path": "/evolution", "key": "evolution", "label": "Autonomous"},
 ]
+
+BRAIN_KEYS = {"doctrine", "memory", "workflow", "skills", "connector", "subagent"}
 
 SKILL_STATUSES = ["active", "incubating", "dormant", "retired"]
 SKILL_TYPES = ["pattern", "failure_detector", "feature"]
@@ -63,6 +70,7 @@ def _make_templates() -> Jinja2Templates:
         skill_types=SKILL_TYPES,
         outcomes=OUTCOMES,
         nav=NAV,
+        brain_keys=BRAIN_KEYS,
         ring=da.ring_segments(),
         tape_regime=sample.sample_regime(),       # the omnipresent regime read (sample state)
         tape_state=sample.sample_market_state(),
