@@ -9,12 +9,10 @@ from __future__ import annotations
 
 import json
 import os
-import threading
 from datetime import date as Date
-from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -22,15 +20,22 @@ from fastapi.templating import Jinja2Templates
 from alpha.eval.decision import DecisionPackage
 from alpha.eval.decision_store import DecisionStore
 from alpha.eval.verdict_store import VerdictStore
-from alpha.harness.metatools import MetaTools
-from alpha.llm.client import MockLLMClient
-from alpha.llm.config import make_client
-from alpha.meta import ingest as meta_ingest
-from alpha.meta.agent import MetaAgent
-from alpha.meta.models import Session, new_session_id
-from alpha.meta.store import LiveBrainStore, SessionStore
+from alpha.meta.ingest import ingest_attachments
 from alpha_web import data_access as da
 from alpha_web import sample
+from alpha_web.sonia_client import SoniaClient
+
+_SONIA: SoniaClient | None = None
+
+
+def set_sonia_client(client) -> None:
+    """Test seam: inject an in-process SoniaClient (sync, wrapping a Sonia TestClient). None → use ALPHA_SONIA_URL."""
+    global _SONIA
+    _SONIA = client
+
+
+def _sonia() -> SoniaClient:
+    return _SONIA if _SONIA is not None else SoniaClient()
 
 NAV = [
     {"path": "/", "key": "teach", "label": "Teach"},
@@ -42,26 +47,6 @@ NAV = [
     {"path": "/verdict", "key": "verdict", "label": "Verdict"},
     {"path": "/evolution", "key": "evolution", "label": "Autonomous"},
 ]
-
-_MUTATION_LOCK = threading.Lock()
-
-
-def _meta_agent():
-    """Fresh per request: load the live brain, bind MetaTools, attach the refiner LLM."""
-    h, log = _brain_store().load()
-    return MetaAgent(MetaTools(h, log), make_client("refiner")), (h, log)
-
-
-def _llm_unavailable(exc: Exception) -> bool:
-    return "missing" in str(exc).lower() and "API_KEY" in str(exc)
-
-
-def _brain_store() -> LiveBrainStore:
-    return LiveBrainStore(os.environ.get("ALPHA_LIVE_BRAIN_DIR", "./state/brain"))
-
-
-def _session_store() -> SessionStore:
-    return SessionStore(os.environ.get("ALPHA_SESSIONS_DIR", "./state/sessions"))
 
 SKILL_STATUSES = ["active", "incubating", "dormant", "retired"]
 SKILL_TYPES = ["pattern", "failure_detector", "feature"]
@@ -202,10 +187,6 @@ def create_app() -> FastAPI:
             "regime": sample.sample_regime(), "market": sample.sample_market_state(),
         })
 
-    @app.get("/")
-    def cockpit(request: Request):
-        return render(request, "cockpit.html", {"active": "teach", "sessions": _session_store().list()[:20]})
-
     @app.get("/doctrine")
     def doctrine(request: Request):
         immutable, mutable = da.split_doctrine(da.load_brain())
@@ -244,149 +225,85 @@ def create_app() -> FastAPI:
     def evolution(request: Request):
         return render(request, "evolution.html", {"active": "evolution", **_evolution_context()})
 
-    @app.post("/evolve/{session_id}/direction")
-    def choose_direction(request: Request, session_id: str, direction_id: str = Form(...), comment: str = Form("")):
-        store = _session_store()
-        sess = store.get(session_id)
-        if sess is None or not sess.sources:
-            return render(request, "partials/edit_queue.html", {"error": "session not found", "session": None, "edits": []})
-        sess.chosen_direction_id = direction_id
-        sess.direction_comment = comment
-        direction = next((d for d in sess.directions if d.direction_id == direction_id), None)
-        if direction is None:
-            return render(request, "partials/edit_queue.html",
-                          {"error": "that direction is no longer available — start a new session",
-                           "session": sess, "edits": []})
+    import httpx
+
+    def _cockpit_ctx(request, session: dict | None, banner: str = ""):
+        return {"active": "evolve",
+                "session_id": (session or {}).get("session_id", ""),
+                "messages": (session or {}).get("messages", []),
+                "sessions": _safe_sessions(),
+                "banner": banner}
+
+    def _safe_sessions():
         try:
-            agent, _ = _meta_agent()
-            sess.edits = agent.expand_to_edits(sess.sources[0], direction, comment=comment or None)
-        except Exception as e:
-            if _llm_unavailable(e):
-                return render(request, "partials/edit_queue.html",
-                              {"error": "the model is unavailable — try again", "session": sess, "edits": []})
-            raise
-        store.put(sess)
-        return render(request, "partials/edit_queue.html", {"error": "", "session": sess, "edits": sess.edits})
+            return _sonia().list_sessions()
+        except httpx.HTTPError:
+            return []
+
+    @app.get("/")
+    def home(request: Request):
+        try:
+            sessions = _sonia().list_sessions()
+            latest = next((s for s in sessions if s.get("status") == "open"), None)
+            session = _sonia().get_session(latest["session_id"]) if latest else None
+            return render(request, "cockpit.html", _cockpit_ctx(request, session))
+        except httpx.HTTPError:
+            return render(request, "cockpit.html", _cockpit_ctx(request, None,
+                          banner="Sonia service unavailable — start it with `python -m sonia`"))
+
+    @app.post("/evolve/message")
+    def message(request: Request, session_id: str = Form(""), text: str = Form(""),
+                files: list[UploadFile] = File(default=[])):
+        uploads = [(f.filename, f.file.read()) for f in files if f.filename]
+        clean, attachments = ingest_attachments(text, uploads)
+        try:
+            out = _sonia().chat(session_id or None, clean, attachments)
+        except httpx.HTTPError:
+            return render(request, "partials/message_assistant.html",
+                          {"session_id": session_id, "m": {"message_id": "err", "role": "assistant",
+                           "text": "Sonia service unavailable — start it with `python -m sonia`.",
+                           "directions": [], "edits": []},
+                           "banner": "unavailable"})
+        return render(request, "partials/_two_turns.html",
+                      {"session_id": out["session_id"], "user": out["user_message"],
+                       "assistant": out["assistant_message"]})
 
     @app.post("/evolve/{session_id}/edit/{edit_id}")
-    def edit_action(request: Request, session_id: str, edit_id: str,
-                    action: str = Form(...), comment: str = Form("")):
-        store = _session_store()
-        sess = store.get(session_id)
-        row = next((e for e in (sess.edits if sess else []) if e.edit_id == edit_id), None)
-        if row is None:
-            return render(request, "partials/edit_row.html", {"e": None, "session": sess})
-        if action == "accept":
-            row.status = "accepted"
-        elif action == "reject":
-            row.status = "rejected"
-        elif action == "comment" and comment.strip():
-            direction = next((d for d in sess.directions if d.direction_id == sess.chosen_direction_id), None)
-            if direction is None or not sess.sources:
-                row.apply_reason = "direction no longer available — accept, reject, or start a new session"
-                store.put(sess)
-                return render(request, "partials/edit_row.html", {"e": row, "session": sess})
-            try:
-                agent, _ = _meta_agent()
-                new_row = agent.repropose_edit(sess.sources[0], direction, row, comment.strip())
-            except Exception as e:
-                if _llm_unavailable(e):
-                    row.apply_reason = "the model is unavailable — try again"
-                    store.put(sess)
-                    return render(request, "partials/edit_row.html", {"e": row, "session": sess})
-                raise
-            sess.edits = [new_row if e.edit_id == edit_id else e for e in sess.edits]
-            row = new_row
-        store.put(sess)
-        return render(request, "partials/edit_row.html", {"e": row, "session": sess})
+    def edit(request: Request, session_id: str, edit_id: str, action: str = Form(...)):
+        e = _sonia().edit(session_id, edit_id, action)
+        return render(request, "partials/edit_card.html", {"session_id": session_id, "e": e})
 
-    @app.post("/evolve/{session_id}/apply")
-    def apply_session(request: Request, session_id: str):
-        sstore = _session_store()
-        sess = sstore.get(session_id)
-        if sess is None or sess.status != "open":
-            return render(request, "partials/apply_result.html",
-                          {"error": "session is not open", "session": sess, "applied": []})
-        with _MUTATION_LOCK:
-            bstore = _brain_store()
-            h, log = bstore.load()
-            if not bstore.is_live():
-                bstore.save(h, log)                       # materialize before snapshot
-            sess.snapshot_before = bstore.snapshot(session_id)
-            # apply makes NO LLM call, so it needs no API key — pass a mock client.
-            agent = MetaAgent(MetaTools(h, log), MockLLMClient("{}"))
-            accepted = [e for e in sess.edits if e.status == "accepted"]
-            applied, _ = agent.apply(accepted)
-            bstore.save(h, log)
-            sess.applied_seqs = [r.seq for r in applied]
-            sess.status = "applied"
-            sstore.put(sess)
+    @app.post("/evolve/{session_id}/message/{message_id}/apply")
+    def apply(request: Request, session_id: str, message_id: str):
+        r = _sonia().apply(session_id, message_id)
         return render(request, "partials/apply_result.html",
-                      {"error": "", "session": sess, "applied": applied})
+                      {"session_id": session_id, "message_id": message_id, "applied": r["applied"]})
 
-    @app.post("/evolve/{session_id}/direction/regenerate")
-    def regenerate_directions(request: Request, session_id: str, comment: str = Form("")):
-        store = _session_store()
-        sess = store.get(session_id)
-        if sess is None or not sess.sources:
-            return render(request, "partials/directions.html",
-                          {"error": "session not found — start a new one", "directions": [], "session": None})
-        try:
-            agent, _ = _meta_agent()
-            sess.directions = agent.propose_directions(sess.sources[0], comment=comment or None)
-        except Exception as e:
-            if _llm_unavailable(e):
-                return render(request, "partials/directions.html",
-                              {"error": "the model is unavailable — try again", "directions": [], "session": sess})
-            raise
-        store.put(sess)
-        return render(request, "partials/directions.html", {"error": "", "directions": sess.directions, "session": sess})
+    @app.post("/evolve/rollback/{session_id}/{message_id}")
+    def rollback(request: Request, session_id: str, message_id: str):
+        _sonia().rollback(session_id, message_id)
+        return render(request, "partials/apply_result.html",
+                      {"session_id": session_id, "message_id": message_id, "applied": 0})
 
     @app.get("/evolve/sessions")
     def sessions_index(request: Request):
-        return render(request, "cockpit.html", {"active": "teach", "sessions": _session_store().list()[:50]})
+        return render(request, "cockpit.html", _cockpit_ctx(request, None))
 
     @app.get("/evolve/sessions/{session_id}")
     def session_detail(request: Request, session_id: str):
-        sess = _session_store().get(session_id)
-        return render(request, "session_detail.html", {"active": "teach", "session": sess})
-
-    @app.post("/evolve/rollback/{session_id}")
-    def rollback(request: Request, session_id: str):
-        sstore = _session_store()
-        sess = sstore.get(session_id)
-        if sess and sess.snapshot_before:
-            with _MUTATION_LOCK:
-                _brain_store().restore(sess.snapshot_before)
-            sess.notes.append("rolled back to pre-apply snapshot")
-            sstore.put(sess)
-        return render(request, "partials/apply_result.html",
-                      {"error": "rolled back" if sess else "no snapshot", "session": sess, "applied": []})
-
-    @app.post("/evolve/ingest")
-    def ingest(request: Request, text: str = Form(""), url: str = Form("")):
-        if url.strip():
-            try:
-                source = meta_ingest.fetch_url(url.strip())
-            except meta_ingest.IngestError as e:
-                return render(request, "partials/directions.html",
-                              {"error": f"{e} — paste the text instead.", "directions": [], "session": None})
-        else:
-            source = meta_ingest.from_text(text, title="pasted text")
         try:
-            agent, _ = _meta_agent()
-        except RuntimeError as e:
-            if _llm_unavailable(e):
-                return render(request, "partials/directions.html",
-                              {"error": "No API key — set your key or use mock mode.", "directions": [], "session": None})
-            raise
-        dirs = agent.propose_directions(source)
-        sess = Session(session_id=new_session_id(),
-                       created_at=datetime.now(timezone.utc).isoformat(),
-                       sources=[source], directions=dirs)
-        _session_store().put(sess)
-        return render(request, "partials/directions.html",
-                      {"error": "", "directions": dirs, "session": sess})
+            session = _sonia().get_session(session_id)
+        except httpx.HTTPError:
+            session = None
+        return render(request, "cockpit.html", _cockpit_ctx(request, session))
+
+    @app.post("/evolve/new")
+    def new_chat(request: Request):
+        try:
+            _sonia().new_session()
+        except httpx.HTTPError:
+            pass
+        return render(request, "cockpit.html", _cockpit_ctx(request, None))
 
     return app
 

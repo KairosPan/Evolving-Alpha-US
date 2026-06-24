@@ -6,12 +6,9 @@ from alpha.harness.edit_log import EditLog, EditRecord
 from alpha.harness.metatools import MetaTools
 from alpha.harness.state import HarnessState
 from alpha.llm.client import LLMClient
-from alpha.meta import prompts
-from alpha.meta.models import (
-    LessonSource, ProposedDirection, ProposedEdit, new_edit_id,
-)
+from alpha.meta.models import ProposedEdit, new_edit_id
 from alpha.refine.apply import ALL_TOOLS, try_apply_op
-from alpha.refine.ops import RefineOp, parse_ops
+from alpha.refine.ops import RefineOp
 
 _KIND = {
     "write_skill": "skill", "patch_skill": "skill", "retire_skill": "skill",
@@ -46,17 +43,8 @@ class MetaAgent:
         self._retire_min = retire_min
         self._promote_min = promote_min
 
-    def propose_directions(self, source: LessonSource, *, comment: str | None = None) -> list[ProposedDirection]:
-        system, user = prompts.build_directions_prompt(self.h, source, comment)
-        return prompts.parse_directions(self.llm.complete(system, user))
-
     def _preview(self, op: RefineOp) -> ProposedEdit:
         return preview_op(self.h, op, retire_min=self._retire_min, promote_min=self._promote_min)
-
-    def expand_to_edits(self, source: LessonSource, direction: ProposedDirection, *,
-                        comment: str | None = None) -> list[ProposedEdit]:
-        system, user = prompts.build_edits_prompt(self.h, source, direction, comment)
-        return [self._preview(op) for op in parse_ops(self.llm.complete(system, user))]
 
     def apply(self, accepted: list[ProposedEdit]) -> tuple[list[EditRecord], list[ProposedEdit]]:
         applied: list[EditRecord] = []
@@ -72,15 +60,3 @@ class MetaAgent:
             else:
                 e.status, e.apply_reason = "failed", reason
         return applied, accepted
-
-    def repropose_edit(self, source: LessonSource, direction: ProposedDirection,
-                       prior_edit: ProposedEdit, comment: str) -> ProposedEdit:
-        system, user = prompts.build_reedit_prompt(self.h, source, direction, prior_edit, comment)
-        ops = parse_ops(self.llm.complete(system, user))
-        if not ops:
-            prior_edit.status, prior_edit.apply_reason, prior_edit.user_comment = (
-                "failed", "model returned no usable edit", comment)
-            return prior_edit
-        out = self._preview(ops[0])
-        out.edit_id, out.user_comment = prior_edit.edit_id, comment
-        return out

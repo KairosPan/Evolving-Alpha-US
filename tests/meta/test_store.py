@@ -38,8 +38,8 @@ def test_snapshot_and_restore(tmp_path):
 def test_session_store_put_get_list_newest_first(tmp_path):
     store = SessionStore(tmp_path)
     store.put(Session(session_id="20260101T000000000000-aaaa"))
-    store.put(Session(session_id="20260102T000000000000-bbbb", status="applied"))
-    assert store.get("20260102T000000000000-bbbb").status == "applied"
+    store.put(Session(session_id="20260102T000000000000-bbbb", status="discarded"))
+    assert store.get("20260102T000000000000-bbbb").status == "discarded"
     assert store.get("missing") is None
     ids = [s.session_id for s in store.list()]
     assert ids == ["20260102T000000000000-bbbb", "20260101T000000000000-aaaa"]

@@ -1,0 +1,11 @@
+<div class="bubble assistant" id="msg-{{ m.message_id }}">
+  <div class="prose">{{ m.text }}</div>
+  {% for d in m.directions %}<div class="direction">▸ {{ d.title }}{% if d.summary %} — {{ d.summary }}{% endif %}</div>{% endfor %}
+  {% for e in m.edits %}{% include "partials/edit_card.html" %}{% endfor %}
+  {% if m.edits %}
+  <form hx-post="/evolve/{{ session_id }}/message/{{ m.message_id }}/apply"
+        hx-target="#msg-{{ m.message_id }}" hx-swap="beforeend">
+    <button type="submit">Apply accepted</button>
+  </form>
+  {% endif %}
+</div>

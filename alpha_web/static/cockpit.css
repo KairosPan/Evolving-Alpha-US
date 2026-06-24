@@ -1,0 +1,14 @@
+.cockpit{display:flex;gap:1rem}
+.sessions{width:14rem;flex:none}
+.thread-wrap{flex:1;display:flex;flex-direction:column;min-height:60vh}
+.thread{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;padding:.5rem}
+.bubble{padding:.5rem .75rem;border-radius:.5rem;max-width:48rem}
+.bubble.user{align-self:flex-end;background:#1f2937;color:#e5e7eb}
+.bubble.assistant{align-self:flex-start;background:#111827;color:#e5e7eb;border:1px solid #374151}
+.edit-card{margin-top:.4rem;padding:.35rem .5rem;border:1px solid #374151;border-radius:.4rem}
+.edit-card.status-failed{border-color:#b91c1c}
+.chip{display:inline-block;font-size:.75rem;background:#374151;border-radius:.3rem;padding:0 .35rem;margin-right:.25rem}
+.composer{display:flex;gap:.5rem;align-items:flex-end;padding:.5rem;border-top:1px solid #374151}
+.composer textarea{flex:1;min-height:3rem}
+.banner{background:#7c2d12;color:#fff;padding:.4rem .6rem;border-radius:.4rem;margin:.4rem}
+.htmx-indicator{display:none}.htmx-request .htmx-indicator{display:inline}

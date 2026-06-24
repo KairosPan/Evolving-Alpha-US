@@ -1,0 +1,13 @@
+<div class="edit-card status-{{ e.status }}" id="edit-{{ e.edit_id }}">
+  <code>{{ e.tool }}</code> <span>{{ e.summary or e.target_id or "" }}</span>{% if e.target_id %} <code class="target">{{ e.target_id }}</code>{% endif %}
+  {% if e.status == "failed" %}<em class="reason">{{ e.apply_reason }}</em>{% endif %}
+  {% if e.status in ("proposed", "accepted", "rejected") %}
+  <span class="actions">
+    <button hx-post="/evolve/{{ session_id }}/edit/{{ e.edit_id }}" hx-vals='{"action":"accept"}'
+            hx-target="#edit-{{ e.edit_id }}" hx-swap="outerHTML">accept</button>
+    <button hx-post="/evolve/{{ session_id }}/edit/{{ e.edit_id }}" hx-vals='{"action":"reject"}'
+            hx-target="#edit-{{ e.edit_id }}" hx-swap="outerHTML">reject</button>
+  </span>
+  <span class="state">{{ e.status }}</span>
+  {% endif %}
+</div>

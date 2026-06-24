@@ -83,13 +83,6 @@ class Session(BaseModel):
     created_at: str = ""
     title: str = ""
     channel: str = "teach"
-    status: Literal["open", "applied", "discarded"] = "open"
+    status: Literal["open", "discarded"] = "open"
     messages: list[Message] = Field(default_factory=list)
-    sources: list[LessonSource] = Field(default_factory=list)
-    directions: list[ProposedDirection] = Field(default_factory=list)
-    chosen_direction_id: str | None = None
-    direction_comment: str = ""
-    edits: list[ProposedEdit] = Field(default_factory=list)
-    applied_seqs: list[int] = Field(default_factory=list)
-    snapshot_before: str | None = None
     notes: list[str] = Field(default_factory=list)

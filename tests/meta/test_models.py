@@ -1,5 +1,5 @@
 from alpha.meta.models import (
-    LessonSource, ProposedDirection, ProposedEdit, Session,
+    LessonSource, Message, ProposedDirection, ProposedEdit, Session,
     new_session_id, new_edit_id,
 )
 
@@ -19,13 +19,16 @@ def test_proposed_edit_defaults_and_roundtrip():
 def test_session_holds_nested_models_and_roundtrips():
     sess = Session(
         session_id="s1",
-        sources=[LessonSource(kind="text", text="b")],
-        directions=[ProposedDirection(direction_id="d1", title="lean into squeezes")],
-        edits=[ProposedEdit(edit_id="e1", tool="patch_skill", args={"skill_id": "x"})],
+        messages=[Message(
+            message_id="m1",
+            role="assistant",
+            directions=[ProposedDirection(direction_id="d1", title="lean into squeezes")],
+            edits=[ProposedEdit(edit_id="e1", tool="patch_skill", args={"skill_id": "x"})],
+        )],
     )
     assert sess.status == "open"
     again = Session.model_validate(sess.model_dump())
-    assert again == sess and again.edits[0].tool == "patch_skill"
+    assert again == sess and again.messages[0].edits[0].tool == "patch_skill"
 
 
 def test_id_helpers_are_unique_and_sortable():

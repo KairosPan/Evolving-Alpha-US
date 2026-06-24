@@ -1,8 +1,6 @@
 <ul class="session-list">
   {% for s in sessions %}
-    <li><a href="/evolve/sessions/{{ s.session_id }}">{{ s.session_id }}</a>
-      — <span class="pill">{{ s.status }}</span>, {{ s.applied_seqs|length }} edit(s)</li>
-  {% else %}
-    <li class="muted">No sessions yet.</li>
+  <li><a hx-get="/evolve/sessions/{{ s.session_id }}" hx-target="#cockpit" hx-swap="outerHTML">
+    {{ s.title or s.session_id }}</a></li>
   {% endfor %}
 </ul>

@@ -1,27 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Teach{% endblock %}
 {% block content %}
-<div class="view-head">
-  <p class="eyebrow">META-AGENT · TEACHING COCKPIT</p>
-  <h1>Teach the desk.</h1>
-  <p class="lede">Show it material — a writeup or a link. It proposes a direction, then concrete edits
-    to its doctrine, skills and memory. You approve each one.</p>
-</div>
-
-<section class="panel" id="ingest">
-  <form hx-post="/evolve/ingest" hx-target="#stage" hx-swap="innerHTML" hx-indicator="#spin">
-    <label>Paste text
-      <textarea name="text" rows="6" placeholder="Paste an article, a 复盘, a setup writeup…"></textarea>
-    </label>
-    <label>…or a URL <input type="url" name="url" placeholder="https://…"></label>
-    <button type="submit">Propose directions <span id="spin" class="htmx-indicator">·thinking·</span></button>
-  </form>
-</section>
-
-<section id="stage"><!-- directions / edit-queue / result partials swap in here --></section>
-
-<section class="panel">
-  <h2>Past sessions</h2>
-  {% include "partials/session_list.html" %}
+<section class="cockpit" id="cockpit">
+  <aside class="sessions">
+    <form hx-post="/evolve/new" hx-target="#thread" hx-swap="innerHTML"><button>New chat</button></form>
+    {% include "partials/session_list.html" %}
+  </aside>
+  <main class="thread-wrap">
+    <div id="banner">{% if banner %}<div class="banner">{{ banner }}</div>{% endif %}</div>
+    <div id="thread" class="thread">
+      {% for m in messages %}
+        {% if m.role == "user" %}{% include "partials/message_user.html" %}
+        {% else %}{% include "partials/message_assistant.html" %}{% endif %}
+      {% endfor %}
+    </div>
+    <form id="composer" class="composer" hx-post="/evolve/message"
+          hx-target="#thread" hx-swap="beforeend" hx-encoding="multipart/form-data"
+          hx-on::after-request="this.reset()">
+      <input type="hidden" name="session_id" value="{{ session_id or '' }}">
+      <textarea name="text" placeholder="Teach Sonia… (paste text, links; attach .txt/.md/.csv/.pdf)"></textarea>
+      <input type="file" name="files" multiple>
+      <button type="submit">Send</button>
+      <span class="thinking htmx-indicator">thinking…</span>
+    </form>
+  </main>
 </section>
 {% endblock %}
