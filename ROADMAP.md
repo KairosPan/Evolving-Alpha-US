@@ -6,10 +6,12 @@ which records **what's built** (the append-only status log).
 **Discipline (avoid drift):** every item lives in exactly one place. Not-yet-done → here. Done → moved
 out of here and recorded in `docs/PROJECT_STATE.md`. When an item ships, delete it from this file.
 
-Status as of 2026-06-24: `main` @ `fc133e7`, 539 tests green. Alpaca data source is live-verified and
-vendor-swappable (`ALPHA_DATA_SOURCE`); the teaching cockpit shipped (§6) and was then **rewritten as
-"Sonia" — a standalone meta-agent service** (separate process, `deepseek-v4-pro` text-only, owns the
-brain + gated apply; the console is a thin sync HTTP client).
+Status as of 2026-06-25: `main` @ `741f290` (local, **not pushed**), 555 tests green. Alpaca data source is
+live-verified and vendor-swappable (`ALPHA_DATA_SOURCE`); the teaching cockpit shipped (§6), was **rewritten
+as "Sonia" — a standalone meta-agent service** (separate process, `deepseek-v4-pro` text-only, owns the
+brain + gated apply; the console is a thin sync HTTP client), then got a **cockpit-hardening + Brain-drawer**
+round (HTMX nesting fixes, hard-delete conversations, and a left-rail accordion grouping the six brain
+components — see the teaching-cockpit §6 subsection).
 
 ---
 
@@ -116,6 +118,25 @@ follow-ups (non-blocking, from the final review — all bounded by the single-us
 - [ ] **Distinguish "Sonia 404" from "Sonia unavailable" in the console banner** — both surface as one
   `httpx.HTTPError` today, so a stale session/edit id (Sonia returns 404) reads as a service outage; split
   `ConnectError` (down) from `HTTPStatusError` 404 (stale id → "refresh / new chat").
+
+✅ **v3 — cockpit hardening + Brain drawer shipped** (2026-06-24/25, `main` @ `741f290` local, 555 tests;
+subagent-driven build + opus whole-branch review = Ready-to-merge/0 Critical/0 Important; **NOT pushed**).
+Fixed an HTMX nesting-bug class (New-chat → `204 + HX-Redirect`, session links → plain `<a href>`; a
+3-agent Workflow audited all 32 HTMX interactions, 0 others); added **hard-delete conversations** (per-row
+`×` → Sonia owns it, empty-200 `<li>` removal, `SessionStore._path` path-traversal guard); and the
+**Brain left-rail accordion drawer** grouping the six brain components — doctrine·memory·workflow·skill·
+connector·subagent — with server auto-expand + a vanilla-JS toggle (no HTMX in the rail). Spec:
+`docs/superpowers/specs/2026-06-24-brain-drawer-design.md`. **Brain-drawer follow-ups (deferred — UI-first
+round shipped only the views; the three NEW components are read-only stubs):**
+
+- [ ] **Real models / stores / seed data for `workflow`, `connector`, `subagent`** — today they are read-only
+  stub pages (`brain_stub.html`). Each needs its own meaning + model before anything can populate it. Likely
+  one brainstorm→spec→plan round per component type.
+- [ ] **Make Sonia EDIT the three new components** — extend `H` + the meta-tools + gated-apply path + the
+  Sonia prompt + `edit_log` `target_kind` so teaching can touch workflow/connector/subagent (today Sonia
+  edits only doctrine/skills/memory). Blocked on the models above.
+- [ ] **Delete-`×` while Sonia is DOWN** swaps the `unavailable` banner into the `<li>` (cosmetic stray
+  banner; never-500-safe). Minor polish from the v3 final review.
 
 **Broader meta-agent follow-ups (also in spec §11):**
 
