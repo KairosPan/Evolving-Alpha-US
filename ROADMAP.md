@@ -6,7 +6,7 @@ which records **what's built** (the append-only status log).
 **Discipline (avoid drift):** every item lives in exactly one place. Not-yet-done → here. Done → moved
 out of here and recorded in `docs/PROJECT_STATE.md`. When an item ships, delete it from this file.
 
-Status as of 2026-06-25: `main` @ `741f290` (local, **not pushed**), 555 tests green. Alpaca data source is
+Status as of 2026-06-25: `main` pushed to `origin/main` (in sync), 555 tests green. Alpaca data source is
 live-verified and vendor-swappable (`ALPHA_DATA_SOURCE`); the teaching cockpit shipped (§6), was **rewritten
 as "Sonia" — a standalone meta-agent service** (separate process, `deepseek-v4-pro` text-only, owns the
 brain + gated apply; the console is a thin sync HTTP client), then got a **cockpit-hardening + Brain-drawer**
@@ -120,7 +120,7 @@ follow-ups (non-blocking, from the final review — all bounded by the single-us
   `ConnectError` (down) from `HTTPStatusError` 404 (stale id → "refresh / new chat").
 
 ✅ **v3 — cockpit hardening + Brain drawer shipped** (2026-06-24/25, `main` @ `741f290` local, 555 tests;
-subagent-driven build + opus whole-branch review = Ready-to-merge/0 Critical/0 Important; **NOT pushed**).
+subagent-driven build + opus whole-branch review = Ready-to-merge/0 Critical/0 Important; **pushed, in sync**).
 Fixed an HTMX nesting-bug class (New-chat → `204 + HX-Redirect`, session links → plain `<a href>`; a
 3-agent Workflow audited all 32 HTMX interactions, 0 others); added **hard-delete conversations** (per-row
 `×` → Sonia owns it, empty-200 `<li>` removal, `SessionStore._path` path-traversal guard); and the
