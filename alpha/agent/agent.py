@@ -55,7 +55,8 @@ class LLMAgentPolicy:
         system = build_system_prompt(self._harness, injection=self._injection,
                                      phase_prior=self._phase_prior, skill_budget=self._skill_budget,
                                      memory_budget=self._memory_budget, trial_slots=self._trial_slots,
-                                     available_signals=available_data_signals(universe))
+                                     available_signals=available_data_signals(universe),
+                                     asof=state.as_of)
         user = build_user_prompt(state, universe)
         raw = self._llm.complete(system, user)
         pkg = parse_decision(raw, state.date, universe, as_of=state.as_of)
