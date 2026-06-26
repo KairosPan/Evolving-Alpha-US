@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -38,6 +39,7 @@ class Lesson(BaseModel):
     named_analog: str = ""
     lesson: str
     importance: Importance = Field(default_factory=Importance)
+    learned_asof: date | None = None   # PIT key: the date this lesson became KNOWABLE (None = seed/always-known)
 
     @classmethod
     def from_seed(cls, d: dict) -> "Lesson":
