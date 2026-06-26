@@ -20,6 +20,7 @@ class TrajectoryStep(BaseModel):
     entries: dict[str, StockSnapshot] = Field(default_factory=dict)     # picked symbol -> decision-day snapshot
     outcomes: dict[str, ScoredCandidate] = Field(default_factory=dict)  # symbol -> realized scored outcome
     scored: bool = False
+    exit_date: Date | None = None      # realized scoring exit (set at the InnerLoop maturity seam); PIT key for episodes
 
 
 class Trajectory(BaseModel):
