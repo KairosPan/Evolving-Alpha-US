@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pydantic import ValidationError
 
-from alpha.harness.edit_log import EditRecord
+from alpha.harness.edit_log import EditProvenance, EditRecord
 from alpha.harness.errors import HarnessError
 from alpha.harness.memory import Lesson
 from alpha.harness.metatools import MetaTools
@@ -64,7 +64,9 @@ def _target_id(tool: str, args: dict) -> str | None:
 
 
 def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowed: frozenset[str],
-                 min_retire_samples: int, min_promote_samples: int) -> tuple[EditRecord | None, str | None]:
+                 min_retire_samples: int, min_promote_samples: int,
+                 provenance: EditProvenance | None = None,
+                 conflict_queue=None) -> tuple[EditRecord | None, str | None]:
     """Gate order: whitelist -> rationale -> empty-patch -> retire/promote evidence -> dispatch
     (dispatch errors -> clean reject reason). Returns (record, None) on apply | (None, reason)."""
     tid = _target_id(op.tool, op.args)
@@ -89,4 +91,6 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
         rec = _dispatch(meta, op)
     except _DISPATCH_ERRORS as e:
         return None, f"{type(e).__name__}: {e}"
+    if provenance is not None:
+        rec = meta.log.stamp_last(provenance)
     return rec, None
