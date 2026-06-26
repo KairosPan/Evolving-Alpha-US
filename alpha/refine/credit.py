@@ -78,7 +78,7 @@ class _Acc:
                            expectancy=self.adv_sum / d, expectancy_raw=self.score_sum / d)
 
 
-def apply_credit(traj: Trajectory, h: HarnessState, decay: float = 0.1) -> CreditReport:
+def apply_credit(traj: Trajectory, h: HarnessState, decay: float = 0.1, *, episode_store=None) -> CreditReport:
     """Walk the scored steps and update each matched skill's SkillStats IN PLACE (observation channel,
     NOT a meta-tool edit, NOT logged). CONTRACT: call once per trajectory; re-calling on the SAME
     trajectory double-counts. Calling on successive DISJOINT trajectories is the intended cumulative
@@ -106,6 +106,10 @@ def apply_credit(traj: Trajectory, h: HarnessState, decay: float = 0.1) -> Credi
             if nuked:
                 st.nukes += 1
             accs.setdefault(skill.skill_id, _Acc(skill.skill_id)).add(win, nuked, sc.advantage, sc.score)
+        if episode_store is not None:                       # observation-channel episode write (§6.3); ungated
+            from alpha.memory.episodes import episodes_from_step
+            for ep in episodes_from_step(step, h):
+                episode_store.add(ep)
     return CreditReport(per_skill={sid: a.to_credit() for sid, a in accs.items()},
                         unattributed=(unattr.to_credit() if unattr.n else None), n_scored=n_scored)
 
