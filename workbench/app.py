@@ -9,6 +9,10 @@ from alpha.meta.store import LiveBrainStore
 from alpha.converse.store import ProjectStore
 from alpha.converse.workspace import Workspace
 from alpha.converse.session import converse_project
+from alpha.harness.metatools import MetaTools
+from alpha.harness.edit_log import EditProvenance
+from alpha.refine.apply import try_apply_op, ALL_TOOLS
+from alpha.refine.ops import RefineOp, PASS_TOOLS
 
 DEFAULT_PROJECT_ID = "default"
 _MUTATION_LOCK = threading.Lock()
@@ -84,6 +88,56 @@ def create_app() -> FastAPI:
             return {"project_id": DEFAULT_PROJECT_ID, "messages": [], "turns": [],
                     "staged_edits": [], "artifacts": []}
         return _project_view(proj)
+
+    def _find(proj, eid):
+        return next((e for e in proj.staged_edits if e.edit_id == eid and e.status == "pending"), None)
+
+    @app.post("/edits/{eid}/approve")
+    def approve_edit(eid: str):
+        with _MUTATION_LOCK:
+            pstore = _project_store(); proj = pstore.get(DEFAULT_PROJECT_ID)
+            se = _find(proj, eid) if proj else None
+            if se is None:
+                return JSONResponse({"error": "not found"}, status_code=404)
+            bstore = _brain_store()
+            with bstore.lock():
+                h, log = bstore.load()
+                if not bstore.is_live():
+                    bstore.save(h, log)
+                snap = bstore.snapshot(f"approve-{eid}")
+                op = RefineOp(tool=se.op["tool"], args=dict(se.op["args"]), rationale=se.op.get("rationale", ""))
+                rec, reason = try_apply_op(MetaTools(h, log), h, op, allowed=PASS_TOOLS["M"],
+                                           min_retire_samples=5, min_promote_samples=3,
+                                           provenance=EditProvenance(path="teaching", proposer="hermes"))
+                if rec is not None:
+                    bstore.save(h, log)
+                    se.status, se.applied_seq, se.snapshot_before, se.reason = "approved", rec.seq, snap, None
+                else:
+                    se.status, se.reason = "rejected", reason
+            pstore.put(proj)
+            return {"edit_id": eid, "status": se.status, "reason": se.reason}
+
+    @app.post("/edits/{eid}/reject")
+    def reject_edit(eid: str):
+        with _MUTATION_LOCK:
+            pstore = _project_store(); proj = pstore.get(DEFAULT_PROJECT_ID)
+            se = _find(proj, eid) if proj else None
+            if se is None:
+                return JSONResponse({"error": "not found"}, status_code=404)
+            se.status = "rejected"; pstore.put(proj)
+            return {"edit_id": eid, "status": "rejected"}
+
+    @app.post("/rollback")
+    def rollback():
+        with _MUTATION_LOCK:
+            pstore = _project_store(); proj = pstore.get(DEFAULT_PROJECT_ID)
+            snaps = [e.snapshot_before for e in (proj.staged_edits if proj else []) if e.snapshot_before]
+            if not snaps:
+                return JSONResponse({"error": "nothing to roll back"}, status_code=404)
+            bstore = _brain_store()
+            with bstore.lock():
+                bstore.restore(snaps[-1])
+            return {"ok": True}
 
     return app
 
