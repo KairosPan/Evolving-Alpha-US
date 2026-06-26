@@ -14,11 +14,11 @@
 <div class="banner err">⚠ <span><b>Sonia service unavailable.</b> Start it with <code>python -m sonia</code> to see the held conflict queue.</span></div>
 {% endif %}
 
-{% if not conflicts %}
+{% if not conflicts and not sonia_down %}
 <div class="panel panel-pad">
   <p class="muted" style="margin:0;">No conflicts held — the teaching record and self-study are fully aligned. Nothing awaits adjudication.</p>
 </div>
-{% else %}
+{% elif conflicts %}
 <p class="eyebrow">{{ conflicts|length }} held conflict{{ "" if conflicts|length == 1 else "s" }}</p>
 <div class="evo">
   {% for c in conflicts %}
@@ -48,8 +48,19 @@
       <div class="evo-why">
         <span class="k">self-study op</span>{{ c.op.tool }} — {{ c.op.rationale }}
       </div>
-      {# Adjudication buttons — wired in Task 4 #}
       <div class="conflict-actions" style="margin-top:10px;">
+        <button
+          hx-post="/conflicts/{{ c.conflict_id }}/resolve"
+          hx-vals='{"decision": "keep_teaching"}'
+          hx-target="#conflict-{{ c.conflict_id }}"
+          hx-swap="outerHTML"
+          class="btn btn--sm">Keep teaching</button>
+        <button
+          hx-post="/conflicts/{{ c.conflict_id }}/resolve"
+          hx-vals='{"decision": "accept_self_study"}'
+          hx-target="#conflict-{{ c.conflict_id }}"
+          hx-swap="outerHTML"
+          class="btn btn--sm btn--warn">Accept self-study</button>
       </div>
     </div>
   </div>

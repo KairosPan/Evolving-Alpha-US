@@ -248,6 +248,20 @@ def create_app() -> FastAPI:
         except Exception:
             return render(request, "conflicts.html", {"active": "conflicts", "conflicts": [], "sonia_down": True})
 
+    @app.post("/conflicts/{cid}/resolve")
+    def resolve_conflict(request: Request, cid: str, decision: str = Form(...)):
+        # Mirror delete_session: return EMPTY 200 (not 204 — htmx skips swap on 204) so the
+        # conflict row outerHTML-swaps to nothing and vanishes from the page.
+        try:
+            _sonia().resolve_conflict(cid, decision)
+        except Exception:
+            return Response(
+                status_code=200,
+                content=f'<div id="conflict-{cid}" class="banner err">⚠ Sonia unavailable — could not resolve conflict.</div>',
+                media_type="text/html",
+            )
+        return Response(status_code=200, content="")
+
     def _brain_stub(request: Request, key: str):
         title, blurb = _BRAIN_STUBS[key]
         return render(request, "brain_stub.html", {"active": key, "title": title, "blurb": blurb})

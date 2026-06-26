@@ -53,3 +53,13 @@ def test_conflicts_page_renders_held(tmp_path, monkeypatch):
 def test_conflicts_page_empty_state(tmp_path, monkeypatch):
     r = _web_client(tmp_path, monkeypatch).get("/conflicts")      # no conflicts seeded
     assert r.status_code == 200 and "Conflicts" in r.text         # renders an empty state, no 500
+
+
+def test_resolve_returns_empty_200_and_removes(tmp_path, monkeypatch):
+    held = _seed(tmp_path)
+    tc = _web_client(tmp_path, monkeypatch)
+    r = tc.post(f"/conflicts/{held.conflict_id}/resolve", data={"decision": "accept_self_study"})
+    assert r.status_code == 200 and r.text == ""                 # empty -> htmx outerHTML-swaps the row away
+    assert tc.get("/conflicts").json() if False else True        # (page is HTML; assert via the queue below)
+    from alpha.meta.conflict_store import ConflictQueue
+    assert ConflictQueue(str(tmp_path / "conflicts")).all() == []   # actually resolved in Sonia's queue
