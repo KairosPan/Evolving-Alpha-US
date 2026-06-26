@@ -51,6 +51,11 @@ def _dispatch(meta: MetaTools, op: RefineOp) -> EditRecord:
     raise ValueError(f"unknown tool: {tool}")
 
 
+def _target_kind(tool: str) -> str:
+    from alpha.refine.conflict import _KIND
+    return _KIND.get(tool, "")
+
+
 def _target_id(tool: str, args: dict) -> str | None:
     if tool in ("write_skill", "patch_skill", "retire_skill", "revive_skill", "promote_skill"):
         v = args.get("skill_id")
@@ -87,6 +92,13 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
                 return None, f"promote blocked: n={sk.stats.n} < min_promote_samples={min_promote_samples}"
             if sk.stats.expectancy is None or sk.stats.expectancy <= 0:
                 return None, "promote blocked: expectancy (advantage) not > 0"
+    if conflict_queue is not None:
+        from alpha.refine.conflict import is_conflict
+        if is_conflict(meta.log, op, provenance):
+            contested = meta.log.latest_for(_target_kind(op.tool), tid) if tid else None
+            conflict_queue.add(op=op.model_dump(), provenance=provenance.model_dump() if provenance else None,
+                               contested=contested.model_dump() if contested else None)
+            return None, "held_for_review: self-study contests a teaching-owned element"
     try:
         rec = _dispatch(meta, op)
     except _DISPATCH_ERRORS as e:
