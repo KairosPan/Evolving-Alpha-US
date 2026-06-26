@@ -125,12 +125,13 @@ def create_app() -> FastAPI:
                 return JSONResponse({"error": "not found"}, status_code=404)
             accepted = [e for e in msg.edits if e.status == "accepted"]
             bstore = _brain_store()
-            h, log = bstore.load()
-            if not bstore.is_live():
-                bstore.save(h, log)                                   # materialize before snapshot
-            msg.snapshot_before = bstore.snapshot(f"{sid}-{mid}")
-            applied, _rows = MetaAgent(MetaTools(h, log), MockLLMClient("{}")).apply(accepted)
-            bstore.save(h, log)
+            with bstore.lock():
+                h, log = bstore.load()
+                if not bstore.is_live():
+                    bstore.save(h, log)                               # materialize before snapshot
+                msg.snapshot_before = bstore.snapshot(f"{sid}-{mid}")
+                applied, _rows = MetaAgent(MetaTools(h, log), MockLLMClient("{}")).apply(accepted)
+                bstore.save(h, log)
             msg.applied_seqs = [r.seq for r in applied]
             sstore.put(sess)
             return {"applied": len(applied), "edits": [e.model_dump() for e in msg.edits]}
@@ -157,7 +158,9 @@ def create_app() -> FastAPI:
             msg = _find(sess, mid) if sess else None
             if msg is None or not msg.snapshot_before:
                 return JSONResponse({"error": "nothing to roll back"}, status_code=404)
-            _brain_store().restore(msg.snapshot_before)
+            bstore = _brain_store()
+            with bstore.lock():
+                bstore.restore(msg.snapshot_before)
             sess.notes.append(f"rolled back {mid}")
             sstore.put(sess)
             return {"ok": True}

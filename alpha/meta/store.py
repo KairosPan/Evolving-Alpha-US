@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import os
 import shutil
 import tempfile
+import time
 from pathlib import Path
 
 from alpha.harness.edit_log import EditLog
@@ -62,6 +65,30 @@ class LiveBrainStore:
 
     def restore(self, snapshot_path: str) -> None:
         _atomic_write(self._brain, Path(snapshot_path).read_text(encoding="utf-8"))
+
+    @contextlib.contextmanager
+    def lock(self, timeout: float = 10.0):
+        """Cross-process exclusive lock over the brain's read-modify-write critical section.
+        Bounded non-blocking retry; on timeout raise (never silently skip a write)."""
+        self._root.mkdir(parents=True, exist_ok=True)
+        lock_path = self._root / ".brain.lock"
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+        deadline = time.monotonic() + timeout
+        try:
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError(f"brain lock busy after {timeout}s: {lock_path}")
+                    time.sleep(0.05)
+            yield
+        finally:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            finally:
+                os.close(fd)
 
 
 from alpha.meta.models import Session
