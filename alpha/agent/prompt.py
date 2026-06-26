@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date, datetime
+
 from alpha.agent.retrieval import (
     DEFAULT_MEMORY_BUDGET, DEFAULT_SKILL_BUDGET, DEFAULT_TRIAL_SLOTS, select_for_prompt,
 )
@@ -66,20 +68,23 @@ def build_system_prompt(h: HarnessState, *, injection: str = "full", phase_prior
                         skill_budget: int = DEFAULT_SKILL_BUDGET,
                         memory_budget: int = DEFAULT_MEMORY_BUDGET,
                         trial_slots: int = DEFAULT_TRIAL_SLOTS,
-                        available_signals: frozenset[str] | None = None) -> str:
+                        available_signals: frozenset[str] | None = None,
+                        asof: date | datetime | None = None) -> str:
     """Render H=(p,K,M) + the regime cycle + the output contract into the system prompt.
 
     injection='full' renders all active skills + all lessons; 'retrieval' renders a budgeted slice
     (phase-prior hit first). Rebuilt every decide() so Refiner edits to H are immediately visible.
     """
+    asof_d = asof.date() if isinstance(asof, datetime) else asof   # PIT key compares date<=date
     if injection == "retrieval":
         sel = select_for_prompt(h, phase_prior=phase_prior, skill_budget=skill_budget,
-                                memory_budget=memory_budget, trial_slots=trial_slots)
+                                memory_budget=memory_budget, trial_slots=trial_slots, asof=asof_d)
         skills, trials, lessons = sel.skills, sel.trials, sel.lessons
     else:
         skills = [s for s in h.skills.all() if s.status == "active"]
         trials = [s for s in h.skills.all() if s.status == "incubating"]
-        lessons = h.memory.all()
+        lessons = [l for l in h.memory.all()
+                   if asof_d is None or l.learned_asof is None or l.learned_asof <= asof_d]
 
     if available_signals is not None:                    # US-3c: enforce Skill.depends_on (None = off)
         skills = [s for s in skills if _depends_on_satisfied(s, available_signals)]
