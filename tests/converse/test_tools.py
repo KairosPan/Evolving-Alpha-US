@@ -9,7 +9,7 @@ from alpha.universe.stock import StockSnapshot
 from alpha.universe.universe import CandidateUniverse
 from alpha.llm.client import MockLLMClient
 from alpha.eval.decision import DecisionPackage
-from alpha.converse.tools import make_decide_tool
+from alpha.converse.tools import make_decide_tool, make_gated_write_tool
 
 def _h():
     skills = SkillRegistry.from_skills([
@@ -25,6 +25,31 @@ def _state():
 
 def _uni():
     return CandidateUniverse.from_stocks([StockSnapshot(symbol="RUN", name="Runner", status="gainer")])
+
+def _bare_h():
+    return HarnessState(doctrine=Doctrine(), skills=SkillRegistry.from_skills([]),
+                        memory=MemoryStore.from_lessons([]))
+
+
+def test_gated_write_applies_valid_memory_op():
+    h = _bare_h()
+    _schema, propose = make_gated_write_tool(h)
+    out = propose(tool="process_memory",
+                  args={"lesson_id": "c-mem-1", "phases": ["trend"],
+                        "outcome": "win", "lesson": "converse: gate routing works"},
+                  rationale="prove the gated write path")
+    assert out["status"] == "applied"
+    assert any(l.lesson_id == "c-mem-1" for l in h.memory.all())
+
+
+def test_gated_write_rejects_non_whitelisted_op():
+    h = _bare_h()
+    _schema, propose = make_gated_write_tool(h)
+    out = propose(tool="rewrite_doctrine", args={"section": "x", "new_guidance": "y"},
+                  rationale="not in the M whitelist")
+    assert out["status"] == "rejected"
+    assert out["reason"]
+
 
 def test_decide_tool_returns_typed_package():
     agent_llm = MockLLMClient('{"regime_read": "trend frontside", "candidates": '
