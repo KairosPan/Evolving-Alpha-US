@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Conflicts{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <p class="eyebrow">sonia · held queue · teaching vs self-study</p>
+  <h1 class="page-title">Conflicts</h1>
+  <p class="page-lede">Self-study ops the Refiner wants to apply that directly contest a human teaching
+    record. Each one is held here for adjudication — keep the teaching (block the edit) or accept the
+    self-study and retire the contested lesson.</p>
+</div>
+
+{% if sonia_down %}
+<div class="banner err">⚠ <span><b>Sonia service unavailable.</b> Start it with <code>python -m sonia</code> to see the held conflict queue.</span></div>
+{% endif %}
+
+{% if not conflicts %}
+<div class="panel panel-pad">
+  <p class="muted" style="margin:0;">No conflicts held — the teaching record and self-study are fully aligned. Nothing awaits adjudication.</p>
+</div>
+{% else %}
+<p class="eyebrow">{{ conflicts|length }} held conflict{{ "" if conflicts|length == 1 else "s" }}</p>
+<div class="evo">
+  {% for c in conflicts %}
+  <div class="evo-item" id="conflict-{{ c.conflict_id }}">
+    <span class="evo-seq">{{ "%02d"|format(loop.index) }}</span>
+    <div class="evo-card">
+      <div class="evo-top">
+        <span class="op op--down">{{ c.op.tool }}</span>
+        <span class="evo-target">{{ c.contested.target_id }}</span>
+        <span class="evo-tool">{{ c.provenance.path }} · {{ c.provenance.proposer }}</span>
+      </div>
+      <div class="evo-summary">{{ c.op.rationale }}</div>
+      <div class="evo-diff">
+        <div class="diff-row">
+          <span class="diff-key">contested</span>
+          <span class="diff-val">{{ c.contested.target_id }}</span>
+        </div>
+        <div class="diff-row">
+          <span class="diff-key">proposer</span>
+          <span class="diff-val">{{ c.provenance.path }} / {{ c.provenance.proposer }}</span>
+        </div>
+        <div class="diff-row">
+          <span class="diff-key">conflict&nbsp;id</span>
+          <span class="diff-val"><code>{{ c.conflict_id }}</code></span>
+        </div>
+      </div>
+      <div class="evo-why">
+        <span class="k">self-study op</span>{{ c.op.tool }} — {{ c.op.rationale }}
+      </div>
+      {# Adjudication buttons — wired in Task 4 #}
+      <div class="conflict-actions" style="margin-top:10px;">
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

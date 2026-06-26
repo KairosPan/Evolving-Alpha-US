@@ -33,3 +33,23 @@ def test_sonia_client_list_and_resolve(tmp_path, monkeypatch):
     assert sc.list_conflicts()[0]["conflict_id"] == held.conflict_id
     assert sc.resolve_conflict(held.conflict_id, "keep_teaching")["resolved"] == held.conflict_id
     assert sc.list_conflicts() == []
+
+
+def _web_client(tmp_path, monkeypatch):
+    from alpha_web.app import app, set_sonia_client
+    set_sonia_client(SoniaClient(client=_sonia_tc(tmp_path, monkeypatch)))
+    return TestClient(app)
+
+
+def test_conflicts_page_renders_held(tmp_path, monkeypatch):
+    held = _seed(tmp_path)
+    r = _web_client(tmp_path, monkeypatch).get("/conflicts")
+    assert r.status_code == 200
+    assert "Conflicts" in r.text                                  # nav label
+    assert held.conflict_id in r.text and "self_study" in r.text  # the held conflict is rendered
+    assert "demote_memory" in r.text
+
+
+def test_conflicts_page_empty_state(tmp_path, monkeypatch):
+    r = _web_client(tmp_path, monkeypatch).get("/conflicts")      # no conflicts seeded
+    assert r.status_code == 200 and "Conflicts" in r.text         # renders an empty state, no 500

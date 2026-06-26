@@ -51,6 +51,7 @@ NAV = [
     {"path": "/decisions", "key": "decisions", "label": "Decisions"},
     {"path": "/verdict", "key": "verdict", "label": "Verdict"},
     {"path": "/evolution", "key": "evolution", "label": "Autonomous"},
+    {"path": "/conflicts", "key": "conflicts", "label": "Conflicts"},
 ]
 
 BRAIN_KEYS = {"doctrine", "memory", "workflow", "skills", "connector", "subagent"}
@@ -238,6 +239,14 @@ def create_app() -> FastAPI:
     @app.get("/evolution")
     def evolution(request: Request):
         return render(request, "evolution.html", {"active": "evolution", **_evolution_context()})
+
+    @app.get("/conflicts")
+    def conflicts(request: Request):
+        try:
+            rows = _sonia().list_conflicts()
+            return render(request, "conflicts.html", {"active": "conflicts", "conflicts": rows, "sonia_down": False})
+        except Exception:
+            return render(request, "conflicts.html", {"active": "conflicts", "conflicts": [], "sonia_down": True})
 
     def _brain_stub(request: Request, key: str):
         title, blurb = _BRAIN_STUBS[key]
