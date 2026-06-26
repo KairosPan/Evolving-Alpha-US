@@ -1,5 +1,6 @@
 # tests/converse/test_tools.py
 from datetime import date, datetime
+import pandas as pd
 from alpha.harness.skill import Skill
 from alpha.harness.doctrine import Doctrine
 from alpha.harness.registry import SkillRegistry, MemoryStore
@@ -9,7 +10,8 @@ from alpha.universe.stock import StockSnapshot
 from alpha.universe.universe import CandidateUniverse
 from alpha.llm.client import MockLLMClient
 from alpha.eval.decision import DecisionPackage
-from alpha.converse.tools import make_decide_tool, make_gated_write_tool
+from alpha.data.source import FakeSource
+from alpha.converse.tools import make_decide_tool, make_gated_write_tool, make_decide_for_date_tool
 
 def _h():
     skills = SkillRegistry.from_skills([
@@ -59,3 +61,29 @@ def test_decide_tool_returns_typed_package():
     pkg = decide(state=_state(), universe=_uni())
     assert isinstance(pkg, DecisionPackage)
     assert [c.symbol for c in pkg.candidates] == ["RUN"]
+
+
+def _fake_source():
+    cal = [date(2026, 6, d) for d in range(10, 14)]      # 4 trading days
+    snaps, px, closes = {}, 10.0, []
+    for d in cal:
+        prev = px; px = px * 1.15; closes.append(px)      # RUN rises 15%/day -> a gainer (>= gainer_pct 10)
+        snaps[d] = pd.DataFrame({"symbol": ["RUN"], "name": ["RUN"], "open": [prev], "high": [px],
+                                 "low": [prev], "close": [px], "volume": [1], "prev_close": [prev]})
+    bars = {"RUN": pd.DataFrame({"date": cal, "open": [10.0] + closes[:-1], "high": closes,
+                                 "low": [10.0] + closes[:-1], "close": closes, "volume": [1] * len(cal)})}
+    return FakeSource(calendar=cal, bars=bars, snapshots=snaps)
+
+def _agent_llm():
+    return MockLLMClient('{"regime_read": "trend frontside", "candidates": '
+                         '[{"symbol": "RUN", "pattern": "gap_and_go", "confidence": 0.7}]}')
+
+def test_decide_for_date_builds_pit_state_and_returns_typed_package():
+    schema, decide = make_decide_for_date_tool(_h(), _agent_llm(), _fake_source())
+    assert schema["name"] == "decide" and "date" in schema["parameters"]["required"]
+    pkg = decide(date="2026-06-12")
+    from alpha.eval.decision import DecisionPackage
+    assert isinstance(pkg, DecisionPackage)
+    assert pkg.date == date(2026, 6, 12)                  # built for the requested date
+    assert pkg.as_of == datetime(2026, 6, 12, 16, 0)      # PIT close stamp
+    assert [c.symbol for c in pkg.candidates] == ["RUN"]  # RUN surfaced as a gainer and survived
