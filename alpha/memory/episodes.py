@@ -27,3 +27,29 @@ class Episode(BaseModel):
         if self.learned_asof is None:
             object.__setattr__(self, "learned_asof", self.exit_date)   # frozen model
         return self
+
+
+def episodes_from_step(step, h) -> list[Episode]:
+    """Build one Episode per scored pick in a matured TrajectoryStep. Uses step.exit_date as the PIT key.
+    [] if the step is unscored or has no exit_date (the last `horizon` steps never mature)."""
+    from alpha.refine.credit import resolve_skill  # local import: avoid heavy import at module load
+    if not step.scored or step.exit_date is None:
+        return []
+    narratives = {c.symbol: getattr(c, "narrative", "") for c in step.decision.candidates}
+    phase = getattr(step.decision, "regime_read", "") or ""
+    out: list[Episode] = []
+    for symbol, sc in step.outcomes.items():
+        skill = resolve_skill(getattr(sc, "pattern", ""), h)
+        skill_id = skill.skill_id if skill is not None else (getattr(sc, "pattern", "") or "__unattributed__")
+        family = skill.family if skill is not None else None
+        out.append(Episode(
+            episode_id=f"{step.exit_date.isoformat()}:{symbol}:{skill_id}",
+            symbol=symbol, skill_id=skill_id, family=family, phase=phase,
+            narrative=narratives.get(symbol, "") or "",
+            entry_date=step.date, exit_date=step.exit_date,
+            outcome=getattr(sc, "outcome", ""), advantage=getattr(sc, "advantage", 0.0),
+            score=getattr(sc, "score", 0.0),
+            failure_kind=getattr(sc, "failure_signature", "") or "",
+            reflection_text=getattr(sc, "reflection", "") or "",
+        ))
+    return out
