@@ -9,12 +9,14 @@ from alpha.converse.loop import run_conversation, ConversationResult
 from alpha.converse.tools import make_decide_for_date_tool, make_gated_write_tool
 
 
-def build_converse_registry(harness: HarnessState, agent_llm, source) -> ToolRegistry:
+def build_converse_registry(harness: HarnessState, agent_llm, source,
+                            *, read_only: bool = False) -> ToolRegistry:
     reg = ToolRegistry()
     decide_schema, decide_fn = make_decide_for_date_tool(harness, agent_llm, source)
     reg.register("decide", decide_schema, decide_fn)
-    write_schema, write_fn = make_gated_write_tool(harness)
-    reg.register("propose_memory_edit", write_schema, write_fn)
+    if not read_only:
+        write_schema, write_fn = make_gated_write_tool(harness)
+        reg.register("propose_memory_edit", write_schema, write_fn)
     return reg
 
 

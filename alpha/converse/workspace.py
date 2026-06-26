@@ -20,6 +20,7 @@ class Workspace:
 
     def init(self) -> None:
         """Idempotent git init + local identity config; no-op if .git already exists."""
+        self._root.mkdir(parents=True, exist_ok=True)
         if (self._root / ".git").exists():
             return
         self._run(["git", "init", "-q"])
