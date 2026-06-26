@@ -56,3 +56,24 @@ def test_workbench_approve_empty_200(tmp_path, monkeypatch):
     pid = _workbench().get_project()["staged_edits"][0]["edit_id"]
     r = tc.post(f"/workbench/edits/{pid}/approve")
     assert r.status_code == 200 and r.text == ""                      # empty-200 row removal
+
+
+def test_approve_error_banner_escapes_eid_xss(monkeypatch):
+    # The approve-error branch reflects path param `eid` into a raw text/html fragment via html.escape.
+    # A workbench client that RAISES on approve_edit triggers the error banner.
+    # The reflected eid MUST be HTML-escaped (reflected-XSS guard), not interpolated raw.
+    import urllib.parse
+    from fastapi.testclient import TestClient
+    from alpha_web.app import app, set_workbench_client
+
+    class _BrokenClient:
+        def approve_edit(self, eid):
+            raise RuntimeError("workbench unavailable")
+
+    set_workbench_client(_BrokenClient())
+    tc = TestClient(app)
+    payload = '"><img src=x onerror=alert(1)>'
+    r = tc.post(f"/workbench/edits/{urllib.parse.quote(payload, safe='')}/approve")
+    assert r.status_code == 200
+    assert '"><img' not in r.text and "<img src=x" not in r.text      # no attribute-breakout / live tag
+    assert "&lt;img" in r.text                                         # reflected, but escaped (inert)

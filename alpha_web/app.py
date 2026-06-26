@@ -292,7 +292,10 @@ def create_app() -> FastAPI:
 
     @app.post("/workbench/say")
     def workbench_say(request: Request, text: str = Form("")):
-        _workbench().converse(text)
+        try:
+            _workbench().converse(text)
+        except Exception:
+            pass
         return Response(status_code=204, headers={"HX-Redirect": "/workbench"})
 
     @app.post("/workbench/edits/{eid}/approve")
@@ -323,7 +326,10 @@ def create_app() -> FastAPI:
 
     @app.post("/workbench/rollback")
     def workbench_rollback(request: Request):
-        _workbench().rollback()
+        try:
+            _workbench().rollback()
+        except Exception:
+            pass
         return Response(status_code=204, headers={"HX-Redirect": "/workbench"})
 
     def _brain_stub(request: Request, key: str):
