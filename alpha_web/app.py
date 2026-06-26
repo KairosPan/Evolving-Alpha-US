@@ -25,8 +25,10 @@ from alpha.meta.ingest import ingest_attachments
 from alpha_web import data_access as da
 from alpha_web import sample
 from alpha_web.sonia_client import SoniaClient
+from alpha_web.workbench_client import WorkbenchClient
 
 _SONIA: SoniaClient | None = None
+_WORKBENCH: WorkbenchClient | None = None
 
 
 def set_sonia_client(client) -> None:
@@ -37,6 +39,16 @@ def set_sonia_client(client) -> None:
 
 def _sonia() -> SoniaClient:
     return _SONIA if _SONIA is not None else SoniaClient()
+
+
+def set_workbench_client(client) -> None:
+    """Test seam: inject an in-process WorkbenchClient (sync, wrapping a Workbench TestClient). None → use ALPHA_WORKBENCH_URL."""
+    global _WORKBENCH
+    _WORKBENCH = client
+
+
+def _workbench() -> WorkbenchClient:
+    return _WORKBENCH if _WORKBENCH is not None else WorkbenchClient()
 
 NAV = [
     {"path": "/", "key": "teach", "label": "Teach"},
@@ -53,6 +65,7 @@ NAV = [
     {"path": "/verdict", "key": "verdict", "label": "Verdict"},
     {"path": "/evolution", "key": "evolution", "label": "Autonomous"},
     {"path": "/conflicts", "key": "conflicts", "label": "Conflicts"},
+    {"path": "/workbench", "key": "workbench", "label": "Workbench"},
 ]
 
 BRAIN_KEYS = {"doctrine", "memory", "workflow", "skills", "connector", "subagent"}
@@ -264,6 +277,54 @@ def create_app() -> FastAPI:
                 media_type="text/html",
             )
         return Response(status_code=200, content="")
+
+    @app.get("/workbench")
+    def workbench_page(request: Request):
+        try:
+            data = _workbench().get_project()
+            return render(request, "workbench.html", {"active": "workbench", "project": data, "wb_down": False})
+        except Exception:
+            return render(request, "workbench.html", {
+                "active": "workbench",
+                "project": {"turns": [], "staged_edits": [], "artifacts": []},
+                "wb_down": True,
+            })
+
+    @app.post("/workbench/say")
+    def workbench_say(request: Request, text: str = Form("")):
+        _workbench().converse(text)
+        return Response(status_code=204, headers={"HX-Redirect": "/workbench"})
+
+    @app.post("/workbench/edits/{eid}/approve")
+    def workbench_approve(request: Request, eid: str):
+        try:
+            _workbench().approve_edit(eid)
+        except Exception:
+            safe_eid = html.escape(eid, quote=True)
+            return Response(
+                status_code=200,
+                content=f'<div id="edit-{safe_eid}" class="banner err">⚠ Workbench unavailable — could not approve edit.</div>',
+                media_type="text/html",
+            )
+        return Response(status_code=200, content="")
+
+    @app.post("/workbench/edits/{eid}/reject")
+    def workbench_reject(request: Request, eid: str):
+        try:
+            _workbench().reject_edit(eid)
+        except Exception:
+            safe_eid = html.escape(eid, quote=True)
+            return Response(
+                status_code=200,
+                content=f'<div id="edit-{safe_eid}" class="banner err">⚠ Workbench unavailable — could not reject edit.</div>',
+                media_type="text/html",
+            )
+        return Response(status_code=200, content="")
+
+    @app.post("/workbench/rollback")
+    def workbench_rollback(request: Request):
+        _workbench().rollback()
+        return Response(status_code=204, headers={"HX-Redirect": "/workbench"})
 
     def _brain_stub(request: Request, key: str):
         title, blurb = _BRAIN_STUBS[key]

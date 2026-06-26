@@ -33,3 +33,26 @@ def test_workbench_client_converse_and_approve(tmp_path, monkeypatch):
     eid = r["staged_edits"][0]["edit_id"]
     assert wc.approve_edit(eid)["status"] == "approved"
     assert wc.get_project()["project_id"] == "default"
+
+
+def _web_client(tmp_path, monkeypatch):
+    from alpha_web.app import app, set_workbench_client
+    set_workbench_client(WorkbenchClient(client=_wb_tc(tmp_path, monkeypatch)))
+    return TestClient(app)
+
+
+def test_workbench_page_renders(tmp_path, monkeypatch):
+    tc = _web_client(tmp_path, monkeypatch)
+    tc.post("/workbench/say", data={"text": "remember"})              # stage a proposal
+    r = tc.get("/workbench")
+    assert r.status_code == 200 and "Workbench" in r.text and "process_memory" in r.text
+
+
+def test_workbench_approve_empty_200(tmp_path, monkeypatch):
+    tc = _web_client(tmp_path, monkeypatch)
+    tc.post("/workbench/say", data={"text": "remember"})
+    # fetch the edit id via the workbench project directly for robustness:
+    from alpha_web.app import _workbench
+    pid = _workbench().get_project()["staged_edits"][0]["edit_id"]
+    r = tc.post(f"/workbench/edits/{pid}/approve")
+    assert r.status_code == 200 and r.text == ""                      # empty-200 row removal

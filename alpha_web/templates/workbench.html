@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Workbench{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <p class="eyebrow">workbench · conversational brain editor</p>
+  <h1 class="page-title">Workbench</h1>
+  <p class="page-lede">Converse with the Workbench agent to stage brain edits (memory, skills, doctrine).
+    Review pending proposals below, then approve or reject each one.</p>
+</div>
+
+{% if wb_down %}
+<div class="banner err">⚠ <span><b>Workbench service unavailable.</b> Start it with <code>python -m workbench</code> to use the conversational editor.</span></div>
+{% endif %}
+
+{# ── Say form ── #}
+<div class="panel panel-pad" style="margin-bottom:16px;">
+  <form method="post" action="/workbench/say"
+        hx-post="/workbench/say" hx-target="body" hx-swap="none">
+    <div style="display:flex;gap:8px;align-items:flex-end;">
+      <label style="flex:1;">
+        <span class="eyebrow" style="display:block;margin-bottom:4px;">Message</span>
+        <input class="input" type="text" name="text" placeholder="e.g. remember that frontside trending days favour momentum…" style="width:100%;" autocomplete="off">
+      </label>
+      <button type="submit" class="btn">Send</button>
+    </div>
+  </form>
+</div>
+
+{# ── Conversation thread ── #}
+{% if project.turns %}
+<div class="evo" style="margin-bottom:24px;">
+  {% for t in project.turns %}
+  <div class="evo-item">
+    <span class="evo-seq">{{ "%02d"|format(loop.index) }}</span>
+    <div class="evo-card">
+      <div class="evo-top">
+        <span class="op op--up">You</span>
+      </div>
+      <div class="evo-summary">{{ t.user_text }}</div>
+      {% if t.final_text %}
+      <div class="evo-why">
+        <span class="k">Agent</span>{{ t.final_text }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% elif not wb_down %}
+<div class="panel panel-pad" style="margin-bottom:24px;">
+  <p class="muted" style="margin:0;">No conversation yet — send a message above to start.</p>
+</div>
+{% endif %}
+
+{# ── Pending proposals ── #}
+{% set pending = project.staged_edits | selectattr("status", "equalto", "pending") | list %}
+{% if pending %}
+<p class="eyebrow">{{ pending|length }} pending proposal{{ "" if pending|length == 1 else "s" }}</p>
+<div class="evo" style="margin-bottom:24px;">
+  {% for e in project.staged_edits %}{% if e.status == "pending" %}
+  <div class="evo-item" id="edit-{{ e.edit_id }}">
+    <span class="evo-seq">{{ "%02d"|format(loop.index) }}</span>
+    <div class="evo-card">
+      <div class="evo-top">
+        <span class="op op--down">{{ e.op.tool }}</span>
+        <span class="evo-tool">staged edit</span>
+      </div>
+      <div class="evo-summary">{{ e.op.rationale }}</div>
+      {% if e.valid and e.preview %}
+      <div class="evo-diff">
+        <div class="diff-row">
+          <span class="diff-key">preview</span>
+          <span class="diff-val">{{ e.preview }}</span>
+        </div>
+      </div>
+      {% endif %}
+      <div class="conflict-actions" style="margin-top:10px;">
+        <button
+          hx-post="/workbench/edits/{{ e.edit_id }}/approve"
+          hx-target="#edit-{{ e.edit_id }}"
+          hx-swap="outerHTML"
+          class="btn btn--sm">Approve</button>
+        <button
+          hx-post="/workbench/edits/{{ e.edit_id }}/reject"
+          hx-target="#edit-{{ e.edit_id }}"
+          hx-swap="outerHTML"
+          class="btn btn--sm btn--warn">Reject</button>
+      </div>
+    </div>
+  </div>
+  {% endif %}{% endfor %}
+</div>
+{% elif not wb_down %}
+<div class="panel panel-pad" style="margin-bottom:24px;">
+  <p class="muted" style="margin:0;">No pending proposals — converse to stage new brain edits.</p>
+</div>
+{% endif %}
+
+{# ── Artifacts ── #}
+{% if project.artifacts %}
+<p class="eyebrow">Artifacts</p>
+<div class="evo">
+  {% for a in project.artifacts %}
+  <div class="evo-item">
+    <span class="evo-seq">{{ "%02d"|format(loop.index) }}</span>
+    <div class="evo-card">
+      <div class="evo-top">
+        <span class="evo-target">{{ a.name if a.name is defined else a }}</span>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── Rollback ── #}
+{% if not wb_down %}
+<div style="margin-top:24px;">
+  <form method="post" action="/workbench/rollback"
+        hx-post="/workbench/rollback" hx-target="body" hx-swap="none">
+    <button type="submit" class="btn btn--sm btn--warn"
+            onclick="return confirm('Roll back all unapproved staged edits?')">Rollback staged edits</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}
