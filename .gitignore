@@ -47,3 +47,6 @@ __pycache__/
 
 # Live brain + teaching sessions (regenerable local state)
 /state/
+
+# Hermes vendor-feasibility spike — gitignored clone
+spikes/2026-06-26-hermes-vendor-feasibility/_hermes/
