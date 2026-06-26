@@ -63,5 +63,26 @@ class EpisodeStore:
     def all(self) -> list[Episode]:
         return [_row_to_episode(r) for r in self._conn.execute("SELECT * FROM episodes")]
 
+    def for_asof(self, asof: Date, *, phase: str | None = None, narrative: str | None = None,
+                 limit: int = 50) -> list[Episode]:
+        """PIT-safe recall: non-superseded episodes knowable by `asof` (learned_asof <= asof), newest first."""
+        clauses = ["superseded = 0", "learned_asof <= ?"]
+        params: list = [asof.isoformat()]
+        if phase is not None:
+            clauses.append("phase = ?"); params.append(phase)
+        if narrative is not None:
+            clauses.append("narrative = ?"); params.append(narrative)
+        params.append(limit)
+        sql = f"SELECT * FROM episodes WHERE {' AND '.join(clauses)} ORDER BY exit_date DESC LIMIT ?"
+        return [_row_to_episode(r) for r in self._conn.execute(sql, params)]
+
+    def mark_superseded(self, *, after: Date) -> int:
+        """Mechanism for a breaker rollback (call-site deferred to §6.6): mark episodes learned after a
+        checkpoint date as superseded so recall skips them. Returns the number marked."""
+        cur = self._conn.execute("UPDATE episodes SET superseded = 1 WHERE learned_asof > ?",
+                                 (after.isoformat(),))
+        self._conn.commit()
+        return cur.rowcount
+
     def close(self) -> None:
         self._conn.close()
