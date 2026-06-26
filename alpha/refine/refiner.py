@@ -4,6 +4,7 @@ from collections import deque
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from alpha.harness.edit_log import EditProvenance
 from alpha.harness.metatools import MetaTools
 from alpha.harness.state import HarnessState
 from alpha.llm.client import LLMClient
@@ -53,18 +54,22 @@ class Refiner:
     PLACE (the agent sees them next decision); does NOT checkpoint or roll back (that is US-2c's InnerLoop)."""
 
     def __init__(self, harness: HarnessState, llm: LLMClient, meta: MetaTools,
-                 config: RefinerConfig | None = None) -> None:
+                 config: RefinerConfig | None = None,
+                 conflict_queue=None) -> None:
         self._h = harness
         self._llm = llm
         self._meta = meta
         self._cfg = config or RefinerConfig()
+        self._conflict_queue = conflict_queue
         self._recent_reports: "deque[RefineReport]" = deque(maxlen=2)
 
     def _apply_op(self, op: RefineOp, pk: PassKind, allowed: frozenset) -> tuple[bool, object]:
         """Delegate to shared try_apply_op then wrap result into Refiner's AppliedEdit/RejectedEdit."""
         rec, reason = try_apply_op(self._meta, self._h, op, allowed=allowed,
                                    min_retire_samples=self._cfg.min_retire_samples,
-                                   min_promote_samples=self._cfg.min_promote_samples)
+                                   min_promote_samples=self._cfg.min_promote_samples,
+                                   provenance=EditProvenance(path="self_study", proposer="refiner"),
+                                   conflict_queue=self._conflict_queue)
         if reason is not None:
             return False, RejectedEdit(pass_kind=pk, tool=op.tool,
                                        target_id=_target_id(op.tool, op.args), reason=reason)

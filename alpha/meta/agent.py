@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 
-from alpha.harness.edit_log import EditLog, EditRecord
+from alpha.harness.edit_log import EditLog, EditProvenance, EditRecord
 from alpha.harness.metatools import MetaTools
 from alpha.harness.state import HarnessState
 from alpha.llm.client import LLMClient
@@ -23,7 +23,8 @@ def preview_op(harness: HarnessState, op: RefineOp, *, retire_min: int = 5, prom
     (status 'proposed' with payload on success, 'failed' + apply_reason on rejection)."""
     scratch = copy.deepcopy(harness)
     rec, reason = try_apply_op(MetaTools(scratch, EditLog()), scratch, op, allowed=ALL_TOOLS,
-                               min_retire_samples=retire_min, min_promote_samples=promote_min)
+                               min_retire_samples=retire_min, min_promote_samples=promote_min,
+                               provenance=EditProvenance(path="teaching", proposer="sonia"))
     if rec is not None:
         return ProposedEdit(edit_id=new_edit_id(), tool=op.tool, target_kind=rec.target_kind,
                             target_id=rec.target_id, op=rec.op, summary=rec.summary,
@@ -53,7 +54,8 @@ class MetaAgent:
                 continue
             op = RefineOp(tool=e.tool, args=dict(e.args), rationale=e.rationale)
             rec, reason = try_apply_op(self.tools, self.h, op, allowed=ALL_TOOLS,
-                                       min_retire_samples=self._retire_min, min_promote_samples=self._promote_min)
+                                       min_retire_samples=self._retire_min, min_promote_samples=self._promote_min,
+                                       provenance=EditProvenance(path="teaching", proposer="sonia"))
             if rec is not None:
                 e.status, e.applied_seq, e.apply_reason = "applied", rec.seq, ""
                 applied.append(rec)

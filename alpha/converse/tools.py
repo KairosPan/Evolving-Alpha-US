@@ -11,7 +11,7 @@ from alpha.universe.universe import build_universe
 from alpha.state.builder import build_market_state
 
 from alpha.harness.metatools import MetaTools
-from alpha.harness.edit_log import EditLog
+from alpha.harness.edit_log import EditLog, EditProvenance
 from alpha.refine.apply import try_apply_op
 from alpha.refine.ops import RefineOp, PASS_TOOLS
 
@@ -24,7 +24,8 @@ def make_gated_write_tool(harness, *, min_retire_samples: int = 5, min_promote_s
         rec, reason = try_apply_op(MetaTools(harness, EditLog()), harness, op,
                                    allowed=PASS_TOOLS["M"],
                                    min_retire_samples=min_retire_samples,
-                                   min_promote_samples=min_promote_samples)
+                                   min_promote_samples=min_promote_samples,
+                                   provenance=EditProvenance(path="teaching", proposer="hermes"))
         return {"status": "applied"} if rec is not None else {"status": "rejected", "reason": reason}
     schema = {"name": "propose_memory_edit",
               "description": "Propose a memory edit; applied only if it clears the gate.",
