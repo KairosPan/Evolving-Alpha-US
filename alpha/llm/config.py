@@ -5,7 +5,7 @@ from typing import Literal
 
 from alpha.llm.client import LLMClient, MockLLMClient
 
-Role = Literal["agent", "refiner", "sonia"]
+Role = Literal["agent", "refiner", "sonia", "converse"]
 
 # (provider, model) defaults per role: ALL roles on DeepSeek deepseek-v4-pro (openai_compat).
 # NOTE: `deepseek-v4-pro` is the intended model NAME; if the live API rejects it as an unknown id,
@@ -14,6 +14,7 @@ _DEFAULTS: dict[str, tuple[str, str]] = {
     "agent": ("openai_compat", "deepseek-v4-pro"),
     "refiner": ("openai_compat", "deepseek-v4-pro"),
     "sonia": ("openai_compat", "deepseek-v4-pro"),
+    "converse": ("openai_compat", "deepseek-v4-pro"),
 }
 
 

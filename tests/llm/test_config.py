@@ -28,3 +28,9 @@ def test_provider_selects_class_without_keys(monkeypatch):
 def test_bad_role_raises():
     with pytest.raises(ValueError):
         make_client("nonsense")
+
+
+def test_converse_role_resolves(monkeypatch):
+    monkeypatch.setenv("ALPHA_CONVERSE_PROVIDER", "mock")
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE", "{}")
+    assert isinstance(make_client("converse"), MockLLMClient)
