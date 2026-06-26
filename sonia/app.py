@@ -13,6 +13,7 @@ from alpha.llm.config import make_client
 from alpha.meta.agent import MetaAgent
 from alpha.meta.models import Attachment, Message, Session, new_message_id, new_session_id, now_iso
 from alpha.meta.sonia_agent import SoniaAgent
+from alpha.meta.conflict_store import ConflictQueue
 from alpha.meta.store import LiveBrainStore, SessionStore
 
 _MUTATION_LOCK = threading.Lock()
@@ -26,6 +27,10 @@ def _session_store() -> SessionStore:
     return SessionStore(os.environ.get("ALPHA_SESSIONS_DIR", "./state/sessions"))
 
 
+def _conflict_store() -> ConflictQueue:
+    return ConflictQueue(os.environ.get("ALPHA_CONFLICTS_DIR", "./state/conflicts"))
+
+
 class ChatIn(BaseModel):
     session_id: str | None = None
     text: str = ""
@@ -34,6 +39,10 @@ class ChatIn(BaseModel):
 
 class EditAction(BaseModel):
     action: str  # "accept" | "reject"
+
+
+class ResolveIn(BaseModel):
+    decision: str  # "accept_self_study" | "keep_teaching"
 
 
 def create_app() -> FastAPI:
@@ -125,6 +134,20 @@ def create_app() -> FastAPI:
             msg.applied_seqs = [r.seq for r in applied]
             sstore.put(sess)
             return {"applied": len(applied), "edits": [e.model_dump() for e in msg.edits]}
+
+    @app.get("/conflicts")
+    def list_conflicts():
+        return [c.model_dump() for c in _conflict_store().all()]
+
+    @app.post("/conflicts/{cid}/resolve")
+    def resolve_conflict(cid: str, body: ResolveIn):
+        q = _conflict_store()
+        held = q.get(cid)
+        if held is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        # §5-accepted: accept_self_study records intent only (no auto-re-apply); both decisions resolve+remove.
+        q.resolve(cid)
+        return {"resolved": cid, "decision": body.decision}
 
     @app.post("/sessions/{sid}/messages/{mid}/rollback")
     def rollback_message(sid: str, mid: str):
