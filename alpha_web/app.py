@@ -7,6 +7,7 @@ Real artifacts override the SAMPLE on the Decisions/Verdict pages:
 """
 from __future__ import annotations
 
+import html
 import json
 import os
 from datetime import date as Date
@@ -255,9 +256,11 @@ def create_app() -> FastAPI:
         try:
             _sonia().resolve_conflict(cid, decision)
         except Exception:
+            # cid is an attacker-controllable path param reflected into raw HTML — escape it (XSS guard).
+            safe_cid = html.escape(cid, quote=True)
             return Response(
                 status_code=200,
-                content=f'<div id="conflict-{cid}" class="banner err">⚠ Sonia unavailable — could not resolve conflict.</div>',
+                content=f'<div id="conflict-{safe_cid}" class="banner err">⚠ Sonia unavailable — could not resolve conflict.</div>',
                 media_type="text/html",
             )
         return Response(status_code=200, content="")

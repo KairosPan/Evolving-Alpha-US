@@ -63,3 +63,16 @@ def test_resolve_returns_empty_200_and_removes(tmp_path, monkeypatch):
     assert tc.get("/conflicts").json() if False else True        # (page is HTML; assert via the queue below)
     from alpha.meta.conflict_store import ConflictQueue
     assert ConflictQueue(str(tmp_path / "conflicts")).all() == []   # actually resolved in Sonia's queue
+
+
+def test_resolve_error_fragment_escapes_cid_xss(tmp_path, monkeypatch):
+    # The Sonia-error branch reflects the path param `cid` into a raw text/html fragment; an unknown cid
+    # (empty queue) makes Sonia 404 -> the client raises -> the except branch fires. The reflected cid MUST
+    # be HTML-escaped (reflected-XSS guard), not interpolated raw.
+    from urllib.parse import quote
+    tc = _web_client(tmp_path, monkeypatch)                          # empty queue -> resolve raises
+    payload = '"><img src=x onerror=alert(1)>'
+    r = tc.post(f"/conflicts/{quote(payload, safe='')}/resolve", data={"decision": "keep_teaching"})
+    assert r.status_code == 200
+    assert '"><img' not in r.text and "<img src=x" not in r.text    # no attribute-breakout / live tag
+    assert "&lt;img" in r.text                                       # reflected, but escaped (inert)
