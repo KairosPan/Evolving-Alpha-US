@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from alpha.harness.memory import Lesson
@@ -26,7 +26,7 @@ def select_for_prompt(h: HarnessState, *, phase_prior: str | None,
                       skill_budget: int = DEFAULT_SKILL_BUDGET,
                       memory_budget: int = DEFAULT_MEMORY_BUDGET,
                       trial_slots: int = DEFAULT_TRIAL_SLOTS,
-                      asof: date | None = None) -> Selection:
+                      asof: date | datetime | None = None) -> Selection:
     """Pick the skills/trials/lessons to inject (pure, deterministic, read-only).
 
     skills: active, ranked (phase-prior hit first, then stats.n desc, then skill_id), top skill_budget.
@@ -34,6 +34,8 @@ def select_for_prompt(h: HarnessState, *, phase_prior: str | None,
     lessons: importance.weight() >= MIN_MEMORY_WEIGHT and learned_asof <= asof (PIT mask),
              by (weight desc, lesson_id), top memory_budget.
     """
+    if isinstance(asof, datetime):
+        asof = asof.date()
     canon = normalize_phase(phase_prior) if phase_prior else None
 
     def _hit(s: Skill) -> bool:

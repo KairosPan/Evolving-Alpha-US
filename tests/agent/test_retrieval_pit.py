@@ -30,3 +30,20 @@ def test_future_lesson_visible_on_its_asof():
 def test_no_asof_means_no_gate():
     sel = select_for_prompt(_h_with_lessons(), phase_prior=None)   # asof omitted
     assert {l.lesson_id for l in sel.lessons} == {"seed", "future"}
+
+
+def test_accepts_datetime_asof_directly():
+    """Passing a datetime directly must not raise and must mask the future lesson."""
+    from datetime import datetime
+    sel = select_for_prompt(_h_with_lessons(), phase_prior=None,
+                            asof=datetime(2026, 6, 11, 16, 0))
+    ids = {l.lesson_id for l in sel.lessons}
+    # datetime(2026,6,11,...) normalises to date(2026,6,11) → same as the existing mask test
+    assert ids == {"seed"}
+
+
+def test_plain_date_asof_unchanged():
+    """A plain date still works after the normalisation guard is in place."""
+    sel = select_for_prompt(_h_with_lessons(), phase_prior=None,
+                            asof=date(2026, 6, 12))
+    assert {l.lesson_id for l in sel.lessons} == {"seed", "future"}
