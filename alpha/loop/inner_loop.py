@@ -90,7 +90,8 @@ class InnerLoop:
                  agent_llm: LLMClient, refiner_llm: LLMClient, config: LoopConfig | None = None,
                  refiner_config: RefinerConfig | None = None, scorer=None,
                  agent_factory: Callable[[HarnessState], DecisionPolicy] | None = None,
-                 shadow_daily: dict[Date, float] | None = None) -> None:
+                 shadow_daily: dict[Date, float] | None = None,
+                 episode_store=None) -> None:
         self._mgr = manager
         self._source = source
         self._start = start
@@ -102,6 +103,7 @@ class InnerLoop:
         self._scorer = scorer or ReturnScorer()   # spec §7: forward-return oracle is PRIMARY (CN defaulted PoolScorer)
         self._agent_factory = agent_factory
         self._shadow_daily = dict(shadow_daily) if shadow_daily is not None else None
+        self._episode_store = episode_store
         self._rebind()
 
     def _rebind(self) -> None:
@@ -161,6 +163,7 @@ class InnerLoop:
                                               days, j, cfg.horizon, cursor, record)
                     drafts[j]["outcomes"] = outcomes
                     drafts[j]["scored"] = True
+                    drafts[j]["exit_date"] = cursor          # realized maturity/exit date (PIT key for episodes)
                     step_j = TrajectoryStep(**drafts[j])
                     scored_steps.append(step_j)
                     newly.append(step_j)
@@ -173,7 +176,7 @@ class InnerLoop:
                 if frozen:
                     continue
                 per_step_credits.append(apply_credit(Trajectory(steps=[step]), self._mgr.harness,
-                                                     decay=cfg.credit_decay))
+                                                     decay=cfg.credit_decay, episode_store=self._episode_store))
                 advs = [c.advantage for c in step.outcomes.values()]
                 # empty outcomes (no oracle data / all dropped) contribute 0.0 — a neutral day, not excluded
                 breaker_days.append((step.date, sum(advs) / len(advs) if advs else 0.0))
