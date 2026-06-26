@@ -2,8 +2,7 @@
 Refiner changed H (doctrine / skills / memory) — as JSON the console's Evolution page renders.
 
   python scripts/capture_window.py 2026-01-02 2026-03-31 snap AAPL MSFT NVDA TSLA AMD
-  export ALPHA_AGENT_PROVIDER=openai_compat ALPHA_AGENT_MODEL=deepseek-chat   # + DEEPSEEK_API_KEY
-  export ALPHA_REFINER_PROVIDER=anthropic   ALPHA_REFINER_MODEL=claude-sonnet-4-6  # + ANTHROPIC_API_KEY
+  export DEEPSEEK_API_KEY=...   # agent + refiner both default to openai_compat/deepseek-v4-pro
   python scripts/save_evolution.py snap 2026-01-02 2026-03-31 evolution.json
   ALPHA_WEB_EVOLUTION=evolution.json python -m alpha_web
 """

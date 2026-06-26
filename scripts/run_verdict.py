@@ -11,9 +11,9 @@ Two-step user run (needs the `live` extra + APCA_API_KEY_ID/SECRET + LLM keys):
   # 1. Build the offline PIT DB once (no LLM, just market data):
   python scripts/capture_window.py 2026-01-02 2026-03-31 verdict_pit AAPL MSFT NVDA TSLA AMD ...
 
-  # 2. Render the verdict at temperature=0 (agent=DeepSeek/cheap, refiner=Claude by default):
-  export ALPHA_AGENT_PROVIDER=openai_compat ALPHA_AGENT_MODEL=deepseek-chat   # + DEEPSEEK key
-  export ALPHA_REFINER_PROVIDER=anthropic   ALPHA_REFINER_MODEL=claude-sonnet-4-6  # + ANTHROPIC key
+  # 2. Render the verdict at temperature=0 (agent + refiner both default to DeepSeek deepseek-v4-pro):
+  export DEEPSEEK_API_KEY=...   # both roles use openai_compat/deepseek-v4-pro by default
+  # (override an unknown id if needed: ALPHA_AGENT_MODEL=deepseek-chat ALPHA_REFINER_MODEL=deepseek-chat)
   python scripts/run_verdict.py verdict_pit 2026-01-02 2026-03-31 --windows 3
 
 `screen` defaults ON (the L4 guard is live + symmetric across arms; richer-state wiring 2026-06-16), so

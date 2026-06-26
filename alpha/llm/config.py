@@ -7,10 +7,12 @@ from alpha.llm.client import LLMClient, MockLLMClient
 
 Role = Literal["agent", "refiner", "sonia"]
 
-# (provider, model) defaults per role: agent cheap (many rollouts), refiner Claude (edits H).
+# (provider, model) defaults per role: ALL roles on DeepSeek deepseek-v4-pro (openai_compat).
+# NOTE: `deepseek-v4-pro` is the intended model NAME; if the live API rejects it as an unknown id,
+# override per role at runtime (e.g. ALPHA_AGENT_MODEL=deepseek-chat) — any OpenAI-compatible id works.
 _DEFAULTS: dict[str, tuple[str, str]] = {
-    "agent": ("openai_compat", "deepseek-chat"),
-    "refiner": ("anthropic", "claude-sonnet-4-6"),
+    "agent": ("openai_compat", "deepseek-v4-pro"),
+    "refiner": ("openai_compat", "deepseek-v4-pro"),
     "sonia": ("openai_compat", "deepseek-v4-pro"),
 }
 
