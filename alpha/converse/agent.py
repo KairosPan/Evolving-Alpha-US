@@ -6,16 +6,20 @@ from alpha.llm.config import make_client
 from alpha.data.registry import make_source
 from alpha.converse.registry import ToolRegistry
 from alpha.converse.loop import run_conversation, ConversationResult
-from alpha.converse.tools import make_decide_for_date_tool, make_gated_write_tool
+from alpha.converse.tools import make_decide_for_date_tool, make_gated_write_tool, make_propose_edit_tool
 
 
 def build_converse_registry(harness: HarnessState, agent_llm, source,
-                            *, read_only: bool = False) -> ToolRegistry:
+                            *, read_only: bool = False, write_mode: str = "apply") -> ToolRegistry:
     reg = ToolRegistry()
     decide_schema, decide_fn = make_decide_for_date_tool(harness, agent_llm, source)
     reg.register("decide", decide_schema, decide_fn)
-    if not read_only:
+    mode = "none" if read_only else write_mode
+    if mode == "apply":
         write_schema, write_fn = make_gated_write_tool(harness)
+        reg.register("propose_memory_edit", write_schema, write_fn)
+    elif mode == "stage":
+        write_schema, write_fn = make_propose_edit_tool(harness)
         reg.register("propose_memory_edit", write_schema, write_fn)
     return reg
 
