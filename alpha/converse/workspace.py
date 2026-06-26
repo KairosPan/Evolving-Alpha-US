@@ -45,6 +45,14 @@ class Workspace:
         filename = f"{pkg.date}.json"
         return self.commit_artifact(filename, pkg.model_dump_json(), f"decision: {pkg.date}")
 
+    def artifacts(self) -> list[str]:
+        """Committed artifact paths in this workspace (git ls-files), or [] if not a repo."""
+        try:
+            out = self._run(["git", "ls-files"])
+            return [line for line in out.stdout.splitlines() if line.strip()]
+        except Exception:
+            return []
+
     # ------------------------------------------------------------------
     # internals
     # ------------------------------------------------------------------
