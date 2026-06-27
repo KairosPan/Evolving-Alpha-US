@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from alpha.agent.retrieval import (
-    DEFAULT_MEMORY_BUDGET, DEFAULT_SKILL_BUDGET, DEFAULT_TRIAL_SLOTS, select_for_prompt,
+    DEFAULT_MEMORY_BUDGET, DEFAULT_SKILL_BUDGET, DEFAULT_TRIAL_SLOTS,
+    DEFAULT_EPISODE_BUDGET, Selection, select_for_prompt,
+    select_episodes_for_prompt,
 )
 from alpha.harness.regime import CANONICAL_PHASES
 from alpha.harness.skill import Skill
@@ -69,7 +71,8 @@ def build_system_prompt(h: HarnessState, *, injection: str = "full", phase_prior
                         memory_budget: int = DEFAULT_MEMORY_BUDGET,
                         trial_slots: int = DEFAULT_TRIAL_SLOTS,
                         available_signals: frozenset[str] | None = None,
-                        asof: date | datetime | None = None) -> str:
+                        asof: date | datetime | None = None,
+                        episode_store=None, episode_budget: int = DEFAULT_EPISODE_BUDGET) -> str:
     """Render H=(p,K,M) + the regime cycle + the output contract into the system prompt.
 
     injection='full' renders all active skills + all lessons; 'retrieval' renders a budgeted slice
@@ -115,6 +118,15 @@ def build_system_prompt(h: HarnessState, *, injection: str = "full", phase_prior
             tag = {"principle": "PRINCIPLE", "loss": "LOSS", "win": "WIN"}.get(l.outcome, l.outcome.upper())
             analog = f"{l.named_analog}: " if l.named_analog else ""
             parts.append(f"- [{tag}] {analog}{l.lesson}")
+    if episode_store is not None:
+        eps = select_episodes_for_prompt(episode_store, phase_prior=phase_prior, asof=asof_d,
+                                         budget=episode_budget)
+        if eps:
+            parts.append("\nRECALLED EPISODES (what happened last time in this regime):")
+            for e in eps:
+                refl = f": {e.reflection_text}" if e.reflection_text else ""
+                parts.append(f"- [{e.phase}] {e.symbol}/{e.skill_id} -> {e.outcome} "
+                             f"(adv {e.advantage:+.1f}){refl}")
     parts.append("\n" + _OUTPUT_CONTRACT)
     return "\n".join(parts)
 
