@@ -33,16 +33,13 @@ components — see the teaching-cockpit §6 subsection).
   (`save_decisions`/`refine_live`) and the verdict harness (read-only `recall_store`, symmetric arms;
   HCH never self-writes mid-verdict). `for_asof(limit=None)` lifted the 50-cap at the two aggregation
   read sites. See `docs/superpowers/plans/2026-06-27-episode-readside-on.md` + `docs/PROJECT_STATE.md`.
-- [ ] **Polish (deferred from the read-side flip):**
-  - **Broader `for_asof` cap audit** — the two production read sites (recall, taboo) + `forge` now pass an
-    explicit/`None` limit, but the default-50 is still a silent global cap for any future caller. Consider a
-    `for_asof(..., limit=None)` convention (or a `FULL` sentinel) sweep across all callers + a lint note.
-  - **`hit_max_iters` handling** — `alpha/converse/loop.py::run_conversation` returns
-    `hit_max_iters=True` with an empty `final_text` when the tool-call loop exhausts `max_iters`; callers
-    must check the flag or a turn silently yields no prose. Surface it (a fallback message / explicit error).
-  - **conftest fragility** — `tests/web/conftest.py` + `tests/sonia/conftest.py` use module-level
-    `pytest.importorskip` (a missing extra silently skips the WHOLE package, no failure recorded) +
-    autouse env monkeypatch with asymmetric fixture names. Make the skip explicit/visible; unify the isolation fixture.
+- ✅ **Polish trio DONE** (2026-06-27) — (1) **`for_asof` cap audit**: confirmed only 3 production callers
+  (recall, taboo, forge), all now pass `limit=None`; documented the no-cap convention in the `for_asof`
+  docstring (default-50 = ad-hoc/display only; no production caller relies on it). (2) **`hit_max_iters`**:
+  `run_conversation` now returns a fallback `final_text` on budget-exhaustion (the flag stays for
+  programmatic detection) so a turn never silently shows empty prose. (3) **conftest**: DRY'd the
+  brain/session isolation into one shared `brain_session_isolation` fixture (parent `tests/conftest.py`),
+  consumed by symmetric autouse `_isolate_state` fixtures in `tests/web` + `tests/sonia`.
 
 ## 2. Data-source layer (pluggable; mechanism shipped 2026-06-22)
 
