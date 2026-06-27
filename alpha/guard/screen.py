@@ -10,6 +10,7 @@ from alpha.data.firewall import AsOfGuard
 from alpha.data.source import GuardedSource
 from alpha.eval.decision import DecisionPackage
 from alpha.guard.veto import CandidateContext, veto
+from alpha.memory.aggregate import is_episode_taboo, summarize
 from alpha.regime.classifier import GCycle
 from alpha.state.market import MarketState
 
@@ -68,7 +69,7 @@ def ssr_active(source, symbol: str, as_of: Date) -> bool:
     return pct is not None and pct <= SSR_DROP_PCT
 
 
-def screen_decision(decision: DecisionPackage, *, source, state: MarketState) -> DecisionPackage:
+def screen_decision(decision: DecisionPackage, *, source, state: MarketState, episode_store=None) -> DecisionPackage:
     """Apply the L4 hard veto to a freshly-produced DecisionPackage: DROP candidates the immutable-core
     guard blocks (SSR / reverse-split-pending / risk-off / backside regime), record dropped reasons in
     key_risks, and populate the structured regime. Frozen models -> rebuilt via model_copy.
@@ -84,13 +85,16 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState) ->
     snap = guarded.daily_snapshot(as_of)               # day's OHLC for the halt-then-dump proxy (guard-safe)
     rows = ({str(r["symbol"]): r for r in snap.to_dict("records")}
             if snap is not None and not snap.empty else {})
+    taboo_stats = (summarize(episode_store.for_asof(as_of), key=lambda e: e.symbol)
+                   if episode_store is not None else {})
     kept, notes = [], []
     for c in decision.candidates:
         ctx = CandidateContext(symbol=c.symbol, regime=regime,
                                ssr=ssr_active(guarded, c.symbol, as_of),
                                reverse_split_pending=has_reverse_split_pending(corp, c.symbol, as_of),
                                dilution=has_dilution_filing(corp, c.symbol, as_of),
-                               halt_then_dump=halt_then_dump_proxy(rows.get(c.symbol)))
+                               halt_then_dump=halt_then_dump_proxy(rows.get(c.symbol)),
+                               episode_taboo=is_episode_taboo(taboo_stats.get(c.symbol)))
         v = veto(ctx)
         if v.vetoed:
             notes.append(f"vetoed {c.symbol}: {'; '.join(v.reasons)}")
@@ -106,10 +110,12 @@ class GuardedPolicy:
     """Composable L4 guard: wraps any DecisionPolicy; runs it, then applies screen_decision so the
     immutable-core hard veto overrides the agent. Works in any driver that calls policy.decide()."""
 
-    def __init__(self, inner, source) -> None:
+    def __init__(self, inner, source, *, episode_store=None) -> None:
         self._inner = inner
         self._source = source
+        self._episode_store = episode_store
 
     def decide(self, state: MarketState, universe) -> DecisionPackage:
         decision = self._inner.decide(state, universe)
-        return screen_decision(decision, source=self._source, state=state)
+        return screen_decision(decision, source=self._source, state=state,
+                               episode_store=self._episode_store)
