@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from alpha.llm.config import make_client
 from alpha.data.registry import make_source
 from alpha.meta.store import LiveBrainStore
-from alpha.converse.store import ProjectStore
+from alpha.converse.sqlite_store import SqliteProjectStore
 from alpha.converse.workspace import Workspace
 from alpha.converse.session import converse_project
 from alpha.harness.metatools import MetaTools
@@ -32,7 +32,7 @@ def _source():    return _SOURCE if _SOURCE is not None else make_source()
 
 
 def _brain_store():   return LiveBrainStore(os.environ.get("ALPHA_LIVE_BRAIN_DIR", "./state/brain"))
-def _project_store(): return ProjectStore(os.environ.get("ALPHA_PROJECTS_DIR", "./state/projects"))
+def _project_store(): return SqliteProjectStore.open(os.environ.get("ALPHA_PROJECTS_DB", "./state/projects/state.db"))
 
 
 def _workspace():

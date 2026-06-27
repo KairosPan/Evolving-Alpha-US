@@ -61,8 +61,8 @@ class SqliteProjectStore:
         return cls(sqlite3.connect(path))
 
     def put(self, project: Project) -> None:
-        turns = json.dumps([t.model_dump() for t in project.turns])
-        staged = json.dumps([s.model_dump() for s in project.staged_edits])
+        turns = json.dumps([t.model_dump(mode="json") for t in project.turns])
+        staged = json.dumps([s.model_dump(mode="json") for s in project.staged_edits])
         self._conn.execute(
             "INSERT INTO projects (project_id, created_at, title, h_pin, turns, staged_edits) "
             "VALUES (?,?,?,?,?,?) ON CONFLICT(project_id) DO UPDATE SET "

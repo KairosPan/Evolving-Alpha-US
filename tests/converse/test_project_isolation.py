@@ -7,7 +7,7 @@ from alpha.harness.registry import SkillRegistry, MemoryStore
 from alpha.harness.state import HarnessState
 from alpha.data.source import FakeSource
 from alpha.llm.client import MockLLMClient
-from alpha.converse.store import ProjectStore
+from alpha.converse.sqlite_store import SqliteProjectStore
 from alpha.converse.workspace import Workspace
 from alpha.converse.session import converse_project
 
@@ -30,7 +30,7 @@ def _agent():
     return MockLLMClient('{"regime_read": "trend frontside", "candidates": [{"symbol": "RUN", "pattern": "gap_and_go"}]}')
 
 def test_two_projects_share_brain_isolate_workspaces(tmp_path):
-    store = ProjectStore(tmp_path / "projects")
+    store = SqliteProjectStore.open(str(tmp_path / "state.db"))
     h = _h()                                              # ONE shared brain instance
     wsA = Workspace(tmp_path / "A"); wsA.init()
     wsB = Workspace(tmp_path / "B"); wsB.init()

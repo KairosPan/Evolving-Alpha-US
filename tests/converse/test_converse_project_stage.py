@@ -7,7 +7,7 @@ from alpha.harness.registry import SkillRegistry, MemoryStore
 from alpha.harness.state import HarnessState
 from alpha.data.source import FakeSource
 from alpha.llm.client import MockLLMClient
-from alpha.converse.store import ProjectStore
+from alpha.converse.sqlite_store import SqliteProjectStore
 from alpha.converse.session import converse_project
 
 def _h():
@@ -22,7 +22,7 @@ def _src():
 
 def test_stage_mode_stages_proposal_without_live_write(tmp_path):
     h = _h(); before = copy.deepcopy(h.to_dict())
-    store = ProjectStore(tmp_path / "projects")
+    store = SqliteProjectStore.open(str(tmp_path / "state.db"))
     chat = MockLLMClient([
         '{"tool": "propose_memory_edit", "args": {"tool": "process_memory", "args": '
         '{"lesson_id": "m1", "phases": ["trend"], "outcome": "win", "lesson": "x"}, "rationale": "learned"}}',

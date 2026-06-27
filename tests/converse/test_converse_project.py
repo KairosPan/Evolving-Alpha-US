@@ -7,7 +7,7 @@ from alpha.harness.registry import SkillRegistry, MemoryStore
 from alpha.harness.state import HarnessState
 from alpha.data.source import FakeSource
 from alpha.llm.client import MockLLMClient
-from alpha.converse.store import ProjectStore
+from alpha.converse.sqlite_store import SqliteProjectStore
 from alpha.converse.workspace import Workspace
 from alpha.converse.session import converse_project
 
@@ -36,7 +36,7 @@ def _agent_llm():
 
 
 def test_converse_project_persists_turn_and_commits_decision(tmp_path):
-    store = ProjectStore(tmp_path / "projects")
+    store = SqliteProjectStore.open(str(tmp_path / "state.db"))
     ws = Workspace(tmp_path / "ws"); ws.init()
     chat = MockLLMClient(['{"tool": "decide", "args": {"date": "2026-06-12"}}', "RUN looks strong."])
     proj = converse_project("p1", "read on RUN for 2026-06-12?", harness=_h(), store=store,
@@ -51,7 +51,7 @@ def test_converse_project_persists_turn_and_commits_decision(tmp_path):
 
 
 def test_resume_appends_a_second_turn(tmp_path):
-    store = ProjectStore(tmp_path / "projects")
+    store = SqliteProjectStore.open(str(tmp_path / "state.db"))
     chat1 = MockLLMClient(["first answer"])               # no tool call -> immediate final
     converse_project("p1", "hi", harness=_h(), store=store, agent_llm=_agent_llm(),
                      chat_llm=chat1, source=_fake_source())
@@ -62,7 +62,7 @@ def test_resume_appends_a_second_turn(tmp_path):
 
 
 def test_pinned_project_is_read_only_no_write_tool(tmp_path):
-    store = ProjectStore(tmp_path / "projects")
+    store = SqliteProjectStore.open(str(tmp_path / "state.db"))
     from alpha.converse.project import new_project
     p = new_project(); p.h_pin = 0
     p.project_id = "pinned"; store.put(p)

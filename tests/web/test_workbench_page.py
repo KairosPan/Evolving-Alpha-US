@@ -8,7 +8,7 @@ from alpha_web.workbench_client import WorkbenchClient
 
 def _wb_tc(tmp_path, monkeypatch):
     monkeypatch.setenv("ALPHA_LIVE_BRAIN_DIR", str(tmp_path / "brain"))
-    monkeypatch.setenv("ALPHA_PROJECTS_DIR", str(tmp_path / "projects"))
+    monkeypatch.setenv("ALPHA_PROJECTS_DB", str(tmp_path / "state.db"))
     monkeypatch.setenv("ALPHA_WORKSPACE_DIR", str(tmp_path / "ws"))
     from workbench.app import create_app, set_llms
     from alpha.llm.client import MockLLMClient

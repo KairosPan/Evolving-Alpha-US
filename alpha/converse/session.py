@@ -9,7 +9,7 @@ from alpha.llm.chat import ChatMessage
 from alpha.converse.agent import build_converse_registry, build_system_prompt
 from alpha.converse.loop import run_conversation
 from alpha.converse.project import Project, StagedEdit, new_project, new_turn
-from alpha.converse.store import ProjectStore
+from alpha.converse.sqlite_store import SqliteProjectStore
 from alpha.converse.workspace import Workspace
 
 
@@ -18,7 +18,7 @@ def converse_project(
     user_text: str,
     *,
     harness: HarnessState,
-    store: ProjectStore,
+    store: SqliteProjectStore,
     snapshots=None,
     agent_llm,
     chat_llm,
