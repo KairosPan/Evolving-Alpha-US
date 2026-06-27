@@ -1,8 +1,11 @@
 # alpha/refine/forge.py
 from __future__ import annotations
 from datetime import date as Date
+from pydantic import BaseModel, Field
+from alpha.harness.edit_log import EditProvenance
 from alpha.harness.state import HarnessState
 from alpha.memory.aggregate import summarize
+from alpha.refine.apply import try_apply_op
 from alpha.refine.ops import RefineOp
 
 def propose_skill_ops(harness: HarnessState, episode_store, *, asof: Date,
@@ -26,3 +29,34 @@ def propose_skill_ops(harness: HarnessState, episode_store, *, asof: Date,
                                 rationale=(f"forge: episode evidence n={s.n} nuke_rate={s.nuke_rate:.2f} "
                                            f"mean_adv={s.mean_advantage:+.2f}")))
     return ops
+
+
+_FORGE_ALLOWED = frozenset({"promote_skill", "retire_skill"})
+
+
+class ForgeReport(BaseModel):
+    applied: list[str] = Field(default_factory=list)
+    held: list[str] = Field(default_factory=list)
+    rejected: list[tuple[str, str]] = Field(default_factory=list)   # (skill_id, reason)
+
+
+def forge_skills(harness: HarnessState, episode_store, meta, *, asof: Date, conflict_queue=None,
+                 min_promote_samples: int = 3, min_retire_samples: int = 5,
+                 **proposer_kwargs) -> ForgeReport:
+    """Apply the proposed promote/retire ops through the one gate: the episode evidence proposes, the gate
+    independently confirms on the skill's own stats; a teaching-owned contest is HELD (§5)."""
+    report = ForgeReport()
+    for op in propose_skill_ops(harness, episode_store, asof=asof, **proposer_kwargs):
+        sid = op.args["skill_id"]
+        rec, reason = try_apply_op(meta, harness, op, allowed=_FORGE_ALLOWED,
+                                   min_promote_samples=min_promote_samples,
+                                   min_retire_samples=min_retire_samples,
+                                   provenance=EditProvenance(path="self_study", proposer="forge"),
+                                   conflict_queue=conflict_queue)
+        if rec is not None:
+            report.applied.append(sid)
+        elif reason and reason.startswith("held_for_review"):
+            report.held.append(sid)
+        else:
+            report.rejected.append((sid, reason or ""))
+    return report
