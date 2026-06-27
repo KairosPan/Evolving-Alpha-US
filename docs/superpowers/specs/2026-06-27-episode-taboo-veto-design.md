@@ -71,7 +71,7 @@ Recall goes through `EpisodeStore.for_asof(state.date)` which masks `learned_aso
 - **§6 #2 gated auto-promote/demote** — the next cycle; reuses `summarize(key=skill_id)` + `is_*` thresholds.
 - **Phase-scoped taboo** (veto only if the name nukes in the *current* regime) — a refinement; v1 is per-symbol overall.
 - **Recency-windowed taboo** (only recent nukes count) — v1 uses all PIT-masked episodes for the symbol with the sample-floor.
-- **Wiring the live/verdict decide path ON** — v1 ships the capability default-off; turning it on (symmetric arms) is the small noted follow-up (shared with episode-recall's on-switch).
+- ✅ **DONE (2026-06-27)** — **Wiring the live/verdict decide path ON** (symmetric arms), shared with episode-recall's on-switch. Shipped via `docs/superpowers/plans/2026-06-27-episode-readside-on.md`: taboo runs on the act path (`save_decisions --brain`), the evolving path (`refine_live`), and the verdict (`run_verdict --brain`, read-only `recall_store` through `GuardedPolicy` on every arm — symmetric). The `for_asof` 50-cap was lifted at the taboo aggregation site (`limit=None`), so a symbol's full PIT-masked nuke history is counted (a test proves taboo now fires past the old 50-cap). Default-off preserved (no brain → byte-identical).
 
 ## Why this shape
 

@@ -71,7 +71,7 @@ The recall is PIT-safe by construction: `for_asof` masks `learned_asof <= asof`,
 - **#2 gated auto-promote/demote** from aggregated episode evidence.
 - **#3 taboo→L4 veto** from strongly-negative episodes.
 - Soft blended recall score (beyond recency + |advantage|); narrative-scoped recall (needs pre-decision narrative/theme signals).
-- Wiring the live `EpisodeStore` into the production decide path + the verdict harness's symmetric arms (this v1 ships the *capability*, default-off; turning it on across the live/verdict paths is a small follow-up wiring once we trust the recall).
+- ✅ **DONE (2026-06-27)** — Wiring the live `EpisodeStore` into the production decide path + the verdict harness's symmetric arms. Shipped via `docs/superpowers/plans/2026-06-27-episode-readside-on.md`: recall reads the live brain on the act path (`save_decisions --brain`/`$ALPHA_EPISODES_DB`) and the evolving path (`refine_live`, `recall_store=episode_store`); the verdict (`run_verdict --brain` → `compare_harnesses`/`multi_window`) threads a **read-only** `recall_store` symmetrically into both arms (HCH via `InnerLoop.recall_store`, NEVER `episode_store=` — no self-write; Hexpert via `LLMAgentPolicy(episode_store=…)`). The `for_asof` 50-cap was lifted at the recall read site (`limit=None`). Default-off preserved (no brain → byte-identical).
 
 ## Why this shape
 

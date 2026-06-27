@@ -29,6 +29,20 @@ components — see the teaching-cockpit §6 subsection).
   longs → the production-posture verdict is thin-by-construction. Recalibrate the phase thresholds / the
   frontside definition against US data (the Refiner is meant to calibrate these vs the oracle in US-2; a
   manual US prior is the faster first step) so the production posture can trade. See the findings doc §4.
+- ✅ **§6 read-side FLIPPED ON** (2026-06-27) — recall + episode-taboo wired into the live decide path
+  (`save_decisions`/`refine_live`) and the verdict harness (read-only `recall_store`, symmetric arms;
+  HCH never self-writes mid-verdict). `for_asof(limit=None)` lifted the 50-cap at the two aggregation
+  read sites. See `docs/superpowers/plans/2026-06-27-episode-readside-on.md` + `docs/PROJECT_STATE.md`.
+- [ ] **Polish (deferred from the read-side flip):**
+  - **Broader `for_asof` cap audit** — the two production read sites (recall, taboo) + `forge` now pass an
+    explicit/`None` limit, but the default-50 is still a silent global cap for any future caller. Consider a
+    `for_asof(..., limit=None)` convention (or a `FULL` sentinel) sweep across all callers + a lint note.
+  - **`hit_max_iters` handling** — `alpha/converse/loop.py::run_conversation` returns
+    `hit_max_iters=True` with an empty `final_text` when the tool-call loop exhausts `max_iters`; callers
+    must check the flag or a turn silently yields no prose. Surface it (a fallback message / explicit error).
+  - **conftest fragility** — `tests/web/conftest.py` + `tests/sonia/conftest.py` use module-level
+    `pytest.importorskip` (a missing extra silently skips the WHOLE package, no failure recorded) +
+    autouse env monkeypatch with asymmetric fixture names. Make the skip explicit/visible; unify the isolation fixture.
 
 ## 2. Data-source layer (pluggable; mechanism shipped 2026-06-22)
 
