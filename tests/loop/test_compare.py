@@ -122,6 +122,86 @@ def test_multi_window_collects_verdict_tally():
     assert all(v in {"win", "loss", "flat", "insufficient"} for v in mw.verdicts)
 
 
+# ---------------------------------------------------------------------------
+# Task 5: symmetric read-only recall_store across the verdict arms
+# ---------------------------------------------------------------------------
+
+def _seed_taboo_store(symbol="RUN", n=3):
+    """recall_store seeded so `symbol` is taboo: n PIT-old nuked episodes (learned long before the run)."""
+    from alpha.memory.store import EpisodeStore
+    from alpha.memory.episodes import Episode
+    s = EpisodeStore.in_memory()
+    for i in range(n):
+        s.add(Episode(episode_id=f"{symbol}:{i}", symbol=symbol, skill_id="gap_and_go",
+                      entry_date=date(2026, 1, 1), exit_date=date(2026, 1, 2),
+                      outcome="nuked", advantage=-2.0, learned_asof=date(2026, 1, 2)))
+    return s
+
+
+def _run_compare(recall_store="__omit__", *, src=None):
+    """Thin wrapper over compare_harnesses with deterministic MockLLM factories (picks RUN every day).
+    recall_store='__omit__' -> pass NO kwarg (the default); else thread it through."""
+    src = src if src is not None else _source(6, 1.15)
+    kw = dict(
+        agent_llm_factory=lambda: MockLLMClient('{"regime_read": "trend", "candidates": '
+                                                '[{"symbol": "RUN", "pattern": "gap_and_go", "confidence": 0.7}]}'),
+        refiner_llm_factory=lambda: MockLLMClient('{"ops": []}'),
+        store_factory=lambda: SnapshotStore(tempfile.mkdtemp()), loop_config=_cfg())
+    if recall_store != "__omit__":
+        kw["recall_store"] = recall_store
+    return compare_harnesses(lambda: load_seeds(SEEDS), src, src.trading_calendar()[0],
+                             src.trading_calendar()[-1], **kw)
+
+
+def test_verdict_recall_store_not_written_during_run():
+    """A verdict reads the supplied pool but never WRITES to it: the HCH arm threads it as recall_store=
+    (read) NOT episode_store= (write). This is non-vacuous only if the HCH arm actually MATURES picks
+    during the run — so we seed taboo on a symbol NOT in the universe (OTHER), letting RUN survive the
+    veto and mature normally. The supplied store must stay unchanged while a write WOULD have occurred
+    (proven by the write-store growth control below). It FAILS under the episode_store=recall_store
+    self-write bug (the HCH arm's matured RUN episodes would land in the supplied store)."""
+    src = _source(6, 1.15)                                  # universe = {RUN} only
+    store = _seed_taboo_store("OTHER")                      # taboo a NON-universe symbol -> never fires
+    n_before = len(store.for_asof(date(2099, 1, 1), limit=None))
+    _run_compare(recall_store=store, src=src)
+    assert len(store.for_asof(date(2099, 1, 1), limit=None)) == n_before   # unchanged -> read-only
+
+    # Control: a WRITE actually would have happened during that run. Drive an otherwise-identical InnerLoop
+    # over the same source/window with the SAME store handed as episode_store= (the write path the verdict
+    # must NOT use) and confirm it grows -> the read-only assertion above is meaningful, not trivially true.
+    from alpha.harness.manager import HarnessManager
+    from alpha.loop.inner_loop import InnerLoop
+    from alpha.eval.scorer import ReturnScorer
+    store_W = _seed_taboo_store("OTHER")                    # same inert seed, used as the WRITE handle
+    n_w_before = len(store_W.for_asof(date(2099, 1, 1), limit=None))
+    mgr = HarnessManager(load_seeds(SEEDS), SnapshotStore(tempfile.mkdtemp()))
+    InnerLoop(mgr, src, src.trading_calendar()[0], src.trading_calendar()[-1],
+              MockLLMClient('{"regime_read": "trend", "candidates": '
+                            '[{"symbol": "RUN", "pattern": "gap_and_go", "confidence": 0.7}]}'),
+              MockLLMClient('{"ops": []}'), config=_cfg(), scorer=ReturnScorer(),
+              recall_store=store, episode_store=store_W).run()
+    assert len(store_W.for_asof(date(2099, 1, 1), limit=None)) > n_w_before   # the run DID write (RUN matured)
+
+
+def test_verdict_recall_store_drops_taboo_symbol_symmetrically():
+    """When the supplied recall pool makes the universe symbol taboo, BOTH the HCH and Hexpert arms drop
+    it (read applied symmetrically): no candidate is entered/scored in either arm -> both no-trade -> the
+    excess delta is 0. (This is the veto-fires case; the not_written test above is the veto-doesn't-fire,
+    matures-and-could-write case — together they cover both sides of the read/write decoupling.)"""
+    store = _seed_taboo_store("RUN")                      # RUN IS the universe symbol -> taboo fires
+    cr = _run_compare(recall_store=store)
+    assert cr.arms["HCH"].report.n_candidates == 0       # HCH: RUN vetoed -> nothing entered/scored
+    assert cr.arms["Hexpert"].report.n_candidates == 0   # Hexpert: same read -> same veto (symmetric)
+    assert abs(cr.hch_minus_hexpert_mean_excess) < 1e-9  # both arms no-trade -> equal
+
+
+def test_verdict_recall_store_none_byte_identical():
+    """recall_store=None reproduces today's headline numbers (additive default-off)."""
+    a = _run_compare(recall_store=None)
+    b = _run_compare()                                    # no kwarg -> same default
+    assert a.hch_minus_hexpert_mean_excess == b.hch_minus_hexpert_mean_excess
+
+
 def test_multi_window_aggregates_deltas():
     from alpha.loop.compare import multi_window, MultiWindowReport
     src = _source(10, 1.15)

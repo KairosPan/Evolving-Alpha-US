@@ -67,7 +67,7 @@ def compare_harnesses(harness_factory: Callable[[], HarnessState], source, start
                       loop_config: LoopConfig | None = None,
                       refiner_config: RefinerConfig | None = None,
                       scorer_factory: Callable[[], object] | None = None,
-                      shadow: bool = False) -> ComparisonReport:
+                      shadow: bool = False, recall_store=None) -> ComparisonReport:
     """Run HCH (self-refining InnerLoop) vs Hexpert (frozen seed H + agent, NO Refiner) vs Hmin
     (chase-biggest-gainer + no-trade) on the SAME source/window/horizon/scorer. All inputs are FACTORIES
     so each arm gets a fresh H / LLM client / store (no cross-arm pollution; MockLLMClient is stateful).
@@ -83,24 +83,30 @@ def compare_harnesses(harness_factory: Callable[[], HarnessState], source, start
     # the SAME guard+sizing (a fair, symmetric comparison), wrap each policy here before wf.walk/run — in the
     # SAME order as _rebind: L4 guard inner, L3 sizing outer (size the post-veto survivors). Sizing is
     # verdict-neutral, so wrapping the non-HCH arms does not change their numbers; it keeps the chain uniform.
+    # recall_store is READ-only for EVERY arm: GuardedPolicy taboo + Hexpert recall (episode_store=), HCH via
+    # the loop's recall_store= (NOT episode_store= — the verdict must not self-write mid-run). Default None ->
+    # byte-identical to the no-memory verdict. The §6 read is applied SYMMETRICALLY (like the screen flag).
     def _wrap(policy):
-        p = GuardedPolicy(policy, source) if cfg.screen else policy
+        p = GuardedPolicy(policy, source, episode_store=recall_store) if cfg.screen else policy
         return SizingPolicy(p) if cfg.size else p
 
     # Hexpert FIRST when shadow (its series seeds HCH); frozen H = bare agent walk, no Refiner/manager.
-    hexpert_traj = wf.walk(_wrap(LLMAgentPolicy(harness_factory(), agent_llm_factory()))) if shadow else None
+    hexpert_traj = wf.walk(_wrap(LLMAgentPolicy(harness_factory(), agent_llm_factory(),
+                                                episode_store=recall_store))) if shadow else None
 
     # HCH = self-refining InnerLoop (optionally shadow-gated against the Hexpert reference series)
     mgr = HarnessManager(harness_factory(), store_factory())
     loop = InnerLoop(mgr, source, start, end, agent_llm_factory(), refiner_llm_factory(),
                      config=cfg, refiner_config=refiner_config, scorer=scorer_factory(),
-                     shadow_daily=(daily_advantage(hexpert_traj) if shadow else None))
+                     shadow_daily=(daily_advantage(hexpert_traj) if shadow else None),
+                     recall_store=recall_store)   # READ-only into the loop (never episode_store=): no self-write
     lr = loop.run()
     hch_eval = report_from_trajectory(lr.trajectory, horizon=cfg.horizon)
 
     # Hexpert (reuse the shadow pre-run trajectory, else run it now)
     if hexpert_traj is None:
-        hexpert_traj = wf.walk(_wrap(LLMAgentPolicy(harness_factory(), agent_llm_factory())))
+        hexpert_traj = wf.walk(_wrap(LLMAgentPolicy(harness_factory(), agent_llm_factory(),
+                                                    episode_store=recall_store)))
     hexpert_eval = report_from_trajectory(hexpert_traj, horizon=cfg.horizon)
 
     # Hmin floor baselines (deterministic, no LLM/H/store)
@@ -157,7 +163,7 @@ def multi_window(harness_factory: Callable[[], HarnessState], source,
                  loop_config: LoopConfig | None = None,
                  refiner_config: RefinerConfig | None = None,
                  scorer_factory: Callable[[], object] | None = None,
-                 shadow: bool = False) -> MultiWindowReport:
+                 shadow: bool = False, recall_store=None) -> MultiWindowReport:
     """Run compare_harnesses over each window; aggregate the excess deltas. A direction diagnostic, not
     a significance test (see MultiWindowReport)."""
     deltas: list[float] = []
@@ -166,7 +172,7 @@ def multi_window(harness_factory: Callable[[], HarnessState], source,
         cr = compare_harnesses(harness_factory, source, start, end, agent_llm_factory=agent_llm_factory,
                                refiner_llm_factory=refiner_llm_factory, store_factory=store_factory,
                                loop_config=loop_config, refiner_config=refiner_config,
-                               scorer_factory=scorer_factory, shadow=shadow)
+                               scorer_factory=scorer_factory, shadow=shadow, recall_store=recall_store)
         deltas.append(cr.hch_minus_hexpert_mean_excess)
         verdicts.append(cr.stat_verdict.verdict if cr.stat_verdict is not None else "insufficient")
     n = len(deltas)

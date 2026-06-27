@@ -91,7 +91,7 @@ class InnerLoop:
                  refiner_config: RefinerConfig | None = None, scorer=None,
                  agent_factory: Callable[[HarnessState], DecisionPolicy] | None = None,
                  shadow_daily: dict[Date, float] | None = None,
-                 episode_store=None, conflict_queue=None) -> None:
+                 episode_store=None, conflict_queue=None, recall_store=None) -> None:
         self._mgr = manager
         self._source = source
         self._start = start
@@ -104,6 +104,8 @@ class InnerLoop:
         self._agent_factory = agent_factory
         self._shadow_daily = dict(shadow_daily) if shadow_daily is not None else None
         self._episode_store = episode_store
+        self._recall_store = recall_store     # READ-only: recall + taboo into the policy stack (NOT the
+        #   apply_credit WRITE handle above) — lets the verdict feed both arms a fixed pool, no self-write
         self._conflict_queue = conflict_queue
         self._rebind()
 
@@ -112,8 +114,8 @@ class InnerLoop:
         EVERY rollback (rollback_to rebinds mgr.harness/mgr.tools to the restored objects)."""
         h = self._mgr.harness
         base = self._agent_factory(h) if self._agent_factory is not None \
-            else LLMAgentPolicy(h, self._agent_llm)
-        policy = GuardedPolicy(base, self._source) if self._cfg.screen else base
+            else LLMAgentPolicy(h, self._agent_llm, episode_store=self._recall_store)
+        policy = GuardedPolicy(base, self._source, episode_store=self._recall_store) if self._cfg.screen else base
         self._agent = SizingPolicy(policy) if self._cfg.size else policy   # size OUTSIDE guard (post-veto)
         self._refiner = Refiner(h, self._refiner_llm, self._mgr.tools, self._refiner_cfg,
                                 conflict_queue=self._conflict_queue)
