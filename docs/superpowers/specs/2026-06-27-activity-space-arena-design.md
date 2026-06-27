@@ -108,6 +108,8 @@ Each registered tool carries a `CapabilityTier`; dispatch applies per-tier polic
 | **T3 brain-edit** | propose `RefineOp` | **proposer only, via `try_apply_op`**; **wire the currently-absent `conflict_queue` (→ `held_for_review`) + provenance** on the converse path |
 | **T4 human-confirm / forbidden** | net write · send · external side-effects = human-confirm; **live orders = never registered** | make the currently-vacuous staged-edit approval *real* (`StagedEdit.status` is defined but never enforced today — recon-confirmed) |
 
+**Single choke-point invariant (the activity-space twin of the one-write-waist).** *Every* tool dispatch — every tier — flows through one enforcement point (`alpha/arena/policy.py`, called from `converse/loop.py`); there is **no second dispatch path** around it. This is non-negotiable: OpenClaw's sandbox was bypassed precisely because one endpoint (`/tools/invoke`) omitted the policy layer, so a single missed call site silently voids the whole membrane. The arena must add no alternate route, and a test asserts every registered tool is only reachable through the policy.
+
 **The three membranes:**
 - **Membrane A — brain `H`.** Any self-modification crosses through the existing gate. The new computer-use tools **never** write `H` directly (preserves the "one write-waist" invariant). This membrane is *ours* — neither Codex nor Hermes has a "brain"; the sandbox confines *execution*, the gate confines *the brain*.
 - **Membrane B — the outside world.** Network *reads* = allowlist-autonomous; network *writes/sends*/external side-effects = human-confirm. Market-data reads remain bound by the **PIT firewall** (no future leakage), independent of the sandbox.
@@ -178,6 +180,7 @@ P-A strictly gates the rest; within P-A the recall PIT-mask wiring comes first.
 
 - `InProcessEnv` is the default test backend; `LocalEnv` tests run harmless commands in a temp workspace with network forced off.
 - A new **membrane test suite**: T3 must route through `try_apply_op` (and a conflicting `task`-evidenced trading-`H` op is held/rejected); T4 must require confirmation; live-order tools must not exist; network is dead in tests; market reads still honor the PIT firewall.
+- A **no-bypass test** (enforces the single choke-point invariant, §4): enumerate every registered tool and assert each is invocable only through `arena.policy` — there is no second dispatch path that skips tier enforcement.
 - Recall-into-prompt gets a dedicated **PIT-leak regression** (a lesson learned on D is invisible to a conversational turn dated D−1), covering both injection modes.
 - Existing 704 tests stay green throughout; P-B/P-C are default-off and byte-identical when off.
 
@@ -185,7 +188,7 @@ P-A strictly gates the rest; within P-A the recall PIT-mask wiring comes first.
 
 ## 10. Risks & open questions
 
-1. **Local phase has no kernel boundary.** Membrane B + hard wall are tool-level only until P-D. Documented as a provisional operator-trust posture; the seam keeps the upgrade additive. *Do not let any doc imply kernel-grade safety in the Local phase.*
+1. **Local phase has no kernel boundary.** Membrane B + hard wall are tool-level only until P-D. Documented as a provisional operator-trust posture (the same posture OpenClaw and Hermes-Local openly adopt — single trusted operator, *not* an adversarial boundary); the seam keeps the upgrade additive. *Do not let any doc imply kernel-grade safety in the Local phase.* **The `LocalEnv` workspace path-guard is NOT a security boundary** — string-path validation is TOCTOU-bypassable (symlink-swap between check and use; Snyk demonstrated exactly this against OpenClaw's `assertSandboxPath`). Treat it as accident-prevention only; `SandboxedEnv` (P-D) must enforce confinement in the kernel/container (fd-based ops or `writable_roots`), never by path strings.
 2. **Second-fitness Goodhart.** A general-operating metric is gameable. Mitigated by: human/verifier judge (not an autonomous metric) as default, LLM-judge deferred, the gate + sample floor, and above all the **separation invariant** keeping it away from trading `H`.
 3. **Separation enforcement is at the gate.** The gate proves *who/what*, not soundness — it can route a `task`-evidenced op targeting trading `H` to rejection/hold, but cannot verify a human judgment was *correct*. It is a routing/audit aid, not a correctness guarantee.
 4. **The trading-vs-operational classification of an `H` element is itself undefined and load-bearing.** The whole separation invariant (§1.3, §5) presumes the gate can tell whether a target `H` element is "trading-relevant" (walk-forward-only) or "operational" (general-signal-allowed). That rule does not exist yet. Candidate mechanisms: a per-element `domain` tag set at creation, classification by component sub-type, or by the proposer/path that authored it. **This must be pinned during P-C planning before the general signal is allowed to touch `H` at all** — until then, P-A/P-B are safe because the general signal writes nothing gated.
