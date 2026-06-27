@@ -13,7 +13,9 @@ def propose_skill_ops(harness: HarnessState, episode_store, *, asof: Date,
                       retire_min_samples: int = 5, retire_min_nukerate: float = 0.5) -> list[RefineOp]:
     """Deterministic per-skill episode-evidence proposer: promote strong incubating skills, soft-retire
     strong-negative active skills. PIT-masked via for_asof(asof). Pure (reads, never writes)."""
-    stats = summarize(episode_store.for_asof(asof), key=lambda e: e.skill_id)
+    # for_asof's default limit (50) is a GLOBAL cap across all skills — too small for this offline
+    # maintenance pass, which must see a skill's full PIT-masked history (it keys promote/retire off n).
+    stats = summarize(episode_store.for_asof(asof, limit=1_000_000), key=lambda e: e.skill_id)
     ops: list[RefineOp] = []
     for skill_id, s in stats.items():
         sk = harness.skills.get(skill_id)
