@@ -36,3 +36,12 @@ def fake_source():
         "ex_date": [date(2026, 6, 20)], "kind": ["reverse_split"], "ratio": [0.1],
     })
     return FakeSource(calendar=cal, bars=bars, snapshots=snapshots, corp_actions=corp)
+
+
+@pytest.fixture
+def brain_session_isolation(tmp_path, monkeypatch):
+    """Point the live-brain + sessions dirs at a tmp dir so a test never touches real on-disk state.
+    Shared by tests/web and tests/sonia (their autouse fixtures depend on this — DRY: one definition).
+    Not autouse here, so the offline core suite is unaffected; it activates only where requested."""
+    monkeypatch.setenv("ALPHA_LIVE_BRAIN_DIR", str(tmp_path / "brain"))
+    monkeypatch.setenv("ALPHA_SESSIONS_DIR", str(tmp_path / "sessions"))
