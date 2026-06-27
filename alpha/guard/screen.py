@@ -71,13 +71,14 @@ def ssr_active(source, symbol: str, as_of: Date) -> bool:
 
 def screen_decision(decision: DecisionPackage, *, source, state: MarketState, episode_store=None) -> DecisionPackage:
     """Apply the L4 hard veto to a freshly-produced DecisionPackage: DROP candidates the immutable-core
-    guard blocks (SSR / reverse-split-pending / risk-off / backside regime), record dropped reasons in
-    key_risks, and populate the structured regime. Frozen models -> rebuilt via model_copy.
+    guard blocks (SSR / reverse-split-pending / risk-off / backside regime) — plus, when an `episode_store`
+    is wired, an §6 episode-taboo (a symbol with a strong PIT-masked nuke history). Record dropped reasons
+    in key_risks, and populate the structured regime. Frozen models -> rebuilt via model_copy.
 
     PIT-safe: all data reads go through a fresh GuardedSource(AsOfGuard(state.date)); SSR reads only
-    prior-day bars (< as_of) and corp actions are announce-keyed (<= as_of). Vetoed candidates are
-    dropped (never entered/scored) rather than annotated — a kept-but-failed candidate would still be
-    scored as an entry by the drivers, defeating the hard veto."""
+    prior-day bars (< as_of) and corp actions are announce-keyed (<= as_of); episode recall is masked at
+    `for_asof(state.date)`. Vetoed candidates are dropped (never entered/scored) rather than annotated — a
+    kept-but-failed candidate would still be scored as an entry by the drivers, defeating the hard veto."""
     as_of = state.date
     guarded = GuardedSource(source, AsOfGuard(as_of))
     regime = GCycle().read(state)
