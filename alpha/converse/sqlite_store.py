@@ -91,5 +91,17 @@ class SqliteProjectStore:
             turns=[ProjectTurn.model_validate(t) for t in json.loads(row["turns"])],
             staged_edits=[StagedEdit.model_validate(s) for s in json.loads(row["staged_edits"])])
 
+    def list(self) -> list[Project]:
+        ids = [r["project_id"] for r in self._conn.execute(
+            "SELECT project_id FROM projects ORDER BY project_id DESC")]
+        return [self.get(i) for i in ids]
+
+    def delete(self, project_id: str) -> None:
+        """Hard-delete a project. Idempotent: a missing id is a no-op."""
+        self._conn.execute("DELETE FROM projects WHERE project_id=?", (project_id,))
+        self._conn.execute("DELETE FROM messages WHERE project_id=?", (project_id,))
+        self._conn.execute("DELETE FROM messages_fts WHERE project_id=?", (project_id,))
+        self._conn.commit()
+
     def close(self) -> None:
         self._conn.close()

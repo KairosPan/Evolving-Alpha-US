@@ -39,3 +39,19 @@ def test_put_is_idempotent_upsert():
     got = s.get("p1")
     assert got.title == "renamed"
     assert len(got.messages) == 3
+
+
+def test_list_is_project_id_desc():
+    s = SqliteProjectStore.in_memory()
+    for pid in ("p1", "p3", "p2"):
+        s.put(Project(project_id=pid, created_at="2026-06-27T00:00:00", title=pid))
+    assert [p.project_id for p in s.list()] == ["p3", "p2", "p1"]
+
+
+def test_delete_is_idempotent():
+    s = SqliteProjectStore.in_memory()
+    s.put(Project(project_id="p1", created_at="2026-06-27T00:00:00", title="x"))
+    s.delete("p1")
+    s.delete("p1")                  # second delete is a no-op, not an error
+    assert s.get("p1") is None
+    assert s.list() == []
