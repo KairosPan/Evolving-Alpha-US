@@ -18,13 +18,15 @@ from alpha.harness.manager import HarnessManager
 from alpha.harness.snapshot import SnapshotStore
 from alpha.llm.config import make_client
 from alpha.loop.inner_loop import InnerLoop, LoopConfig
+from alpha.memory.store import EpisodeStore
 from alpha.meta.store import LiveBrainStore
 from alpha.meta.conflict_store import ConflictQueue
 
 
 def run_refine_live(source, start: Date, end: Date, *, brain_dir: str, conflicts_dir: str,
                     agent_llm_factory=None, refiner_llm_factory=None, horizon: int = 2,
-                    agent_factory=None, loop_config: "LoopConfig | None" = None) -> dict:
+                    agent_factory=None, loop_config: "LoopConfig | None" = None,
+                    episodes_db: "str | None" = None) -> dict:
     """Evolve the live brain via one InnerLoop pass over [start, end]; held conflicts -> ConflictQueue.
     Tests inject MockLLM factories + tmp dirs; the live path uses per-role make_client (temp=0).
     agent_factory: optional callable (HarnessState -> DecisionPolicy) for offline/test injection.
@@ -38,8 +40,9 @@ def run_refine_live(source, start: Date, end: Date, *, brain_dir: str, conflicts
     with bstore.lock():                                   # 3rd writer — serialize vs Sonia/workbench
         h, log = bstore.load()                            # the LIVE brain (teaching-owned elements present)
         mgr = HarnessManager(h, SnapshotStore(tempfile.mkdtemp()), log=log)   # in-run breaker checkpoints
+        episode_store = EpisodeStore.open(episodes_db) if episodes_db else None
         loop = InnerLoop(mgr, source, start, end, agent_llm_factory(), refiner_llm_factory(),
-                         config=cfg, conflict_queue=cq,
+                         config=cfg, conflict_queue=cq, episode_store=episode_store,
                          agent_factory=agent_factory)
         report = loop.run()
         bstore.save(mgr.harness, mgr.log)                 # persist the evolved brain
@@ -59,7 +62,8 @@ def main() -> None:
     out = run_refine_live(source, args.start, args.end,
                           brain_dir=os.environ.get("ALPHA_LIVE_BRAIN_DIR", "./state/brain"),
                           conflicts_dir=os.environ.get("ALPHA_CONFLICTS_DIR", "./state/conflicts"),
-                          horizon=args.horizon)
+                          horizon=args.horizon,
+                          episodes_db=os.environ.get("ALPHA_EPISODES_DB", "./state/brain.db"))
     print(f"{out['n_edits']} self-study edits applied · {out['held']} conflicts held "
           f"({out['refines']} refines) -> {out['conflicts_dir']}")
 
