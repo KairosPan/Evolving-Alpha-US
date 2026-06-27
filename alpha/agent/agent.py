@@ -31,13 +31,15 @@ class LLMAgentPolicy:
                  injection: Literal["full", "retrieval"] = "retrieval",
                  skill_budget: int = DEFAULT_SKILL_BUDGET,
                  memory_budget: int = DEFAULT_MEMORY_BUDGET,
-                 trial_slots: int = DEFAULT_TRIAL_SLOTS) -> None:
+                 trial_slots: int = DEFAULT_TRIAL_SLOTS,
+                 episode_store=None) -> None:
         self._harness = harness
         self._llm = llm
         self._injection: Literal["full", "retrieval"] = injection
         self._skill_budget = skill_budget
         self._memory_budget = memory_budget
         self._trial_slots = trial_slots
+        self._episode_store = episode_store
         self._phase_prior: str | None = None
 
     def decide(self, state: MarketState, universe: CandidateUniverse) -> DecisionPackage:
@@ -45,7 +47,7 @@ class LLMAgentPolicy:
                                      phase_prior=self._phase_prior, skill_budget=self._skill_budget,
                                      memory_budget=self._memory_budget, trial_slots=self._trial_slots,
                                      available_signals=available_data_signals(universe),
-                                     asof=state.as_of)
+                                     asof=state.as_of, episode_store=self._episode_store)
         user = build_user_prompt(state, universe)
         raw = self._llm.complete(system, user)
         pkg = parse_decision(raw, state.date, universe, as_of=state.as_of)
