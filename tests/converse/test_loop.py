@@ -40,3 +40,7 @@ def test_respects_max_iters():
     res = run_conversation(_reg(), llm, "sys", [ChatMessage(role="user", text="go")], max_iters=3)
     assert res.hit_max_iters is True
     assert len(res.tool_calls) == 3
+    # On exhaustion the turn must NOT silently yield empty prose: a fallback final_text is returned
+    # (callers render res.final_text directly) while hit_max_iters stays True for programmatic detection.
+    assert res.final_text != ""
+    assert "3" in res.final_text

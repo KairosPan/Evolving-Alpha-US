@@ -54,4 +54,10 @@ def run_conversation(registry: ToolRegistry, chat: ChatLLMClient, system: str,
         calls.append({"tool": name, "args": args, "result": result})
         msgs.append(ChatMessage(role="assistant", text=reply))
         msgs.append(ChatMessage(role="user", text=f"[tool:{name} result]\n{_result_text(result)}"))
-    return ConversationResult(final_text="", messages=msgs, tool_calls=calls, hit_max_iters=True)
+    # Budget exhausted without a prose final answer. Return a fallback final_text (not "") so callers
+    # that render res.final_text directly never show an empty turn; hit_max_iters stays True for any
+    # caller that wants to special-case it.
+    return ConversationResult(
+        final_text=(f"(I reached the {max_iters}-step tool-calling limit without finishing. "
+                    "Try narrowing the request or asking again.)"),
+        messages=msgs, tool_calls=calls, hit_max_iters=True)
