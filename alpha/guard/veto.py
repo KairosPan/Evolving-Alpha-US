@@ -19,6 +19,7 @@ class CandidateContext:
     going_concern: bool = False             # (US-3 fundamental)
     regulatory: bool = False                # SEC/exchange action (US-3)
     ssr: bool = False                       # short-sale restriction active (US-3)
+    episode_taboo: bool = False             # from §6: strong PIT-masked nuke history for this symbol
 
 
 @dataclass(frozen=True)
@@ -48,4 +49,6 @@ def veto(ctx: CandidateContext) -> VetoVerdict:
         reasons.append("regulatory / SEC action")
     if ctx.ssr:
         reasons.append("short-sale restriction active (SSR): don't fight it")
+    if ctx.episode_taboo:
+        reasons.append("episode taboo: strong nuke history (don't chase)")
     return VetoVerdict(vetoed=bool(reasons), reasons=reasons)
