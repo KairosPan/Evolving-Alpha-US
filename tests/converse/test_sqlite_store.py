@@ -55,3 +55,27 @@ def test_delete_is_idempotent():
     s.delete("p1")                  # second delete is a no-op, not an error
     assert s.get("p1") is None
     assert s.list() == []
+
+
+def test_search_finds_messages_by_text():
+    s = SqliteProjectStore.in_memory()
+    s.put(Project(project_id="p1", created_at="2026-06-27T00:00:00", title="x",
+                  messages=[ChatMessage(role="user", text="the gamma squeeze setup")]))
+    s.put(Project(project_id="p2", created_at="2026-06-27T00:00:00", title="y",
+                  messages=[ChatMessage(role="user", text="a quiet range day")]))
+    hits = s.search("gamma")                       # >=3 chars (trigram floor)
+    assert [(h["project_id"], h["seq"]) for h in hits] == [("p1", 0)]
+    assert "gamma" in hits[0]["text"]
+
+
+def test_search_reflects_deletes_and_updates():
+    s = SqliteProjectStore.in_memory()
+    s.put(Project(project_id="p1", created_at="2026-06-27T00:00:00", title="x",
+                  messages=[ChatMessage(role="user", text="halt then dump pattern")]))
+    s.delete("p1")
+    assert s.search("halt") == []                  # FTS rows removed on delete
+
+
+def test_tokenizer_is_recorded():
+    s = SqliteProjectStore.in_memory()
+    assert s.tokenizer in ("trigram", "unicode61")

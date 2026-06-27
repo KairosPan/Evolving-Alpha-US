@@ -103,5 +103,13 @@ class SqliteProjectStore:
         self._conn.execute("DELETE FROM messages_fts WHERE project_id=?", (project_id,))
         self._conn.commit()
 
+    def search(self, query: str) -> list[dict]:
+        """Full-text search over message text (FTS5). Returns matched messages, best-rank first.
+        Note: the trigram tokenizer requires queries of at least 3 characters."""
+        rows = self._conn.execute(
+            "SELECT project_id, seq, text FROM messages_fts WHERE messages_fts MATCH ? "
+            "ORDER BY rank", (query,)).fetchall()
+        return [{"project_id": r["project_id"], "seq": r["seq"], "text": r["text"]} for r in rows]
+
     def close(self) -> None:
         self._conn.close()
