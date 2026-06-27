@@ -91,7 +91,7 @@ class InnerLoop:
                  refiner_config: RefinerConfig | None = None, scorer=None,
                  agent_factory: Callable[[HarnessState], DecisionPolicy] | None = None,
                  shadow_daily: dict[Date, float] | None = None,
-                 episode_store=None) -> None:
+                 episode_store=None, conflict_queue=None) -> None:
         self._mgr = manager
         self._source = source
         self._start = start
@@ -104,6 +104,7 @@ class InnerLoop:
         self._agent_factory = agent_factory
         self._shadow_daily = dict(shadow_daily) if shadow_daily is not None else None
         self._episode_store = episode_store
+        self._conflict_queue = conflict_queue
         self._rebind()
 
     def _rebind(self) -> None:
@@ -114,7 +115,8 @@ class InnerLoop:
             else LLMAgentPolicy(h, self._agent_llm)
         policy = GuardedPolicy(base, self._source) if self._cfg.screen else base
         self._agent = SizingPolicy(policy) if self._cfg.size else policy   # size OUTSIDE guard (post-veto)
-        self._refiner = Refiner(h, self._refiner_llm, self._mgr.tools, self._refiner_cfg)
+        self._refiner = Refiner(h, self._refiner_llm, self._mgr.tools, self._refiner_cfg,
+                                conflict_queue=self._conflict_queue)
 
     def run(self) -> LoopReport:
         cfg = self._cfg
