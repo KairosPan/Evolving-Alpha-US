@@ -55,6 +55,33 @@ def test_save_decisions_persists_browsable_by_date(tmp_path):
     assert store.latest() is not None and store.get(store.dates()[0]) is not None
 
 
+# ---------------------------------------------------------------------------
+# Task 7: optional read-only brain -> §6 recall+taboo on the act-only path
+# ---------------------------------------------------------------------------
+
+def _seed_taboo_store(symbol="RUN", n=3):
+    """recall_store seeded so `symbol` is taboo: n PIT-old nuked episodes (learned long before the run)."""
+    from alpha.memory.store import EpisodeStore
+    from alpha.memory.episodes import Episode
+    s = EpisodeStore.in_memory()
+    for i in range(n):
+        s.add(Episode(episode_id=f"{symbol}:{i}", symbol=symbol, skill_id="gap_and_go",
+                      entry_date=date(2026, 1, 1), exit_date=date(2026, 1, 2),
+                      outcome="nuked", advantage=-2.0, learned_asof=date(2026, 1, 2)))
+    return s
+
+
+def test_produce_decisions_taboo_drops_candidate():
+    """With a seeded brain, the act-only path drops a taboo symbol from the daily packages; with no brain
+    (episode_store=None) RUN survives the frontside L4 guard (so ONLY taboo, not the regime, drops it)."""
+    src, start, end = _fake()
+    store = _seed_taboo_store("RUN")
+    pkgs = list(sd.produce_decisions(src, start, end, agent_llm_factory=_AGENT, episode_store=store))
+    assert all("RUN" not in [c.symbol for c in p.candidates] for p in pkgs)
+    pkgs_off = list(sd.produce_decisions(src, start, end, agent_llm_factory=_AGENT, episode_store=None))
+    assert any("RUN" in [c.symbol for c in p.candidates] for p in pkgs_off)   # off -> not dropped
+
+
 def test_screen_off_skips_the_guard():
     src, start, end = _fake()
     pkgs = list(sd.produce_decisions(src, start, end, agent_llm_factory=_AGENT, screen=False, size=False))

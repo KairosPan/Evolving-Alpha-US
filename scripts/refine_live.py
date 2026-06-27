@@ -43,6 +43,7 @@ def run_refine_live(source, start: Date, end: Date, *, brain_dir: str, conflicts
         episode_store = EpisodeStore.open(episodes_db) if episodes_db else None
         loop = InnerLoop(mgr, source, start, end, agent_llm_factory(), refiner_llm_factory(),
                          config=cfg, conflict_queue=cq, episode_store=episode_store,
+                         recall_store=episode_store,        # §6 read ON: recall+taboo from the live brain
                          agent_factory=agent_factory)
         report = loop.run()
         bstore.save(mgr.harness, mgr.log)                 # persist the evolved brain

@@ -37,6 +37,7 @@ from alpha.harness.snapshot import SnapshotStore
 from alpha.loop.compare import ComparisonReport, MultiWindowReport, compare_harnesses, multi_window
 from alpha.loop.inner_loop import LoopConfig
 from alpha.llm.config import make_client
+from alpha.memory.store import EpisodeStore
 
 SEEDS_DIR = Path(__file__).resolve().parents[1] / "seeds"
 
@@ -60,7 +61,7 @@ def split_windows(calendar: list[Date], start: Date, end: Date, n: int, *, horiz
 
 def run_verdict(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS_DIR, horizon: int = 2,
                 windows: int = 1, shadow: bool = False, screen: bool = True,
-                agent_llm_factory=None, refiner_llm_factory=None):
+                agent_llm_factory=None, refiner_llm_factory=None, recall_store=None):
     """Run the §9/§10 comparison over the captured `source`. Returns a ComparisonReport (windows<=1) or a
     MultiWindowReport (windows>1). Factories default to temp=0 `make_client` clients; tests inject MockLLM.
 
@@ -73,7 +74,8 @@ def run_verdict(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS_DIR, 
     store_factory = lambda: SnapshotStore(tempfile.mkdtemp())
     cfg = LoopConfig(horizon=horizon, screen=screen)  # screen ON = production posture; OFF = raw-skill
     kw = dict(agent_llm_factory=agent_llm_factory, refiner_llm_factory=refiner_llm_factory,
-              store_factory=store_factory, loop_config=cfg, shadow=shadow)
+              store_factory=store_factory, loop_config=cfg, shadow=shadow,
+              recall_store=recall_store)   # READ-only §6 pool, symmetric across arms; None -> no-memory verdict
     wins = split_windows(source.trading_calendar(), start, end, windows, horizon=horizon)
     if len(wins) > 1:
         return multi_window(harness_factory, source, wins, **kw)
@@ -181,6 +183,8 @@ def main() -> None:
     ap.add_argument("--shadow", action="store_true", help="seed HCH's paired breaker with the Hexpert series")
     ap.add_argument("--no-screen", action="store_true", help="bypass the L4 regime veto (raw-agent-skill "
                     "diagnostic, NOT the production posture)")
+    ap.add_argument("--brain", metavar="PATH", help="read-only EpisodeStore (brain.db) for §6 recall+taboo "
+                    "into BOTH arms (symmetric); omit for the no-memory verdict")
     ap.add_argument("--json", metavar="PATH", help="also write the console JSON (web verdict view) to PATH "
                     "(single comparison; pair with --windows 1, the default)")
     args = ap.parse_args()
@@ -199,8 +203,11 @@ def main() -> None:
         print("  WARNING: ALPHA_LLM_TEMPERATURE != 0 — the verdict will not be deterministic.")
     print()
 
+    recall_store = EpisodeStore.open(args.brain, create_if_missing=False) if args.brain else None
+    print(f"  recall_store={'(brain) ' + args.brain if args.brain else '(none)'}")
     result = run_verdict(source, args.start, args.end, horizon=args.horizon,
-                         windows=args.windows, shadow=args.shadow, screen=screen)
+                         windows=args.windows, shadow=args.shadow, screen=screen,
+                         recall_store=recall_store)
     if isinstance(result, MultiWindowReport):
         print(format_multi(result))
         if args.json:

@@ -18,6 +18,7 @@ but only the *act* half: it decides and persists, no scoring or refinement.
 from __future__ import annotations
 
 import argparse
+import os
 from datetime import date as Date, datetime as DateTime
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from alpha.eval.decision_store import DecisionStore
 from alpha.guard.screen import GuardedPolicy
 from alpha.harness.loader import load_seeds
 from alpha.llm.config import make_client
+from alpha.memory.store import EpisodeStore
 from alpha.sizing.policy import SizingPolicy
 from alpha.state.builder import build_market_state
 from alpha.universe.universe import build_universe
@@ -40,16 +42,19 @@ SEEDS_DIR = Path(__file__).resolve().parents[1] / "seeds"
 
 
 def produce_decisions(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS_DIR,
-                      agent_llm_factory=None, screen: bool = True, size: bool = True):
+                      agent_llm_factory=None, screen: bool = True, size: bool = True,
+                      episode_store=None):
     """Yield one DecisionPackage per trading day in [start, end] (act-only). `screen`/`size` mirror
     LoopConfig: GuardedPolicy is the L4 veto, SizingPolicy the L3 sizing — both default ON. The
     perception history (sentiment_raw / prior gainers) is threaded forward exactly like InnerLoop so
-    the regime read sees frontside on genuine uptrends. Tests inject a MockLLM via agent_llm_factory."""
+    the regime read sees frontside on genuine uptrends. Tests inject a MockLLM via agent_llm_factory.
+    episode_store: optional read-only brain -> §6 recall (LLMAgentPolicy) + taboo (GuardedPolicy); the
+    act path never writes episodes (no scoring/maturity here). Default None -> byte-identical (no §6)."""
     agent_llm_factory = agent_llm_factory or (lambda: make_client("agent"))
     h = load_seeds(seeds_dir)
-    policy = LLMAgentPolicy(h, agent_llm_factory())
+    policy = LLMAgentPolicy(h, agent_llm_factory(), episode_store=episode_store)   # §6 recall (read-only)
     if screen:
-        policy = GuardedPolicy(policy, source)          # L4 veto (inner)
+        policy = GuardedPolicy(policy, source, episode_store=episode_store)   # L4 veto (+ §6 taboo)
     if size:
         policy = SizingPolicy(policy)                   # L3 sizing (outer; sizes post-veto survivors)
 
@@ -83,12 +88,16 @@ def main() -> None:
     ap.add_argument("out_dir", help="DecisionStore directory (point ALPHA_WEB_DECISIONS_DIR here)")
     ap.add_argument("--no-screen", action="store_true", help="skip the L4 guard veto")
     ap.add_argument("--no-size", action="store_true", help="emit unsized decisions (skip L3 sizing)")
+    ap.add_argument("--brain", metavar="PATH", help="read-only EpisodeStore (brain.db) for §6 recall+taboo; "
+                    "defaults to $ALPHA_EPISODES_DB if set")
     args = ap.parse_args()
 
     source = SnapshotSource(PITStore(Path(args.pit_root)))
     store = DecisionStore(args.out_dir)
+    brain = args.brain or os.environ.get("ALPHA_EPISODES_DB")
+    episode_store = EpisodeStore.open(brain, create_if_missing=False) if brain else None
     n = save_decisions(source, args.start, args.end, store,
-                       screen=not args.no_screen, size=not args.no_size)
+                       screen=not args.no_screen, size=not args.no_size, episode_store=episode_store)
     print(f"saved {n} daily decisions {args.start}..{args.end} -> {args.out_dir}")
 
 

@@ -110,6 +110,40 @@ def test_formatters_render_key_sections():
     assert "MULTI-WINDOW" in rv.format_multi(mw)
 
 
+# ---------------------------------------------------------------------------
+# Task 6: run_verdict threads a read-only recall_store into BOTH arms (symmetric)
+# ---------------------------------------------------------------------------
+
+def _seed_taboo_store(symbol="RUN", n=3):
+    """recall_store seeded so `symbol` is taboo: n PIT-old nuked episodes (learned long before the run)."""
+    from alpha.memory.store import EpisodeStore
+    from alpha.memory.episodes import Episode
+    s = EpisodeStore.in_memory()
+    for i in range(n):
+        s.add(Episode(episode_id=f"{symbol}:{i}", symbol=symbol, skill_id="gap_and_go",
+                      entry_date=date(2026, 1, 1), exit_date=date(2026, 1, 2),
+                      outcome="nuked", advantage=-2.0, learned_asof=date(2026, 1, 2)))
+    return s
+
+
+def test_run_verdict_threads_recall_store():
+    """recall_store passes through run_verdict into the comparison (read-only; never mutated by a verdict)."""
+    store = _seed_taboo_store("RUN")
+    n_before = len(store.for_asof(date(2099, 1, 1), limit=None))
+    cr = rv.run_verdict(*_fake(), agent_llm_factory=_AGENT, refiner_llm_factory=_REFINER,
+                        recall_store=store)
+    assert isinstance(cr, ComparisonReport)
+    assert len(store.for_asof(date(2099, 1, 1), limit=None)) == n_before   # read-only: unchanged
+
+
+def test_run_verdict_recall_store_none_default():
+    """No recall_store (the default None) -> today's verdict numbers (additive default-off)."""
+    a = rv.run_verdict(*_fake(), agent_llm_factory=_AGENT, refiner_llm_factory=_REFINER)
+    b = rv.run_verdict(*_fake(), agent_llm_factory=_AGENT, refiner_llm_factory=_REFINER,
+                       recall_store=None)
+    assert a.hch_minus_hexpert_mean_excess == b.hch_minus_hexpert_mean_excess
+
+
 def test_split_windows_partitions_contiguously():
     src, start, end = _fake(12)
     cal = src.trading_calendar()
