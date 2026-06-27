@@ -80,3 +80,16 @@ def test_phase_prior_none_recalls_across_phases_by_recency():
     out = select_episodes_for_prompt(s, phase_prior=None, asof=date(2026, 6, 20))
     # no phase boost → rank purely by recency; "b" (2026-06-09) is newer
     assert out[0].episode_id == "b"
+
+
+def test_recall_pool_sees_full_history_past_the_50_cap():
+    """An older phase-matching high-|advantage| episode is recalled (ranked first) even behind 50
+    more-recent off-phase episodes that would crowd the default-50 window."""
+    from datetime import timedelta
+    s = EpisodeStore.in_memory()
+    s.add(_ep("gold", "trend frontside", date(2026, 1, 2), 9.0, sym="AAA"))   # older, phase-match, big |adv|
+    for i in range(50):                                  # off-phase, MORE recent (would fill default-50)
+        s.add(_ep(f"n{i}", "flush exhaustion", date(2026, 3, 1) + timedelta(days=i), 0.1, sym="BBB"))
+    got = select_episodes_for_prompt(s, phase_prior="trend", asof=date(2026, 6, 1), budget=8)
+    assert any(e.episode_id == "gold" for e in got)      # behind the 50-cap, but full pool sees + ranks it
+    assert got[0].episode_id == "gold"                   # phase-match boost ranks it first

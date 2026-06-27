@@ -24,3 +24,21 @@ def test_for_asof_filters_phase_and_narrative():
     s.add(_ep("b", date(2026, 6, 3), phase="chop", narr="biotech"))
     assert {e.episode_id for e in s.for_asof(date(2026, 6, 9), phase="trend")} == {"a"}
     assert {e.episode_id for e in s.for_asof(date(2026, 6, 9), narrative="biotech")} == {"b"}
+
+
+def test_for_asof_limit_none_returns_full_history():
+    """limit=None bypasses the default-50 cap; default still caps at 50 (the recurring-cap fix)."""
+    from datetime import timedelta
+    s = EpisodeStore.in_memory()
+    for i in range(60):                                   # 60 PIT-visible episodes, exit_date ascending
+        s.add(Episode(episode_id=f"e{i}", symbol="AAA", skill_id="s1",
+                      entry_date=date(2026, 1, 1), exit_date=date(2026, 2, 1) + timedelta(days=i),
+                      outcome="faded", learned_asof=date(2026, 2, 1) + timedelta(days=i)))
+    asof = date(2026, 6, 1)
+    assert len(s.for_asof(asof)) == 50                    # default cap unchanged
+    assert len(s.for_asof(asof, limit=None)) == 60        # full history
+    # PIT mask holds in the uncapped branch too: a future-learned_asof episode stays invisible.
+    s.add(Episode(episode_id="future", symbol="AAA", skill_id="s1", entry_date=date(2026, 1, 1),
+                  exit_date=date(2026, 7, 1), outcome="faded", learned_asof=date(2026, 7, 1)))
+    full = s.for_asof(asof, limit=None)
+    assert len(full) == 60 and "future" not in {e.episode_id for e in full}

@@ -68,7 +68,7 @@ def select_episodes_for_prompt(episode_store, *, phase_prior: str | None,
     # `.phase` (e.g. "trend frontside"), which normalize_phase() can't map — so extract the canonical
     # token from the prose. Idempotent on an already-canonical prior (phase_from_read("trend") == "trend").
     canon = phase_from_read(phase_prior) if phase_prior else None
-    pool = episode_store.for_asof(asof)                          # PIT-masked (learned_asof <= asof)
+    pool = episode_store.for_asof(asof, limit=None)             # full PIT-masked pool; rank then top-budget
 
     def _key(e):
         ep_canon = phase_from_read(e.phase or "")

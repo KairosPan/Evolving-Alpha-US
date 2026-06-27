@@ -64,16 +64,22 @@ class EpisodeStore:
         return [_row_to_episode(r) for r in self._conn.execute("SELECT * FROM episodes")]
 
     def for_asof(self, asof: Date, *, phase: str | None = None, narrative: str | None = None,
-                 limit: int = 50) -> list[Episode]:
-        """PIT-safe recall: non-superseded episodes knowable by `asof` (learned_asof <= asof), newest first."""
+                 limit: int | None = 50) -> list[Episode]:
+        """PIT-safe recall: non-superseded episodes knowable by `asof` (learned_asof <= asof), newest first.
+        `limit=None` -> the FULL PIT-masked history (no cap) — the aggregation callers (taboo/recall) need it;
+        the default 50 stays the safety cap for ad-hoc callers."""
         clauses = ["superseded = 0", "learned_asof <= ?"]
         params: list = [asof.isoformat()]
         if phase is not None:
             clauses.append("phase = ?"); params.append(phase)
         if narrative is not None:
             clauses.append("narrative = ?"); params.append(narrative)
-        params.append(limit)
-        sql = f"SELECT * FROM episodes WHERE {' AND '.join(clauses)} ORDER BY exit_date DESC LIMIT ?"
+        where = " AND ".join(clauses)
+        if limit is None:                                 # uncapped: full PIT-masked, non-superseded history
+            sql = f"SELECT * FROM episodes WHERE {where} ORDER BY exit_date DESC"
+        else:
+            params.append(limit)
+            sql = f"SELECT * FROM episodes WHERE {where} ORDER BY exit_date DESC LIMIT ?"
         return [_row_to_episode(r) for r in self._conn.execute(sql, params)]
 
     def mark_superseded(self, *, after: Date) -> int:

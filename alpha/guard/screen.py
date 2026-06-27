@@ -86,8 +86,8 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
     snap = guarded.daily_snapshot(as_of)               # day's OHLC for the halt-then-dump proxy (guard-safe)
     rows = ({str(r["symbol"]): r for r in snap.to_dict("records")}
             if snap is not None and not snap.empty else {})
-    taboo_stats = (summarize(episode_store.for_asof(as_of), key=lambda e: e.symbol)
-                   if episode_store is not None else {})
+    taboo_stats = (summarize(episode_store.for_asof(as_of, limit=None), key=lambda e: e.symbol)
+                   if episode_store is not None else {})   # limit=None: full PIT history (past the 50-cap)
     kept, notes = [], []
     for c in decision.candidates:
         ctx = CandidateContext(symbol=c.symbol, regime=regime,

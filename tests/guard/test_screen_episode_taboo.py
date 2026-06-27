@@ -111,3 +111,29 @@ def test_guarded_policy_episode_store_end_to_end():
 
     assert all(c.symbol != _SYMBOL for c in out.candidates), "GuardedPolicy must drop taboo symbol"
     assert any("episode taboo" in n for n in out.key_risks)
+
+
+def test_taboo_sees_full_history_past_the_50_cap():
+    """A symbol nuked 3x is taboo even when 50 more-recent OTHER-symbol episodes would crowd it out of
+    the default-50 window (the for_asof cap fix)."""
+    from datetime import timedelta
+    src = _clean_src()                                   # rising CLEAN bars -> no SSR/halt veto
+    state = _state()                                     # date 2026-06-12, frontside/risk-on
+    store = EpisodeStore.in_memory()
+    # 3 OLDER nuked episodes for the target symbol CLEAN (knowable by state.date)
+    for i in range(3):
+        store.add(Episode(episode_id=f"clean{i}", symbol=_SYMBOL, skill_id=_PATTERN,
+                          entry_date=date(2026, 1, 1), exit_date=date(2026, 1, 2) + timedelta(days=i),
+                          outcome="nuked", advantage=-2.0,
+                          learned_asof=date(2026, 1, 2) + timedelta(days=i)))
+    # 50 MORE-RECENT episodes for other symbols (would fill the default-50 window and hide CLEAN's nukes)
+    for i in range(50):
+        store.add(Episode(episode_id=f"oth{i}", symbol=f"X{i}", skill_id=_PATTERN,
+                          entry_date=date(2026, 1, 1), exit_date=date(2026, 3, 1) + timedelta(days=i),
+                          outcome="continued", advantage=1.0,
+                          learned_asof=date(2026, 3, 1) + timedelta(days=i)))
+
+    out = screen_decision(_pkg(), source=src, state=state, episode_store=store)
+
+    assert all(c.symbol != _SYMBOL for c in out.candidates), "taboo must fire past the 50-cap"
+    assert any("episode taboo" in n for n in out.key_risks)
