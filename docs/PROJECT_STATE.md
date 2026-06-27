@@ -461,6 +461,33 @@ per-candidate `taboo_check` (the guard drops vetoed candidates rather than soft-
 deferred. Adversarial 4-lens plan review (0 blocking architectural issues; folded the one real item — a
 planted-broken acceptance `_run` helper). Full suite **387 tests green**.
 
+**Phase-1 Hermes-vendoring completion (D1/D2/D3) — Complete (2026-06-27). The two named-open §8/Phase-1 follow-ups + the deferred SQLite session piece are closed.**
+Three disjoint deliverables (spec `docs/superpowers/specs/2026-06-27-phase1-hermes-vendoring-completion-design.md`, plan
+`docs/superpowers/plans/2026-06-27-phase1-hermes-vendoring-completion.md`). **D1 — reference-vendor the clean leaf:**
+committed `third_party/hermes/{tools/registry.py, LICENSE, PROVENANCE.md}` — the Phase-0-proven clean eager leaf
+(`tools/registry.py`, 589 LOC, no `agent/` drag), verbatim from pinned Hermes SHA `5add283ec8e7a33110a9051179208bd50bda427c`,
+as the audited schema source-of-truth; the **active** path stays the 28-LOC `alpha/converse/registry.py` reimpl. A
+`tests/converse/test_registry_parity.py` proves (a) the vendored leaf imports standalone with NO non-stdlib top-level import
+(the narrow-waist claim) and (b) the reimpl honors the vendored registry's tool-calling schema contract (name-keyed register →
+schema-by-name → dispatch-by-name). Not imported in production. **D2 — replace JSON `ProjectStore` with SQLite + FTS5:**
+new `alpha/converse/sqlite_store.py::SqliteProjectStore` (`state.db` — relational `projects` envelope + normalized `messages`
+rows + an `messages_fts` FTS5 **trigram** virtual table, with a runtime probe + `unicode61` fallback) behind the **identical**
+`get/put/delete/list` interface, plus a new `search()` FTS message-search capability and a one-time
+`scripts/migrate_projects_to_sqlite.py` (idempotent JSON→SQLite upsert). All seven `Project` fields round-trip; `list()` keeps
+the JSON store's exact `ORDER BY project_id DESC`; `project_id` is now a bound SQL param (the JSON `_path` traversal guard
+disappears). `converse_project` + `workbench` (`ALPHA_PROJECTS_DB`) + their tests rewired; the JSON `alpha/converse/store.py`
+and its dedicated traversal test deleted. **The persistence backend swap is the ONLY existing-code behavior change** — the
+converse/workbench/web suites pass unchanged against SQLite. **D3 — reframe the parent spec + record state:** parent spec
+§8 table rows (registry → REFERENCE-VENDOR pinned `5add283e`; loop → REIMPLEMENTED `alpha/converse/loop.py`; SQLite sessions
+→ REIMPLEMENTED SCHEMA `alpha/converse/sqlite_store.py`, not a code-level vendor of `hermes_state.py`) + the §8
+upstream-tracking "Open" → **RESOLVED: hard-pin `5add283e`, do not track upstream** (re-run the spike's `coupling.py` as a
+gate before any deliberate bump) + §9 Phase-1 done-criteria (messages persist to SQLite + FTS5; registry reimplemented with
+the leaf reference-pinned) + the header §8 bullet + a §2.1 layer-diagram parenthetical, all reframed to the Phase-0
+NUANCED-GO reality; the consistency pass also resolved the two stale §8-Open references in §10 (risks 10/11 + the consolidated
+Open list). Full suite **704 tests green** (693 → +13 new [parity 3 + sqlite_store 8 + migrate 2] − 2 deleted JSON-store cases);
+trigram tokenizer active on this runtime (sqlite 3.50.2), `unicode61` the documented fallback. The §8/Phase-1 Hermes thread is
+now closed; remaining backlog stays in `ROADMAP.md`.
+
 **Next (orthogonal)** — *the live, maintained backlog now lives in `ROADMAP.md`; the list below is the
 2026-06-16 snapshot, kept as history*: execute the verdict run above once keys + a captured window are available (the only
 remaining step to render the long-promised empirical HCH-vs-Hexpert number); then per-narrative-line phases.
