@@ -15,7 +15,8 @@ def propose_skill_ops(harness: HarnessState, episode_store, *, asof: Date,
     strong-negative active skills. PIT-masked via for_asof(asof). Pure (reads, never writes)."""
     # for_asof's default limit (50) is a GLOBAL cap across all skills — too small for this offline
     # maintenance pass, which must see a skill's full PIT-masked history (it keys promote/retire off n).
-    stats = summarize(episode_store.for_asof(asof, limit=1_000_000), key=lambda e: e.skill_id)
+    # limit=None = the no-cap convention shared with the recall/taboo aggregation read sites.
+    stats = summarize(episode_store.for_asof(asof, limit=None), key=lambda e: e.skill_id)
     ops: list[RefineOp] = []
     for skill_id, s in stats.items():
         sk = harness.skills.get(skill_id)

@@ -66,8 +66,9 @@ class EpisodeStore:
     def for_asof(self, asof: Date, *, phase: str | None = None, narrative: str | None = None,
                  limit: int | None = 50) -> list[Episode]:
         """PIT-safe recall: non-superseded episodes knowable by `asof` (learned_asof <= asof), newest first.
-        `limit=None` -> the FULL PIT-masked history (no cap) — the aggregation callers (taboo/recall) need it;
-        the default 50 stays the safety cap for ad-hoc callers."""
+        `limit=None` -> the FULL PIT-masked history (no cap). CONVENTION: aggregation callers that key off
+        full per-key history (recall, taboo, forge) ALL pass `limit=None`; the default 50 is the safety cap
+        for ad-hoc / display callers only (there are no default-50 production callers today — audited)."""
         clauses = ["superseded = 0", "learned_asof <= ?"]
         params: list = [asof.isoformat()]
         if phase is not None:
