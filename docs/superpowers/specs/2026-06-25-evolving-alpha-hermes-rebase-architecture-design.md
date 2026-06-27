@@ -4,7 +4,7 @@
 > - **§5.7** — Hermes fast self-study sub-tier **deferred**; provenance = `{path, proposer, evidence_ref={kind,id}, parent_checkpoint_version, reflection_lm_id(+seed), resolution?}`; conflict flood-control **conservative** (any self-study touch of a teaching-owned H element escalates) + digest UI.
 > - **§6.10** — **SQLite split** (semantic Lessons in JSON snapshot, episodes+FTS in `brain.db`); `learned_asof = max(exit_date of summarized episodes)` + a PIT-leak regression test; auto-promote/demote on credit **ON** (sample-floor + gated `demote_memory`/`update_memory`, episode writes ungated, and any auto-adjust of a *teaching-owned* Lesson escalates per §5.4); graph = **recall+episodes first, `links` second**; **add a per-backtest-day recall latency benchmark gate**.
 > - **§7** — Hermes sandbox provisional; tiers = read/compute→none, workspace-write→git-workspace-scoped, shell/exec→Hermes isolated env, network→allowlist; **live-order tools NOT exposed to the B-WIDE face** (human-confirm + revisit if ever added).
-> - **§8** — **hard-pin a reviewed Hermes commit now**; revisit pin-vs-rebase after the Phase-0 spike measures coupling depth.
+> - **§8 — RESOLVED (2026-06-27): hard-pin `5add283e`, do not track upstream** (the Phase-0 spike measured coupling — the whole monolith is reachable; reference-vendor the registry leaf, reimplement the rest).
 
 # evolving-alpha — Hermes Re-Base Architecture (Design)
 
@@ -43,10 +43,11 @@ The organizing principle is unchanged: **one brain `H`, one write-waist (`try_ap
 │  project = { resumable Hermes session  +  git-backed workspace        │
 │              +  H-version provenance refs }   (§4)                     │
 ├──────────────────────────────────────────────────────────────────────┤
-│  VENDORED HERMES CORE  (Strategy C narrow waist, §8)                   │
-│   • tool-calling conversation loop (conversation_loop.py)             │
-│   • tools/registry.py (OpenAI function-calling) + MCP consume/serve   │
-│   • SQLite state.db + FTS5 (CJK trigram) resumable sessions           │
+│  HERMES NARROW-WAIST CORE  (Strategy C, §8 — registry reference-       │
+│   vendored; loop + session reimplemented — see §8)                    │
+│   • tool-calling conversation loop (reimpl: alpha/converse/loop.py)   │
+│   • tools/registry.py (reference-vendor; active: converse/registry.py)│
+│   • SQLite state.db + FTS5 (CJK trigram) sessions (reimpl schema)     │
 │   • SOUL.md / SKILL.md / MemoryProvider file & hook model             │
 ├──────────────────────────────────────────────────────────────────────┤
 │  PRESERVED EVOLVING-ALPHA MOAT  (kept yours, unchanged at call sites)  │
@@ -283,11 +284,13 @@ This is explicitly **provisional**. A Codex-grade sandbox (stronger filesystem/n
 
 ## 8. Narrow-waist vendor boundary
 
+> **Reframed to the Phase-0 spike reality (2026-06-27).** The Phase-0 vendor-feasibility spike (`spikes/2026-06-26-hermes-vendor-feasibility/FINDINGS.md`, NUANCED-GO) disproved the literal "lift these modules" plan: Hermes is a ~2 579-file daily-moving monolith and every target's *total* import footprint is the whole monolith. Only the **eager** footprint is liftable. Strategy C is therefore **"reimplement the thin parts + selective leaf-vendor of the one clean eager leaf."** The first three rows below are updated to that reality; the rest are unchanged.
+>
 | Concern | Disposition | Notes |
 |---|---|---|
-| Tool registry (`tools/registry.py`, OpenAI function-calling) + MCP consume/serve | **VENDOR** | the registration substrate for `decide`, trading tools, general tools |
-| Tool-calling conversation loop (`agent/conversation_loop.py`) | **VENDOR** | the B-WIDE face |
-| SQLite `state.db` + FTS5 (CJK trigram) resumable sessions | **VENDOR** | session/message persistence; also backs episodic `brain.db` |
+| Tool registry (`tools/registry.py`, OpenAI function-calling) + MCP consume/serve | **REFERENCE-VENDOR (pinned `5add283e`)** | clean eager leaf (1 file / 589 LOC, **no `agent/` drag**, per the spike). Committed at `third_party/hermes/` as the audited schema source-of-truth; the *active* code path is the `alpha/converse/registry.py` reimpl (parity-tested against it). Not imported in production. |
+| Tool-calling conversation loop (`agent/conversation_loop.py`) | **REIMPLEMENTED (done)** | eager 28 files / drags the whole `agent/` package → the wrong thing to vendor; reimplemented as the thin tool-calling loop `alpha/converse/loop.py` (the B-WIDE face). |
+| SQLite `state.db` + FTS5 (CJK trigram) resumable sessions | **REIMPLEMENTED SCHEMA (done)** | `hermes_state.py` is eager 7 files / drags `agent/`; the schema is the stable contract, not the code. Reimplemented as `alpha/converse/sqlite_store.py` (`state.db` + FTS5 trigram, `unicode61` fallback) — NOT a code-level vendor of `hermes_state.py`. Episodic `brain.db` (§6) uses the same SQLite/FTS5 substrate. |
 | SOUL.md / SKILL.md / MemoryProvider file & hook model | **VENDOR (as projection)** | rendered *from* `H`; native writes intercepted → `RefineOp`s |
 | `curator.py` decay-tick + stale→archive; `background_review` | **VENDOR (re-pointed)** | trigger only; ops routed through YOUR gate, not `write_approval` |
 | Sandbox environments (docker/ssh/modal) | **VENDOR (provisional)** | §7 |
@@ -305,7 +308,7 @@ This is explicitly **provisional**. A Codex-grade sandbox (stronger filesystem/n
 | Provenance block on `EditRecord` | **NEW** | §5.4 |
 | Hermes write-interception adapter | **NEW** | the M-only fast tier |
 
-**Upstream-tracking policy — Open:** Hermes commits daily and is a ~374MB monolith. **Open:** pin to a single reviewed commit (stable, manual periodic bumps) vs. a periodic rebase cadence. The Phase-0 spike (§9) must surface how deeply the vendored modules couple to the rest of the monolith before this is decided; deep coupling argues for a hard pin.
+**Upstream-tracking policy — RESOLVED (2026-06-27): hard-pin SHA `5add283e`; do NOT track upstream.** The Phase-0 spike (§9) measured the coupling: the reachable static footprint is the entire ~2 579-file monolith, and even the little we vendor (only the eager leaf `tools/registry.py`, everything else reimplemented) would force re-running the coupling measurement across every Python file each rebase cycle to confirm the eager surface / schema contract had not shifted — a cost not justified by the benefit. The single stable artifact we depend on is the **tool-calling schema contract** (JSON-serialisable name/schema/fn triples), not the code. Pin the SHA; only bump deliberately when a specific upstream change is needed, and when you do, **re-run the spike's coupling suite (`spikes/2026-06-26-hermes-vendor-feasibility/coupling.py`) as a gating check.** Cross-reference: `third_party/hermes/PROVENANCE.md`.
 
 ---
 
@@ -319,8 +322,8 @@ This is explicitly **provisional**. A Codex-grade sandbox (stronger filesystem/n
 
 ### Phase 1 — Conversational face (B-WIDE)
 
-**Goal:** the Hermes `conversation_loop` runs against the shared `H`, with `decide` + trading tools + PIT-gated recall registered.
-**Done:** a multi-turn session can call `decide`, read memory PIT-safely, and persist messages to SQLite + artifacts to the git workspace; provenance ref stamped per turn.
+**Goal:** the (reimplemented) tool-calling conversation loop runs against the shared `H`, with `decide` + trading tools + PIT-gated recall registered.
+**Done:** a multi-turn session can call `decide`, read memory PIT-safely, and **messages persist to SQLite (`state.db`) + FTS5 search**, artifacts to the git workspace; provenance ref stamped per turn. The registry was **reimplemented** (the active `alpha/converse/registry.py`) with the clean eager leaf **reference-pinned** at `third_party/hermes/tools/registry.py` (parity-tested); the SQLite session store was **reimplemented as a schema** (`alpha/converse/sqlite_store.py`), not a code-level vendor of `hermes_state.py` (§8).
 
 ### Phase 2 — Project workspace
 
@@ -361,8 +364,8 @@ This is explicitly **provisional**. A Codex-grade sandbox (stronger filesystem/n
 
 **Unverified items requiring diligence (flagged, not assumed)**
 
-10. **Vendor coupling depth** — whether `registry` / `hermes_state` / `conversation_loop` can be lifted from the ~374MB monolith without dragging the whole `agent/` package is **unproven**; this is the explicit object of the Phase-0 spike.
-11. **Upstream churn** — Hermes commits daily; pin-vs-rebase (§8) is **Open** and depends on (10).
+10. **Vendor coupling depth** — RESOLVED by the Phase-0 spike (2026-06-27): of the three targets, only `tools/registry.py` lifts cleanly (eager = 1 file / 589 LOC, no `agent/` drag); `hermes_state.py` (eager 7 files) and `conversation_loop.py` (eager 28 files) both drag the whole `agent/` package, so they are **reimplemented**, not vendored (§8). The total reachable footprint is the entire ~2 579-file monolith.
+11. **Upstream churn** — Hermes commits daily; pin-vs-rebase (§8) is RESOLVED to a **hard pin** (do not track upstream), grounded in (10).
 12. **Repo social signals** — claims about Hermes's maturity/adoption are treated as **unverified**; correctness is established by the spike, not external reputation.
 
-**Consolidated "Open" / decisions to confirm:** §5.7 (Hermes fast sub-tier timing, provenance schema, conflict flood-control); §6.10 (SQLite split, `learned_asof` rule, auto-adjust default, graph scope, latency budget); §7 (sandbox tiers, stricter confinement for any live-trading tool); §8 (vendor pin vs rebase). The offline GEPA-style self-study Forge and its remaining questions are deferred (§5.6).
+**Consolidated "Open" / decisions to confirm:** §5.7 (Hermes fast sub-tier timing, provenance schema, conflict flood-control); §6.10 (SQLite split, `learned_asof` rule, auto-adjust default, graph scope, latency budget); §7 (sandbox tiers, stricter confinement for any live-trading tool). (§8's vendor pin-vs-rebase is **RESOLVED** — hard-pin `5add283e`, do not track upstream, per the Phase-0 spike.) The offline GEPA-style self-study Forge and its remaining questions are deferred (§5.6).
