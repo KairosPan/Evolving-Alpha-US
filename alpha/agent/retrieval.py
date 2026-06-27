@@ -4,7 +4,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from alpha.harness.memory import Lesson
-from alpha.harness.regime import normalize_phase
+from alpha.harness.regime import normalize_phase, phase_from_read
 from alpha.harness.skill import Skill
 from alpha.harness.state import HarnessState
 
@@ -64,11 +64,15 @@ def select_episodes_for_prompt(episode_store, *, phase_prior: str | None,
         asof = asof.date()
     if asof is None:
         return []
-    canon = normalize_phase(phase_prior) if phase_prior else None
+    # phase_from_read (not normalize_phase) on BOTH sides: episodes store the RAW prose regime_read as
+    # `.phase` (e.g. "trend frontside"), which normalize_phase() can't map — so extract the canonical
+    # token from the prose. Idempotent on an already-canonical prior (phase_from_read("trend") == "trend").
+    canon = phase_from_read(phase_prior) if phase_prior else None
     pool = episode_store.for_asof(asof)                          # PIT-masked (learned_asof <= asof)
 
     def _key(e):
-        match = 1 if (canon is not None and normalize_phase(e.phase or "") == canon) else 0
+        ep_canon = phase_from_read(e.phase or "")
+        match = 1 if (canon is not None and ep_canon == canon) else 0
         return (match, e.learned_asof or e.exit_date, abs(e.advantage))
 
     pool.sort(key=_key, reverse=True)

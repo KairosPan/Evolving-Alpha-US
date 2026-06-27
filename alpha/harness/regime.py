@@ -21,6 +21,20 @@ def normalize_phase(raw: object) -> str | None:
     return _PHASE_ALIASES.get(raw.strip().lower())
 
 
+def phase_from_read(regime_read: str) -> str | None:
+    """Extract the first CANONICAL phase token from a free-text regime_read.
+
+    The output contract makes regime_read a multi-token string (e.g. 'trend frontside' or
+    'AI frontside; trend'), so normalize_phase() on the whole string returns None. Scan tokens
+    (comma/semicolon/space-separated) and return the first that maps to a canonical phase, else None.
+    """
+    for tok in (regime_read or "").replace(",", " ").replace(";", " ").split():
+        p = normalize_phase(tok)
+        if p is not None:
+            return p
+    return None
+
+
 def normalize_phases(raw: str | list[str] | None) -> tuple[list[str], bool]:
     """Normalize raw phase token(s) to (canonical_phases, applies_all).
 

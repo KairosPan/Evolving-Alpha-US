@@ -6,25 +6,14 @@ from alpha.agent.parse import parse_decision
 from alpha.agent.prompt import available_data_signals, build_system_prompt, build_user_prompt
 from alpha.agent.retrieval import DEFAULT_MEMORY_BUDGET, DEFAULT_SKILL_BUDGET, DEFAULT_TRIAL_SLOTS
 from alpha.eval.decision import DecisionPackage
-from alpha.harness.regime import normalize_phase
+from alpha.harness.regime import phase_from_read
 from alpha.harness.state import HarnessState
 from alpha.llm.client import LLMClient
 from alpha.state.market import MarketState
 from alpha.universe.universe import CandidateUniverse
 
 
-def _phase_from_read(regime_read: str) -> str | None:
-    """Extract the first CANONICAL phase token from a free-text regime_read.
-
-    The output contract makes regime_read a multi-token string (e.g. 'trend frontside' or
-    'AI frontside; trend'), so normalize_phase() on the whole string returns None. Scan tokens
-    (comma/semicolon/space-separated) and return the first that maps to a canonical phase, else None.
-    """
-    for tok in (regime_read or "").replace(",", " ").replace(";", " ").split():
-        p = normalize_phase(tok)
-        if p is not None:
-            return p
-    return None
+_phase_from_read = phase_from_read   # back-compat alias: extraction now lives in alpha.harness.regime
 
 
 class LLMAgentPolicy:
