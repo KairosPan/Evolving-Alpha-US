@@ -18,7 +18,7 @@ def build_arena(harness, agent_llm, source, *, workspace: Path | None = None,
                                   write_mode=write_mode, conflict_queue=conflict_queue,
                                   provenance=provenance)
     tiers: dict[str, CapabilityTier] = {"decide": CapabilityTier.T0_OBSERVE}
-    if not read_only and write_mode != "none":
+    if not read_only and write_mode in {"apply", "stage"}:
         tiers["propose_memory_edit"] = CapabilityTier.T3_BRAIN_EDIT
     if workspace is not None:
         rs, rfn, rtier = make_read_file_tool(workspace)

@@ -35,7 +35,7 @@ def _agent_llm(): return _AGENT_LLM if _AGENT_LLM is not None else make_client("
 def _source():    return _SOURCE if _SOURCE is not None else make_source()
 
 
-def _brain_store():   return LiveBrainStore(os.environ.get("ALPHA_LIVE_BRAIN_DIR", "./state/brain"))
+def _brain_store():   return LiveBrainStore(_brain_dir())
 def _project_store(): return SqliteProjectStore.open(os.environ.get("ALPHA_PROJECTS_DB", "./state/projects/state.db"))
 
 
@@ -95,8 +95,8 @@ def create_app() -> FastAPI:
         with _MUTATION_LOCK:
             _assert_brain_outside_workspace()
             h, _log = _brain_store().load()                 # read live brain for context/decide
-            ws = _workspace()
             try:
+                ws = _workspace()
                 proj = converse_project(DEFAULT_PROJECT_ID, body.text, harness=h, store=_project_store(),
                                         agent_llm=_agent_llm(), chat_llm=_chat_llm(), source=_source(),
                                         workspace=ws, write_mode="stage",

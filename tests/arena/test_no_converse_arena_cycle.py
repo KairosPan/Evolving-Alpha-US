@@ -5,7 +5,7 @@ import pathlib
 def test_converse_never_imports_arena():
     """Layer spine (CLAUDE.md §2): alpha/arena may import converse, never the reverse.
     The live-face wiring is injected (registry_factory) precisely so converse stays arena-free."""
-    converse_dir = pathlib.Path("alpha/converse")
+    converse_dir = pathlib.Path(__file__).resolve().parents[2] / "alpha" / "converse"
     offenders = []
     for py in converse_dir.rglob("*.py"):
         tree = ast.parse(py.read_text())
