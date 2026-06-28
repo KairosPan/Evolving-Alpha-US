@@ -18,17 +18,25 @@ from alpha.refine.ops import RefineOp, PASS_TOOLS
 from alpha.meta.models import new_edit_id
 
 
-def make_gated_write_tool(harness, *, min_retire_samples: int = 5, min_promote_samples: int = 3):
+def make_gated_write_tool(harness, *, min_retire_samples: int = 5, min_promote_samples: int = 3,
+                          conflict_queue=None, provenance: EditProvenance | None = None):
     """A tool whose ONLY path to mutate H is try_apply_op (the one write-waist). Restricted to the
-    M-pass whitelist for this face; the gate enforces rationale / evidence floors / red-lines."""
+    M-pass whitelist for this face; the gate enforces rationale / evidence floors / red-lines, and
+    (when conflict_queue is provided) HOLDS a self-study-vs-teaching conflict for user review."""
+    prov = provenance if provenance is not None else EditProvenance(path="teaching", proposer="hermes")
+
     def propose_memory_edit(tool: str, args: dict, rationale: str) -> dict:
         op = RefineOp(tool=tool, args=args, rationale=rationale)
         rec, reason = try_apply_op(MetaTools(harness, EditLog()), harness, op,
                                    allowed=PASS_TOOLS["M"],
                                    min_retire_samples=min_retire_samples,
                                    min_promote_samples=min_promote_samples,
-                                   provenance=EditProvenance(path="teaching", proposer="hermes"))
-        return {"status": "applied"} if rec is not None else {"status": "rejected", "reason": reason}
+                                   provenance=prov, conflict_queue=conflict_queue)
+        if rec is not None:
+            return {"status": "applied"}
+        if reason and reason.startswith("held_for_review"):
+            return {"status": "held", "reason": reason}
+        return {"status": "rejected", "reason": reason}
     schema = {"name": "propose_memory_edit",
               "description": "Propose a memory edit; applied only if it clears the gate.",
               "parameters": {"type": "object",
