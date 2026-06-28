@@ -12,7 +12,7 @@ The arena package (`alpha/arena/`, built + merged) is a tested skeleton: `build_
 - **`build_converse_registry` gains `conflict_queue=None, provenance=None`** (passthrough to `make_gated_write_tool` — closes the last bit of build gap 1 on the registry path; stage-mode `make_propose_edit_tool` is unaffected, conflict detection there happens at workbench-approve time).
 - **Tier assignment is explicit** in `build_arena` as it registers (no introspection): `decide`→T0 (always); `propose_memory_edit`→T3 (iff `build_converse_registry` registered it, i.e. not `read_only` and `write_mode != "none"`); and *when a workspace is given*: `read_file`→T0, plus (iff not `read_only`) `write_file`→T1 and `shell`→T2. Any name not in the tier map is fail-closed by `ActivityPolicy` (the no-bypass guarantee).
 - **`read_only` (pinned projects) = pure read/analysis:** `decide` (+ `read_file` if a workspace is given). No brain-edit, no `write_file`, no `shell` — a pinned project reproduces the past with zero side effects.
-- **`converse_project` and `converse` rewired:** call `build_arena(...)` and `run_conversation(..., dispatch=policy.dispatch)`. `converse_project` threads `write_mode`/`read_only` (as today) plus `workspace` and an `env`. The workbench keeps `write_mode="stage"`; the real apply stays in the workbench approve handler, already guarded by `assert_approvable` (Task 9).
+- **Dependency injection (preserves the layer spine — `converse` must NEVER import `arena`).** `converse_project` (and `converse`) gain an optional `registry_factory` parameter: `registry_factory(h, agent_llm, source, *, read_only, write_mode) -> (ToolRegistry, dispatch_callable | None)`. When `None` (default), `converse_project` uses today's `build_converse_registry(...)` with `dispatch=None` — byte-identical behavior. The entry then drives `run_conversation(registry, ..., dispatch=dispatch)`. The factory must be called AFTER `converse_project` resolves the project's `h`/`read_only` (so the factory can't be a pre-built registry). **`build_arena` stays in `alpha/arena/`; the `arena` factory is injected by a layer that may import `arena` — the workbench (apps).** The workbench builds the factory (`build_arena(h, …, workspace=ws.root, env=LocalEnv(ws.root), write_mode="stage", read_only=…)` → `(reg, pol.dispatch)`) and passes it as `registry_factory`. The workbench keeps `write_mode="stage"`; the real apply stays in its approve handler, already guarded by `assert_approvable` (Task 9).
 - **Environment:** the workbench passes `LocalEnv(workspace=<project git workspace dir>)` so shell/file act in the project's git-backed workspace. The simple `converse()` defaults `env=InProcessEnv()` (no real shell in tests/CLI unless a `LocalEnv` is supplied).
 
 ## 3. Safety posture (USER-CONFIRMED, must stay documented)
@@ -25,10 +25,11 @@ The arena package (`alpha/arena/`, built + merged) is a tested skeleton: `build_
 - Existing `tests/converse` + `tests/web` (workbench) stay green; the default (`write_mode`, no env) path is behavior-preserving except that dispatch now routes through the policy (which is transparent for tiered tools).
 
 ## 5. Files touched
-- `alpha/converse/agent.py` — `build_converse_registry` gains `conflict_queue`/`provenance`; `converse` rewired to `build_arena` + dispatch.
-- `alpha/arena/builder.py` — `build_arena` gains `write_mode`/`read_only`/`conflict_queue`/`provenance`; reuses `build_converse_registry`; explicit tiers; read-only suppression.
-- `alpha/converse/session.py` — `converse_project` calls `build_arena` + `run_conversation(dispatch=policy.dispatch)`; accepts `env`.
-- `workbench/app.py` — pass `LocalEnv(workspace=<project workspace dir>)`; assert brain-dir-outside-workspace.
+- `alpha/converse/agent.py` (converse layer — NO arena import) — `build_converse_registry` gains `conflict_queue`/`provenance`; `converse` gains the optional `registry_factory` injection + `dispatch` passthrough.
+- `alpha/converse/session.py` (converse layer — NO arena import) — `converse_project` gains `registry_factory`; resolves `h`/`read_only`/`write_mode`, calls the factory (or the default `build_converse_registry`), drives `run_conversation(..., dispatch=dispatch)`.
+- `alpha/converse/workspace.py` — add a public `root` property (the `LocalEnv` workspace dir).
+- `alpha/arena/builder.py` (arena layer) — `build_arena` gains optional `workspace`, plus `write_mode`/`read_only`/`conflict_queue`/`provenance`; reuses `build_converse_registry`; explicit tiers; read-only + workspace-contingent tool registration.
+- `workbench/app.py` (apps layer — MAY import arena) — build the arena `registry_factory` (`build_arena` + `LocalEnv(ws.root)`), pass it to `converse_project`; assert brain-dir-outside-workspace at startup.
 
 ## 6. Risks
 1. **Live shell weakens the one-write-waist to operator-trust** (§3) — accepted; the real fix is `SandboxedEnv` (deferred). Do not paper over with a regex.
