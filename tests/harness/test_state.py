@@ -7,6 +7,26 @@ from alpha.harness.state import HarnessState
 from alpha.harness.errors import ImmutableDoctrineError
 
 
+def _state_with_operational():
+    """HarnessState that includes operational-domain Skill and Lesson (PC-3 round-trip pin)."""
+    skills = SkillRegistry.from_skills([
+        Skill(skill_id="trade_s", name="Trade Skill", type="pattern",
+              family="runner", phases=["trend"], status="active", domain="trading"),
+        Skill(skill_id="op_s", name="Op Skill", type="pattern",
+              family="runner", phases=["trend"], status="active", domain="operational"),
+    ])
+    memory = MemoryStore.from_lessons([
+        Lesson(lesson_id="l_trade", phases=["trend"], outcome="win",
+               lesson="trade lesson", domain="trading"),
+        Lesson(lesson_id="l_op", phases=["trend"], outcome="win",
+               lesson="op lesson", domain="operational"),
+    ])
+    doctrine = Doctrine.from_seed_list([
+        {"section": "core", "regime": "all", "immutable": True, "guidance": "stop discipline"},
+    ])
+    return HarnessState(doctrine=doctrine, skills=skills, memory=memory)
+
+
 def _state():
     skills = SkillRegistry.from_skills([
         Skill(skill_id="a", name="A", type="pattern", family="runner", phases=["trend"], status="active"),
@@ -33,3 +53,24 @@ def test_roundtrip_preserves_immutable_guard():
     assert core.immutable is True
     with pytest.raises(ImmutableDoctrineError):       # guard restored after rebuild
         core.guidance = "tampered"
+
+
+def test_domain_survives_harness_roundtrip():
+    """PC-3 Fork-E pin: Skill.domain and Lesson.domain survive to_dict() → from_dict()."""
+    st = _state_with_operational()
+    d = st.to_dict()
+    st2 = HarnessState.from_dict(d)
+
+    skills_by_id = {s.skill_id: s for s in st2.skills.all()}
+    assert skills_by_id["trade_s"].domain == "trading"
+    assert skills_by_id["op_s"].domain == "operational"
+
+    lessons_by_id = {l.lesson_id: l for l in st2.memory.all()}
+    assert lessons_by_id["l_trade"].domain == "trading"
+    assert lessons_by_id["l_op"].domain == "operational"
+
+    # Also pin that 'domain' key appears in the serialised dicts (not silently dropped)
+    skill_dicts = {s["skill_id"]: s for s in d["skills"]}
+    assert skill_dicts["op_s"]["domain"] == "operational"
+    lesson_dicts = {l["lesson_id"]: l for l in d["memory"]}
+    assert lesson_dicts["l_op"]["domain"] == "operational"
