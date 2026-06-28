@@ -51,6 +51,30 @@ CREATE VIRTUAL TABLE IF NOT EXISTS episodes_fts USING fts5(reflection_text, narr
 """
 
 
+def test_for_asof_kind_filter_defaults_to_trade():
+    """Default kind='trade' silently scopes recall to trade rows only (verdict-neutrality fence)."""
+    s = EpisodeStore.in_memory()
+    asof = date(2026, 6, 10)
+    trade_ep = _ep("t1", date(2026, 6, 5), kind="trade")
+    task_ep = _ep("k1", date(2026, 6, 5), sym="TSLA", kind="task")
+    trade_ep = trade_ep.model_copy(update={"learned_asof": asof})
+    task_ep = task_ep.model_copy(update={"learned_asof": asof})
+    s.add(trade_ep)
+    s.add(task_ep)
+
+    # (a) default kind="trade" → only the trade row
+    result_a = s.for_asof(asof, limit=None)
+    assert [e.episode_id for e in result_a] == ["t1"]
+
+    # (b) kind="task" → only the task row
+    result_b = s.for_asof(asof, kind="task", limit=None)
+    assert [e.episode_id for e in result_b] == ["k1"]
+
+    # (c) kind=None → both rows (no filter)
+    result_c = s.for_asof(asof, kind=None, limit=None)
+    assert {e.episode_id for e in result_c} == {"t1", "k1"}
+
+
 def test_guarded_migration_old_db(tmp_path):
     """Opening EpisodeStore on an old brain.db (no 'kind' column) migrates silently; rows default to 'trade'."""
     db_path = str(tmp_path / "old_brain.db")

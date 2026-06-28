@@ -70,17 +70,21 @@ class EpisodeStore:
         return [_row_to_episode(r) for r in self._conn.execute("SELECT * FROM episodes")]
 
     def for_asof(self, asof: Date, *, phase: str | None = None, narrative: str | None = None,
-                 limit: int | None = 50) -> list[Episode]:
+                 kind: str | None = "trade", limit: int | None = 50) -> list[Episode]:
         """PIT-safe recall: non-superseded episodes knowable by `asof` (learned_asof <= asof), newest first.
         `limit=None` -> the FULL PIT-masked history (no cap). CONVENTION: aggregation callers that key off
         full per-key history (recall, taboo, forge) ALL pass `limit=None`; the default 50 is the safety cap
-        for ad-hoc / display callers only (there are no default-50 production callers today — audited)."""
+        for ad-hoc / display callers only (there are no default-50 production callers today — audited).
+        `kind="trade"` (default) is the verdict-neutrality fence: trade-only rows for all live callers.
+        Pass `kind=None` to see every kind (e.g. taboo/display over all rows)."""
         clauses = ["superseded = 0", "learned_asof <= ?"]
         params: list = [asof.isoformat()]
         if phase is not None:
             clauses.append("phase = ?"); params.append(phase)
         if narrative is not None:
             clauses.append("narrative = ?"); params.append(narrative)
+        if kind is not None:
+            clauses.append("kind = ?"); params.append(kind)
         where = " AND ".join(clauses)
         if limit is None:                                 # uncapped: full PIT-masked, non-superseded history
             sql = f"SELECT * FROM episodes WHERE {where} ORDER BY exit_date DESC"
