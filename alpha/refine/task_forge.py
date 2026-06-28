@@ -67,18 +67,10 @@ def propose_task_skill_ops(
                            f"confirmed_success_rate={s.confirmed_success_rate:.2f}"),
             )
             pairs.append((op, s))
-        # Soft-retire: active + confirmed failure signal strong enough.
-        elif (sk.status == "active"
-              and s.n >= retire_min_samples
-              and s.n > 0
-              and s.failed / s.n >= retire_min_failrate):
-            op = RefineOp(
-                tool="retire_skill",
-                args={"skill_id": skill_id, "permanent": False},
-                rationale=(f"task_forge: n={s.n} failed={s.failed} "
-                           f"fail_rate={s.failed / s.n:.2f}"),
-            )
-            pairs.append((op, s))
+        # DEFERRED: retire-on-task (spec §3.5) requires a confirmed-FAILURE gate floor; the
+        # Task-17 gate only added a confirmed-POSITIVE promote floor, which a failing skill can
+        # never pass — so a retire op here is always rejected. Emit nothing for retire until a
+        # retire-specific task floor ships, to avoid dead, always-rejected ops in ForgeReport.
     return pairs
 
 
@@ -120,7 +112,7 @@ def forge_task_skills(
     for op, task_stats in pairs:
         sid = op.args["skill_id"]
         sk = harness.skills.get(sid)
-        domain = getattr(sk, "domain", "operational") if sk is not None else "operational"
+        domain = sk.domain
         # PINNING (verdict 5): evidence_kind is ALWAYS "task" for this proposer.
         provenance = EditProvenance(
             path="self_study",

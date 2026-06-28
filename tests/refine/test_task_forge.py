@@ -260,3 +260,34 @@ def test_active_operational_not_promoted():
     pairs = propose_task_skill_ops(store, h, asof=_ASOF, confirmed_ids=confirmed)
     promote_ops = [op for op, _ in pairs if op.tool == "promote_skill"]
     assert promote_ops == [], "active skill must not be proposed for promote"
+
+
+# ---------------------------------------------------------------------------
+# retire-on-task is DEFERRED (spec §3.5) — no retire op ever emitted
+# ---------------------------------------------------------------------------
+
+def test_retire_on_task_deferred_no_retire_op():
+    """Retire-on-task is deferred: an active operational skill with high fail-rate yields NO op.
+
+    The Task-17 gate only has a confirmed-POSITIVE promote floor; a failing skill can never
+    pass it, so emitting a retire_skill op just creates a dead, always-rejected entry in
+    ForgeReport. Until a retire-specific task floor ships, propose_task_skill_ops must be
+    silent for active skills with high task fail-rate (spec §3.5 deferred).
+    """
+    op_skill = _skill("op_fail", "active", domain="operational")
+    h = _h(op_skill)
+
+    # 10 failed task episodes — high fail-rate signal
+    eps = [_task_ep("op_fail", "failed") for _ in range(10)]
+    store = _store(*eps)
+
+    pairs = propose_task_skill_ops(
+        store, h, asof=_ASOF,
+        confirmed_ids=frozenset(),
+        retire_min_samples=5,
+        retire_min_failrate=0.5,
+    )
+    retire_ops = [op for op, _ in pairs if op.tool == "retire_skill"]
+    assert retire_ops == [], (
+        "retire-on-task is deferred (no retire floor yet); no retire_skill op must be emitted"
+    )
