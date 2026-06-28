@@ -1,5 +1,6 @@
 # tests/refine/test_apply_separation.py
 """PB-9/PC-5: evidence-kind carrier + domain-aware separation gate.
+PC-8 (Task 17): gate-side task floor (verdict 3 + 5).
 
 PB-9 (still valid):
 (a) Back-compat: EditProvenance without evidence_kind has .evidence_kind is None.
@@ -11,6 +12,13 @@ PC-5 (new in Task 14):
 (e) task-evidenced op targeting missing/legacy element (domain=None) → rejected (fail-closed).
 (f) task-evidenced op targeting domain="operational" element → PASSES separation, applied + logged.
 (g) a task op that is also a self-study-vs-teaching conflict is REJECTED on domain grounds, not held.
+
+PC-8 (new in Task 17): gate-side task floor lives at the waist (BEFORE _dispatch):
+(h) task_stats=None → reject (fail-closed).
+(i) confirmed_n < min_task_confirmed_samples → reject.
+(j) confirmed_success_rate < min_task_success_rate → reject.
+(k) all floors met + operational skill with n==0/expectancy=None → dispatch succeeds,
+    trade promote-floor is bypassed (stats never consulted).
 """
 from alpha.harness.doctrine import Doctrine
 from alpha.harness.edit_log import EditLog, EditProvenance
@@ -18,6 +26,7 @@ from alpha.harness.metatools import MetaTools
 from alpha.harness.registry import MemoryStore, SkillRegistry
 from alpha.harness.skill import Skill, SkillStats
 from alpha.harness.state import HarnessState
+from alpha.memory.aggregate import TaskStats
 from alpha.refine.apply import try_apply_op
 from alpha.refine.ops import PASS_TOOLS, RefineOp
 
@@ -31,9 +40,16 @@ def _h(skills=None):
     )
 
 
-def _skill(sid, status="incubating", n=10, expectancy=0.5):
+def _skill(sid, status="incubating", n=10, expectancy=0.5, domain="trading"):
     return Skill(skill_id=sid, name=sid, type="pattern", status=status,
-                 stats=SkillStats(n=n, expectancy=expectancy))
+                 stats=SkillStats(n=n, expectancy=expectancy), domain=domain)
+
+
+def _passing_task_stats(confirmed_n=3, confirmed_success=2) -> TaskStats:
+    """A TaskStats that passes the default floor knobs (confirmed_n>=0, rate>=0.0)."""
+    return TaskStats(n=confirmed_n + 2, succeeded=confirmed_success, failed=1,
+                     incomplete=1, confirmed_success=confirmed_success,
+                     confirmed_n=confirmed_n)
 
 
 # ── (a) back-compat: evidence_kind defaults to None ─────────────────────────
@@ -268,9 +284,8 @@ def test_create_guard_trade_evidenced_write_skill_trading_passes():
 # ── PC-4 (c) → PC-5: task-evidenced create with domain='operational' now SUCCEEDS ──
 
 def test_create_guard_task_evidenced_write_skill_operational_now_succeeds():
-    """PC-5: task-evidenced write_skill(domain='operational') now PASSES the separation gate
-    (domain='operational' is the only legitimate operational create path) and is applied + logged.
-    Previously (PB-9 blanket wall) this was rejected; under the domain-aware gate it succeeds."""
+    """PC-5/PC-8: task-evidenced write_skill(domain='operational') passes the separation gate
+    and the task floor (passing task_stats) and is applied + logged."""
     h = _h(); log = EditLog(); meta = MetaTools(h, log)
     op = RefineOp(tool="write_skill",
                   args={"skill_id": "s_op3", "name": "s_op3", "type": "pattern",
@@ -280,8 +295,9 @@ def test_create_guard_task_evidenced_write_skill_operational_now_succeeds():
                   rationale="task evidence, operational domain")
     p_task = EditProvenance(path="self_study", proposer="refiner", evidence_kind="task")
     rec, reason = try_apply_op(meta, h, op, allowed=PASS_TOOLS["K"],
-                               min_retire_samples=5, min_promote_samples=3, provenance=p_task)
-    # Operational target: passes separation gate, applied + logged.
+                               min_retire_samples=5, min_promote_samples=3, provenance=p_task,
+                               task_stats=_passing_task_stats())
+    # Operational target: passes separation gate + task floor, applied + logged.
     assert reason is None
     assert rec is not None
     assert len(log) == 1
@@ -321,8 +337,8 @@ def test_domain_aware_gate_missing_target_rejected():
 
 
 def test_domain_aware_gate_operational_skill_passes():
-    """PC-5 (c): task-evidenced patch_skill on a domain='operational' skill passes the
-    separation gate and is applied + logged (short-circuits trade floors)."""
+    """PC-5/PC-8 (c): task-evidenced patch_skill on a domain='operational' skill passes the
+    separation gate and the task floor (passing task_stats) and is applied + logged."""
     from alpha.harness.skill import Skill, SkillStats
     sk = Skill(skill_id="s_op_ex", name="s_op_ex", type="pattern", status="incubating",
                stats=SkillStats(n=0, expectancy=None), domain="operational")
@@ -333,7 +349,8 @@ def test_domain_aware_gate_operational_skill_passes():
                   rationale="task-evidence operational patch")
     p = EditProvenance(path="self_study", proposer="refiner", evidence_kind="task")
     rec, reason = try_apply_op(meta, h, op, allowed=PASS_TOOLS["K"],
-                               min_retire_samples=5, min_promote_samples=3, provenance=p)
+                               min_retire_samples=5, min_promote_samples=3, provenance=p,
+                               task_stats=_passing_task_stats())
     assert reason is None
     assert rec is not None
     assert len(log) == 1
@@ -372,3 +389,88 @@ def test_domain_aware_gate_task_conflict_rejected_on_domain_not_held():
     assert rec is None
     assert reason is not None and reason.startswith("separation:")
     assert len(cq.items) == 0  # conflict queue untouched
+
+
+# ── PC-8 (Task 17): gate-side task floor ────────────────────────────────────
+
+def test_task_floor_none_task_stats_fails_closed():
+    """PC-8 (h): task-evidenced op targeting operational H with task_stats=None is rejected
+    (fail-closed). The caller MUST supply task evidence; None is not a bypass."""
+    sk = _skill("s_op_fc", domain="operational", n=0, expectancy=None, status="incubating")
+    h = _h(skills=[sk]); log = EditLog(); meta = MetaTools(h, log)
+    op = RefineOp(tool="patch_skill",
+                  args={"skill_id": "s_op_fc", "notes": "floor test"},
+                  rationale="task evidence, no stats")
+    p = EditProvenance(path="self_study", proposer="refiner", evidence_kind="task")
+    rec, reason = try_apply_op(meta, h, op, allowed=PASS_TOOLS["K"],
+                               min_retire_samples=5, min_promote_samples=3, provenance=p,
+                               task_stats=None)
+    assert rec is None
+    assert reason is not None and "task floor" in reason
+    assert len(log) == 0
+
+
+def test_task_floor_insufficient_confirmed_n_rejects():
+    """PC-8 (i): task_stats.confirmed_n < min_task_confirmed_samples → reject."""
+    sk = _skill("s_op_cn", domain="operational", n=0, expectancy=None, status="incubating")
+    h = _h(skills=[sk]); log = EditLog(); meta = MetaTools(h, log)
+    op = RefineOp(tool="patch_skill",
+                  args={"skill_id": "s_op_cn", "notes": "floor test"},
+                  rationale="task evidence, low confirmed_n")
+    p = EditProvenance(path="self_study", proposer="refiner", evidence_kind="task")
+    low_stats = TaskStats(n=5, succeeded=3, failed=1, incomplete=1,
+                          confirmed_success=1, confirmed_n=2)  # confirmed_n=2 < 3
+    rec, reason = try_apply_op(meta, h, op, allowed=PASS_TOOLS["K"],
+                               min_retire_samples=5, min_promote_samples=3, provenance=p,
+                               task_stats=low_stats, min_task_confirmed_samples=3)
+    assert rec is None
+    assert reason is not None and "task floor" in reason
+    assert len(log) == 0
+
+
+def test_task_floor_insufficient_success_rate_rejects():
+    """PC-8 (j): confirmed_success_rate < min_task_success_rate → reject."""
+    sk = _skill("s_op_sr", domain="operational", n=0, expectancy=None, status="incubating")
+    h = _h(skills=[sk]); log = EditLog(); meta = MetaTools(h, log)
+    op = RefineOp(tool="patch_skill",
+                  args={"skill_id": "s_op_sr", "notes": "floor test"},
+                  rationale="task evidence, low success rate")
+    p = EditProvenance(path="self_study", proposer="refiner", evidence_kind="task")
+    # confirmed_n=4 >= 3 (passes confirmed_n check), but rate=0.25 < 0.5
+    low_rate_stats = TaskStats(n=5, succeeded=1, failed=3, incomplete=1,
+                               confirmed_success=1, confirmed_n=4)
+    rec, reason = try_apply_op(meta, h, op, allowed=PASS_TOOLS["K"],
+                               min_retire_samples=5, min_promote_samples=3, provenance=p,
+                               task_stats=low_rate_stats,
+                               min_task_confirmed_samples=3, min_task_success_rate=0.5)
+    assert rec is None
+    assert reason is not None and "task floor" in reason
+    assert len(log) == 0
+
+
+def test_task_floor_all_met_promotes_n0_skill_bypasses_trade_floor():
+    """PC-8 (k): all task floors met → promote_skill dispatches successfully on an operational
+    skill with stats.n==0 / expectancy=None, proving:
+    (1) the task floor governs (sufficient confirmed evidence gates the op), AND
+    (2) the trade promote-floor is fully bypassed (n=0 would block a trade promote)."""
+    sk = Skill(skill_id="s_op_promo", name="s_op_promo", type="pattern", status="incubating",
+               stats=SkillStats(n=0, expectancy=None), domain="operational")
+    h = _h(skills=[sk]); log = EditLog(); meta = MetaTools(h, log)
+    op = RefineOp(tool="promote_skill", args={"skill_id": "s_op_promo"},
+                  rationale="task evidence: n=0 operational skill, task floor met")
+    p = EditProvenance(path="self_study", proposer="refiner", evidence_kind="task")
+    passing_stats = TaskStats(n=5, succeeded=3, failed=1, incomplete=1,
+                              confirmed_success=2, confirmed_n=3)
+    rec, reason = try_apply_op(meta, h, op, allowed=PASS_TOOLS["K"],
+                               min_retire_samples=5, min_promote_samples=3, provenance=p,
+                               task_stats=passing_stats,
+                               min_task_confirmed_samples=3, min_task_success_rate=0.5)
+    # Task floor met + trade floor bypassed → promotes successfully
+    assert reason is None, f"unexpected rejection: {reason}"
+    assert rec is not None
+    assert len(log) == 1
+    # Skill was actually promoted (status changed from incubating)
+    assert h.skills.get("s_op_promo").status != "incubating"
+    # Provenance stamped correctly
+    assert log.records()[-1].provenance is not None
+    assert log.records()[-1].provenance.evidence_kind == "task"

@@ -1,6 +1,8 @@
 # alpha/refine/apply.py
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from pydantic import ValidationError
 
 from alpha.harness.edit_log import EditProvenance, EditRecord
@@ -10,6 +12,9 @@ from alpha.harness.metatools import MetaTools
 from alpha.harness.skill import Skill
 from alpha.harness.state import HarnessState
 from alpha.refine.ops import PASS_TOOLS, RefineOp
+
+if TYPE_CHECKING:
+    from alpha.memory.aggregate import TaskStats
 
 ALL_TOOLS = frozenset().union(*PASS_TOOLS.values())
 
@@ -94,9 +99,13 @@ def _target_id(tool: str, args: dict) -> str | None:
 def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowed: frozenset[str],
                  min_retire_samples: int, min_promote_samples: int,
                  provenance: EditProvenance | None = None,
-                 conflict_queue=None) -> tuple[EditRecord | None, str | None]:
+                 conflict_queue=None,
+                 task_stats: "TaskStats | None" = None,
+                 min_task_samples: int = 0,
+                 min_task_success_rate: float = 0.0,
+                 min_task_confirmed_samples: int = 0) -> tuple[EditRecord | None, str | None]:
     """Gate order: whitelist -> rationale -> empty-patch -> set-once/create guards ->
-    domain-aware separation -> trade floors -> conflict -> dispatch
+    domain-aware separation -> task floor (PC-8) -> trade floors -> conflict -> dispatch
     (dispatch errors -> clean reject reason). Returns (record, None) on apply | (None, reason)."""
     tid = _target_id(op.tool, op.args)
     if op.tool not in allowed:
@@ -116,7 +125,18 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
         if domain != "operational":
             return None, f"separation: task-evidence may only target operational H (target domain={domain})"
         # Operational target: short-circuit the trade floors entirely.
-        # Task 17 (PC-8): gate-side task floor goes here, before _dispatch.
+        # PC-8 (Task 17): gate-side task floor — authority lives at the waist.
+        # None fails closed; the caller MUST supply precomputed task evidence.
+        if task_stats is None:
+            return None, "task floor: task_stats required for operational ops (fails closed)"
+        if task_stats.n < min_task_samples:
+            return None, (f"task floor: n={task_stats.n} < min_task_samples={min_task_samples}")
+        if task_stats.confirmed_n < min_task_confirmed_samples:
+            return None, (f"task floor: confirmed_n={task_stats.confirmed_n} "
+                          f"< min_task_confirmed_samples={min_task_confirmed_samples}")
+        if task_stats.confirmed_success_rate < min_task_success_rate:
+            return None, (f"task floor: confirmed_success_rate={task_stats.confirmed_success_rate:.3f} "
+                          f"< min_task_success_rate={min_task_success_rate}")
         try:
             rec = _dispatch(meta, op)
         except _DISPATCH_ERRORS as e:
