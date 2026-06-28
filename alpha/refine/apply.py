@@ -81,8 +81,15 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
         return None, "missing rationale"
     if op.tool in ("patch_skill", "update_memory") and not (set(op.args) - {"skill_id", "lesson_id"}):
         return None, "empty patch (no fields to change)"
+    # PC-4: set-once relabel guard — domain is immutable once an element is created; all provenances.
+    if op.tool in ("patch_skill", "update_memory") and "domain" in op.args:
+        return None, "domain is set-once; cannot be relabeled"
     if provenance is not None and provenance.evidence_kind == "task":
         return None, "separation: task-evidenced op may not touch a gated surface (domain tag not pinned)"
+    # PC-4: create-path mislabel guard — only a task-evidenced create may mint domain="operational".
+    if op.tool in ("write_skill", "process_memory") and op.args.get("domain") == "operational":
+        if provenance is None or provenance.evidence_kind != "task":
+            return None, "create may not mint operational under trade evidence"
     if op.tool == "retire_skill" and tid is not None:
         sk = harness.skills.get(tid)
         if sk is not None and sk.stats.n < min_retire_samples:
