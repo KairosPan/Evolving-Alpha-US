@@ -15,3 +15,18 @@ def test_learned_asof_can_be_overridden_but_defaults_to_exit_date():
     e = Episode(episode_id="x", symbol="X", skill_id="s", entry_date=date(2026, 6, 1),
                 exit_date=date(2026, 6, 3), outcome="faded", advantage=0.0, score=0.0)
     assert e.learned_asof == date(2026, 6, 3)
+
+def test_episode_kind_defaults_to_trade():
+    """Back-compat: omitting kind yields kind=='trade'."""
+    e = Episode(episode_id="x", symbol="X", skill_id="s", entry_date=date(2026, 6, 1),
+                exit_date=date(2026, 6, 3), outcome="faded", advantage=0.0, score=0.0)
+    assert e.kind == "trade"
+
+def test_episode_kind_task_validates():
+    """Task episodes carry kind='task' and still derive learned_asof from exit_date."""
+    d = date(2026, 6, 28)
+    e = Episode(episode_id="task:2026-06-28:test", symbol="", skill_id="__task__",
+                entry_date=d, exit_date=d, outcome="succeeded", advantage=0.0, score=0.0,
+                kind="task")
+    assert e.kind == "task"
+    assert e.learned_asof == d

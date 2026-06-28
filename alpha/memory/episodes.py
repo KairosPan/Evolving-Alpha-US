@@ -1,6 +1,7 @@
 # alpha/memory/episodes.py
 from __future__ import annotations
 from datetime import date as Date
+from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class Episode(BaseModel):
@@ -10,6 +11,7 @@ class Episode(BaseModel):
     episode_id: str
     symbol: str
     skill_id: str
+    kind: Literal["trade", "task"] = "trade"
     family: str | None = None
     phase: str = ""
     narrative: str = ""
