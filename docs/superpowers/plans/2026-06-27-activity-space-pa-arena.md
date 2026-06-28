@@ -381,11 +381,13 @@ def test_untiered_tool_is_fail_closed():
 
 
 def test_t4_blocked_without_confirmation():
-    reg = _registry()
+    reg = ToolRegistry()
+    ran: list[str] = []
+    reg.register("send", {"name": "send"}, lambda to: (ran.append(to), {"sent": to})[1])
     pol = ActivityPolicy(reg, tiers={"send": CapabilityTier.T4_CONFIRM})
     out = pol.dispatch("send", {"to": "x"})
     assert out.get("needs_confirmation") is True
-    assert "send" not in [c for c in []]   # the fn must NOT have run
+    assert ran == []   # the fn must NOT have run without confirmation
 
 
 def test_t4_runs_when_confirmed():
