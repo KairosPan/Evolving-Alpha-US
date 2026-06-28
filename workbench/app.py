@@ -13,6 +13,7 @@ from alpha.harness.metatools import MetaTools
 from alpha.harness.edit_log import EditProvenance
 from alpha.refine.apply import try_apply_op, ALL_TOOLS
 from alpha.refine.ops import RefineOp, PASS_TOOLS
+from alpha.converse.approve import assert_approvable, StagedEditNotApproved
 
 DEFAULT_PROJECT_ID = "default"
 _MUTATION_LOCK = threading.Lock()
@@ -105,13 +106,20 @@ def create_app() -> FastAPI:
                 if not bstore.is_live():
                     bstore.save(h, log)
                 snap = bstore.snapshot(f"approve-{eid}")
+                se.status = "approved"
+                try:
+                    assert_approvable(se)
+                except StagedEditNotApproved as exc:
+                    se.status, se.reason = "rejected", str(exc)
+                    pstore.put(proj)
+                    return JSONResponse({"error": str(exc), "edit_id": eid, "status": "rejected"}, status_code=422)
                 op = RefineOp(tool=se.op["tool"], args=dict(se.op["args"]), rationale=se.op.get("rationale", ""))
                 rec, reason = try_apply_op(MetaTools(h, log), h, op, allowed=PASS_TOOLS["M"],
                                            min_retire_samples=5, min_promote_samples=3,
                                            provenance=EditProvenance(path="teaching", proposer="hermes"))
                 if rec is not None:
                     bstore.save(h, log)
-                    se.status, se.applied_seq, se.snapshot_before, se.reason = "approved", rec.seq, snap, None
+                    se.applied_seq, se.snapshot_before, se.reason = rec.seq, snap, None
                 else:
                     se.status, se.reason = "rejected", reason
             pstore.put(proj)
