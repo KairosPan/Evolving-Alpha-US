@@ -69,13 +69,11 @@ def test_capability_tiers_ordered():
 
 
 def test_exec_result_is_frozen():
+    import pytest
     r = ExecResult(ok=True, stdout="hi", stderr="", exit_code=0)
     assert r.ok and r.stdout == "hi"
-    try:
+    with pytest.raises(Exception):     # frozen models reject post-construction mutation
         r.ok = False
-        assert False, "ExecResult must be frozen"
-    except Exception:
-        pass
 
 
 def test_feedback_round_trips():
@@ -254,6 +252,24 @@ def test_local_blocks_path_escape_above_workspace(tmp_path: Path):
     assert "outside workspace" in r.stderr.lower()
 
 
+def test_local_blocks_relative_parent_traversal(tmp_path: Path):
+    env = LocalEnv(workspace=tmp_path)
+    # a RELATIVE ../.. escape must also be refused (not just absolute paths)
+    assert env.is_blocked(["cat", "../../etc/passwd"]) is not None
+    r = env.run(["cat", "../../etc/passwd"])
+    assert r.ok is False and "outside workspace" in r.stderr.lower()
+
+
+def test_local_allows_path_inside_workspace(tmp_path: Path):
+    # the allow-branch: an absolute path INSIDE the workspace must NOT be blocked
+    # (guards against an inverted relative_to check that would refuse all path operands)
+    (tmp_path / "notes.txt").write_text("inside")
+    env = LocalEnv(workspace=tmp_path)
+    assert env.is_blocked(["cat", str(tmp_path / "notes.txt")]) is None
+    r = env.run(["cat", str(tmp_path / "notes.txt")])
+    assert r.ok is True and "inside" in r.stdout
+
+
 def test_local_times_out(tmp_path: Path):
     env = LocalEnv(workspace=tmp_path)
     r = env.run(["python", "-c", "import time; time.sleep(5)"], timeout=0.3)
@@ -309,12 +325,21 @@ class LocalEnv:
         if hard:
             return hard
         for tok in argv:
-            if tok.startswith("/") or tok.startswith("~"):
-                p = Path(tok).expanduser()
-                try:
-                    p.resolve().relative_to(self.workspace)
-                except ValueError:
-                    return f"path operand outside workspace: {tok}"
+            # Treat a token as a path operand if it is absolute, home-relative, or contains a
+            # separator / parent ref — then resolve it AGAINST the workspace and refuse escapes
+            # (catches both /etc/passwd AND ../../etc/passwd). Accident-prevention only: a path
+            # embedded inside a -c string is NOT parsed — that is SandboxedEnv's job, not this
+            # provisional, non-kernel guard.
+            looks_like_path = (tok.startswith("/") or tok.startswith("~")
+                               or "/" in tok or tok == "..")
+            if not looks_like_path:
+                continue
+            base = Path(tok).expanduser()
+            resolved = base if base.is_absolute() else (self.workspace / base)
+            try:
+                resolved.resolve().relative_to(self.workspace)
+            except ValueError:
+                return f"path operand outside workspace: {tok}"
         return None
 
     def run(self, argv: list[str], *, timeout: float = 30.0, net: bool = False) -> ExecResult:
