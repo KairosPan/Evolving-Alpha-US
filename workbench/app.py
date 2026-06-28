@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os, threading
+from pathlib import Path as _Path
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -14,6 +15,8 @@ from alpha.harness.edit_log import EditProvenance
 from alpha.refine.apply import try_apply_op, ALL_TOOLS
 from alpha.refine.ops import RefineOp, PASS_TOOLS
 from alpha.converse.approve import assert_approvable, StagedEditNotApproved
+from alpha.arena.builder import build_arena
+from alpha.arena.environment import LocalEnv
 
 DEFAULT_PROJECT_ID = "default"
 _MUTATION_LOCK = threading.Lock()
@@ -42,6 +45,31 @@ def _workspace():
     return ws
 
 
+def _brain_dir() -> str:
+    return os.environ.get("ALPHA_LIVE_BRAIN_DIR", "./state/brain")
+
+
+def _assert_brain_outside_workspace() -> None:
+    """Fail fast if the brain dir is inside the workspace — a live shell could then reach it."""
+    ws_root = _Path(os.environ.get("ALPHA_WORKSPACE_DIR", "./state/workspaces")).resolve()
+    brain = _Path(_brain_dir()).resolve()
+    if brain == ws_root or brain.is_relative_to(ws_root):
+        raise RuntimeError(
+            f"brain dir {brain} is inside workspace {ws_root}; move them apart "
+            "(LocalEnv is not a kernel boundary — the brain must sit outside the shell's workspace)")
+
+
+def _arena_factory(workspace_root):
+    """Return a converse_project registry_factory that builds the arena with a LocalEnv pointed
+    at *workspace_root* (full computer-use: decide/read/write/shell + the policy choke point)."""
+    env = LocalEnv(workspace=workspace_root)
+    def factory(h, agent_llm, source, *, read_only, write_mode):
+        reg, pol = build_arena(h, agent_llm, source, workspace=workspace_root, env=env,
+                               write_mode=write_mode, read_only=read_only)
+        return reg, pol.dispatch
+    return factory
+
+
 class ConverseIn(BaseModel):
     text: str = ""
 
@@ -65,11 +93,14 @@ def create_app() -> FastAPI:
     @app.post("/converse")
     def converse_ep(body: ConverseIn):
         with _MUTATION_LOCK:
+            _assert_brain_outside_workspace()
             h, _log = _brain_store().load()                 # read live brain for context/decide
+            ws = _workspace()
             try:
                 proj = converse_project(DEFAULT_PROJECT_ID, body.text, harness=h, store=_project_store(),
                                         agent_llm=_agent_llm(), chat_llm=_chat_llm(), source=_source(),
-                                        workspace=_workspace(), write_mode="stage")
+                                        workspace=ws, write_mode="stage",
+                                        registry_factory=_arena_factory(ws.root))
             except Exception as e:                           # never 500 — keep the user turn
                 store = _project_store(); proj = store.get(DEFAULT_PROJECT_ID)
                 from alpha.converse.project import new_project, new_turn
