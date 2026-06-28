@@ -26,6 +26,7 @@ The organizing principle is unchanged: **one brain `H`, one write-waist (`try_ap
 ### 1.2 Explicitly out of scope (now)
 
 - **Model / weight-level evolution.** All evolution is **file/prompt/config-level only**. The separate `hermes-agent-self-evolution` (DSPy+GEPA weight RL) repo is *not* adopted.
+  - **Scope-lift gate (added 2026-06-27).** *Code-level* self/teacher-modification of the agent (skill-code, tool-code, runtime, container image) is now **designed-for but gated**, not flatly out of scope: it is permitted **only** behind a kernel sandbox + an immutable TCB carve-out + an outer verifier + mandatory human approval, **never autonomously**, and **never** on the no-kernel `LocalEnv`. See `2026-06-27-modification-ladder-and-body-axis-design.md` (the modification ladder R1–R6; NOW ships data rungs R1/R2 only). Weight-level evolution stays fully out of scope.
 - **Codex-grade sandbox.** We adopt Hermes's existing execution sandbox (docker/ssh/modal tool environments) as a **provisional** safety story and revisit a stronger sandbox later (§7).
 - **Per-project forked brains.** There is **ONE shared evolving brain**, not a fork per project (§4).
 - **Offline self-study search (GEPA-style Forge).** Deferred (§5.6); it is a future *deepening of the self-study path*, not a new organ. The gate / fitness / provenance substrate is kept ready for it, but it is not built now.
@@ -152,6 +153,8 @@ Every turn stamps a **provenance ref** = the `SnapshotStore` `H`-version that wa
 ### 5.1 The invariant (non-negotiable)
 
 The **only** function that mutates `H=(p,G,K,M)` is `alpha/refine/apply.py::try_apply_op(...)` via the `MetaTools` facade. Every actor on either path is a **candidate generator** emitting `list[RefineOp]`. This generalizes a proven pattern: the Refiner and Sonia (`preview_op`) already do exactly this — Sonia even dry-runs on a scratch harness. Any future proposer (incl. a later self-study Forge, §5.6) plugs into the same waist.
+
+**Immutable-TCB carve-out (added 2026-06-27, non-negotiable).** This invariant only holds while the *code that enforces it* is itself unmodifiable by the agent. Therefore the gate + its guards — `apply.py`, `metatools.py`, `ops.py`, `edit_log.py`, `snapshot.py`, `manager.py`, `conflict.py`, `doctrine.py` (immutability), `floor_breaker.py`, `firewall.py`/recall PIT-mask, `arena/policy.py`, and (in the body phase) the red-line lint + `try_promote_body` + the verifier — form an **immutable Trusted Computing Base**: dev/git-only, permanently excluded from the reshapeable set at every modification tier, and byte-hash-pinned on any body promotion. The maximally-reshapeable agent is *the body minus its own gate/firewall/audit/lint*. See the modification-ladder companion spec §3.
 
 ### 5.2 The two paths
 

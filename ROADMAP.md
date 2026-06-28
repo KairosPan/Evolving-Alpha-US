@@ -40,6 +40,14 @@ components — see the teaching-cockpit §6 subsection).
   programmatic detection) so a turn never silently shows empty prose. (3) **conftest**: DRY'd the
   brain/session isolation into one shared `brain_session_isolation` fixture (parent `tests/conftest.py`),
   consumed by symmetric autouse `_isolate_state` fixtures in `tests/web` + `tests/sonia`.
+- [ ] **Activity space — inner-loop arena (P-A)** — build `alpha/arena/`: the `ActivitySpace` contract
+  (O/A/E/F) + `ToolEnvironment` seam (`InProcessEnv`/`LocalEnv`) + a single dispatch **choke point** with
+  capability tiers + the safety membrane. **Data rungs only (R1/R2)**; brain files live OUTSIDE the
+  workspace + path-guarded so even a T2 shell can't write `snap.json`. Closes two live-face build gaps:
+  wire `conflict_queue` + real provenance on the converse brain-edit path, and enforce `StagedEdit.status`
+  (T4 human-confirm). Threads PIT-gated recall into the conversational prompt (+ PIT regression test).
+  Specs: `docs/superpowers/specs/2026-06-27-activity-space-arena-design.md` (P-A) +
+  `…-2026-06-27-modification-ladder-and-body-axis-design.md` (§8 NOW). Own writing-plans arc.
 
 ## 2. Data-source layer (pluggable; mechanism shipped 2026-06-22)
 
@@ -83,6 +91,14 @@ is missing. Best delivered as `CompositeSource` backends (§2).
   `eval/fill` module + per-candidate `taboo_check` are deferred for the same reason).
 - [ ] **Master-dispatch `G` sub-agents** (keeps the `G`-pass a reserved no-op today).
 - [ ] **Keep-last-K checkpoint pruning.**
+- [ ] **Body axis + code-level reshape (DEFERRED · commercial)** — the kernel `SandboxedEnv`
+  (Seatbelt/bwrap/Docker) + writer-sidecar (H read-only to the runtime; brain writes only via the
+  `try_apply_op` IPC) + outer supervisor (`BodyManager`) + `try_promote_body`/`BodyLog` +
+  propose→fork-verify→rebuild-from-declared-diff + joint `(H-version, body-digest)` change-set rollback,
+  unlocking the modification ladder **R3 skill-code → R4 tool-code → R5 runtime → R6 image/OS** in order.
+  Gated by the **immutable-TCB** byte-hash pin + mandatory human approval; never autonomous, never on
+  `LocalEnv`. A conscious scope-lift of parent spec §1.2. Spec:
+  `docs/superpowers/specs/2026-06-27-modification-ladder-and-body-axis-design.md` (§5–§9).
 
 ## 6. Web console (`alpha_web`) — follow-ups (the read-only console shipped 2026-06-22)
 

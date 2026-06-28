@@ -86,6 +86,10 @@ ToolEnvironment (Protocol):  run(cmd|code, *, cwd, timeout, net) -> ExecResult
   │                 #   (an allowlist permits autonomous reads; everything else denied)
   └─ SandboxedEnv   # [DEFERRED · commercial] Seatbelt(mac)/bwrap(linux)/Docker/microVM
                     #   + kernel-enforced network allowlist
+                    #   + H volume READ-ONLY to the runtime; brain writes go ONLY
+                    #     through an isolated writer-sidecar exposing the try_apply_op IPC
+                    #   + fork verification runs through a TCB-pinned firewall the
+                    #     candidate cannot modify, network-denied (see companion spec §5–§6)
 ```
 
 **Policy model (copied from Codex's two axes):** `sandbox_mode × approval_policy`. In the Local phase the *sandbox axis* is fixed to "host", so safety rests on the *approval axis* + tool-level policy (§4) — an honest **provisional, operator-trust posture** (≈ Hermes `Local` + Codex's logical policy *without* the kernel enforcement). The seam exists precisely so flipping on `SandboxedEnv` later is additive, not a rewrite.
@@ -117,6 +121,8 @@ Each registered tool carries a `CapabilityTier`; dispatch applies per-tier polic
 
 **Local-phase caveat (must be documented as such):** with no kernel isolation, membranes B and the hard wall rest on tool-level policy (allowlist + human-confirm + not registering dangerous tools + the blocklist), not on the OS. This is the provisional posture; `SandboxedEnv` (P-D) is what makes it kernel-enforced for untrusted/multi-user surfaces.
 
+**The modification ladder (companion spec).** What T3 (brain-edit) may *reach* is governed by the modification ladder R1–R6 in `2026-06-27-modification-ladder-and-body-axis-design.md`. Two rules bind T3 here: (1) **data rungs only in the no-kernel phase** — NOW exposes only R1 (brain-knowledge: p non-red-line + M) and R2 (skill-config); R3+ (skill-code / tool-code / runtime / image) are *designed-for but deferred* behind the kernel `SandboxedEnv` + the immutable TCB + an outer verifier, and must NOT be enabled on `LocalEnv`. (2) **code edits have no `(kind,id)` target**, so once R5 exists, *all* self-study runtime/code edits are `held_for_review` unconditionally — only human/teaching approval can promote them.
+
 ---
 
 ## 5. Experience return + outer-loop coupling
@@ -131,6 +137,8 @@ Each registered tool carries a `CapabilityTier`; dispatch applies per-tier polic
 **Coupling to the outer loop.** The outer-loop Refiner **K-pass** (and Sonia) promote/retire skills/tools using (a) `SkillStats` usage + (b) the human/verifier task-success judgment — *the agent evolves its own toolbox by doing*. Every such edit still flows through `try_apply_op` with a sample floor (mirroring `min_promote_samples`), so no noisy window over-promotes before the floor/breaker reacts.
 
 **Separation invariant enforcement (§1.3 restated as a rule).** The general-operating signal may only target `K` / `G` / operational doctrine. Trading doctrine and trading-skill keep/retire are reachable **only** by the walk-forward fitness path. The gate is the natural enforcement point: a `task`-evidenced op whose target is a trading-relevant `H` element is rejected (or, like a cross-path conflict, held for the user). This keeps the trading moat un-Goodhart-able by the new signal.
+
+**Classification is the precondition (closes open Q#4).** This enforcement requires a concrete rule for classifying an `H` element as trading-relevant vs operational — the target is a **per-element `domain` tag** on `H` (with a per-file-path map for code, pinned in `EditProvenance`/the manifest). **Interim hard rule:** until that tag exists in code, **no `task`-evidenced op may touch ANY gated surface**, and any change whose surface spans both domains is rejected (never silently routed). This must land before P-C, or before any code rung — whichever comes first.
 
 ---
 
