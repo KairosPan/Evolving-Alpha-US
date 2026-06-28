@@ -22,10 +22,10 @@ class RefinerConfig(BaseModel):
     window: int = 10
     min_retire_samples: int = Field(default=5, ge=1)
     min_promote_samples: int = Field(default=3, ge=1)
-    # PC-8: gate-side task floor knobs (off-keeping defaults; None task_stats always fails closed).
-    min_task_samples: int = Field(default=0, ge=0)
-    min_task_success_rate: float = Field(default=0.0, ge=0.0, le=1.0)
-    min_task_confirmed_samples: int = Field(default=0, ge=0)
+    # PC-8: gate-side task floor knobs (fail-toward-strict defaults; None task_stats always fails closed).
+    min_task_samples: int = Field(default=3, ge=0)
+    min_task_success_rate: float = Field(default=0.5, ge=0.0, le=1.0)
+    min_task_confirmed_samples: int = Field(default=3, ge=0)
     # (credit `decay` is a parameter of apply_credit / the US-2c LoopConfig, not the Refiner's concern)
 
 

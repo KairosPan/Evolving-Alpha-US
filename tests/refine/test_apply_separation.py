@@ -46,7 +46,7 @@ def _skill(sid, status="incubating", n=10, expectancy=0.5, domain="trading"):
 
 
 def _passing_task_stats(confirmed_n=3, confirmed_success=2) -> TaskStats:
-    """A TaskStats that passes the default floor knobs (confirmed_n>=0, rate>=0.0)."""
+    """A TaskStats that passes the strict default floor knobs (confirmed_n>=3, rate>=0.5)."""
     return TaskStats(n=confirmed_n + 2, succeeded=confirmed_success, failed=1,
                      incomplete=1, confirmed_success=confirmed_success,
                      confirmed_n=confirmed_n)
@@ -474,3 +474,31 @@ def test_task_floor_all_met_promotes_n0_skill_bypasses_trade_floor():
     # Provenance stamped correctly
     assert log.records()[-1].provenance is not None
     assert log.records()[-1].provenance.evidence_kind == "task"
+
+
+def test_task_floor_zero_confirmations_default_rejects():
+    """RED→GREEN: PC-8 default-floor gate is now strict.
+
+    task_stats has task evidence (n=5, all succeeded) but ZERO external confirmations
+    (confirmed_n=0, confirmed_success=0).  With the OLD defaults (0/0.0) this would
+    PASS; with the new strict defaults (min_task_confirmed_samples=3, min_task_success_rate=0.5)
+    it must be REJECTED — proving the anti-Goodhart floor is on by default.
+    """
+    sk = Skill(skill_id="s_op_zero", name="s_op_zero", type="pattern", status="incubating",
+               stats=SkillStats(n=0, expectancy=None), domain="operational")
+    h = _h(skills=[sk]); log = EditLog(); meta = MetaTools(h, log)
+    op = RefineOp(tool="promote_skill", args={"skill_id": "s_op_zero"},
+                  rationale="task shows all success but zero external confirmations")
+    p = EditProvenance(path="self_study", proposer="refiner", evidence_kind="task")
+    zero_conf_stats = TaskStats(n=5, succeeded=5, failed=0, incomplete=0,
+                                confirmed_success=0, confirmed_n=0)
+    # Do NOT pass explicit min_task_* — use the defaults, which are now strict.
+    rec, reason = try_apply_op(meta, h, op, allowed=PASS_TOOLS["K"],
+                               min_retire_samples=5, min_promote_samples=3, provenance=p,
+                               task_stats=zero_conf_stats)
+    # Zero confirmed evidence cannot promote — default gate rejects.
+    assert rec is None, "expected rejection but got a record"
+    assert reason is not None and "task floor" in reason and "confirmed_n" in reason, (
+        f"expected task-floor/confirmed_n rejection, got: {reason!r}"
+    )
+    assert len(log) == 0  # nothing written

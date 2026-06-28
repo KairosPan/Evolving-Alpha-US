@@ -101,9 +101,9 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
                  provenance: EditProvenance | None = None,
                  conflict_queue=None,
                  task_stats: "TaskStats | None" = None,
-                 min_task_samples: int = 0,
-                 min_task_success_rate: float = 0.0,
-                 min_task_confirmed_samples: int = 0) -> tuple[EditRecord | None, str | None]:
+                 min_task_samples: int = 3,
+                 min_task_success_rate: float = 0.5,
+                 min_task_confirmed_samples: int = 3) -> tuple[EditRecord | None, str | None]:
     """Gate order: whitelist -> rationale -> empty-patch -> set-once/create guards ->
     domain-aware separation -> task floor (PC-8) -> trade floors -> conflict -> dispatch
     (dispatch errors -> clean reject reason). Returns (record, None) on apply | (None, reason)."""
