@@ -56,6 +56,29 @@ def _target_kind(tool: str) -> str:
     return _KIND.get(tool, "")
 
 
+def _element_domain(h: HarnessState, tool: str, tid: str | None, args: dict) -> str | None:
+    """Return the domain of the op's target element for the domain-aware separation gate.
+
+    Create tools (write_skill, process_memory) declare domain in args; all others look up
+    the existing element.  Returns None when the target is missing or has no domain attr
+    (fail-closed: None != "operational" → rejected).
+    """
+    if tool in ("write_skill", "process_memory"):
+        return args.get("domain", "trading")   # create: domain declared in args
+    if tid is None:
+        return None
+    kind = _target_kind(tool)
+    if kind == "skill":
+        el = h.skills.get(tid)
+    elif kind == "memory":
+        el = h.memory.get(tid)
+    elif kind == "doctrine":
+        el = h.doctrine.get(tid)
+    else:
+        el = None
+    return getattr(el, "domain", None) if el is not None else None
+
+
 def _target_id(tool: str, args: dict) -> str | None:
     if tool in ("write_skill", "patch_skill", "retire_skill", "revive_skill", "promote_skill"):
         v = args.get("skill_id")
@@ -72,7 +95,8 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
                  min_retire_samples: int, min_promote_samples: int,
                  provenance: EditProvenance | None = None,
                  conflict_queue=None) -> tuple[EditRecord | None, str | None]:
-    """Gate order: whitelist -> rationale -> empty-patch -> retire/promote evidence -> dispatch
+    """Gate order: whitelist -> rationale -> empty-patch -> set-once/create guards ->
+    domain-aware separation -> trade floors -> conflict -> dispatch
     (dispatch errors -> clean reject reason). Returns (record, None) on apply | (None, reason)."""
     tid = _target_id(op.tool, op.args)
     if op.tool not in allowed:
@@ -84,8 +108,21 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
     # PC-4: set-once relabel guard — domain is immutable once an element is created; all provenances.
     if op.tool in ("patch_skill", "update_memory") and "domain" in op.args:
         return None, "domain is set-once; cannot be relabeled"
+    # PC-5: domain-aware separation gate — task-evidenced ops may only target operational H.
+    # Placed before the trade floors so operational targets (stats.n==0/expectancy=None) aren't
+    # wrongly rejected by the retire/promote floor before we can route them.
     if provenance is not None and provenance.evidence_kind == "task":
-        return None, "separation: task-evidenced op may not touch a gated surface (domain tag not pinned)"
+        domain = _element_domain(harness, op.tool, tid, op.args)
+        if domain != "operational":
+            return None, f"separation: task-evidence may only target operational H (target domain={domain})"
+        # Operational target: short-circuit the trade floors entirely.
+        # Task 17 (PC-8): gate-side task floor goes here, before _dispatch.
+        try:
+            rec = _dispatch(meta, op)
+        except _DISPATCH_ERRORS as e:
+            return None, f"{type(e).__name__}: {e}"
+        rec = meta.log.stamp_last(provenance)
+        return rec, None
     # PC-4: create-path mislabel guard — only a task-evidenced create may mint domain="operational".
     if op.tool in ("write_skill", "process_memory") and op.args.get("domain") == "operational":
         if provenance is None or provenance.evidence_kind != "task":
