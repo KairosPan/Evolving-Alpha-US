@@ -38,9 +38,9 @@ def _task_outcome(res: "ConversationResult") -> str:
         result = tc.get("result", {})
         if not isinstance(result, dict):
             continue
-        if "error" in result:
+        if result.get("ok") is False:          # §1.4 #2: shell ExecResult non-zero exit
             return "failed"
-        if result.get("ok") is False:
+        if "error" in result:                  # §1.4 #3: any tool error key
             return "failed"
     return "succeeded"
 

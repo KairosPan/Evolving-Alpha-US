@@ -76,7 +76,40 @@ def test_record_task_episode_none_store_writes_nothing(h, store):
     assert store.all() == []
 
 
-# ── outcome precedence ────────────────────────────────────────────────────────
+# ── outcome precedence — parametrized (PB-5 §1.4) ────────────────────────────
+
+@pytest.mark.parametrize("tool_calls,hit_max_iters,expected", [
+    # (a) hit_max_iters → "incomplete" regardless of tool results
+    (
+        [{"tool": "shell", "args": {}, "result": {"ok": True, "exit_code": 0}}],
+        True,
+        "incomplete",
+    ),
+    # (b) shell ExecResult ok=False → "failed" (checked before error key)
+    (
+        [{"tool": "shell", "args": {}, "result": {"ok": False, "exit_code": 1}}],
+        False,
+        "failed",
+    ),
+    # (c) any tool result carrying {"error": ...} → "failed"
+    (
+        [{"tool": "anything", "args": {}, "result": {"error": "boom"}}],
+        False,
+        "failed",
+    ),
+    # (d) no failure signal → "succeeded"
+    (
+        [{"tool": "shell", "args": {}, "result": {"ok": True, "exit_code": 0}}],
+        False,
+        "succeeded",
+    ),
+])
+def test_task_outcome_precedence(tool_calls, hit_max_iters, expected):
+    """Parametrized spec §1.4 coverage for _task_outcome (PB-5)."""
+    from alpha.arena.experience import _task_outcome
+    res = ConversationResult(tool_calls=tool_calls, final_text="x", hit_max_iters=hit_max_iters)
+    assert _task_outcome(res) == expected
+
 
 def test_outcome_incomplete_when_hit_max_iters(store, h):
     res = ConversationResult(
