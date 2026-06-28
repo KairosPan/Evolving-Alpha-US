@@ -2,6 +2,8 @@
 """Persisted, H-version-stamped conversational turn with optional workspace commit."""
 from __future__ import annotations
 
+from datetime import date as _Date
+
 from alpha.eval.decision import DecisionPackage
 from alpha.harness.state import HarnessState
 from alpha.llm.chat import ChatMessage
@@ -27,6 +29,7 @@ def converse_project(
     max_iters: int = 8,
     write_mode: str = "apply",
     registry_factory=None,
+    experience_writer=None,
 ) -> Project:
     """Load-or-create *project_id*, run one conversation turn, persist and return the project."""
     # 1. Load or create the project.
@@ -86,6 +89,15 @@ def converse_project(
             project.staged_edits.append(StagedEdit(
                 edit_id=r["edit_id"], op=r["op"], summary=r.get("summary", ""),
                 valid=bool(r.get("valid")), reason=r.get("reason"), preview=r.get("preview", {})))
+
+    # 6c. Fire the injected experience writer (P-B task episode capture, observation-only).
+    #     Default None ⇒ byte-identical when off. The writer is opaque to converse — it encapsulates
+    #     EpisodeStore + record_task_episode so this module never imports alpha.arena (layer spine).
+    if experience_writer is not None:
+        _asof = (_Date.fromisoformat(turn.created_at[:10]) if turn.created_at
+                 else _Date.today())
+        experience_writer(res, h, asof=_asof, project_id=project.project_id,
+                          turn_seq=len(project.turns) - 1)
 
     # 7. Commit DecisionPackage results to workspace if provided.
     if workspace is not None:
