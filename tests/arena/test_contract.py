@@ -8,13 +8,11 @@ def test_capability_tiers_ordered():
 
 
 def test_exec_result_is_frozen():
+    import pytest
     r = ExecResult(ok=True, stdout="hi", stderr="", exit_code=0)
     assert r.ok and r.stdout == "hi"
-    try:
+    with pytest.raises(Exception):     # frozen models reject post-construction mutation
         r.ok = False
-        assert False, "ExecResult must be frozen"
-    except Exception:
-        pass
 
 
 def test_feedback_round_trips():
