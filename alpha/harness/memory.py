@@ -38,6 +38,7 @@ class Lesson(BaseModel):
     failure_signature: str = ""
     named_analog: str = ""
     lesson: str
+    domain: Literal["trading", "operational"] = "trading"
     importance: Importance = Field(default_factory=Importance)
     learned_asof: date | None = None   # PIT key: the date this lesson became KNOWABLE (None = seed/always-known)
 

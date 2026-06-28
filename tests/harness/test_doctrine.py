@@ -33,3 +33,26 @@ def test_doctrine_queries():
 def test_doctrine_from_seed_normalizes_phase():
     doc = Doctrine.from_seed_list([{"section": "s", "regime": "momentum", "guidance": "g"}])
     assert doc.get("s").phases == ["trend"]
+
+
+def test_doctrine_entry_domain_operational_round_trips():
+    e = DoctrineEntry(section="ops_check", guidance="check system health",
+                      domain="operational", immutable=False)
+    assert e.domain == "operational"
+    # round-trip: model_dump → model_validate must preserve domain
+    e2 = DoctrineEntry.model_validate(e.model_dump())
+    assert e2.domain == "operational"
+    assert e2.immutable is False
+
+
+def test_doctrine_entry_domain_orthogonal_to_immutable():
+    # immutable=True entry defaults to domain="trading"
+    e_imm = DoctrineEntry(section="risk_redline", phases=["flush"],
+                          immutable=True, guidance="stop discipline")
+    assert e_imm.domain == "trading"
+    assert e_imm.immutable is True
+    # domain="operational" entry can be immutable=False (orthogonal)
+    e_op = DoctrineEntry(section="ops_alert", guidance="send alert",
+                         domain="operational", immutable=False)
+    assert e_op.domain == "operational"
+    assert e_op.immutable is False

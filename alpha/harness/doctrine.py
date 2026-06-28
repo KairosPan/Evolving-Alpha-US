@@ -1,6 +1,8 @@
 # alpha/harness/doctrine.py
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from alpha.harness.errors import ImmutableDoctrineError
@@ -15,6 +17,7 @@ class DoctrineEntry(BaseModel):
     applies_all_phases: bool = False
     family: str | None = None
     immutable: bool = False
+    domain: Literal["trading", "operational"] = "trading"
     guidance: str
 
     @classmethod

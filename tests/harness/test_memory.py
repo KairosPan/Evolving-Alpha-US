@@ -30,3 +30,16 @@ def test_lesson_from_seed_string_regime():
 def test_lesson_bad_family_rejected():
     with pytest.raises(ValueError):
         Lesson.from_seed({"lesson_id": "x", "outcome": "principle", "lesson": "y", "family": "forex"})
+
+
+def test_lesson_domain_defaults_to_trading():
+    le = Lesson.from_seed({"lesson_id": "x", "outcome": "principle", "lesson": "y"})
+    assert le.domain == "trading"
+
+
+def test_lesson_domain_seedable_to_operational():
+    le = Lesson.from_seed({
+        "lesson_id": "x", "outcome": "principle", "lesson": "y",
+        "domain": "operational",
+    })
+    assert le.domain == "operational"
