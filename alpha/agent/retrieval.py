@@ -42,13 +42,17 @@ def select_for_prompt(h: HarnessState, *, phase_prior: str | None,
     def _hit(s: Skill) -> bool:
         return canon is not None and (s.applies_all_phases or canon in s.phases)
 
-    actives = sorted(h.skills.by_status("active"),
-                     key=lambda s: (not _hit(s), -s.stats.n, s.skill_id))
-    trials = list(reversed(h.skills.by_status("incubating")))[:trial_slots]
+    actives = sorted(
+        (s for s in h.skills.by_status("active") if getattr(s, "domain", "trading") == "trading"),
+        key=lambda s: (not _hit(s), -s.stats.n, s.skill_id))
+    trials = list(reversed(
+        [s for s in h.skills.by_status("incubating") if getattr(s, "domain", "trading") == "trading"]
+    ))[:trial_slots]
     lessons = sorted(
         (l for l in h.memory.all()
          if l.importance.weight() >= MIN_MEMORY_WEIGHT
-         and (asof is None or l.learned_asof is None or l.learned_asof <= asof)),
+         and (asof is None or l.learned_asof is None or l.learned_asof <= asof)
+         and getattr(l, "domain", "trading") == "trading"),
         key=lambda l: (-l.importance.weight(), l.lesson_id))
     return Selection(skills=actives[:skill_budget], trials=trials, lessons=lessons[:memory_budget])
 
