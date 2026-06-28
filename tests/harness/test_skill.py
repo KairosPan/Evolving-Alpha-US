@@ -41,3 +41,22 @@ def test_skill_rejects_bad_family():
 def test_skill_rejects_unknown_seed_key():
     with pytest.raises(ValidationError):       # extra='forbid' -> loud failure on typo'd seed key
         Skill.from_seed({"skill_id": "x", "name": "X", "type": "pattern", "bogus_key": 1})
+
+
+# PC-1 — Skill.domain field
+def test_skill_domain_defaults_to_trading():
+    sk = Skill.from_seed({"skill_id": "x", "name": "X", "type": "pattern"})
+    assert sk.domain == "trading"
+
+
+def test_skill_domain_operational_from_seed():
+    sk = Skill.from_seed({"skill_id": "x", "name": "X", "type": "pattern", "domain": "operational"})
+    assert sk.domain == "operational"
+
+
+def test_skill_domain_survives_model_dump_round_trip():
+    sk = Skill.from_seed({"skill_id": "x", "name": "X", "type": "pattern", "domain": "operational"})
+    dumped = sk.model_dump()
+    assert dumped["domain"] == "operational"
+    sk2 = Skill(**dumped)
+    assert sk2.domain == "operational"
