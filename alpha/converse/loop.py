@@ -34,9 +34,16 @@ def _parse_tool_call(reply: str) -> dict | None:
 
 
 def run_conversation(registry: ToolRegistry, chat: ChatLLMClient, system: str,
-                     messages: list[ChatMessage], *, max_iters: int = 8) -> ConversationResult:
+                     messages: list[ChatMessage], *, max_iters: int = 8,
+                     dispatch=None) -> ConversationResult:
     """Multi-turn tool-calling loop. Each iter: ask the model; if its reply is a tool call, dispatch
-    it and feed the result back; otherwise the reply is the final answer. Bounded by max_iters."""
+    it and feed the result back; otherwise the reply is the final answer. Bounded by max_iters.
+
+    *dispatch* (name, args) -> result lets a caller (e.g. alpha.arena.ActivityPolicy) intercept every
+    tool call at one choke point. Defaults to registry.call(name, **args) — byte-identical to before."""
+    if dispatch is None:
+        def dispatch(name, args):                 # default: the plain registry call
+            return registry.call(name, **(args or {}))
     msgs = list(messages)
     calls: list[dict] = []
     for _ in range(max_iters):
@@ -46,7 +53,7 @@ def run_conversation(registry: ToolRegistry, chat: ChatLLMClient, system: str,
             return ConversationResult(final_text=reply.strip(), messages=msgs, tool_calls=calls)
         name, args = call["tool"], call.get("args", {}) or {}
         try:
-            result = registry.call(name, **args)
+            result = dispatch(name, args)
         except KeyError:
             result = {"error": f"unknown tool: {name}"}
         except Exception as e:                       # a tool raising must not kill the conversation
@@ -54,9 +61,6 @@ def run_conversation(registry: ToolRegistry, chat: ChatLLMClient, system: str,
         calls.append({"tool": name, "args": args, "result": result})
         msgs.append(ChatMessage(role="assistant", text=reply))
         msgs.append(ChatMessage(role="user", text=f"[tool:{name} result]\n{_result_text(result)}"))
-    # Budget exhausted without a prose final answer. Return a fallback final_text (not "") so callers
-    # that render res.final_text directly never show an empty turn; hit_max_iters stays True for any
-    # caller that wants to special-case it.
     return ConversationResult(
         final_text=(f"(I reached the {max_iters}-step tool-calling limit without finishing. "
                     "Try narrowing the request or asking again.)"),
