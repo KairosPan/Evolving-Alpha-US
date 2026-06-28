@@ -4,6 +4,9 @@
   - SandboxedEnv  : DEFERRED (kernel sandbox; commercial). See modification-ladder spec §5-§6.
 """
 from __future__ import annotations
+import re
+import subprocess
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 from alpha.arena.contract import ExecResult
 
@@ -21,10 +24,6 @@ class InProcessEnv:
 
 
 # --- LocalEnv: host subprocess, workspace-scoped ---
-import re
-import subprocess
-from pathlib import Path
-
 # Hardline command patterns: unconditionally refused (ported from Hermes tools/approval.py, the
 # accident-prevention floor). NOT a security boundary — defense-in-depth for a trusted operator.
 _HARDLINE = [
@@ -60,15 +59,27 @@ class LocalEnv:
         if hard:
             return hard
         for tok in argv:
-            if tok.startswith("/") or tok.startswith("~"):
-                p = Path(tok).expanduser()
-                try:
-                    p.resolve().relative_to(self.workspace)
-                except ValueError:
-                    return f"path operand outside workspace: {tok}"
+            # Treat a token as a path operand if it is absolute, home-relative, or contains a
+            # separator / parent ref — then resolve it AGAINST the workspace and refuse escapes
+            # (catches both /etc/passwd AND ../../etc/passwd). Accident-prevention only: a path
+            # embedded inside a -c string is NOT parsed — that is SandboxedEnv's job, not this
+            # provisional, non-kernel guard.
+            looks_like_path = (tok.startswith("/") or tok.startswith("~")
+                               or "/" in tok or tok == "..")
+            if not looks_like_path:
+                continue
+            base = Path(tok).expanduser()
+            resolved = base if base.is_absolute() else (self.workspace / base)
+            try:
+                resolved.resolve().relative_to(self.workspace)
+            except ValueError:
+                return f"path operand outside workspace: {tok}"
         return None
 
     def run(self, argv: list[str], *, timeout: float = 30.0, net: bool = False) -> ExecResult:
+        """Execute *argv* in *workspace*. The ``net`` flag is NOT enforced here — LocalEnv cannot
+        restrict network without a kernel namespace; real network confinement is SandboxedEnv's job
+        (deferred). Default net=False is advisory only."""
         reason = self.is_blocked(argv)
         if reason is not None:
             return ExecResult(ok=False, stderr=reason, exit_code=126)

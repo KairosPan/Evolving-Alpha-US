@@ -29,3 +29,18 @@ def test_local_times_out(tmp_path: Path):
     r = env.run(["python", "-c", "import time; time.sleep(5)"], timeout=0.3)
     assert r.ok is False
     assert "timeout" in r.stderr.lower()
+
+
+def test_local_blocks_relative_parent_traversal(tmp_path: Path):
+    env = LocalEnv(workspace=tmp_path)
+    assert env.is_blocked(["cat", "../../etc/passwd"]) is not None
+    r = env.run(["cat", "../../etc/passwd"])
+    assert r.ok is False and "outside workspace" in r.stderr.lower()
+
+
+def test_local_allows_path_inside_workspace(tmp_path: Path):
+    (tmp_path / "notes.txt").write_text("inside")
+    env = LocalEnv(workspace=tmp_path)
+    assert env.is_blocked(["cat", str(tmp_path / "notes.txt")]) is None
+    r = env.run(["cat", str(tmp_path / "notes.txt")])
+    assert r.ok is True and "inside" in r.stdout
