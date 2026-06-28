@@ -1,0 +1,36 @@
+> **Status:** DRAFT — pending user review (2026-06-27). Wires the live conversational (B-WIDE) face onto the arena: every live tool call now flows through `ActivityPolicy.dispatch` (the choke point becomes load-bearing), and the full computer-use catalog (decide / read_file / write_file / shell) goes live. Follows `2026-06-27-activity-space-arena-design.md` (P-A, built) — this is its live-wiring increment. **User-confirmed scope (2026-06-27):** full computer-use incl. **shell**, accepting the operator-trust posture below.
+
+# Live Face → Arena Wiring (Design)
+
+## 1. Goal
+The arena package (`alpha/arena/`, built + merged) is a tested skeleton: `build_arena` returns `(registry, ActivityPolicy)` but **no live caller uses it** — the live conversational entries (`converse`, `converse_project`, and the workbench service) still call `build_converse_registry(...)` + `run_conversation(registry, ...)`, so the tier/membrane choke point is dormant and shell/file tools are not exposed. This change makes the live face drive the loop through the policy and exposes the full computer-use catalog.
+
+## 2. Architecture
+- **`build_arena` becomes the canonical live tool-set + policy builder.** It REUSES `build_converse_registry` for `decide` + the brain-edit tool (so the `read_only`/`write_mode` selection logic stays in ONE place), then registers the computer-use tools on the same registry and returns `(registry, ActivityPolicy)`. New signature:
+  `build_arena(harness, agent_llm, source, *, workspace=None, env=None, write_mode="apply", read_only=False, conflict_queue=None, provenance=None, confirm=None) -> (ToolRegistry, ActivityPolicy)`.
+  **`workspace` is optional:** when `None` (the simple `converse()` / test/CLI path) the computer-use tools (`read_file`/`write_file`/`shell`) are NOT registered — you get the policy + `decide` + the brain-edit tool only (choke-point active, no file/shell). When a `workspace` is given (`converse_project`/workbench) the file/shell tools are registered against it. This is what lets `converse()` work without a workspace.
+- **`build_converse_registry` gains `conflict_queue=None, provenance=None`** (passthrough to `make_gated_write_tool` — closes the last bit of build gap 1 on the registry path; stage-mode `make_propose_edit_tool` is unaffected, conflict detection there happens at workbench-approve time).
+- **Tier assignment is explicit** in `build_arena` as it registers (no introspection): `decide`→T0 (always); `propose_memory_edit`→T3 (iff `build_converse_registry` registered it, i.e. not `read_only` and `write_mode != "none"`); and *when a workspace is given*: `read_file`→T0, plus (iff not `read_only`) `write_file`→T1 and `shell`→T2. Any name not in the tier map is fail-closed by `ActivityPolicy` (the no-bypass guarantee).
+- **`read_only` (pinned projects) = pure read/analysis:** `decide` (+ `read_file` if a workspace is given). No brain-edit, no `write_file`, no `shell` — a pinned project reproduces the past with zero side effects.
+- **`converse_project` and `converse` rewired:** call `build_arena(...)` and `run_conversation(..., dispatch=policy.dispatch)`. `converse_project` threads `write_mode`/`read_only` (as today) plus `workspace` and an `env`. The workbench keeps `write_mode="stage"`; the real apply stays in the workbench approve handler, already guarded by `assert_approvable` (Task 9).
+- **Environment:** the workbench passes `LocalEnv(workspace=<project git workspace dir>)` so shell/file act in the project's git-backed workspace. The simple `converse()` defaults `env=InProcessEnv()` (no real shell in tests/CLI unless a `LocalEnv` is supplied).
+
+## 3. Safety posture (USER-CONFIRMED, must stay documented)
+- The brain dir (`ALPHA_LIVE_BRAIN_DIR`, default `./state/brain`) sits OUTSIDE the project workspace (`ALPHA_WORKSPACE_DIR/<project_id>`, default `./state/workspaces/<id>`) — sibling dirs. `LocalEnv`'s path-guard refuses argv path operands escaping the workspace. The wiring **asserts** brain-dir-not-under-workspace at startup (fail fast if misconfigured).
+- **This is accident-prevention, NOT containment.** `LocalEnv` is not a kernel boundary: a shell command with an embedded path (e.g. `python -c "open('../brain/brain.db','w')"`) is not parsed by the argv guard, so a determined shell CAN reach the brain files around the gate. Therefore, **on the live face with shell, the one-write-waist is enforced logically (the gate for tool calls) but the brain's physical integrity rests on operator-trust** (single trusted operator) until the kernel `SandboxedEnv` (deferred, commercial). No embedded-path regex "mitigation" is added — that is the OpenClaw/Snyk false-confidence anti-pattern. The risk is accepted and loudly documented (parent spec §7 / modification-ladder §10).
+
+## 4. Testing (offline)
+- Default test env is `InProcessEnv` (shell refuses); `LocalEnv` tests use a temp workspace with network off.
+- New: `converse_project` (and `converse`) route through `ActivityPolicy.dispatch` — assert an untiered tool name is fail-closed on the LIVE path (not just in `build_arena` unit tests); `shell` is registered and tiered T2; `read_only=True` exposes only `decide`+`read_file` (no write/shell, no brain-edit); a brain-dir-under-workspace config raises at startup.
+- Existing `tests/converse` + `tests/web` (workbench) stay green; the default (`write_mode`, no env) path is behavior-preserving except that dispatch now routes through the policy (which is transparent for tiered tools).
+
+## 5. Files touched
+- `alpha/converse/agent.py` — `build_converse_registry` gains `conflict_queue`/`provenance`; `converse` rewired to `build_arena` + dispatch.
+- `alpha/arena/builder.py` — `build_arena` gains `write_mode`/`read_only`/`conflict_queue`/`provenance`; reuses `build_converse_registry`; explicit tiers; read-only suppression.
+- `alpha/converse/session.py` — `converse_project` calls `build_arena` + `run_conversation(dispatch=policy.dispatch)`; accepts `env`.
+- `workbench/app.py` — pass `LocalEnv(workspace=<project workspace dir>)`; assert brain-dir-outside-workspace.
+
+## 6. Risks
+1. **Live shell weakens the one-write-waist to operator-trust** (§3) — accepted; the real fix is `SandboxedEnv` (deferred). Do not paper over with a regex.
+2. **Behavior change on the live workbench path:** routing through the policy + adding tools must not regress the existing stage/approve flow — covered by keeping `tests/web` green + the new live-dispatch tests.
+3. **`read_only` semantics for the workspace:** a pinned project suppresses write/shell (conservative); if a future use wants read-only-H-but-writable-workspace, that's a separate decision.
