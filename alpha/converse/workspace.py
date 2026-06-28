@@ -18,6 +18,11 @@ class Workspace:
     # public API
     # ------------------------------------------------------------------
 
+    @property
+    def root(self) -> Path:
+        """The resolved workspace directory (e.g. the LocalEnv cwd for arena tools)."""
+        return self._root
+
     def init(self) -> None:
         """Idempotent git init + local identity config; no-op if .git already exists."""
         self._root.mkdir(parents=True, exist_ok=True)
