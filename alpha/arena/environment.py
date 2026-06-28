@@ -1,6 +1,6 @@
 """The E-face execution seam. One Protocol, swappable backends:
   - InProcessEnv  : test/offline default; refuses to execute (deterministic).
-  - LocalEnv      : host subprocess, workspace-scoped + hardline blocklist + network deny (Task 3).
+  - LocalEnv      : host subprocess, workspace-scoped + hardline blocklist + network NOT widened (advisory only; real enforcement deferred to SandboxedEnv).
   - SandboxedEnv  : DEFERRED (kernel sandbox; commercial). See modification-ladder spec §5-§6.
 """
 from __future__ import annotations

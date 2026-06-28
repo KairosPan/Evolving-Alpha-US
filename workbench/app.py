@@ -105,7 +105,6 @@ def create_app() -> FastAPI:
                 h, log = bstore.load()
                 if not bstore.is_live():
                     bstore.save(h, log)
-                snap = bstore.snapshot(f"approve-{eid}")
                 se.status = "approved"
                 try:
                     assert_approvable(se)
@@ -113,6 +112,7 @@ def create_app() -> FastAPI:
                     se.status, se.reason = "rejected", str(exc)
                     pstore.put(proj)
                     return JSONResponse({"error": str(exc), "edit_id": eid, "status": "rejected"}, status_code=422)
+                snap = bstore.snapshot(f"approve-{eid}")
                 op = RefineOp(tool=se.op["tool"], args=dict(se.op["args"]), rationale=se.op.get("rationale", ""))
                 rec, reason = try_apply_op(MetaTools(h, log), h, op, allowed=PASS_TOOLS["M"],
                                            min_retire_samples=5, min_promote_samples=3,

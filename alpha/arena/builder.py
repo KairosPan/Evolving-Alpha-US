@@ -38,4 +38,6 @@ def build_arena(harness, agent_llm, source, *, workspace: Path,
     reg.register("propose_memory_edit", bw_schema, bw_fn)
     tiers["propose_memory_edit"] = CapabilityTier.T3_BRAIN_EDIT
 
+    # LIVE-WIRING NOTE: callers MUST drive the loop via run_conversation(dispatch=policy.dispatch).
+    # Passing the bare registry to run_conversation skips the tier/membrane enforcement (the choke point).
     return reg, ActivityPolicy(reg, tiers, confirm=confirm)
