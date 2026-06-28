@@ -187,3 +187,88 @@ def test_harness_to_dict_unchanged_after_record(store, h):
     )
     record_task_episode(res, h, asof=_D, project_id="p", turn_seq=20, episode_store=store)
     assert h.to_dict() == before
+
+
+# ── PB-6: comprehensive observation-channel membrane pin ─────────────────────
+
+def _h_with_stats() -> object:
+    """Return a fresh harness whose every skill has nonzero stats (PB-6 membrane fixture)."""
+    hh = load_seeds("seeds")
+    for sk in hh.skills.all():
+        sk.stats.record(True)
+        sk.stats.record(False)
+    return hh
+
+
+def test_observation_channel_membrane_comprehensive(store):
+    """PB-6 BINDING: after record_task_episode on a turn referencing an existing skill_id:
+
+    1. json.dumps(h.to_dict(), sort_keys=True, default=str) is byte-identical before vs after.
+    2. Every Skill.stats (n/wins/losses/ewma_winrate/expectancy) is unchanged.
+    3. The episode's skill_id matches the referenced skill (confirms the skill was resolved,
+       not silently dropped).
+
+    Edit-log absence of EditRecord is pinned structurally by test_experience_no_forbidden_imports.
+    """
+    hh = _h_with_stats()
+    real_skill_id = hh.skills.all()[0].skill_id
+
+    before_json = json.dumps(hh.to_dict(), sort_keys=True, default=str)
+    before_stats = {sk.skill_id: sk.stats.model_dump() for sk in hh.skills.all()}
+
+    res = ConversationResult(
+        tool_calls=[{
+            "tool": "propose_skill_edit",
+            "args": {"skill_id": real_skill_id},
+            "result": {"status": "applied"},
+        }],
+        final_text="done",
+        hit_max_iters=False,
+    )
+    ep = record_task_episode(res, hh, asof=_D, project_id="p", turn_seq=30,
+                             episode_store=store)
+    assert ep is not None
+    assert ep.skill_id == real_skill_id, "episode must record the resolved skill_id"
+
+    # 1. byte-identical JSON snapshot of full harness
+    after_json = json.dumps(hh.to_dict(), sort_keys=True, default=str)
+    assert before_json == after_json, "record_task_episode must not mutate h (JSON mismatch)"
+
+    # 2. per-skill stats unchanged — snapshot every SkillStats field
+    after_stats = {sk.skill_id: sk.stats.model_dump() for sk in hh.skills.all()}
+    for sid, snap in before_stats.items():
+        assert after_stats[sid] == snap, (
+            f"Skill.stats mutated for {sid}: before={snap}, after={after_stats[sid]}"
+        )
+
+
+def test_experience_no_forbidden_imports():
+    """PB-6 BINDING: structural/AST pin — experience.py must not import
+    try_apply_op, MetaTools, or SkillStats (observation-channel membrane).
+
+    These names belong to the write-waist (refine/apply.py, harness/metatools.py,
+    harness/skill.py) and must never appear in the observation-only arena layer.
+    """
+    import ast
+    import inspect
+
+    from alpha.arena import experience as _exp
+
+    src = inspect.getsource(_exp)
+    tree = ast.parse(src)
+
+    forbidden = {"try_apply_op", "MetaTools", "SkillStats"}
+    imported_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imported_names.add(alias.asname or alias.name.split(".")[-1])
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                imported_names.add(alias.asname or alias.name)
+
+    violations = forbidden & imported_names
+    assert not violations, (
+        f"experience.py imports forbidden names {violations} — "
+        "observation-channel membrane breach (spec §1.3)"
+    )
