@@ -10,6 +10,7 @@ class EditProvenance(BaseModel):
     model_config = ConfigDict(frozen=True)
     path: Literal["self_study", "teaching"]
     proposer: Literal["refiner", "forge", "sonia", "hermes"]
+    evidence_kind: Literal["trade", "task"] | None = None  # None = legacy/trade-equivalent
     evidence_ref: dict | None = None
     reflection_lm_id: str | None = None
     reflection_seed: int | None = None

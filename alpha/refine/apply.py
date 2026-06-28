@@ -81,6 +81,8 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
         return None, "missing rationale"
     if op.tool in ("patch_skill", "update_memory") and not (set(op.args) - {"skill_id", "lesson_id"}):
         return None, "empty patch (no fields to change)"
+    if provenance is not None and provenance.evidence_kind == "task":
+        return None, "separation: task-evidenced op may not touch a gated surface (domain tag not pinned)"
     if op.tool == "retire_skill" and tid is not None:
         sk = harness.skills.get(tid)
         if sk is not None and sk.stats.n < min_retire_samples:
