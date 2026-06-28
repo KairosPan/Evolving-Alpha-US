@@ -26,6 +26,7 @@ def converse_project(
     workspace: Workspace | None = None,
     max_iters: int = 8,
     write_mode: str = "apply",
+    registry_factory=None,
 ) -> Project:
     """Load-or-create *project_id*, run one conversation turn, persist and return the project."""
     # 1. Load or create the project.
@@ -48,15 +49,22 @@ def converse_project(
         else (snapshots.latest() if snapshots is not None else None)
     )
 
-    # 3. Build registry + system prompt.
-    registry = build_converse_registry(h, agent_llm, source, read_only=read_only, write_mode=write_mode)
+    # 3. Build registry + dispatch (injected factory keeps converse arena-free).
+    if registry_factory is None:
+        registry = build_converse_registry(h, agent_llm, source, read_only=read_only,
+                                            write_mode=write_mode)
+        dispatch = None
+    else:
+        registry, dispatch = registry_factory(h, agent_llm, source,
+                                               read_only=read_only, write_mode=write_mode)
     system = build_system_prompt(h, registry)
 
     # 4. Append the user message.
     project.messages.append(ChatMessage(role="user", text=user_text))
 
     # 5. Run the conversation loop.
-    res = run_conversation(registry, chat_llm, system, project.messages, max_iters=max_iters)
+    res = run_conversation(registry, chat_llm, system, project.messages,
+                           max_iters=max_iters, dispatch=dispatch)
     project.messages = res.messages
 
     # 6. Build a JSON-safe ProjectTurn.
