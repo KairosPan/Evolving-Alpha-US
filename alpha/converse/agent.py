@@ -12,13 +12,15 @@ from alpha.agent.retrieval import select_for_prompt
 
 
 def build_converse_registry(harness: HarnessState, agent_llm, source,
-                            *, read_only: bool = False, write_mode: str = "apply") -> ToolRegistry:
+                            *, read_only: bool = False, write_mode: str = "apply",
+                            conflict_queue=None, provenance=None) -> ToolRegistry:
     reg = ToolRegistry()
     decide_schema, decide_fn = make_decide_for_date_tool(harness, agent_llm, source)
     reg.register("decide", decide_schema, decide_fn)
     mode = "none" if read_only else write_mode
     if mode == "apply":
-        write_schema, write_fn = make_gated_write_tool(harness)
+        write_schema, write_fn = make_gated_write_tool(
+            harness, conflict_queue=conflict_queue, provenance=provenance)
         reg.register("propose_memory_edit", write_schema, write_fn)
     elif mode == "stage":
         write_schema, write_fn = make_propose_edit_tool(harness)
