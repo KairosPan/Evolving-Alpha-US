@@ -28,6 +28,34 @@ def build_converse_registry(harness: HarnessState, agent_llm, source,
     return reg
 
 
+def _render_tool_spec(spec: dict) -> str:
+    """Render one tool as `name(arg[?]: type one of {...} — desc, ...): description`.
+
+    The conversation loop is a TEXT protocol — the model can only call a tool whose argument names it
+    can see. Rendering just name+description (the old behaviour) left tools with non-obvious args, like
+    propose_memory_edit's nested {tool, args, rationale}, uninvokable: a real LLM just guesses arg names
+    and every call 500s on a TypeError. So advertise the parameters: names, required-ness, types, enums
+    (the valid meta-tool values) and any per-arg description."""
+    params = spec.get("parameters") or {}
+    props = params.get("properties") or {}
+    required = set(params.get("required") or [])
+    parts = []
+    for pname, pspec in props.items():
+        bit = pname if pname in required else f"{pname}?"
+        ptype = pspec.get("type")
+        if ptype:
+            bit += f": {ptype}"
+        enum = pspec.get("enum")
+        if enum:
+            bit += " one of {" + "|".join(str(v) for v in enum) + "}"
+        pdesc = pspec.get("description")
+        if pdesc:
+            bit += f" — {pdesc}"
+        parts.append(bit)
+    sig = ", ".join(parts)
+    return f"- {spec['name']}({sig}): {spec.get('description', '')}"
+
+
 def build_system_prompt(harness: HarnessState, registry: ToolRegistry, *,
                         asof: date | datetime | None = None) -> str:
     lines = [
@@ -37,7 +65,7 @@ def build_system_prompt(harness: HarnessState, registry: ToolRegistry, *,
         "TOOLS:",
     ]
     for s in registry.specs():
-        lines.append(f"- {s['name']}: {s.get('description', '')}")
+        lines.append(_render_tool_spec(s))
     selection = select_for_prompt(harness, phase_prior=None, asof=asof)
     if selection.lessons:
         lines += ["", "RECALLED LESSONS:"]

@@ -17,6 +17,26 @@ from alpha.refine.apply import try_apply_op
 from alpha.refine.ops import RefineOp, PASS_TOOLS
 from alpha.meta.models import new_edit_id
 
+# propose_memory_edit is a nested meta-tool DISPATCHER: it forwards to one of the M-pass memory
+# meta-tools. The model can't guess the valid `tool` values or the `args` shape from the name alone,
+# so they're spelled out here (mirrors PASS_TOOLS["M"]) and rendered into the system prompt by
+# build_system_prompt. Keep the enum in sync with refine.ops.PASS_TOOLS["M"].
+_MEMORY_EDIT_PARAMS = {
+    "type": "object",
+    "properties": {
+        "tool": {"type": "string", "enum": ["process_memory", "update_memory", "demote_memory"],
+                 "description": "which memory meta-tool to run"},
+        "args": {"type": "object",
+                 "description": ('that meta-tool\'s arguments (flat fields, not nested). process_memory '
+                                 '(add a lesson) needs {"lesson_id": "<id>", "outcome": '
+                                 '"win"|"loss"|"principle", "lesson": "<text>"}; '
+                                 'update_memory needs {"lesson_id": "<id>", ...fields to change}; '
+                                 'demote_memory needs {"lesson_id": "<id>", "factor": <float 0-1>}')},
+        "rationale": {"type": "string", "description": "why this edit is warranted"},
+    },
+    "required": ["tool", "args", "rationale"],
+}
+
 
 def make_gated_write_tool(harness, *, min_retire_samples: int = 5, min_promote_samples: int = 3,
                           conflict_queue=None, provenance: EditProvenance | None = None):
@@ -39,10 +59,7 @@ def make_gated_write_tool(harness, *, min_retire_samples: int = 5, min_promote_s
         return {"status": "rejected", "reason": reason}
     schema = {"name": "propose_memory_edit",
               "description": "Propose a memory edit; applied only if it clears the gate.",
-              "parameters": {"type": "object",
-                             "properties": {"tool": {"type": "string"}, "args": {"type": "object"},
-                                            "rationale": {"type": "string"}},
-                             "required": ["tool", "args", "rationale"]}}
+              "parameters": _MEMORY_EDIT_PARAMS}
     return schema, propose_memory_edit
 
 
@@ -64,10 +81,7 @@ def make_propose_edit_tool(harness, *, min_retire_samples: int = 5, min_promote_
                 "preview": rec.model_dump() if rec is not None else {}}
     schema = {"name": "propose_memory_edit",
               "description": "Propose a memory edit for the user's approval (staged, not applied).",
-              "parameters": {"type": "object",
-                             "properties": {"tool": {"type": "string"}, "args": {"type": "object"},
-                                            "rationale": {"type": "string"}},
-                             "required": ["tool", "args", "rationale"]}}
+              "parameters": _MEMORY_EDIT_PARAMS}
     return schema, propose_memory_edit
 
 

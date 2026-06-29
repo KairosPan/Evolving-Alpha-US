@@ -46,6 +46,21 @@ def test_system_prompt_lists_tools_and_convention():
     assert '"tool"' in sys
 
 
+def test_system_prompt_advertises_tool_parameters():
+    """The text protocol only shows the model what the prompt renders. propose_memory_edit takes a
+    nested meta-tool call {tool, args, rationale} where tool is one of a fixed set — none of which a
+    model can guess from the name+description alone. The prompt MUST advertise the parameter names and
+    the valid meta-tool values, or the tool is uninvokable by a real LLM (it just guesses arg names)."""
+    reg = build_converse_registry(_h(), _agent_llm(), _fake_source())
+    sys = build_system_prompt(_h(), reg)
+    # decide's date arg must be discoverable
+    assert "date" in sys
+    # propose_memory_edit's own keys + the valid meta-tool names it dispatches to
+    assert "rationale" in sys
+    for metatool in ("process_memory", "update_memory", "demote_memory"):
+        assert metatool in sys, f"valid meta-tool {metatool!r} not advertised in system prompt"
+
+
 def test_converse_calls_decide_for_date_then_finalizes():
     chat_llm = MockLLMClient(['{"tool": "decide", "args": {"date": "2026-06-12"}}',
                               "My read: RUN looks like a gap-and-go."])
