@@ -37,6 +37,27 @@ def test_message_round_trips_two_bubbles(client):
     assert "lets discuss the squeeze setup" in r.text
 
 
+def test_assistant_markdown_is_rendered_not_a_wall_of_asterisks(client, monkeypatch):
+    # Regression for the messy cockpit output: Sonia replies in markdown, so the bubble must show
+    # real <strong>/<ol>, never literal ** markers run together into one paragraph.
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE",
+                       "Storage names:\n\n1. **PSTG** breakout\n2. **NTAP** pullback")
+    r = client.post("/evolve/message", data={"text": "storage market"})
+    assert r.status_code == 200
+    assert "<strong>PSTG</strong>" in r.text
+    assert "<ol>" in r.text and "<li>" in r.text
+    assert "**PSTG**" not in r.text
+
+
+def test_user_text_stays_literal_and_assistant_html_is_safe(client, monkeypatch):
+    # User-typed text is shown verbatim (we don't markdown-render it); model-authored HTML is escaped.
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE", "<script>alert(1)</script> and **safe bold**")
+    r = client.post("/evolve/message", data={"text": "**user keeps stars**"})
+    assert "**user keeps stars**" in r.text                 # user side: not turned into <strong>
+    assert "<script>alert(1)</script>" not in r.text        # assistant side: never injected
+    assert "<strong>safe bold</strong>" in r.text           # assistant markdown still renders
+
+
 def test_accept_then_apply_then_rollback(client, monkeypatch):
     from alpha.harness.loader import load_seeds
     sid_skill = load_seeds("seeds").skills.all()[0].skill_id

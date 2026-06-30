@@ -24,6 +24,7 @@ from alpha.eval.verdict_store import VerdictStore
 from alpha.meta.ingest import ingest_attachments
 from alpha_web import data_access as da
 from alpha_web import sample
+from alpha_web.prose import render_markdown
 from alpha_web.sonia_client import SoniaClient
 from alpha_web.workbench_client import WorkbenchClient
 
@@ -98,6 +99,7 @@ def _make_templates() -> Jinja2Templates:
         fmt_val=lambda v: ", ".join(map(str, v)) if isinstance(v, list) else str(v),
         brain_badge=da.brain_badge,
     )
+    t.env.filters["md"] = render_markdown      # assistant bubbles render markdown → safe HTML
     return t
 
 

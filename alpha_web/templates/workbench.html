@@ -40,7 +40,8 @@
       <div class="evo-summary">{{ t.user_text }}</div>
       {% if t.final_text %}
       <div class="evo-why">
-        <span class="k">Agent</span>{{ t.final_text }}
+        <span class="k">Agent</span>
+        <div class="prose">{{ t.final_text | md }}</div>
       </div>
       {% endif %}
     </div>

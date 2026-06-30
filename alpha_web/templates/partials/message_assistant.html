@@ -1,5 +1,5 @@
 <div class="bubble assistant" id="msg-{{ m.message_id }}">
-  <div class="prose">{{ m.text }}</div>
+  <div class="prose">{{ m.text | md }}</div>
   {% for d in m.directions %}<div class="direction">▸ {{ d.title }}{% if d.summary %} — {{ d.summary }}{% endif %}</div>{% endfor %}
   {% for e in m.edits %}{% include "partials/edit_card.html" %}{% endfor %}
   {% if m.edits %}

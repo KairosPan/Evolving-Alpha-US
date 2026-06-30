@@ -1,10 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
+{# The conversation list + new-chat now live in the rail (Teach drawer); this view is just the thread. #}
 <section class="cockpit" id="cockpit">
-  <aside class="sessions">
-    <form hx-post="/evolve/new" hx-target="#thread" hx-swap="innerHTML"><button>New chat</button></form>
-    {% include "partials/session_list.html" %}
-  </aside>
   <main class="thread-wrap">
     <div id="banner">{% if banner %}<div class="banner">{{ banner }}</div>{% endif %}</div>
     <div id="thread" class="thread">
