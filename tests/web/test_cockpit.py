@@ -71,6 +71,32 @@ def test_accept_then_apply_then_rollback(client, monkeypatch):
     assert "<html" in sessions.lower()
 
 
+def test_message_threads_session_id_back_to_composer(client):
+    # Regression: after a message, the composer's hidden session_id must be updated to the (possibly
+    # newly created) session. Otherwise every following message posts an empty session_id and Sonia
+    # spawns a NEW session each time — splitting one conversation into many.
+    import re
+    r = client.post("/evolve/message", data={"text": "first turn"})
+    assert r.status_code == 200
+    assert "hx-swap-oob" in r.text                          # carries an out-of-band composer update
+    m = re.search(r'id="composer-session"[^>]*value="([^"]+)"', r.text)
+    assert m and m.group(1), "no session_id threaded back to the composer"
+    assert 'id="composer-session"' in client.get("/").text  # composer carries the matching id
+
+
+def test_consecutive_messages_stay_in_one_session(client):
+    # End-to-end: with the threaded session_id (as the browser sends after the OOB swap), a second
+    # message lands in the SAME session instead of starting a new one.
+    import re
+    r1 = client.post("/evolve/message", data={"text": "build me an agent"})
+    sid = re.search(r'id="composer-session"[^>]*value="([^"]+)"', r1.text).group(1)
+    r2 = client.post("/evolve/message", data={"text": "execute", "session_id": sid})
+    sid2 = re.search(r'id="composer-session"[^>]*value="([^"]+)"', r2.text).group(1)
+    assert sid2 == sid                                       # not split into a new session
+    page = client.get(f"/evolve/sessions/{sid}").text
+    assert "build me an agent" in page and "execute" in page
+
+
 def test_new_chat_redirects_instead_of_nesting(client):
     # Regression: the New-chat button targets #thread, so /evolve/new must NOT return a whole
     # cockpit document (that nested the entire page inside itself). It should redirect via HTMX.

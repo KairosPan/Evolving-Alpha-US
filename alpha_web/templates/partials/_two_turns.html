@@ -1,2 +1,6 @@
 {% with m = user %}{% include "partials/message_user.html" %}{% endwith %}
 {% with m = assistant %}{% include "partials/message_assistant.html" %}{% endwith %}
+{# Thread the (possibly newly created) session id back into the composer so the NEXT message stays in
+   this session instead of spawning a new one. Out-of-band: replaces the hidden input by id. #}
+<input type="hidden" id="composer-session" name="session_id" value="{{ session_id }}" hx-swap-oob="true">
+
