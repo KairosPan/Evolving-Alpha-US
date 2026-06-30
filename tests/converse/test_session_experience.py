@@ -177,21 +177,27 @@ def test_record_task_episode_as_writer_persists_kind_task(tmp_path):
 
     store = SqliteProjectStore.open(str(tmp_path / "state.db"))
     ep_store = EpisodeStore.in_memory()
+    captured: dict = {}
 
     def writer(res, h, *, asof, project_id, turn_seq):
+        captured["asof"] = asof
         record_task_episode(res, h, asof=asof, project_id=project_id,
                             turn_seq=turn_seq, episode_store=ep_store)
 
     _call("proj-x", tmp_path=tmp_path, store=store, experience_writer=writer)
 
-    # query as task (default is trade; kind filter is the verdict-neutrality fence)
-    eps = ep_store.for_asof(date.today(), kind="task", limit=None)
+    # Query at the turn's pinned asof — the SAME PIT key the episode was written under, and the kind
+    # filter is the verdict-neutrality fence (default is trade). Using date.today() here is a timezone
+    # trap: created_at is UTC, so its date can run a day ahead of the local date, and the PIT filter
+    # would then (correctly) hide the future-dated episode → 0 rows.
+    eps = ep_store.for_asof(captured["asof"], kind="task", limit=None)
     assert len(eps) == 1, f"expected 1 task episode, got {len(eps)}: {eps}"
 
     ep = eps[0]
     assert ep.kind == "task"
     parts = ep.episode_id.split(":")
     # episode_id = "{turn_date}:{project_id}:{turn_seq}"
+    assert parts[0] == captured["asof"].isoformat(), f"date mismatch in episode_id: {ep.episode_id}"
     assert parts[1] == "proj-x", f"project_id mismatch in episode_id: {ep.episode_id}"
     assert parts[2] == "0", f"turn_seq mismatch in episode_id: {ep.episode_id}"
 
@@ -203,12 +209,17 @@ def test_task_episodes_not_visible_via_default_trade_recall(tmp_path):
 
     store = SqliteProjectStore.open(str(tmp_path / "state.db"))
     ep_store = EpisodeStore.in_memory()
+    captured: dict = {}
 
     def writer(res, h, *, asof, project_id, turn_seq):
+        captured["asof"] = asof
         record_task_episode(res, h, asof=asof, project_id=project_id,
                             turn_seq=turn_seq, episode_store=ep_store)
 
     _call(tmp_path=tmp_path, store=store, experience_writer=writer)
 
-    trade_rows = ep_store.for_asof(date.today(), limit=None)  # default kind="trade"
+    # Query at the episode's own asof so the assertion is non-vacuous: a kind='task' episode IS
+    # visible at this date, so an empty result proves the kind='trade' filter excludes it — not that
+    # the date happened to hide it (date.today() can lag the UTC-derived asof and pass vacuously).
+    trade_rows = ep_store.for_asof(captured["asof"], limit=None)  # default kind="trade"
     assert trade_rows == [], f"task episodes leaked into trade recall: {trade_rows}"
