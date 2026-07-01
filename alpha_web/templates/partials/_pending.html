@@ -1,0 +1,9 @@
+<section id="pending" class="acc dsec is-open"{% if pending_oob %} hx-swap-oob="true"{% endif %}>
+  <button type="button" class="acc-toggle dsec-toggle" aria-expanded="true">
+    Pending changes <span class="count">{{ pending.pending_count if pending else 0 }}</span>
+    <span class="caret" aria-hidden="true">&#9656;</span>
+  </button>
+  <div class="acc-body">
+    <p class="empty">Proposed changes will appear here as you teach.</p>
+  </div>
+</section>

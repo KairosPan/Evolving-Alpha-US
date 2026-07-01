@@ -1,0 +1,34 @@
+<section id="brain-panel" class="acc dsec is-open"{% if brain_oob %} hx-swap-oob="true"{% endif %}>
+  <button type="button" class="acc-toggle dsec-toggle" aria-expanded="true">
+    Current brain <span class="caret" aria-hidden="true">&#9656;</span>
+  </button>
+  <div class="acc-body">
+    {% for c in brain.components %}
+    {% if c.is_stub %}
+    <div class="bcomp is-stub" title="{{ c.blurb }}">
+      <span class="bcomp-label">{{ c.label }}</span>
+      <span class="bcomp-count">&ndash;</span>
+      <span class="stub-tag">read-only</span>
+    </div>
+    {% else %}
+    <div class="acc bcomp">
+      <button type="button" class="acc-toggle bcomp-toggle" aria-expanded="false">
+        <span class="bcomp-label">{{ c.label }}</span>
+        <span class="bcomp-count">{{ c.count }}</span>
+        <span class="caret" aria-hidden="true">&#9656;</span>
+      </button>
+      <div class="acc-body">
+        <a class="open-full" href="{{ c.path }}">→ open full page</a>
+        {% if c.key == "doctrine" %}
+          {% for e in c.items %}<div class="brow"><span class="bname">{{ e.section }}</span>{% if e.immutable %}<span class="tag">red-line</span>{% endif %}</div>{% endfor %}
+        {% elif c.key == "memory" %}
+          {% for l in c.items %}<div class="brow"><span class="bname">{{ l.lesson[:64] }}</span><span class="tag">{{ l.outcome }}</span></div>{% endfor %}
+        {% elif c.key == "skills" %}
+          {% for s in c.items %}<div class="brow"><span class="bname">{{ s.name }}</span><span class="tag">{{ s.status }}</span></div>{% endfor %}
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</section>

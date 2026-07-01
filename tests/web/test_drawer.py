@@ -4,6 +4,11 @@ pytest.importorskip("fastapi")
 
 from alpha.harness.loader import load_seeds
 from alpha_web import drawer
+from fastapi.testclient import TestClient
+
+from alpha_web import app as webapp
+from alpha_web.sonia_client import SoniaClient
+from sonia.app import create_app as create_sonia
 
 
 # ── view-model units ─────────────────────────────────────────────────────────
@@ -44,3 +49,33 @@ def test_brain_view_live_have_counts_stubs_do_not():
     for k in ("workflow", "connector", "subagent"):
         assert by_key[k].is_stub is True
         assert by_key[k].count is None and by_key[k].items == [] and by_key[k].blurb
+
+
+# ── route integration ─────────────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def _wire_sonia(monkeypatch):
+    # Drive the real Sonia app in-process via an injected sync TestClient; mock copilot + isolated state.
+    monkeypatch.setenv("ALPHA_SONIA_PROVIDER", "mock")
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE", "lets discuss the squeeze setup")
+    webapp.set_sonia_client(SoniaClient(client=TestClient(create_sonia())))
+    yield
+    webapp.set_sonia_client(None)
+
+
+@pytest.fixture()
+def client():
+    return TestClient(webapp.create_app())
+
+
+def test_home_renders_drawer_shell_and_six_brain_components(client):
+    body = client.get("/").text
+    assert 'id="agent-drawer"' in body
+    assert 'id="pending"' in body and 'id="brain-panel"' in body
+    assert 'class="drawer-resizer"' in body           # drag-resize hook (JS wired in Task 4)
+    assert "drawer-collapse" in body                  # collapse hook
+    panel = body.split('id="brain-panel"', 1)[1]      # isolate the brain panel from the left-rail nav
+    for label in ("Doctrine", "Memory", "Workflow", "Skill", "Connector", "Subagent"):
+        assert label in panel
+    assert "read-only" in panel                       # stub marker
+    assert "→ open full page" in panel                # live-component full-page link

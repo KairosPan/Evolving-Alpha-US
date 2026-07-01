@@ -23,6 +23,7 @@ from alpha.eval.decision_store import DecisionStore
 from alpha.eval.verdict_store import VerdictStore
 from alpha.meta.ingest import ingest_attachments
 from alpha_web import data_access as da
+from alpha_web import drawer
 from alpha_web import sample
 from alpha_web.prose import render_markdown
 from alpha_web.sonia_client import SoniaClient
@@ -357,7 +358,9 @@ def create_app() -> FastAPI:
                 "session_id": (session or {}).get("session_id", ""),
                 "messages": (session or {}).get("messages", []),
                 "sessions": _safe_sessions(),
-                "banner": banner}
+                "banner": banner,
+                "pending": drawer.pending_view(session),
+                "brain": drawer.brain_view(da.load_brain())}
 
     def _safe_sessions():
         try:
