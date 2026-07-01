@@ -33,6 +33,7 @@ document.body.addEventListener("htmx:afterSwap", (e) => {
       localStorage.setItem(WKEY, val);
     });
     resizer.addEventListener("pointerup", () => { dragging = false; });
+    resizer.addEventListener("pointercancel", () => { dragging = false; });
   }
 
   // collapse toggle
@@ -63,6 +64,8 @@ document.body.addEventListener("htmx:afterSwap", (e) => {
     if (!d) return;
     d.classList.remove("is-collapsed");
     localStorage.setItem(CKEY, "0");
+    const cbtnChip = d.querySelector(".drawer-collapse");
+    if (cbtnChip) cbtnChip.setAttribute("aria-expanded", "true");
     d.classList.remove("flash"); void d.offsetWidth; d.classList.add("flash");
   });
 })();

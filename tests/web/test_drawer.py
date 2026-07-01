@@ -1,3 +1,5 @@
+import pathlib
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -16,6 +18,7 @@ from sonia.app import create_app as create_sonia
 def test_pending_view_none_session_is_empty():
     v = drawer.pending_view(None)
     assert v.session_id == "" and v.groups == [] and v.pending_count == 0
+    assert v.last_applied == ""                                 # no applied groups → empty string
 
 
 def test_pending_view_groups_by_message_and_counts_actionable():
@@ -31,6 +34,7 @@ def test_pending_view_groups_by_message_and_counts_actionable():
     assert v.groups[0].accepted == 1 and v.groups[0].applied is False
     assert v.groups[1].applied is True and v.groups[1].accepted == 0
     assert v.pending_count == 2                                 # e1 accepted + e2 proposed; e3 applied excluded
+    assert v.last_applied == "m3"                               # m3 is the only (and last) applied group
 
 
 def test_brain_view_mirrors_six_components_in_rail_order():
@@ -129,11 +133,8 @@ def test_drawer_mutations_stay_unavailable_when_sonia_down(client):
         assert r.status_code == 200 and "unavailable" in r.text.lower()
 
 
-import pathlib
-
-
 def test_cockpit_js_wires_the_drawer_controls():
-    js = pathlib.Path("alpha_web/static/cockpit.js").read_text("utf-8")
+    js = (pathlib.Path(__file__).resolve().parents[2] / "alpha_web" / "static" / "cockpit.js").read_text("utf-8")
     assert "drawer-resizer" in js            # drag-to-resize handler
     assert "--drawer-w" in js                # sets the width custom property
     assert "drawer-collapse" in js           # collapse toggle

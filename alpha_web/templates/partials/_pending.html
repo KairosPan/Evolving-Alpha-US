@@ -9,10 +9,12 @@
       {% for e in g.edits %}{% include "partials/edit_card.html" %}{% endfor %}
       {% if g.applied %}
       <div class="applied-line">applied &#10003;
+        {% if g.message_id == pending.last_applied %}
         <form hx-post="/evolve/rollback/{{ session_id }}/{{ g.message_id }}"
               hx-target="#pending" hx-swap="outerHTML" style="display:inline">
           <button type="submit">&#8630; rollback</button>
         </form>
+        {% endif %}
       </div>
       {% elif g.accepted %}
       <form hx-post="/evolve/{{ session_id }}/message/{{ g.message_id }}/apply"

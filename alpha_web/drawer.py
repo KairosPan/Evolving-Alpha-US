@@ -30,6 +30,7 @@ class PendingView:
     session_id: str
     groups: list[MessageGroup]
     pending_count: int          # edits still actionable (proposed + accepted) across all groups
+    last_applied: str           # message_id of the last applied group; "" if none
 
 
 def pending_view(session: dict | None) -> PendingView:
@@ -38,18 +39,24 @@ def pending_view(session: dict | None) -> PendingView:
     session = session or {}
     groups: list[MessageGroup] = []
     pending = 0
+    last_applied = ""
     for m in session.get("messages", []):
         edits = m.get("edits") or []
         if not edits:
             continue
+        mid = m.get("message_id", "")
+        is_applied = any(e.get("status") == "applied" for e in edits)
         pending += sum(1 for e in edits if e.get("status") in _ACTIONABLE)
         groups.append(MessageGroup(
-            message_id=m.get("message_id", ""),
+            message_id=mid,
             edits=edits,
             accepted=sum(1 for e in edits if e.get("status") == "accepted"),
-            applied=any(e.get("status") == "applied" for e in edits),
+            applied=is_applied,
         ))
-    return PendingView(session_id=session.get("session_id", ""), groups=groups, pending_count=pending)
+        if is_applied:
+            last_applied = mid
+    return PendingView(session_id=session.get("session_id", ""), groups=groups, pending_count=pending,
+                       last_applied=last_applied)
 
 
 # ── CURRENT brain (the live six-component mirror) ────────────────────────────
