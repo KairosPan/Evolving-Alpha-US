@@ -3,4 +3,6 @@
 {# Thread the (possibly newly created) session id back into the composer so the NEXT message stays in
    this session instead of spawning a new one. Out-of-band: replaces the hidden input by id. #}
 <input type="hidden" id="composer-session" name="session_id" value="{{ session_id }}" hx-swap-oob="true">
-
+{# Land the turn in the drawer: refresh the PENDING change-set and the CURRENT brain out-of-band. #}
+{% with pending_oob = true %}{% include "partials/_pending.html" %}{% endwith %}
+{% with brain_oob = true %}{% include "partials/_brain_panel.html" %}{% endwith %}

@@ -1,0 +1,3 @@
+{# apply/rollback response: #pending is the main swap target, #brain-panel updates out-of-band. #}
+{% include "partials/_pending.html" %}
+{% with brain_oob = true %}{% include "partials/_brain_panel.html" %}{% endwith %}

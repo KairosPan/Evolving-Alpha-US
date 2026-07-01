@@ -4,9 +4,9 @@
   {% if e.status in ("proposed", "accepted", "rejected") %}
   <span class="actions">
     <button hx-post="/evolve/{{ session_id }}/edit/{{ e.edit_id }}" hx-vals='{"action":"accept"}'
-            hx-target="#edit-{{ e.edit_id }}" hx-swap="outerHTML">accept</button>
+            hx-target="#pending" hx-swap="outerHTML">accept</button>
     <button hx-post="/evolve/{{ session_id }}/edit/{{ e.edit_id }}" hx-vals='{"action":"reject"}'
-            hx-target="#edit-{{ e.edit_id }}" hx-swap="outerHTML">reject</button>
+            hx-target="#pending" hx-swap="outerHTML">reject</button>
   </span>
   <span class="state">{{ e.status }}</span>
   {% endif %}

@@ -79,3 +79,51 @@ def test_home_renders_drawer_shell_and_six_brain_components(client):
         assert label in panel
     assert "read-only" in panel                       # stub marker
     assert "→ open full page" in panel                # live-component full-page link
+
+
+def test_message_lands_edits_in_the_drawer_with_a_chip_not_inline(client, monkeypatch):
+    sid_skill = load_seeds("seeds").skills.all()[0].skill_id
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE",
+        '{"ops":[{"tool":"patch_skill","args":{"skill_id":"%s","notes":"n"},"rationale":"r"}]}' % sid_skill)
+    r = client.post("/evolve/message", data={"text": "patch it"})
+    assert r.status_code == 200
+    assert 'id="pending"' in r.text and 'hx-swap-oob="true"' in r.text     # drawer refreshes OOB
+    assert 'id="brain-panel"' in r.text
+    head = r.text.split('id="pending"', 1)[0]                              # chat turns + composer, before the OOB drawer
+    assert "change-chip" in head                                          # bubble points at the drawer
+    assert "edit-card" not in head                                        # …and no inline cards in the bubble
+    assert "edit-card" in r.text and "patch_skill" in r.text              # the edit lives in the drawer's pending section
+
+
+def test_apply_reflects_in_brain_panel_and_rollback_reverts(client, monkeypatch):
+    import re
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE",
+        '{"ops":[{"tool":"process_memory",'
+        '"args":{"lesson_id":"les-test-1","lesson":"NEW-TEST-LESSON","outcome":"principle"},'
+        '"rationale":"teach test"}]}')
+    m = client.post("/evolve/message", data={"text": "remember this"})
+    sid = re.search(r'id="composer-session"[^>]*value="([^"]+)"', m.text).group(1)
+    eid = re.search(r"/edit/([\w-]+)", m.text).group(1)
+    # before apply: only proposed — not in the live brain mirror yet (the proposed edit card, which
+    # DOES echo the lesson text, lives in #pending; check only the brain-panel portion)
+    assert "NEW-TEST-LESSON" not in m.text.split('id="brain-panel"', 1)[1]
+    # accept: the Apply form only appears once an edit is accepted, so scrape mid from THIS response
+    acc = client.post(f"/evolve/{sid}/edit/{eid}", data={"action": "accept"})
+    mid = re.search(r"/message/([\w-]+)/apply", acc.text).group(1)
+    ap = client.post(f"/evolve/{sid}/message/{mid}/apply")
+    assert 'id="brain-panel"' in ap.text and 'hx-swap-oob="true"' in ap.text
+    assert "NEW-TEST-LESSON" in ap.text.split('id="brain-panel"', 1)[1]    # brain mirror reflects the applied lesson
+    # rollback reverts the brain. The edit card stays status=applied (Sonia rollback restores the
+    # brain snapshot, not edit status), so it still echoes the text in #pending — assert on the mirror.
+    rb = client.post(f"/evolve/rollback/{sid}/{mid}")
+    assert "NEW-TEST-LESSON" not in rb.text.split('id="brain-panel"', 1)[1]  # gone from the live brain
+
+
+def test_drawer_mutations_stay_unavailable_when_sonia_down(client):
+    webapp.set_sonia_client(SoniaClient(base_url="http://127.0.0.1:9", timeout=0.2))
+    for r in (
+        client.post("/evolve/s1/edit/e1", data={"action": "accept"}),
+        client.post("/evolve/s1/message/m1/apply"),
+        client.post("/evolve/rollback/s1/m1"),
+    ):
+        assert r.status_code == 200 and "unavailable" in r.text.lower()

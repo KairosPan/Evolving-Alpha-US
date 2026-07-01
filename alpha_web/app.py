@@ -386,6 +386,7 @@ def create_app() -> FastAPI:
         clean, attachments = ingest_attachments(text, uploads)
         try:
             out = _sonia().chat(session_id or None, clean, attachments)
+            session = _sonia().get_session(out["session_id"])
         except httpx.HTTPError:
             return render(request, "partials/message_assistant.html",
                           {"session_id": session_id, "m": {"message_id": "err", "role": "assistant",
@@ -394,7 +395,9 @@ def create_app() -> FastAPI:
                            "banner": "unavailable"})
         return render(request, "partials/_two_turns.html",
                       {"session_id": out["session_id"], "user": out["user_message"],
-                       "assistant": out["assistant_message"]})
+                       "assistant": out["assistant_message"],
+                       "pending": drawer.pending_view(session),
+                       "brain": drawer.brain_view(da.load_brain())})
 
     def _unavailable(request):
         return render(request, "partials/unavailable.html",
@@ -403,28 +406,34 @@ def create_app() -> FastAPI:
     @app.post("/evolve/{session_id}/edit/{edit_id}")
     def edit(request: Request, session_id: str, edit_id: str, action: str = Form(...)):
         try:
-            e = _sonia().edit(session_id, edit_id, action)
-            return render(request, "partials/edit_card.html", {"session_id": session_id, "e": e})
+            _sonia().edit(session_id, edit_id, action)
+            session = _sonia().get_session(session_id)
         except httpx.HTTPError:
             return _unavailable(request)
+        return render(request, "partials/_pending.html",
+                      {"session_id": session_id, "pending": drawer.pending_view(session)})
 
     @app.post("/evolve/{session_id}/message/{message_id}/apply")
     def apply(request: Request, session_id: str, message_id: str):
         try:
-            r = _sonia().apply(session_id, message_id)
-            return render(request, "partials/apply_result.html",
-                          {"session_id": session_id, "message_id": message_id, "applied": r["applied"]})
+            _sonia().apply(session_id, message_id)
+            session = _sonia().get_session(session_id)
         except httpx.HTTPError:
             return _unavailable(request)
+        return render(request, "partials/_drawer_update.html",
+                      {"session_id": session_id, "pending": drawer.pending_view(session),
+                       "brain": drawer.brain_view(da.load_brain())})
 
     @app.post("/evolve/rollback/{session_id}/{message_id}")
     def rollback(request: Request, session_id: str, message_id: str):
         try:
             _sonia().rollback(session_id, message_id)
-            return render(request, "partials/apply_result.html",
-                          {"session_id": session_id, "message_id": message_id, "applied": 0})
+            session = _sonia().get_session(session_id)
         except httpx.HTTPError:
             return _unavailable(request)
+        return render(request, "partials/_drawer_update.html",
+                      {"session_id": session_id, "pending": drawer.pending_view(session),
+                       "brain": drawer.brain_view(da.load_brain())})
 
     @app.get("/evolve/sessions")
     def sessions_index(request: Request):

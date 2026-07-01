@@ -1,9 +1,28 @@
 <section id="pending" class="acc dsec is-open"{% if pending_oob %} hx-swap-oob="true"{% endif %}>
   <button type="button" class="acc-toggle dsec-toggle" aria-expanded="true">
-    Pending changes <span class="count">{{ pending.pending_count if pending else 0 }}</span>
+    Pending changes <span class="count">{{ pending.pending_count }}</span>
     <span class="caret" aria-hidden="true">&#9656;</span>
   </button>
   <div class="acc-body">
+    {% for g in pending.groups %}
+    <div class="pgroup">
+      {% for e in g.edits %}{% include "partials/edit_card.html" %}{% endfor %}
+      {% if g.applied %}
+      <div class="applied-line">applied &#10003;
+        <form hx-post="/evolve/rollback/{{ session_id }}/{{ g.message_id }}"
+              hx-target="#pending" hx-swap="outerHTML" style="display:inline">
+          <button type="submit">&#8630; rollback</button>
+        </form>
+      </div>
+      {% elif g.accepted %}
+      <form hx-post="/evolve/{{ session_id }}/message/{{ g.message_id }}/apply"
+            hx-target="#pending" hx-swap="outerHTML">
+        <button type="submit">Apply accepted ({{ g.accepted }})</button>
+      </form>
+      {% endif %}
+    </div>
+    {% else %}
     <p class="empty">Proposed changes will appear here as you teach.</p>
+    {% endfor %}
   </div>
 </section>
