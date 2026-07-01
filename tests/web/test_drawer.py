@@ -127,3 +127,15 @@ def test_drawer_mutations_stay_unavailable_when_sonia_down(client):
         client.post("/evolve/rollback/s1/m1"),
     ):
         assert r.status_code == 200 and "unavailable" in r.text.lower()
+
+
+import pathlib
+
+
+def test_cockpit_js_wires_the_drawer_controls():
+    js = pathlib.Path("alpha_web/static/cockpit.js").read_text("utf-8")
+    assert "drawer-resizer" in js            # drag-to-resize handler
+    assert "--drawer-w" in js                # sets the width custom property
+    assert "drawer-collapse" in js           # collapse toggle
+    assert "acc-toggle" in js                # delegated accordion handler
+    assert "data-flash" in js or "change-chip" in js   # chip → drawer flash
