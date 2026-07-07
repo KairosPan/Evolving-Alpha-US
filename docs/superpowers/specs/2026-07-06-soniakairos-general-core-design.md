@@ -1,6 +1,13 @@
 # SoniaKairos General Core — Design
 
-**Date:** 2026-07-06 · **Status:** approved in brainstorming (all sections user-confirmed)
+> **SUPERSEDED (2026-07-06, same day):** written against the pre-pivot charter. The charter's
+> 2026-07-06 pivot (Kairos never self-modifies; Sonia sole proposer; no machine acceptance;
+> memory through deliberation; Body = git-per-instance) invalidates D1 (alpha-as-skeleton),
+> the pluggable AcceptancePolicy, the H4 memory split, and the canary primitive. The current
+> design lives at `~/Desktop/self-evolve/Sonia-Kairos/docs/design/2026-07-06-code-structure-design.md`.
+> Kept for the decision history and the (still-valid) extraction-boundary analysis of §3.
+
+**Date:** 2026-07-06 · **Status:** ~~approved in brainstorming~~ SUPERSEDED — see banner
 **Charter:** `~/Desktop/self-evolve/Evolving-Agent-Design-SoniaKairos.md` (the north-star design doc)
 **Evidence base:** `docs/findings/2026-07-01-kairos-design-mining.md`,
 `docs/findings/2026-07-02-kairos-architecture-comparison.zh.md`,
