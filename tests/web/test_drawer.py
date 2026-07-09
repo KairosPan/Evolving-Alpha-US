@@ -44,7 +44,7 @@ def test_brain_view_carries_materialized_flag():
     assert drawer.brain_view(state, materialized=False).materialized is False
 
 
-def test_brain_panel_badges_pre_materialization(client, monkeypatch):
+def test_brain_panel_badges_pre_materialization(client):
     # A fresh session before any apply: the live store isn't materialized, so the mirror says so.
     body = client.get("/").text
     panel = body.split('id="brain-panel"', 1)[1]
@@ -133,7 +133,6 @@ def test_cockpit_js_wires_the_drawer_controls():
 
 
 def test_chat_is_prose_only_then_propose_lands_edits_in_the_drawer(client, monkeypatch):
-    import re
     sid_skill = load_seeds("seeds").skills.all()[0].skill_id
     monkeypatch.setenv("ALPHA_MOCK_RESPONSE",
         '{"ops":[{"tool":"patch_skill","args":{"skill_id":"%s","notes":"n"},"rationale":"r"}]}' % sid_skill)
@@ -151,7 +150,6 @@ def test_chat_is_prose_only_then_propose_lands_edits_in_the_drawer(client, monke
 
 
 def test_propose_with_no_edit_shows_a_visible_note(client, monkeypatch):
-    import re
     monkeypatch.setenv("ALPHA_MOCK_RESPONSE", "let's keep clarifying")
     m = client.post("/evolve/message", data={"text": "hmm"})
     sid = re.search(r'id="composer-session"[^>]*value="([^"]+)"', m.text).group(1)
@@ -163,7 +161,6 @@ def test_propose_with_no_edit_shows_a_visible_note(client, monkeypatch):
 
 
 def test_propose_then_apply_reflects_in_brain_panel_and_rollback_reverts(client, monkeypatch):
-    import re
     monkeypatch.setenv("ALPHA_MOCK_RESPONSE",
         '{"ops":[{"tool":"process_memory",'
         '"args":{"lesson_id":"les-test-1","lesson":"NEW-TEST-LESSON","outcome":"principle"},'

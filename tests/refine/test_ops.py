@@ -53,3 +53,8 @@ def test_parse_extraction_malformed_is_no_edit_not_crash():
     for raw in ("not json at all", '{"ops": 5}', '{"ops": []}', ""):
         ops, no_edit, reason = parse_extraction(raw)
         assert ops == [] and no_edit is True and reason
+
+
+def test_parse_extraction_no_edit_whitespace_reason_falls_back():
+    ops, no_edit, reason = parse_extraction('{"no_edit": true, "reason": "   "}')
+    assert ops == [] and no_edit is True and reason == "no edit proposed"

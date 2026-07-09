@@ -95,3 +95,7 @@ def test_propose_redline_op_becomes_a_failed_card(client, monkeypatch):
 def test_propose_on_missing_message_is_404(client):
     sid = client.post("/sessions/new").json()["session_id"]
     assert client.post(f"/sessions/{sid}/messages/nope/propose").status_code == 404
+
+
+def test_propose_on_missing_session_is_404(client):
+    assert client.post("/sessions/nope-sid/messages/x/propose").status_code == 404
