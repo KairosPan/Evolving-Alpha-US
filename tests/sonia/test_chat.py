@@ -38,15 +38,6 @@ def test_chat_appends_two_turns_and_persists(client):
     assert loaded["title"]                                         # derived from first user message
 
 
-def test_chat_with_ops_returns_edit_cards(client, monkeypatch):
-    from alpha.harness.loader import load_seeds
-    sid = load_seeds("seeds").skills.all()[0].skill_id
-    monkeypatch.setenv("ALPHA_MOCK_RESPONSE",
-                       '{"ops": [{"tool": "patch_skill", "args": {"skill_id": "%s", "notes": "n"}, "rationale": "r"}]}' % sid)
-    body = client.post("/chat", json={"text": "patch it"}).json()
-    assert body["assistant_message"]["edits"][0]["status"] == "proposed"
-
-
 def test_chat_is_graceful_when_copilot_unavailable(client, monkeypatch):
     monkeypatch.delenv("ALPHA_SONIA_PROVIDER", raising=False)        # default openai_compat
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)

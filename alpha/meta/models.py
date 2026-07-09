@@ -76,6 +76,7 @@ class Message(BaseModel):
     edits: list[ProposedEdit] = Field(default_factory=list)
     snapshot_before: str | None = None
     applied_seqs: list[int] = Field(default_factory=list)
+    proposal_note: str = ""          # set when a /propose pass yielded no edit (the visible reason)
 
 
 class Session(BaseModel):
