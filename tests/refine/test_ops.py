@@ -1,4 +1,4 @@
-from alpha.refine.ops import PASS_ORDER, PASS_TOOLS, RefineOp, parse_ops
+from alpha.refine.ops import PASS_ORDER, PASS_TOOLS, RefineOp, parse_extraction, parse_ops
 
 
 def test_pass_structure():
@@ -30,3 +30,26 @@ def test_parse_ops_robust():
     # drops malformed items (non-dict, missing/blank tool, non-dict args) but keeps the good one
     raw = '{"ops": [1, {"args": {}}, {"tool": ""}, {"tool": "x", "args": 5}, {"tool": "promote_skill"}]}'
     assert [o.tool for o in parse_ops(raw)] == ["promote_skill"]
+
+
+def test_parse_extraction_returns_ops_when_present():
+    raw = '{"ops":[{"tool":"process_memory","args":{"lesson_id":"l1"},"rationale":"r"}]}'
+    ops, no_edit, reason = parse_extraction(raw)
+    assert no_edit is False and reason == ""
+    assert [o.tool for o in ops] == ["process_memory"]
+
+
+def test_parse_extraction_no_edit_carries_reason():
+    ops, no_edit, reason = parse_extraction('{"no_edit": true, "reason": "still clarifying"}')
+    assert ops == [] and no_edit is True and reason == "still clarifying"
+
+
+def test_parse_extraction_empty_object_falls_back_never_silent():
+    ops, no_edit, reason = parse_extraction("{}")
+    assert ops == [] and no_edit is True and reason        # non-empty fallback reason
+
+
+def test_parse_extraction_malformed_is_no_edit_not_crash():
+    for raw in ("not json at all", '{"ops": 5}', '{"ops": []}', ""):
+        ops, no_edit, reason = parse_extraction(raw)
+        assert ops == [] and no_edit is True and reason

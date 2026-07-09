@@ -27,21 +27,9 @@ class RefineOp(BaseModel):
     rationale: str = ""
 
 
-def parse_ops(raw: str) -> list[RefineOp]:
-    """Pull {"ops": [...]} from prose/fenced/thinking-prefixed LLM text; drop malformed items.
-    Any structural failure yields []. Empty rationale is kept as '' (rejected later at apply time)."""
-    extracted = extract_json_object(raw)
-    if extracted is None:
-        return []
-    try:
-        data = json.loads(extracted)
-    except (json.JSONDecodeError, ValueError):
-        return []
-    if not isinstance(data, dict):
-        return []
-    raw_ops = data.get("ops")
-    if not isinstance(raw_ops, list):       # non-list ops (5, "x", {}) -> no edits (reject-don't-crash)
-        return []
+def _parse_op_items(raw_ops: list) -> list[RefineOp]:
+    """Validate a list of raw op dicts into RefineOps; drop malformed items (reject-don't-crash).
+    Empty rationale is kept as '' (rejected later at apply time)."""
     ops: list[RefineOp] = []
     for item in raw_ops:
         if not isinstance(item, dict):
@@ -59,3 +47,46 @@ def parse_ops(raw: str) -> list[RefineOp]:
             rationale = ""
         ops.append(RefineOp(tool=tool, args=args, rationale=rationale))
     return ops
+
+
+def parse_ops(raw: str) -> list[RefineOp]:
+    """Pull {"ops": [...]} from prose/fenced/thinking-prefixed LLM text; drop malformed items.
+    Any structural failure yields []. Empty rationale is kept as '' (rejected later at apply time)."""
+    extracted = extract_json_object(raw)
+    if extracted is None:
+        return []
+    try:
+        data = json.loads(extracted)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    raw_ops = data.get("ops")
+    if not isinstance(raw_ops, list):       # non-list ops (5, "x", {}) -> no edits (reject-don't-crash)
+        return []
+    return _parse_op_items(raw_ops)
+
+
+def parse_extraction(raw: str) -> tuple[list[RefineOp], bool, str]:
+    """Parse the enforced-JSON crystallization reply into (ops, no_edit, reason). NEVER silent:
+    - dict with a non-empty valid 'ops' list  -> (ops, False, "")
+    - dict with truthy 'no_edit'               -> ([], True, reason or "no edit proposed")
+    - anything else (empty/unknown/malformed)  -> ([], True, "model proposed no ops")."""
+    extracted = extract_json_object(raw)
+    data = None
+    if extracted is not None:
+        try:
+            data = json.loads(extracted)
+        except (json.JSONDecodeError, ValueError):
+            data = None
+    if not isinstance(data, dict):
+        return [], True, "model returned no parseable JSON"
+    raw_ops = data.get("ops")
+    if isinstance(raw_ops, list):
+        ops = _parse_op_items(raw_ops)
+        if ops:
+            return ops, False, ""
+    if data.get("no_edit"):
+        reason = data.get("reason")
+        return [], True, reason if isinstance(reason, str) and reason.strip() else "no edit proposed"
+    return [], True, "model proposed no ops"
