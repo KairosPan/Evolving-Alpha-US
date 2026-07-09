@@ -165,6 +165,20 @@ round shipped only the views; the three NEW components are read-only stubs):**
 - [ ] **Delete-`×` while Sonia is DOWN** swaps the `unavailable` banner into the `<li>` (cosmetic stray
   banner; never-500-safe). Minor polish from the v3 final review.
 
+✅ **v4 — teach→modification on-demand crystallization** (built 2026-07-09 on branch `feat/teach-crystallize`,
+7-task subagent-driven build + opus whole-branch review = **Ready-to-merge / 0 Critical / 0 Important**).
+Closed the "taught but nothing changed" silent-evaporation gap: chat is now **prose-only**, and edits land
+only via an explicit **"Propose an edit"** control that calls `LLMClient.complete()` in enforced-JSON mode,
+forced to return `{"ops":[…]}` or `{"no_edit":true,"reason":…}` (never silent) → the existing
+`preview_op`→accept→apply write-waist (untouched). Plus an inline "no edit proposed: …" note and a "seeds ·
+no live edits yet" brain-mirror badge. Specs: `docs/superpowers/specs/2026-07-01-teach-crystallize-design.md`,
+plan `docs/superpowers/plans/2026-07-09-teach-crystallize.md`. **Follow-up (deferred, from the final review):**
+
+- [ ] **`/rollback` should clear `msg.applied_seqs`** so a rolled-back teaching turn can be re-proposed.
+  Today rollback reverts the brain snapshot but leaves `applied_seqs` set, so `/propose` returns 409 and the
+  drawer keeps the "Propose an edit" button hidden — the turn stays "done." UX-only (no correctness impact,
+  no live dead-end). Pairs with the spec §10 apply-atomicity / re-preview deferrals.
+
 **Broader meta-agent follow-ups (also in spec §11):**
 
 - [ ] **Self-learning channel** — the agent's **second learning channel**: a reflection→directions stage
