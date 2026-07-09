@@ -47,7 +47,10 @@ class MetaAgent:
     def _preview(self, op: RefineOp) -> ProposedEdit:
         return preview_op(self.h, op, retire_min=self._retire_min, promote_min=self._promote_min)
 
-    def apply(self, accepted: list[ProposedEdit]) -> tuple[list[EditRecord], list[ProposedEdit]]:
+    def apply(self, accepted: list[ProposedEdit], *,
+              human_approver: str | None = None) -> tuple[list[EditRecord], list[ProposedEdit]]:
+        """Apply user-accepted edits through the gate. human_approver records WHO accepted them
+        (charter conformance 2026-07-09: a landed agent proposal names its human approver)."""
         applied: list[EditRecord] = []
         for e in accepted:
             if e.status != "accepted":
@@ -55,7 +58,8 @@ class MetaAgent:
             op = RefineOp(tool=e.tool, args=dict(e.args), rationale=e.rationale)
             rec, reason = try_apply_op(self.tools, self.h, op, allowed=ALL_TOOLS,
                                        min_retire_samples=self._retire_min, min_promote_samples=self._promote_min,
-                                       provenance=EditProvenance(path="teaching", proposer="sonia"))
+                                       provenance=EditProvenance(path="teaching", proposer="sonia",
+                                                                 human_approver=human_approver))
             if rec is not None:
                 e.status, e.applied_seq, e.apply_reason = "applied", rec.seq, ""
                 applied.append(rec)

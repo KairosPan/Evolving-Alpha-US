@@ -38,29 +38,9 @@ _MEMORY_EDIT_PARAMS = {
 }
 
 
-def make_gated_write_tool(harness, *, min_retire_samples: int = 5, min_promote_samples: int = 3,
-                          conflict_queue=None, provenance: EditProvenance | None = None):
-    """A tool whose ONLY path to mutate H is try_apply_op (the one write-waist). Restricted to the
-    M-pass whitelist for this face; the gate enforces rationale / evidence floors / red-lines, and
-    (when conflict_queue is provided) HOLDS a self-study-vs-teaching conflict for user review."""
-    prov = provenance if provenance is not None else EditProvenance(path="teaching", proposer="hermes")
-
-    def propose_memory_edit(tool: str, args: dict, rationale: str) -> dict:
-        op = RefineOp(tool=tool, args=args, rationale=rationale)
-        rec, reason = try_apply_op(MetaTools(harness, EditLog()), harness, op,
-                                   allowed=PASS_TOOLS["M"],
-                                   min_retire_samples=min_retire_samples,
-                                   min_promote_samples=min_promote_samples,
-                                   provenance=prov, conflict_queue=conflict_queue)
-        if rec is not None:
-            return {"status": "applied"}
-        if reason and reason.startswith("held_for_review"):
-            return {"status": "held", "reason": reason}
-        return {"status": "rejected", "reason": reason}
-    schema = {"name": "propose_memory_edit",
-              "description": "Propose a memory edit; applied only if it clears the gate.",
-              "parameters": _MEMORY_EDIT_PARAMS}
-    return schema, propose_memory_edit
+# make_gated_write_tool (the worker's live-landing write tool) was RETIRED 2026-07-09 (charter
+# conformance): no code path may let the conversational agent's own edit reach the live brain
+# without a human step. The worker face stages via make_propose_edit_tool; the user approves.
 
 
 def make_propose_edit_tool(harness, *, min_retire_samples: int = 5, min_promote_samples: int = 3):
@@ -73,7 +53,7 @@ def make_propose_edit_tool(harness, *, min_retire_samples: int = 5, min_promote_
                                    allowed=PASS_TOOLS["M"],
                                    min_retire_samples=min_retire_samples,
                                    min_promote_samples=min_promote_samples,
-                                   provenance=EditProvenance(path="teaching", proposer="hermes"))
+                                   provenance=EditProvenance(path="teaching", proposer="kairos"))
         return {"staged": True, "edit_id": new_edit_id(), "tool": tool,
                 "op": {"tool": tool, "args": dict(args), "rationale": rationale},
                 "summary": rec.summary if rec is not None else "",

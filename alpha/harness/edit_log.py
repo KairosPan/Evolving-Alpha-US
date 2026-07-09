@@ -6,10 +6,13 @@ from pydantic import BaseModel, ConfigDict
 
 
 class EditProvenance(BaseModel):
-    """Who proposed an edit and on what basis (spec §5.3). Stamped at the gate, never by MetaTools."""
+    """Who proposed an edit and on what basis (spec §5.3). Stamped at the gate, never by MetaTools.
+    path "user_direct" = the charter's second hand (2026-07-08): the User's own edit through the
+    same gate — stamped and audited, no deliberation. proposer "hermes" is retired vocabulary
+    (pre-rename worker face) kept so persisted brains still validate; new records use "kairos"."""
     model_config = ConfigDict(frozen=True)
-    path: Literal["self_study", "teaching"]
-    proposer: Literal["refiner", "forge", "sonia", "hermes"]
+    path: Literal["self_study", "teaching", "user_direct"]
+    proposer: Literal["refiner", "forge", "sonia", "hermes", "kairos", "user"]
     evidence_kind: Literal["trade", "task"] | None = None  # None = legacy/trade-equivalent
     evidence_ref: dict | None = None
     reflection_lm_id: str | None = None
@@ -77,7 +80,9 @@ class EditLog:
         return True
 
     def to_dict(self) -> list[dict]:
-        return [r.model_dump() for r in self._records]
+        # mode="json": payloads may embed date-typed fields (e.g. a lesson's learned_asof);
+        # json.dumps consumers crash on python-mode date objects. from_dict re-validates.
+        return [r.model_dump(mode="json") for r in self._records]
 
     @classmethod
     def from_dict(cls, data: list[dict]) -> "EditLog":

@@ -11,14 +11,14 @@ from alpha.converse.agent import build_converse_registry
 
 
 def build_arena(harness, agent_llm, source, *, workspace: Path | None = None,
-                env: ToolEnvironment | None = None, write_mode: str = "apply",
+                env: ToolEnvironment | None = None, write_mode: str = "stage",
                 read_only: bool = False, conflict_queue=None, provenance=None,
                 confirm=None) -> tuple["ToolRegistry", ActivityPolicy]:
     reg = build_converse_registry(harness, agent_llm, source, read_only=read_only,
                                   write_mode=write_mode, conflict_queue=conflict_queue,
-                                  provenance=provenance)
+                                  provenance=provenance)   # raises on retired "apply" (fail-closed)
     tiers: dict[str, CapabilityTier] = {"decide": CapabilityTier.T0_OBSERVE}
-    if not read_only and write_mode in {"apply", "stage"}:
+    if not read_only and write_mode == "stage":
         tiers["propose_memory_edit"] = CapabilityTier.T3_BRAIN_EDIT
     if workspace is not None:
         rs, rfn, rtier = make_read_file_tool(workspace)

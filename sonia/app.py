@@ -2,20 +2,27 @@ from __future__ import annotations
 
 import os
 import threading
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from alpha.harness.edit_log import EditProvenance
 from alpha.harness.metatools import MetaTools
 from alpha.llm.chat import ChatMessage
 from alpha.llm.client import MockLLMClient
 from alpha.llm.config import make_client
+from alpha.refine.apply import ALL_TOOLS, try_apply_op
+from alpha.refine.ops import RefineOp
 from alpha.meta.agent import MetaAgent, preview_op
 from alpha.meta.extractor import extract_ops
 from alpha.meta.models import Attachment, Message, Session, new_message_id, new_session_id, now_iso
 from alpha.meta.sonia_agent import SoniaAgent, turn_text
 from alpha.meta.conflict_store import ConflictQueue
+from alpha.meta.evolution import adopt_proposal
+from alpha.meta.proposal_store import ProposalQueue, proposals_dir
+from alpha.meta.reconcile import reconcile_session, reconcile_staged_edits
 from alpha.meta.store import LiveBrainStore, SessionStore
 
 _MUTATION_LOCK = threading.Lock()
@@ -33,6 +40,36 @@ def _conflict_store() -> ConflictQueue:
     return ConflictQueue(os.environ.get("ALPHA_CONFLICTS_DIR", "./state/conflicts"))
 
 
+def _proposal_store() -> ProposalQueue:
+    return ProposalQueue(proposals_dir())
+
+
+def _reconcile_all(live_len: int, sstore: SessionStore, current: "Session | None" = None) -> None:
+    """After a brain restore: sweep EVERY derived store that can assert reverted seqs — all
+    teaching sessions AND the workbench staged edits (both faces share the one brain, so a
+    rollback issued here must also heal workbench state; see alpha/meta/reconcile.py)."""
+    if current is not None:
+        reconcile_session(current, live_len)         # caller persists `current` itself
+    for other in sstore.list():
+        if current is not None and other.session_id == current.session_id:
+            continue
+        if reconcile_session(other, live_len):
+            sstore.put(other)
+    try:                                             # cross-face sweep; no workbench DB → no-op
+        from alpha.converse.sqlite_store import SqliteProjectStore
+        pstore = SqliteProjectStore.open(
+            os.environ.get("ALPHA_PROJECTS_DB", "./state/projects/state.db"),
+            create_if_missing=False)
+    except Exception:
+        return
+    try:
+        for proj in pstore.list():
+            if reconcile_staged_edits(proj.staged_edits, live_len):
+                pstore.put(proj)
+    finally:
+        pstore.close()
+
+
 class ChatIn(BaseModel):
     session_id: str | None = None
     text: str = ""
@@ -45,6 +82,16 @@ class EditAction(BaseModel):
 
 class ResolveIn(BaseModel):
     decision: str  # "accept_self_study" | "keep_teaching"
+
+
+class DirectEditIn(BaseModel):
+    tool: str
+    args: dict = {}
+    rationale: str = ""
+
+
+class ProposalResolveIn(BaseModel):
+    decision: str  # "adopt" | "discard"
 
 
 def create_app() -> FastAPI:
@@ -157,11 +204,36 @@ def create_app() -> FastAPI:
                 if not bstore.is_live():
                     bstore.save(h, log)                               # materialize before snapshot
                 msg.snapshot_before = bstore.snapshot(f"{sid}-{mid}")
-                applied, _rows = MetaAgent(MetaTools(h, log), MockLLMClient("{}")).apply(accepted)
+                applied, _rows = MetaAgent(MetaTools(h, log), MockLLMClient("{}")).apply(
+                    accepted, human_approver="user")
                 bstore.save(h, log)
             msg.applied_seqs = [r.seq for r in applied]
             sstore.put(sess)
             return {"applied": len(applied), "edits": [e.model_dump() for e in msg.edits]}
+
+    @app.post("/edit")
+    def direct_edit(body: DirectEditIn):
+        """The charter's second hand (2026-07-08 amendment): the USER's own edit, landed through
+        the same gate — stamped user/user_direct, audited, snapshotted, no deliberation. Sample
+        floors are lifted for the user's hand (min_*=0); the structural checks (tool whitelist,
+        rationale required, red-line immutability, set-once domain, positive-expectancy promote)
+        still bind — the Applier validates mechanically even for the user."""
+        with _MUTATION_LOCK:
+            bstore = _brain_store()
+            with bstore.lock():
+                h, log = bstore.load()
+                if not bstore.is_live():
+                    bstore.save(h, log)                       # materialize before snapshot
+                op = RefineOp(tool=body.tool, args=dict(body.args), rationale=body.rationale)
+                rec, reason = try_apply_op(MetaTools(h, log), h, op, allowed=ALL_TOOLS,
+                                           min_retire_samples=0, min_promote_samples=0,
+                                           provenance=EditProvenance(path="user_direct", proposer="user",
+                                                                     human_approver="user"))
+                if rec is None:
+                    return JSONResponse({"applied": False, "reason": reason}, status_code=422)
+                snap = bstore.snapshot(f"user-edit-{new_session_id()}")   # disk still pre-edit here
+                bstore.save(h, log)
+            return {"applied": True, "seq": rec.seq, "summary": rec.summary, "snapshot_before": snap}
 
     @app.get("/conflicts")
     def list_conflicts():
@@ -177,6 +249,59 @@ def create_app() -> FastAPI:
         q.resolve(cid)
         return {"resolved": cid, "decision": body.decision}
 
+    @app.get("/proposals")
+    def list_proposals():
+        # list view drops the heavy brain payloads; the delta records ARE the review surface
+        return [p.model_dump(exclude={"harness_dict", "log_dict"}) for p in _proposal_store().all()]
+
+    @app.post("/proposals/{pid}/resolve")
+    def resolve_proposal(pid: str, body: ProposalResolveIn):
+        """Adopt or discard an evolution packet. Adopt lands the fork wholesale IFF the live
+        brain still content-hashes to the packet's base (else 409 stale — re-run, never merge);
+        discard deletes the packet (the fork's evidence dies with its session, per charter)."""
+        with _MUTATION_LOCK:
+            q = _proposal_store()
+            prop = q.get(pid)
+            if prop is None:
+                return JSONResponse({"error": "not found"}, status_code=404)
+            if body.decision == "adopt":
+                ok, reason = adopt_proposal(_brain_store(), prop)   # takes the brain lock itself
+                if not ok:
+                    return JSONResponse({"adopted": False, "reason": reason}, status_code=409)
+                q.resolve(pid)
+                return {"resolved": pid, "decision": "adopt", "landed_records": len(prop.records)}
+            q.resolve(pid)
+            return {"resolved": pid, "decision": "discard"}
+
+    def _history_dir() -> Path:
+        return Path(os.environ.get("ALPHA_LIVE_BRAIN_DIR", "./state/brain")) / "history"
+
+    @app.get("/snapshots")
+    def list_snapshots():
+        hist = _history_dir()
+        if not hist.is_dir():
+            return []
+        return sorted((p.stem for p in hist.glob("*.json")), reverse=True)
+
+    @app.post("/snapshots/{name}/restore")
+    def restore_snapshot(name: str):
+        """The user's revert lever for ANY landing (incl. /edit user-direct edits, which have no
+        session message to roll back through). Restores a named history snapshot, then runs the
+        full derived-state reconcile sweep."""
+        with _MUTATION_LOCK:
+            hist = _history_dir()
+            p = (hist / f"{name}.json").resolve()
+            if not hist.is_dir() or not p.is_relative_to(hist.resolve()):
+                return JSONResponse({"error": "invalid snapshot name"}, status_code=400)
+            if not p.exists():
+                return JSONResponse({"error": "not found"}, status_code=404)
+            bstore = _brain_store()
+            with bstore.lock():
+                bstore.restore(str(p))
+                _, log = bstore.load()
+            _reconcile_all(len(log), _session_store())
+            return {"ok": True, "restored": name}
+
     @app.post("/sessions/{sid}/messages/{mid}/rollback")
     def rollback_message(sid: str, mid: str):
         with _MUTATION_LOCK:
@@ -188,6 +313,11 @@ def create_app() -> FastAPI:
             bstore = _brain_store()
             with bstore.lock():
                 bstore.restore(msg.snapshot_before)
+                _, log = bstore.load()
+            # Revert reconciles derived state (charter conformance 2026-07-09): any record
+            # asserting a now-reverted seq must stop asserting it — else /propose 409s forever
+            # on a rolled-back turn and workbench keeps dead 'approved+applied' rows.
+            _reconcile_all(len(log), sstore, current=sess)
             sess.notes.append(f"rolled back {mid}")
             sstore.put(sess)
             return {"ok": True}

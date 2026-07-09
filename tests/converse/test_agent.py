@@ -70,3 +70,10 @@ def test_converse_calls_decide_for_date_then_finalizes():
     assert res.final_text == "My read: RUN looks like a gap-and-go."
     assert [c["tool"] for c in res.tool_calls] == ["decide"]
     assert res.tool_calls[0]["result"].candidates[0].symbol == "RUN"   # DecisionPackage (frozen pydantic; attr access)
+
+
+def test_write_mode_none_registry_is_decide_only():
+    """The bare converse() helper uses write_mode="none": it persists nothing and has no approval
+    surface, so offering a stage tool would silently drop stagings at turn end."""
+    reg = build_converse_registry(_h(), _agent_llm(), _fake_source(), write_mode="none")
+    assert {s["name"] for s in reg.specs()} == {"decide"}

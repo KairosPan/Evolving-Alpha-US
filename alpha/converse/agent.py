@@ -7,22 +7,25 @@ from alpha.llm.config import make_client
 from alpha.data.registry import make_source
 from alpha.converse.registry import ToolRegistry
 from alpha.converse.loop import run_conversation, ConversationResult
-from alpha.converse.tools import make_decide_for_date_tool, make_gated_write_tool, make_propose_edit_tool
+from alpha.converse.tools import make_decide_for_date_tool, make_propose_edit_tool
 from alpha.agent.retrieval import select_for_prompt
 
 
 def build_converse_registry(harness: HarnessState, agent_llm, source,
-                            *, read_only: bool = False, write_mode: str = "apply",
+                            *, read_only: bool = False, write_mode: str = "stage",
                             conflict_queue=None, provenance=None) -> ToolRegistry:
+    """write_mode: "stage" (worker proposals staged for user approval) or "none". "apply" was
+    RETIRED 2026-07-09 (charter conformance: the worker never lands its own edit) — raise, never
+    silently downgrade. conflict_queue/provenance are accepted for signature stability but the
+    stage path defers gate enforcement (incl. conflicts + final provenance) to approve time."""
     reg = ToolRegistry()
     decide_schema, decide_fn = make_decide_for_date_tool(harness, agent_llm, source)
     reg.register("decide", decide_schema, decide_fn)
     mode = "none" if read_only else write_mode
     if mode == "apply":
-        write_schema, write_fn = make_gated_write_tool(
-            harness, conflict_queue=conflict_queue, provenance=provenance)
-        reg.register("propose_memory_edit", write_schema, write_fn)
-    elif mode == "stage":
+        raise ValueError("write_mode='apply' was retired (charter conformance 2026-07-09): "
+                         "the worker face may only stage edits for user approval")
+    if mode == "stage":
         write_schema, write_fn = make_propose_edit_tool(harness)
         reg.register("propose_memory_edit", write_schema, write_fn)
     return reg
@@ -86,7 +89,10 @@ def converse(harness: HarnessState, user_text: str, *, agent_llm=None, chat_llm=
     agent_llm = agent_llm if agent_llm is not None else make_client("agent")
     chat_llm = chat_llm if chat_llm is not None else make_client("converse")
     source = source if source is not None else make_source()
-    registry = build_converse_registry(harness, agent_llm, source)
+    # write_mode="none": this bare helper persists nothing and has no approval surface — a stage
+    # tool here would silently drop its stagings at turn end (stated, not silent: no tool at all).
+    # The persisted staging flow lives in converse_project (workbench).
+    registry = build_converse_registry(harness, agent_llm, source, write_mode="none")
     system = build_system_prompt(harness, registry, asof=asof)
     return run_conversation(registry, chat_llm, system, [ChatMessage(role="user", text=user_text)],
                             max_iters=max_iters)

@@ -5,7 +5,7 @@ so it is kept **terse and high-signal** — it states what you must know to edit
 safely, and links out for depth instead of duplicating. When the structure below stops matching
 reality, update this file (and bump the freshness marker).
 
-> **Freshness:** verified against `main` @ `a1a8acd`, 919 tests. `alpha` v0.0.1.
+> **Freshness:** verified against `feat/charter-conformance`, 950 tests. `alpha` v0.0.1.
 > Owner: KairosPan · last reviewed 2026-07-09.
 > If this drifts from the tree, trust the code and fix this file.
 
@@ -26,12 +26,19 @@ Two named entities (names from the sibling design repo `../Sonia-Kairos/`):
   `alpha/arena/`, served by `workbench/` (:8820). The trading decider (`alpha/agent/`) and the
   perception/eval spine are instruments the daily loop and Kairos drive.
 
-**Relationship to the design repo (honest divergence):** this codebase predates the charter's
-2026-07-06 pivot and diverges from it — here the self-study **Refiner/`forge` still self-edit H**
-(charter-Kairos never self-modifies; charter-Sonia is the sole agent proposer), and the worker
-face holds a T3 `propose_memory_edit` tool that in `write_mode="apply"` lands its own edit through
-the gate. This repo is the charter's *studied implementation / donor organ bank*, not its
-implementation. Don't "fix" the divergence casually — it is recorded, not accidental.
+**Relationship to the design repo:** live governance CONVERGED to the charter 2026-07-09
+(spec `docs/superpowers/specs/2026-07-09-charter-conformance-live-governance.md`): the worker
+face is **stage-only** (`write_mode="apply"` retired — raises), live self-study
+(`refine_live`/`evolve_from_episodes`) **forks + proposes packets** the user adopts/discards in
+Sonia (`/proposals`, hash-pinned staleness), rollback **reconciles derived state across BOTH
+faces**, and the user holds the charter's second hand (`sonia POST /edit`, `path="user_direct"`).
+**Named deviations that remain (recorded, deliberate):** the worker still *proposes* (charter-
+Kairos proposes nothing — needs a Sonia-side proposer over worker traces, out of scope);
+approvals ride unauthenticated localhost HTTP (single-operator posture; see ROADMAP SSRF item);
+`--autonomous` + `ALPHA_UNSAFE_AUTONOMOUS=1` restores pre-pivot in-place evolution (experiments
+only); the offline eval harness keeps full machine autonomy inside its trial forks (= the
+charter's trial semantics, not a violation). This repo remains the charter's *studied
+implementation / donor organ bank*.
 
 **It is a co-pilot. It never submits live orders at any phase. Every `DecisionPackage` requires
 explicit human confirmation. Not financial advice.** All eval is **gross** (no cost/slippage,
@@ -98,7 +105,7 @@ Everything is under `alpha/` unless noted. All packages are small (~60 lines/fil
 **Faces**
 | Package | Owns |
 |---|---|
-| `meta/` | The teaching (**Sonia**) side: `sonia_agent.py` (`SoniaAgent.respond`), `agent.py` (`MetaAgent.apply`), `extractor.py` (`extract_ops` — enforced-JSON crystallization, ops-or-`{no_edit,reason}`, never silent), `models.py`, `store.py` (`LiveBrainStore`+`SessionStore`), `conflict_store.py`, `prompts.py`, `ingest.py`. |
+| `meta/` | The teaching (**Sonia**) side: `sonia_agent.py` (`SoniaAgent.respond`), `agent.py` (`MetaAgent.apply`), `extractor.py` (`extract_ops` — enforced-JSON crystallization, ops-or-`{no_edit,reason}`, never silent), `evolution.py` (fork-and-propose: `run_forked_evolution`/`adopt_proposal` — hash-pinned packets) + `proposal_store.py` (`ProposalQueue`), `reconcile.py` (post-restore derived-state sweep, both faces), `models.py`, `store.py` (`LiveBrainStore`+`SessionStore`), `conflict_store.py`, `prompts.py`, `ingest.py`. |
 | `converse/` | The persisted conversational (**Kairos**) side: `session.py` (`converse_project`), `loop.py` (`run_conversation`), `agent.py`, `tools.py`, `approve.py` (`StagedEdit` + `assert_approvable` — the status gate on the live apply path), `registry.py` (`ToolRegistry`), `project.py`, `sqlite_store.py`, `workspace.py`. |
 | `arena/` | Kairos's live tool surface (the "activity space"): `contract.py` (`CapabilityTier` T0–T4), `policy.py` (`ActivityPolicy.dispatch` — the single tool choke point, fail-closed), `environment.py` (`InProcessEnv`/`LocalEnv` — advisory, not a kernel boundary), `tools.py`, `builder.py` (`build_arena` — decide/read/write/shell, **no order tool**), `experience.py` (observation-only task episodes). `converse` never imports `arena` (AST-guarded); the workbench injects it via `registry_factory`. |
 
@@ -137,7 +144,7 @@ These rules live in scattered comments; an agent breaks them by "tidying up". Th
 system's crown jewels.
 
 1. **PIT firewall.** No future leakage, ever. Corp actions key on **`announce_date`, never `ex_date`**. Prices are stored **raw/unadjusted**. Windowed features (RVOL, runner) use **trailing-only** bars. Episodes/lessons carry a `learned_asof` PIT key. Four firewall-surface regression tests pin this.
-2. **One write-waist.** *Every* brain mutation — LLM Refiner, deterministic `forge`, Sonia teaching, converse — flows through `refine/apply.py::try_apply_op` → `harness/metatools.py::MetaTools`, appending exactly one `EditRecord` to the append-only `EditLog`. Don't add a side channel that mutates `H` directly.
+2. **One write-waist.** *Every* brain mutation — LLM Refiner, deterministic `forge`, Sonia teaching, converse, the user's direct hand — flows through `refine/apply.py::try_apply_op` → `harness/metatools.py::MetaTools`, appending exactly one `EditRecord` to the append-only `EditLog`. The one sanctioned composite: `meta/evolution.py::adopt_proposal` lands a fork packet wholesale, but every edit in it passed the gate on a base the content-hash staleness check proves byte-identical to the live brain. Don't add a side channel that mutates `H` directly.
 3. **Immutable doctrine core.** Red-line `DoctrineEntry`s reject mutation via `__setattr__`. The edit path enforces this. Don't bypass it.
 4. **Read vs write episode handle (verdict symmetry).** In `compare_harnesses`, HCH gets a **read-only `recall_store`**, NEVER the `episode_store=` write handle — so it can't self-write mid-verdict and both arms read the same fixed pool symmetrically. This decoupling is deliberate; don't "unify" them.
 5. **Decorator stacking order.** Policies compose as `SizingPolicy(GuardedPolicy(LLMAgentPolicy))` — L4 guard inner (drops vetoed names), L3 sizing outer (sizes the survivors). Order matters.
@@ -154,7 +161,7 @@ it reintroduces an import-time crash that no test names.
 
 ```bash
 pip install -e ".[dev]"          # base deps; add extras as needed: [live] [web] [sonia]
-python -m pytest -q              # full suite — fully OFFLINE (FakeSource), 919 tests, no network/keys
+python -m pytest -q              # full suite — fully OFFLINE (FakeSource), 950 tests, no network/keys
 
 # the four PIT firewall-surface acceptance tests:
 python -m pytest tests/data/test_source.py::test_guarded_source_blocks_future_snapshot \

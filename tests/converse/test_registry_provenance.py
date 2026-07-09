@@ -1,25 +1,27 @@
+"""Charter conformance (2026-07-09): the worker face is stage-only. write_mode="apply" (the
+agent landing its own edit live) is retired — it must raise, never silently downgrade — and the
+default mode stages proposals for the user's approval."""
+import pytest
+
 import alpha.converse.agent as agent_mod
 from alpha.harness.loader import load_seeds
 
 
-def test_apply_mode_threads_conflict_queue_and_provenance(monkeypatch):
-    captured = {}
-    def fake_make_gated(harness, **kw):
-        captured.update(kw)
-        return {"name": "propose_memory_edit"}, (lambda **a: {"status": "applied"})
-    monkeypatch.setattr(agent_mod, "make_gated_write_tool", fake_make_gated)
-    h = load_seeds("seeds")
-    q, p = object(), object()
-    agent_mod.build_converse_registry(h, None, None, write_mode="apply", conflict_queue=q, provenance=p)
-    assert captured.get("conflict_queue") is q
-    assert captured.get("provenance") is p
+def test_apply_mode_is_retired_and_raises():
+    with pytest.raises(ValueError, match="retired"):
+        agent_mod.build_converse_registry(load_seeds("seeds"), None, None, write_mode="apply")
 
 
-def test_apply_mode_defaults_are_none(monkeypatch):
-    captured = {}
-    def fake_make_gated(harness, **kw):
-        captured.update(kw)
-        return {"name": "propose_memory_edit"}, (lambda **a: {})
-    monkeypatch.setattr(agent_mod, "make_gated_write_tool", fake_make_gated)
-    agent_mod.build_converse_registry(load_seeds("seeds"), None, None, write_mode="apply")
-    assert captured.get("conflict_queue") is None and captured.get("provenance") is None
+def test_default_mode_is_stage_and_registers_propose_tool():
+    reg = agent_mod.build_converse_registry(load_seeds("seeds"), None, None)
+    assert {s["name"] for s in reg.specs()} == {"decide", "propose_memory_edit"}
+    # the staged tool never touches the live harness: its result is a staged preview, not "applied"
+    out = reg.call("propose_memory_edit", tool="process_memory",
+                   args={"lesson_id": "prov-1", "phases": ["trend"], "outcome": "win", "lesson": "x"},
+                   rationale="stage default")
+    assert out.get("staged") is True and "status" not in out
+
+
+def test_read_only_drops_propose_tool():
+    reg = agent_mod.build_converse_registry(load_seeds("seeds"), None, None, read_only=True)
+    assert {s["name"] for s in reg.specs()} == {"decide"}

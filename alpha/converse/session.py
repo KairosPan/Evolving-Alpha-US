@@ -27,7 +27,7 @@ def converse_project(
     source,
     workspace: Workspace | None = None,
     max_iters: int = 8,
-    write_mode: str = "apply",
+    write_mode: str = "stage",
     registry_factory=None,
     experience_writer=None,
 ) -> Project:

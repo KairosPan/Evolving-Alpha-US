@@ -227,7 +227,7 @@ def test_trading_skill_rejected_all_valid_proposers():
     """BONUS: task-evidenced op targeting domain='trading' → rejected for ALL valid proposers.
     The gate is the sole enforcement point; no proposer field value can bypass the separation wall."""
     sk = _skill("tr_i", domain="trading", n=10, expectancy=0.5)
-    for proposer in ("refiner", "forge", "sonia", "hermes"):
+    for proposer in ("refiner", "forge", "sonia", "hermes", "kairos", "user"):
         h2 = _h([sk]); log2 = EditLog(); meta2 = MetaTools(h2, log2)
         rec, reason = try_apply_op(meta2, h2, _op("promote_skill", "tr_i"), allowed=PASS_TOOLS["K"],
                                    min_retire_samples=5, min_promote_samples=3,

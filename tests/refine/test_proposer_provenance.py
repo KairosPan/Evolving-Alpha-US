@@ -52,42 +52,39 @@ def test_refiner_applied_edit_has_self_study_provenance():
 
 
 # ---------------------------------------------------------------------------
-# Converse write-tool proposer — expects path="teaching", proposer="hermes"
-#
-# make_gated_write_tool creates a fresh EditLog per call, so we can't inspect it
-# from outside. Instead we patch it to use a shared log, then assert provenance.
+# Converse write-tool proposer — expects path="teaching", proposer="kairos"
+# (charter conformance 2026-07-09: the live-landing tool was retired; the stage
+# tool dry-runs on a scratch copy, stamping the worker's own name)
 # ---------------------------------------------------------------------------
 
-def test_converse_write_tool_applied_edit_has_hermes_provenance():
-    """After propose_memory_edit, the record in the shared log must carry teaching/hermes."""
+def test_converse_stage_tool_dry_run_has_kairos_provenance():
+    """The staged dry-run must thread teaching/kairos provenance through the gate."""
     import alpha.converse.tools as _ct
     from alpha.refine.apply import try_apply_op as _real_tap
 
     h = _bare_h()
-    shared_log = EditLog()
     calls: list[dict] = []
 
     # Intercept try_apply_op to capture the provenance kwarg actually passed
     def _spy_tap(meta, harness, op, **kw):
         calls.append({"provenance": kw.get("provenance")})
-        # Use a MetaTools backed by the shared log so we can inspect it
-        meta2 = MetaTools(harness, shared_log)
-        return _real_tap(meta2, harness, op, **kw)
+        return _real_tap(meta, harness, op, **kw)
 
     original = _ct.try_apply_op
     _ct.try_apply_op = _spy_tap
     try:
-        _schema, propose = _ct.make_gated_write_tool(h)
+        _schema, propose = _ct.make_propose_edit_tool(h)
         out = propose(tool="process_memory",
                       args={"lesson_id": "h-mem-1", "phases": ["trend"],
-                            "outcome": "win", "lesson": "hermes taught this"},
+                            "outcome": "win", "lesson": "kairos staged this"},
                       rationale="teaching provenance test")
     finally:
         _ct.try_apply_op = original
 
-    assert out["status"] == "applied", f"expected applied; got: {out}"
+    assert out["staged"] is True and out["valid"] is True, f"expected valid staging; got: {out}"
     assert len(calls) == 1, "spy not called"
     prov = calls[0]["provenance"]
-    assert prov is not None, "provenance was None — implement it in make_gated_write_tool"
+    assert prov is not None, "provenance was None"
     assert prov.path == "teaching"
-    assert prov.proposer == "hermes"
+    assert prov.proposer == "kairos"
+    assert not any(l.lesson_id == "h-mem-1" for l in h.memory.all()), "live H must be untouched"

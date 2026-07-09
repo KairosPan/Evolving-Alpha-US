@@ -174,12 +174,9 @@ only via an explicit **"Propose an edit"** control that calls `LLMClient.complet
 forced to return `{"ops":[…]}` or `{"no_edit":true,"reason":…}` (never silent) → the existing
 `preview_op`→accept→apply write-waist (untouched). Plus an inline "no edit proposed: …" note and a "seeds ·
 no live edits yet" brain-mirror badge. Specs: `docs/superpowers/specs/2026-07-01-teach-crystallize-design.md`,
-plan `docs/superpowers/plans/2026-07-09-teach-crystallize.md`. **Follow-up (deferred, from the final review):**
-
-- [ ] **`/rollback` should clear `msg.applied_seqs`** so a rolled-back teaching turn can be re-proposed.
-  Today rollback reverts the brain snapshot but leaves `applied_seqs` set, so `/propose` returns 409 and the
-  drawer keeps the "Propose an edit" button hidden — the turn stays "done." UX-only (no correctness impact,
-  no live dead-end). Pairs with the spec §10 apply-atomicity / re-preview deferrals.
+plan `docs/superpowers/plans/2026-07-09-teach-crystallize.md`. The `/rollback`-clears-`applied_seqs`
+follow-up SHIPPED 2026-07-09 as part of the charter-conformance arc (revert now reconciles ALL
+derived state across BOTH faces — see `docs/superpowers/specs/2026-07-09-charter-conformance-live-governance.md` D7).
 
 **Broader meta-agent follow-ups (also in spec §11):**
 
@@ -218,11 +215,9 @@ documented in CLAUDE.md §1. Remaining steps:
   then sync the two NON-frozen design-repo pointers (`Backend-Design-SoniaKairos.md:5` donor path,
   `Sonia-Kairos/CLAUDE.md` terminology-traps line) with an "(ex evolving-alpha-us)" gloss. Local
   folder rename optional, same step.
-- [ ] **EditProvenance vocabulary migration** — extend `proposer` Literal `'hermes'`→ add
-  `'kairos'` + `'user'` (`alpha/harness/edit_log.py:12`); stamp new worker-face edits
-  `proposer="kairos"` (keep reading `'hermes'` — persisted brains carry it); populate the
-  existing-but-never-set `human_approver` at the two approve routes (sonia apply + workbench
-  approve) — the cheap code-side half of the charter's 2026-07-08 user-direct-edit second trigger.
+- [x] ~~EditProvenance vocabulary migration~~ — SHIPPED 2026-07-09 inside the charter-conformance
+  arc (proposer += `kairos`/`user`, path += `user_direct`, `human_approver` populated at every
+  human-approved landing; `'hermes'` kept read-compat).
 - [ ] **CLAUDE.md spec compliance round** (per `../design-requirements-for-claude-md.md` R2/R4/R8):
   subdirectory CLAUDE.md files for `alpha_web/` (HTMX gotchas incl. 204+HX-Redirect), `sonia/` +
   `workbench/` (service env incantations), `alpha/arena/` (tier semantics); committed

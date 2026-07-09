@@ -22,10 +22,13 @@ class HarnessState:
         return [s for s in self.skills.by_phase(phase) if s.status == "active"]
 
     def to_dict(self) -> dict:
+        # mode="json": date fields (e.g. Lesson.learned_asof) must serialize as ISO strings —
+        # every consumer (LiveBrainStore/SnapshotStore/proposal packets) json.dumps this dict,
+        # and python-mode datetime.date objects crash it. from_dict re-validates strings back.
         return {
-            "skills": [s.model_dump() for s in self.skills.all()],
-            "memory": [l.model_dump() for l in self.memory.all()],
-            "doctrine": self.doctrine.model_dump(),
+            "skills": [s.model_dump(mode="json") for s in self.skills.all()],
+            "memory": [l.model_dump(mode="json") for l in self.memory.all()],
+            "doctrine": self.doctrine.model_dump(mode="json"),
         }
 
     @classmethod

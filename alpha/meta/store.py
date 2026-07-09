@@ -126,6 +126,10 @@ class SessionStore:
     def list(self) -> list[Session]:
         if not self._root.is_dir():
             return []
-        out = [Session.model_validate_json(p.read_text(encoding="utf-8"))
-               for p in self._root.glob("*.json")]
-        return sorted(out, key=lambda s: s.session_id, reverse=True)
+        out: list[Session] = []
+        for p in self._root.glob("*.json"):
+            try:                                    # one torn/foreign file must not kill the
+                out.append(Session.model_validate_json(p.read_text(encoding="utf-8")))
+            except Exception:                       # listing (the post-rollback reconcile sweep
+                continue                            # relies on list() completing; ConflictQueue
+        return sorted(out, key=lambda s: s.session_id, reverse=True)   # .all() sets the pattern)

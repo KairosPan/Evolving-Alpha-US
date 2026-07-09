@@ -15,6 +15,8 @@ from alpha.harness.edit_log import EditProvenance
 from alpha.refine.apply import try_apply_op, ALL_TOOLS
 from alpha.refine.ops import RefineOp, PASS_TOOLS
 from alpha.converse.approve import assert_approvable, StagedEditNotApproved
+from alpha.meta.reconcile import reconcile_session, reconcile_staged_edits
+from alpha.meta.store import SessionStore
 from alpha.arena.builder import build_arena
 from alpha.arena.environment import LocalEnv
 
@@ -147,7 +149,8 @@ def create_app() -> FastAPI:
                 op = RefineOp(tool=se.op["tool"], args=dict(se.op["args"]), rationale=se.op.get("rationale", ""))
                 rec, reason = try_apply_op(MetaTools(h, log), h, op, allowed=PASS_TOOLS["M"],
                                            min_retire_samples=5, min_promote_samples=3,
-                                           provenance=EditProvenance(path="teaching", proposer="hermes"))
+                                           provenance=EditProvenance(path="teaching", proposer="kairos",
+                                                                     human_approver="user"))
                 if rec is not None:
                     bstore.save(h, log)
                     se.applied_seq, se.snapshot_before, se.reason = rec.seq, snap, None
@@ -170,12 +173,30 @@ def create_app() -> FastAPI:
     def rollback():
         with _MUTATION_LOCK:
             pstore = _project_store(); proj = pstore.get(DEFAULT_PROJECT_ID)
-            snaps = [e.snapshot_before for e in (proj.staged_edits if proj else []) if e.snapshot_before]
-            if not snaps:
-                return JSONResponse({"error": "nothing to roll back"}, status_code=404)
+            edits = proj.staged_edits if proj else []
+            # roll back the LAST APPLY (highest applied_seq), not the last-staged edit — staging
+            # order and approval order can differ, and the wrong pick reverts a wider window.
+            applied = [e for e in edits if e.applied_seq is not None and e.snapshot_before]
+            if applied:
+                target = max(applied, key=lambda e: e.applied_seq).snapshot_before
+            else:
+                snaps = [e.snapshot_before for e in edits if e.snapshot_before]
+                if not snaps:
+                    return JSONResponse({"error": "nothing to roll back"}, status_code=404)
+                target = snaps[-1]
             bstore = _brain_store()
             with bstore.lock():
-                bstore.restore(snaps[-1])
+                bstore.restore(target)
+                _, log = bstore.load()
+            # Revert reconciles derived state (charter conformance 2026-07-09): sweep BOTH derived
+            # stores — the staged edits here AND the sonia teaching sessions (one shared brain).
+            live_len = len(log)
+            reconcile_staged_edits(proj.staged_edits, live_len)
+            pstore.put(proj)
+            sstore = SessionStore(os.environ.get("ALPHA_SESSIONS_DIR", "./state/sessions"))
+            for s in sstore.list():
+                if reconcile_session(s, live_len):
+                    sstore.put(s)
             return {"ok": True}
 
     return app

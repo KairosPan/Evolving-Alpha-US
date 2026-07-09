@@ -118,24 +118,10 @@ _REFINER_SCRIPT = (
 )
 
 
-def test_refine_live_feeds_conflicts_and_persists(tmp_path):
-    brain_dir = tmp_path / "brain"
-    conflicts_dir = tmp_path / "conflicts"
-
-    lid = _seed_teaching_brain(brain_dir)
-    seed_edit_count = LiveBrainStore(str(brain_dir)).edit_count()
-    assert seed_edit_count == 1, f"expected 1 seed edit, got {seed_edit_count}"
-
-    refine_live = importlib.import_module("scripts.refine_live")
-
-    src = _source()  # n=8: 6 scored steps (horizon=2), satisfying evidence_min=6
+def _run(refine_live, src, brain_dir, conflicts_dir, tmp_path, **kw):
     cal = src.trading_calendar()
-    start, end = cal[0], cal[-1]
-
-    out = refine_live.run_refine_live(
-        src,
-        start,
-        end,
+    return refine_live.run_refine_live(
+        src, cal[0], cal[-1],
         brain_dir=str(brain_dir),
         conflicts_dir=str(conflicts_dir),
         agent_llm_factory=lambda: MockLLMClient("{}"),
@@ -145,16 +131,67 @@ def test_refine_live_feeds_conflicts_and_persists(tmp_path):
         # screen=False: FakeSource doesn't pass the GuardedPolicy screen (no real corp/halt/SSR data).
         # size=False: avoids SizingPolicy overhead in offline test.
         loop_config=LoopConfig(horizon=2, screen=False, size=False),
+        proposals_root=str(tmp_path / "proposals"),
+        **kw,
     )
 
-    # --- assertion 1: contesting op was HELD ---
+
+def test_refine_live_propose_default_packages_without_touching_brain(tmp_path):
+    """Charter conformance (2026-07-09): the default mode forks — held conflicts still queue
+    (they contest LIVE teaching-owned elements), the live brain is byte-untouched, and the
+    surviving edit ships as an adoptable proposal packet."""
+    from alpha.meta.evolution import adopt_proposal
+    from alpha.meta.proposal_store import ProposalQueue
+
+    brain_dir = tmp_path / "brain"
+    conflicts_dir = tmp_path / "conflicts"
+
+    lid = _seed_teaching_brain(brain_dir)
+    seed_edit_count = LiveBrainStore(str(brain_dir)).edit_count()
+    assert seed_edit_count == 1
+
+    refine_live = importlib.import_module("scripts.refine_live")
+    out = _run(refine_live, _source(), brain_dir, conflicts_dir, tmp_path)
+
+    # --- 1: contesting op was HELD (adjudication signal about the LIVE brain, survives the fork)
     held = ConflictQueue(str(conflicts_dir)).all()
-    assert any(
-        c.op.get("args", {}).get("lesson_id") == lid for c in held
-    ), f"Expected a held conflict for lesson_id={lid!r}, got: {held}"
+    assert any(c.op.get("args", {}).get("lesson_id") == lid for c in held)
 
-    # --- assertion 2: non-conflicting edit (m_new) persisted to the live brain ---
-    final_edit_count = LiveBrainStore(str(brain_dir)).edit_count()
-    assert final_edit_count > seed_edit_count, (
-        f"Expected live brain edit_count to rise above {seed_edit_count}, got {final_edit_count}"
-    )
+    # --- 2: the live brain is UNTOUCHED (the worker/machine never lands its own edit)
+    assert LiveBrainStore(str(brain_dir)).edit_count() == seed_edit_count
+
+    # --- 3: the surviving edit (m_new) rode the proposal packet
+    assert out["mode"] == "propose" and out["proposal_id"] is not None
+    q = ProposalQueue(str(tmp_path / "proposals"))
+    prop = q.get(out["proposal_id"])
+    assert prop is not None and prop.kind == "refine"
+    assert any(r.get("target_id") == "m_new" for r in prop.records)
+
+    # --- 4: USER adoption lands it, stamped with the human approver
+    ok, reason = adopt_proposal(LiveBrainStore(str(brain_dir)), prop)
+    assert ok, reason
+    h, log = LiveBrainStore(str(brain_dir)).load()
+    assert h.memory.get("m_new") is not None
+    landed = [r for r in log.records() if r.target_id == "m_new"]
+    assert landed and landed[-1].provenance.human_approver == "user"
+    assert landed[-1].provenance.path == "self_study"          # true principal preserved
+
+
+def test_refine_live_autonomous_requires_unsafe_env(tmp_path, monkeypatch):
+    """The pre-pivot in-place mode is a recorded non-conformance: without the explicit env it
+    refuses; with it, edits land on the live brain (the old behavior, experiments only)."""
+    import pytest
+
+    brain_dir = tmp_path / "brain"
+    conflicts_dir = tmp_path / "conflicts"
+    _seed_teaching_brain(brain_dir)
+    refine_live = importlib.import_module("scripts.refine_live")
+
+    monkeypatch.delenv("ALPHA_UNSAFE_AUTONOMOUS", raising=False)
+    with pytest.raises(RuntimeError, match="ALPHA_UNSAFE_AUTONOMOUS"):
+        _run(refine_live, _source(), brain_dir, conflicts_dir, tmp_path, mode="autonomous")
+
+    monkeypatch.setenv("ALPHA_UNSAFE_AUTONOMOUS", "1")
+    out = _run(refine_live, _source(), brain_dir, conflicts_dir, tmp_path, mode="autonomous")
+    assert out["mode"] == "autonomous"
+    assert LiveBrainStore(str(brain_dir)).edit_count() > 1     # landed in place (m_new)

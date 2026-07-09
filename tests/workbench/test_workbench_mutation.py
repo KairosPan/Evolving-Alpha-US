@@ -57,3 +57,32 @@ def test_rollback_after_approve(tmp_path, monkeypatch):
     assert c.get("/healthz").json()["edit_count"] == 1
     assert c.post("/rollback").json()["ok"] is True
     assert c.get("/healthz").json()["edit_count"] == 0            # restored to the pre-approve snapshot
+
+
+def test_approve_stamps_kairos_and_human_approver(tmp_path, monkeypatch):
+    """Charter conformance 2026-07-09: the landed record names the true principals — the worker
+    (kairos) proposed, the user approved."""
+    c = _client(tmp_path, monkeypatch)
+    eid = _stage_one(c); c.post(f"/edits/{eid}/approve")
+    from alpha.meta.store import LiveBrainStore
+    _, log = LiveBrainStore(str(tmp_path / "brain")).load()
+    rec = log.records()[-1]
+    assert rec.provenance.path == "teaching"
+    assert rec.provenance.proposer == "kairos"
+    assert rec.provenance.human_approver == "user"
+
+
+def test_rollback_reconciles_staged_edit_state(tmp_path, monkeypatch):
+    """Revert reconciles derived state: the reverted staged edit stops asserting it was applied
+    (back to pending, re-approvable) instead of remaining a dead 'approved+applied_seq' record."""
+    c = _client(tmp_path, monkeypatch)
+    eid = _stage_one(c); c.post(f"/edits/{eid}/approve")
+    assert c.post("/rollback").json()["ok"] is True
+
+    se = c.get("/project").json()["staged_edits"][0]
+    assert se["status"] == "pending" and se["applied_seq"] is None
+    assert se["reason"] == "rolled back" and se["snapshot_before"] == ""
+
+    r = c.post(f"/edits/{eid}/approve")                    # recoverable: re-approve re-lands it
+    assert r.status_code == 200 and r.json()["status"] == "approved"
+    assert c.get("/healthz").json()["edit_count"] == 1
