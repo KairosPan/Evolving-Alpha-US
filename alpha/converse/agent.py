@@ -59,7 +59,7 @@ def _render_tool_spec(spec: dict) -> str:
 def build_system_prompt(harness: HarnessState, registry: ToolRegistry, *,
                         asof: date | datetime | None = None) -> str:
     lines = [
-        "You are evolving-alpha's conversational face. You share one brain (H) with the deterministic "
+        "You are Kairos, this system's conversational face. You share one brain (H) with the deterministic "
         "decider. You may use tools.",
         "",
         "TOOLS:",

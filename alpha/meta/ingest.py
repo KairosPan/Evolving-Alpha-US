@@ -61,7 +61,7 @@ class _TextExtractor(HTMLParser):
 
 
 def _urllib_fetcher(url: str) -> str:
-    req = Request(url, headers={"User-Agent": "evolving-alpha-cockpit/1.0"})
+    req = Request(url, headers={"User-Agent": "sonia-kairos-cockpit/1.0"})
     with urlopen(req, timeout=15) as resp:           # noqa: S310 (operator-supplied URL, localhost tool)
         charset = resp.headers.get_content_charset() or "utf-8"
         return resp.read().decode(charset, errors="replace")

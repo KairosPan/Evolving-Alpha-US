@@ -200,7 +200,7 @@ def _evolution_context() -> dict:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Evolving-Alpha-US · Regime Instrument")
+    app = FastAPI(title="Sonia-Kairos-US-Stock · Regime Instrument")
     app.mount("/static", StaticFiles(directory=str(da.STATIC_DIR)), name="static")
     templates = _make_templates()
 

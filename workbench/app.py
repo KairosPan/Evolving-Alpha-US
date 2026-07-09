@@ -83,7 +83,7 @@ def _project_view(proj) -> dict:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Workbench · evolving-alpha conversational face")
+    app = FastAPI(title="Workbench · Kairos conversational face")
 
     @app.get("/healthz")
     def healthz():

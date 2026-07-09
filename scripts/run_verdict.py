@@ -192,7 +192,7 @@ def main() -> None:
     source = SnapshotSource(PITStore(Path(args.pit_root)))
     screen = not args.no_screen
     temp = os.environ.get("ALPHA_LLM_TEMPERATURE", "0")
-    print("=== Evolving-Alpha-US verdict run ===")
+    print("=== Sonia-Kairos-US-Stock verdict run ===")
     print(f"window: {args.start} .. {args.end}   horizon={args.horizon}  windows={args.windows}  "
           f"screen={screen}  shadow={args.shadow}")
     for role in ("agent", "refiner"):

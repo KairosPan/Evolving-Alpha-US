@@ -1,4 +1,9 @@
-# Evolving-Alpha-US — Project State
+# Sonia-Kairos-US-Stock — Project State
+
+*(formerly Evolving-Alpha-US; project renamed 2026-07-09 — two named entities: **Sonia** the
+teacher (`alpha/meta/` + `sonia/`), **Kairos** the worker (`converse/` + `arena/` + `workbench/`).
+Doc/UI rebrand shipped 2026-07-09; import package stays `alpha`, env prefix stays `ALPHA_*`;
+GitHub repo rename pending — see `ROADMAP.md` §7 Naming.)*
 
 > **One-page compressed context for session restart.** This file is the append-only record of **what's
 > built**; the forward-looking backlog of **what's left** lives in **`ROADMAP.md`** (repo root).
@@ -17,7 +22,8 @@ fill-feasibility). A human confirms. **No automatic live orders. No financial ad
 straight copy of the CN system. It is a greenfield rebuild — clean US-native data model,
 all-English code and docs.
 
-**Repo:** `KairosPan/Evolving-Alpha-US`, public, clean-slate git history. Branch `us-0-foundations`.
+**Repo:** `KairosPan/Evolving-Alpha-US` (GitHub rename to `Sonia-Kairos-US-Stock` pending, see
+`ROADMAP.md` §7), public, clean-slate git history. Branch `main`.
 
 ---
 

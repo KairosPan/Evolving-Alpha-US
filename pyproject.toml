@@ -1,7 +1,7 @@
 [project]
 name = "alpha"
 version = "0.0.1"
-description = "Evolving-Alpha-US — self-evolving US-equities momentum co-pilot (US-0 foundations)"
+description = "Sonia-Kairos-US-Stock — self-evolving US-equities momentum co-pilot (Sonia teaches, Kairos acts; no live orders)"
 requires-python = ">=3.11"
 dependencies = [
     "pandas>=2.0",
@@ -20,7 +20,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["alpha*", "alpha_web*", "sonia*"]
+include = ["alpha*", "alpha_web*", "sonia*", "workbench*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

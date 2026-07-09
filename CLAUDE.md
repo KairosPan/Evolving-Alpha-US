@@ -5,17 +5,33 @@ so it is kept **terse and high-signal** — it states what you must know to edit
 safely, and links out for depth instead of duplicating. When the structure below stops matching
 reality, update this file (and bump the freshness marker).
 
-> **Freshness:** verified against `main` @ `dce2a0a`, 704 tests. `alpha` v0.0.1.
+> **Freshness:** verified against `main` @ `a1a8acd`, 919 tests. `alpha` v0.0.1.
+> Owner: KairosPan · last reviewed 2026-07-09.
 > If this drifts from the tree, trust the code and fix this file.
 
 ---
 
 ## 1. Identity
 
-A **self-evolving US speculative-momentum decision-support co-pilot**, built on the Continual
-Harness `H=(p,G,K,M)` two-loop architecture (paper 2605.09998). Each day it screens the market,
-reads the regime, runs an LLM agent to produce a ranked `DecisionPackage`, and a Refiner edits the
-harness's own playbook (`p`/`K`/`M`) overnight via meta-tool CRUD.
+**Sonia-Kairos-US-Stock** (renamed 2026-07-09; formerly *Evolving-Alpha-US*) — a **self-evolving
+US speculative-momentum decision-support co-pilot**, built on the Continual Harness `H=(p,G,K,M)`
+two-loop architecture (paper 2605.09998). Each day it screens the market, reads the regime, runs
+an LLM agent to produce a ranked `DecisionPackage`, and a Refiner edits the harness's own playbook
+(`p`/`K`/`M`) overnight via meta-tool CRUD.
+
+Two named entities (names from the sibling design repo `../Sonia-Kairos/`):
+- **Sonia** — the teacher/meta-agent: `alpha/meta/` + the `sonia/` service (:8810). Prose chat;
+  edits crystallize only via explicit `extract_ops` and land through the gate after user accept.
+- **Kairos** — the worker: the conversational face `alpha/converse/` + its tool surface
+  `alpha/arena/`, served by `workbench/` (:8820). The trading decider (`alpha/agent/`) and the
+  perception/eval spine are instruments the daily loop and Kairos drive.
+
+**Relationship to the design repo (honest divergence):** this codebase predates the charter's
+2026-07-06 pivot and diverges from it — here the self-study **Refiner/`forge` still self-edit H**
+(charter-Kairos never self-modifies; charter-Sonia is the sole agent proposer), and the worker
+face holds a T3 `propose_memory_edit` tool that in `write_mode="apply"` lands its own edit through
+the gate. This repo is the charter's *studied implementation / donor organ bank*, not its
+implementation. Don't "fix" the divergence casually — it is recorded, not accidental.
 
 **It is a co-pilot. It never submits live orders at any phase. Every `DecisionPackage` requires
 explicit human confirmation. Not financial advice.** All eval is **gross** (no cost/slippage,
@@ -35,7 +51,7 @@ data → universe → features → state → regime      (L0/L1 perception: PIT-
         eval / sizing / guard                      (L3/L4: score + size + veto the decision)
             refine                                 (inner loop: reads eval evidence, edits H via MetaTools)
             loop                                    (orchestrates agent+eval+refine over time)
-        meta / converse                            (teaching "Sonia" + conversational faces over H)
+        meta / converse / arena                    (Sonia teaching + Kairos face + its tool surface over H)
             apps                                    (alpha_web / sonia / workbench / scripts)
 ```
 
@@ -61,7 +77,7 @@ Everything is under `alpha/` unless noted. All packages are small (~60 lines/fil
 **The harness (the evolving playbook)**
 | Package | Owns |
 |---|---|
-| `harness/` | `H=(p,G,K,M)`: `doctrine.py` (`p`, immutable red-lines), `skill.py`+`registry.py` (`K`), `memory.py` (`M`, lessons w/ `learned_asof`), `state.py` (`HarnessState`), `metatools.py` (**the edit API**), `edit_log.py` (append-only audit), `snapshot.py`+`manager.py` (checkpoint/rollback), `loader.py` (`load_seeds`), `regime.py` (**phase/family vocabulary** — `CANONICAL_PHASES`). |
+| `harness/` | `H=(p,G,K,M)`: `doctrine.py` (`p`, immutable red-lines), `skill.py`+`registry.py` (`K`), `memory.py` (`M`, lessons w/ `learned_asof`), `state.py` (`HarnessState`), `metatools.py` (**the edit API**), `edit_log.py` (append-only audit), `snapshot.py`+`manager.py` (checkpoint/rollback), `loader.py` (`load_seeds`), `errors.py`, `regime.py` (**phase/family vocabulary** — `CANONICAL_PHASES`). |
 
 **Act + score (L2/L3/L4)**
 | Package | Owns |
@@ -69,28 +85,29 @@ Everything is under `alpha/` unless noted. All packages are small (~60 lines/fil
 | `agent/` | `agent.py` (`LLMAgentPolicy.decide` — the act entry), `prompt.py` (render H→prompt), `parse.py` (hallucination defense), `retrieval.py` (budgeted PIT-masked injection). |
 | `llm/` | `client.py`/`chat.py` (Protocols + `MockLLMClient`), `config.py` (`make_client(role)`), `anthropic.py`/`openai_compat.py`, `extract.py`. |
 | `memory/` | Episodic memory: `episodes.py` (`Episode`, `learned_asof`), `store.py` (`EpisodeStore`, SQLite+FTS5, PIT `for_asof`), `aggregate.py` (`is_episode_taboo`). |
-| `eval/` | The schema + engine hub. `decision.py` (`Candidate`/`Portfolio`/`DecisionPackage` + `DecisionPolicy` Protocol — **the core data contract**), `walk_forward.py` (engine + `score_decision`), `oracle.py`/`return_oracle.py`/`scorer.py`/`metrics.py`/`trajectory.py`/`contribution.py`/`stats.py`, `decision_store.py`/`verdict_store.py`. |
+| `eval/` | The schema + engine hub. `decision.py` (`Candidate`/`Portfolio`/`DecisionPackage` + `DecisionPolicy` Protocol — **the core data contract**), `walk_forward.py` (engine + `score_decision`), `oracle.py`/`return_oracle.py`/`scorer.py`/`metrics.py`/`trajectory.py`/`contribution.py`/`stats.py`/`baselines.py`, `decision_store.py`/`verdict_store.py`. |
 | `sizing/` | L3: `position.py` (`SizeTier`/`size_tier`), `correlation.py`, `portfolio.py`, `policy.py` (`SizingPolicy` decorator). |
 | `guard/` | L4: `veto.py` (pure hard-veto rules), `screen.py` (`GuardedPolicy` decorator + data-flag wiring), `stops.py`, `breaker.py`. |
 
 **Self-evolution**
 | Package | Owns |
 |---|---|
-| `refine/` | `apply.py` (`try_apply_op` — **the single edit gate**), `ops.py`, `refiner.py` (4-pass LLM Refiner), `credit.py`, `signatures.py`, `forge.py` (LLM-free proposer), `conflict.py`. |
+| `refine/` | `apply.py` (`try_apply_op` — **the single edit gate**), `ops.py`, `refiner.py` (4-pass LLM Refiner) + `refiner_prompt.py`, `credit.py`, `signatures.py`, `forge.py` (LLM-free proposer) + `task_forge.py` (operational-K proposer), `conflict.py`. |
 | `loop/` | `inner_loop.py` (`InnerLoop` — the live self-evolution driver), `compare.py` (`compare_harnesses` verdict harness), `floor_breaker.py` (pure breaker math). |
 
 **Faces**
 | Package | Owns |
 |---|---|
-| `meta/` | The teaching ("Sonia") side: `sonia_agent.py` (`SoniaAgent.respond`), `agent.py` (`MetaAgent.apply`), `models.py`, `store.py` (`LiveBrainStore`+`SessionStore`), `conflict_store.py`, `prompts.py`, `ingest.py`. |
-| `converse/` | The persisted conversational side: `session.py` (`converse_project`), `loop.py` (`run_conversation`), `agent.py`, `tools.py`, `registry.py` (`ToolRegistry`), `project.py`, `sqlite_store.py`, `workspace.py`. |
+| `meta/` | The teaching (**Sonia**) side: `sonia_agent.py` (`SoniaAgent.respond`), `agent.py` (`MetaAgent.apply`), `extractor.py` (`extract_ops` — enforced-JSON crystallization, ops-or-`{no_edit,reason}`, never silent), `models.py`, `store.py` (`LiveBrainStore`+`SessionStore`), `conflict_store.py`, `prompts.py`, `ingest.py`. |
+| `converse/` | The persisted conversational (**Kairos**) side: `session.py` (`converse_project`), `loop.py` (`run_conversation`), `agent.py`, `tools.py`, `approve.py` (`StagedEdit` + `assert_approvable` — the status gate on the live apply path), `registry.py` (`ToolRegistry`), `project.py`, `sqlite_store.py`, `workspace.py`. |
+| `arena/` | Kairos's live tool surface (the "activity space"): `contract.py` (`CapabilityTier` T0–T4), `policy.py` (`ActivityPolicy.dispatch` — the single tool choke point, fail-closed), `environment.py` (`InProcessEnv`/`LocalEnv` — advisory, not a kernel boundary), `tools.py`, `builder.py` (`build_arena` — decide/read/write/shell, **no order tool**), `experience.py` (observation-only task episodes). `converse` never imports `arena` (AST-guarded); the workbench injects it via `registry_factory`. |
 
 **Apps (top of repo, not under `alpha/`)** — these talk to each other over **HTTP, not imports**.
 | Package | Owns |
 |---|---|
 | `alpha_web/` | The read-only "Regime Instrument" console (FastAPI+HTMX). `app.py` (`create_app`, ~25 routes), `data_access.py` (brain read + `PHASES`), `sample.py`, `sonia_client.py`/`workbench_client.py`. `python -m alpha_web` → :8100. |
 | `sonia/` | The Sonia meta-agent service — owns the **live brain** + gated apply/rollback. `python -m sonia` → :8810. |
-| `workbench/` | The conversational staging service. `python -m workbench` → :8820. ⚠️ currently missing from `pyproject` `packages.find`. |
+| `workbench/` | Kairos's conversational staging service. `python -m workbench` → :8820. |
 | `scripts/` | Producers/probes: `capture_window.py`, `capture_broad.py`, `run_verdict.py`, `save_decisions.py`, `save_evolution.py`, `refine_live.py`, `evolve_from_episodes.py`, `scan_tradeable.py`, `smoke_alpaca.py`, `migrate_projects_to_sqlite.py`. |
 
 ---
@@ -106,6 +123,11 @@ A bare filename/symbol is **ambiguous**; always qualify by package:
 - **`build_market_state` ×2 (different signatures!)** — `state/builder.py::build_market_state(universe, day, ...)` is the **real assembler**; `features/builder.py::build_market_state(day, source, ...)` is a thin shim that builds the universe then delegates. Live code wants the `state` one.
 - **`regime` means two things** — `alpha/harness/regime.py` (phase/family *vocabulary*, owns `CANONICAL_PHASES`) vs the `alpha/regime/` subpackage (the *classifier*). The classifier should import the vocabulary, not re-spell phase strings.
 - **reference/spike twins** — `reference/cn/` and `spikes/.../​_hermes/` contain their own `decision.py`/`trajectory.py`/`MarketState` etc. A bare symbol/basename search will hit these. They are **read-only reference; never edit them** (see §7).
+
+**Terminology bridge (↔ the `../Sonia-Kairos/` design repo):**
+- **"harness" is a trap.** Here (and in paper 2605.09998) *harness* = the evolvable playbook `H` — what the design charter calls the **Body**. The charter's "harness" = Kernel ∪ Body. Never mix the two senses when reading across repos.
+- **Sonia / Kairos** = roles: Sonia = teacher (`alpha/meta/` + `sonia/`), Kairos = worker (`converse/` + `arena/` + `workbench/`). `LLMAgentPolicy` is an instrument inside the co-pilot, not "Kairos" by itself.
+- **lowercase `kairos`** in `docs/findings/` and design-repo donor notes = the sibling CN legal-agent repo `~/Desktop/self-evolve/kairos` — a different product that shares the name.
 
 ---
 
@@ -132,7 +154,7 @@ it reintroduces an import-time crash that no test names.
 
 ```bash
 pip install -e ".[dev]"          # base deps; add extras as needed: [live] [web] [sonia]
-python -m pytest -q              # full suite — fully OFFLINE (FakeSource), 704 tests, no network/keys
+python -m pytest -q              # full suite — fully OFFLINE (FakeSource), 919 tests, no network/keys
 
 # the four PIT firewall-surface acceptance tests:
 python -m pytest tests/data/test_source.py::test_guarded_source_blocks_future_snapshot \
@@ -154,6 +176,7 @@ python scripts/run_verdict.py    snap 2026-01-02 2026-03-31 --windows 3      # H
 ## 7. Conventions & gotchas
 
 - **All English** — code, comments, docs. `reference/cn/` is read-only CN algorithmic reference (deleted when the rebuild is done); `spikes/.../​_hermes/` is a gitignored vendor spike. **Never edit either** — they only exist to read from.
+- **Branding vs code names.** Product/doc/UI branding = **Sonia-Kairos-US-Stock**; the import package stays `alpha`, the env prefix stays `ALPHA_*`, pyproject `name` stays `alpha` (code-level rename deferred — see `ROADMAP.md` §Naming).
 - **Frozen pydantic v2** for all value objects. New shared types: pick the lowest layer (§2).
 - **Tests mirror `alpha/`** (`tests/<package>/...`) and run fully offline via `FakeSource`/`MockLLMClient`. Eval determinism uses `temperature=0`. Add a test next to the code you change.
 - **Config is currently scattered** — ~31 `ALPHA_*`/`APCA_*` env vars are read inline via `os.environ.get(...)` (no central settings module yet). When adding one, grep for siblings; the `./state/brain` default in particular is duplicated across several files. (Centralizing this is a known backlog item.)
@@ -165,7 +188,7 @@ python scripts/run_verdict.py    snap 2026-01-02 2026-03-31 --windows 3      # H
 
 | Doc | Contents |
 |---|---|
-| `docs/blueprint.md` | Authoritative architecture reference (layers, firewall surfaces, glossary). |
+| `docs/blueprint.md` | Architecture reference for the perception/eval layers (v1.0, 2026-06-13 — predates the harness/agent build-out, arena, and the three services; `docs/PROJECT_STATE.md` + this file are more current). |
 | `docs/PROJECT_STATE.md` | Append-only "what's built" log + locked decisions. |
 | `ROADMAP.md` (repo root) | The single live backlog of "what's left". |
 | `docs/superpowers/specs/` | Per-feature design specs. `plans/` has the matching implementation plans. |

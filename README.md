@@ -1,7 +1,12 @@
-# Evolving-Alpha-US
+# Sonia-Kairos-US-Stock
+
+*Formerly **Evolving-Alpha-US** — renamed 2026-07-09 to align with the sibling Sonia-Kairos design
+charter. **Sonia** teaches; **Kairos** acts.*
 
 A **self-evolving US speculative-momentum decision-support co-pilot**, adapted from the
-[Evolving-Alpha](https://github.com/KairosPan/Evolving-Alpha) A-share system.
+[Evolving-Alpha](https://github.com/KairosPan/Evolving-Alpha) A-share system. Two named agents:
+**Sonia**, the teacher/meta-agent that owns the live brain and applies only user-accepted edits
+through the gate, and **Kairos**, the conversational worker face with a tiered tool surface.
 
 Built on the Continual Harness `H=(p,G,K,M)` two-loop architecture (paper
 [2605.09998](https://arxiv.org/abs/2605.09998), Princeton/ARISE/DeepMind). The harness edits its
@@ -17,16 +22,12 @@ market reflexivity.
 
 ## Status
 
-**US-0 Foundations — Complete.** The data layer, point-in-time firewall, offline universe builder,
-and English architecture documentation are in place. Four firewall-surface regression tests are
-green. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full phase plan.
-
-| Phase | Status |
-|---|---|
-| US-0 Foundations | **Complete** |
-| US-1 Harness + eval + sizing + guard | Planned |
-| US-2 Agent + inner loop | Planned |
-| US-3 Web + enrichment | Planned |
+**All four build phases (US-0 … US-3) are complete**, plus the arcs that followed them: the
+PIT data layer and firewall, harness + eval + sizing + guard, the LLM agent + inner loop, the
+web console, the Sonia teaching service, the Kairos conversational face + arena tool surface,
+PIT episodic memory, and the HCH-vs-Hexpert verdict harness. ~919 fully-offline tests.
+The single live backlog is the repo-root [ROADMAP.md](ROADMAP.md); the what's-built log is
+[docs/PROJECT_STATE.md](docs/PROJECT_STATE.md).
 
 ---
 
@@ -38,11 +39,11 @@ The system is a **co-pilot** for US speculative-momentum trading. Each day at cl
    candidates using strict point-in-time (PIT) data — no future leakage.
 2. Computes a `MarketState` capturing regime (Washout/Recovery/Heating/Trend/Distribution/
    Exhaustion), gainer breadth, runner echelon (consecutive-up-days tiers), and failed-breakout rate.
-3. *(US-2+)* Runs the LLM agent to produce a `DecisionPackage`: ranked candidates, per-candidate
+3. Runs the LLM agent to produce a `DecisionPackage`: ranked candidates, per-candidate
    size tier, fill-feasibility check, guard/veto checks, and rationale.
-4. *(US-2+)* Presents the `DecisionPackage` to a human for confirmation. The human's
+4. Presents the `DecisionPackage` to a human for confirmation. The human's
    confirm/reject/modify response doubles as a DAgger expert label for future training.
-5. *(US-2 inner loop)* The Refiner reads the day's trajectory, identifies failure signatures, and
+5. The Refiner reads the day's trajectory, identifies failure signatures, and
    edits the harness (`p/G/K/M`) via meta-tool CRUD — self-evolving the playbook daily.
 
 **No automatic orders at any phase.** The co-pilot is a research and decision-support tool.
@@ -180,6 +181,19 @@ send one real teaching message and confirm a coherent prose reply.
 
 ---
 
+## Kairos workbench (conversational face)
+
+**Kairos** is the worker: a persisted conversational face over the same brain, with a tiered
+computer-use tool surface (`alpha/arena/` — decide/read/write/shell, **no order tool**, every call
+through the fail-closed `ActivityPolicy` choke point).
+
+```bash
+pip install -e '.[web,sonia]'
+ALPHA_CONVERSE_MODEL=deepseek-chat DEEPSEEK_API_KEY=... python -m workbench   # :8820
+```
+
+---
+
 ## Data Setup (Offline Backtesting)
 
 The system ships with a `FakeSource` for fully offline tests. For real data, use Alpaca:
@@ -234,13 +248,14 @@ primary free-tier limitation, not history depth. A broader snapshot source is a 
 
 | File | Contents |
 |---|---|
-| [docs/blueprint.md](docs/blueprint.md) | Authoritative US architecture blueprint (TL;DR, concept mapping, layers, firewall surfaces, phasing, risks, glossary) |
-| [docs/PROJECT_STATE.md](docs/PROJECT_STATE.md) | Compressed session-restart context (identity, locked decisions, tech stack, repo map, current milestone) |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Four-phase roadmap with task lists and acceptance gates |
+| [docs/blueprint.md](docs/blueprint.md) | Architecture blueprint for the perception/eval layers (v1.0, 2026-06-13 — predates the harness/agent build-out, arena, and the three services) |
+| [docs/PROJECT_STATE.md](docs/PROJECT_STATE.md) | The append-only what's-built log (identity, locked decisions, tech stack, milestones) |
+| [ROADMAP.md](ROADMAP.md) | The single live backlog — what's left, prioritized (the historical four-phase plan lives in git history of `docs/ROADMAP.md`) |
 | [docs/superpowers/specs/2026-06-13-us-market-adaptation-design.md](docs/superpowers/specs/2026-06-13-us-market-adaptation-design.md) | Full design spec (v1.1, post adversarial self-review) |
 
 ---
 
 ## License
 
-Research use only. See `LICENSE` (to be added). No financial advice. No automatic order execution.
+Research use only. No license file yet — all rights reserved until one is added. No financial
+advice. No automatic order execution.

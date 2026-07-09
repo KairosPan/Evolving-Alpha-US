@@ -1,4 +1,6 @@
-# Evolving-Alpha-US — Roadmap
+# Sonia-Kairos-US-Stock — Roadmap
+
+*(formerly Evolving-Alpha-US; renamed 2026-07-09)*
 
 The single forward-looking backlog: **what's left**, prioritized. Sibling to `docs/PROJECT_STATE.md`,
 which records **what's built** (the append-only status log).
@@ -202,7 +204,31 @@ plan `docs/superpowers/plans/2026-07-09-teach-crystallize.md`. **Follow-up (defe
   still required: reject private/loopback/link-local ranges + the cloud-metadata IP `169.254.169.254`
   (DNS-rebinding-safe).
 
-## 7. Known tradeoffs / review leftovers (accepted — no action planned)
+## 7. Naming — Sonia-Kairos-US-Stock rebrand follow-ups (doc/UI rebrand DONE 2026-07-09)
+
+Decision (2026-07-09): product/doc/UI branding = **Sonia-Kairos-US-Stock**, two entities **Sonia**
+(teacher: `alpha/meta/` + `sonia/`) and **Kairos** (worker: `converse/` + `arena/` + `workbench/`).
+The import package stays `alpha`, the env prefix stays `ALPHA_*` (~1,340 import lines across ~296
+files, 4 lazy-import-held cycles, string uvicorn targets — rename cost ≫ value). Kairos naming
+option (A) chosen: the worker face carries the name AS-IS, divergence from the charter pivot
+documented in CLAUDE.md §1. Remaining steps:
+
+- [ ] **GitHub repo rename** `Evolving-Alpha-US` → `Sonia-Kairos-US-Stock` (GitHub redirects old
+  clone URLs) + `git remote set-url origin` + update README clone block + PROJECT_STATE repo line;
+  then sync the two NON-frozen design-repo pointers (`Backend-Design-SoniaKairos.md:5` donor path,
+  `Sonia-Kairos/CLAUDE.md` terminology-traps line) with an "(ex evolving-alpha-us)" gloss. Local
+  folder rename optional, same step.
+- [ ] **EditProvenance vocabulary migration** — extend `proposer` Literal `'hermes'`→ add
+  `'kairos'` + `'user'` (`alpha/harness/edit_log.py:12`); stamp new worker-face edits
+  `proposer="kairos"` (keep reading `'hermes'` — persisted brains carry it); populate the
+  existing-but-never-set `human_approver` at the two approve routes (sonia apply + workbench
+  approve) — the cheap code-side half of the charter's 2026-07-08 user-direct-edit second trigger.
+- [ ] **CLAUDE.md spec compliance round** (per `../design-requirements-for-claude-md.md` R2/R4/R8):
+  subdirectory CLAUDE.md files for `alpha_web/` (HTMX gotchas incl. 204+HX-Redirect), `sonia/` +
+  `workbench/` (service env incantations), `alpha/arena/` (tier semantics); committed
+  `.claude/settings.json` deny-list for `reference/cn/**` + `spikes/**` instead of prose rules.
+
+## 8. Known tradeoffs / review leftovers (accepted — no action planned)
 
 - **M3** (review 2026-06-22): a `worthless_removal` delist whose `process_date == entry_day` is skipped by
   `ReturnOracle._delisted_between`'s strict `ex_date > entry_day`. Accepted — bar-disappearance is the

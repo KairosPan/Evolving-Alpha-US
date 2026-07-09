@@ -1,8 +1,13 @@
-# Evolving-Alpha-US — Architecture Blueprint
+# Sonia-Kairos-US-Stock — Architecture Blueprint
+
+*(formerly Evolving-Alpha-US; project renamed 2026-07-09)*
 
 > **Version:** 1.0 · **Date:** 2026-06-13
 > **Scope:** US-first greenfield rebuild of the self-evolving speculative-momentum co-pilot.
-> **Status:** Authoritative US architecture reference (knowledge survives `reference/cn/` deletion).
+> **Status:** Architecture reference for the perception/eval layers (knowledge survives
+> `reference/cn/` deletion). ⚠️ v1.0 predates the harness/agent build-out, `alpha/arena/`, and the
+> three services (`alpha_web`/`sonia`/`workbench`) — for current structure see `CLAUDE.md` +
+> `docs/PROJECT_STATE.md`.
 > **Spec:** `docs/superpowers/specs/2026-06-13-us-market-adaptation-design.md`
 
 ---
