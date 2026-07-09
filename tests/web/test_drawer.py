@@ -1,4 +1,5 @@
 import pathlib
+import re
 
 import pytest
 
@@ -116,3 +117,53 @@ def test_cockpit_js_wires_the_drawer_controls():
     assert "drawer-collapse" in js           # collapse toggle
     assert "acc-toggle" in js                # delegated accordion handler
     assert "data-flash" in js or "change-chip" in js   # chip → drawer flash
+
+
+def test_chat_is_prose_only_then_propose_lands_edits_in_the_drawer(client, monkeypatch):
+    import re
+    sid_skill = load_seeds("seeds").skills.all()[0].skill_id
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE",
+        '{"ops":[{"tool":"patch_skill","args":{"skill_id":"%s","notes":"n"},"rationale":"r"}]}' % sid_skill)
+    m = client.post("/evolve/message", data={"text": "patch it"})
+    assert m.status_code == 200
+    assert "change-chip" not in m.text and "edit-card" not in m.text     # chat produced no edits
+    assert "Propose an edit" in m.text                                   # the on-demand control is offered
+    sid = re.search(r'id="composer-session"[^>]*value="([^"]+)"', m.text).group(1)
+    mid = re.search(r"/message/([\w-]+)/propose", m.text).group(1)       # the assistant turn's propose button
+    p = client.post(f"/evolve/{sid}/message/{mid}/propose")
+    assert p.status_code == 200
+    assert "change-chip" in p.text                                       # chip now points at the drawer
+    assert 'id="pending"' in p.text and 'hx-swap-oob="true"' in p.text   # #pending refreshes OOB
+    assert "edit-card" in p.text and "patch_skill" in p.text             # the edit lives in the drawer
+
+
+def test_propose_with_no_edit_shows_a_visible_note(client, monkeypatch):
+    import re
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE", "let's keep clarifying")
+    m = client.post("/evolve/message", data={"text": "hmm"})
+    sid = re.search(r'id="composer-session"[^>]*value="([^"]+)"', m.text).group(1)
+    mid = re.search(r"/message/([\w-]+)/propose", m.text).group(1)
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE", '{"no_edit": true, "reason": "still clarifying the window"}')
+    p = client.post(f"/evolve/{sid}/message/{mid}/propose")
+    assert "no edit proposed" in p.text and "still clarifying the window" in p.text
+    assert "change-chip" not in p.text
+
+
+def test_propose_then_apply_reflects_in_brain_panel_and_rollback_reverts(client, monkeypatch):
+    import re
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE",
+        '{"ops":[{"tool":"process_memory",'
+        '"args":{"lesson_id":"les-test-1","lesson":"NEW-TEST-LESSON","outcome":"principle"},'
+        '"rationale":"teach test"}]}')
+    m = client.post("/evolve/message", data={"text": "remember this"})
+    sid = re.search(r'id="composer-session"[^>]*value="([^"]+)"', m.text).group(1)
+    mid = re.search(r"/message/([\w-]+)/propose", m.text).group(1)
+    p = client.post(f"/evolve/{sid}/message/{mid}/propose")
+    eid = re.search(r"/edit/([\w-]+)", p.text).group(1)
+    acc = client.post(f"/evolve/{sid}/edit/{eid}", data={"action": "accept"})
+    assert re.search(r"/message/([\w-]+)/apply", acc.text).group(1) == mid   # same turn
+    ap = client.post(f"/evolve/{sid}/message/{mid}/apply")
+    assert 'id="brain-panel"' in ap.text and 'hx-swap-oob="true"' in ap.text
+    assert "NEW-TEST-LESSON" in ap.text.split('id="brain-panel"', 1)[1]       # mirror reflects the applied lesson
+    rb = client.post(f"/evolve/rollback/{sid}/{mid}")
+    assert "NEW-TEST-LESSON" not in rb.text.split('id="brain-panel"', 1)[1]   # gone from the live brain

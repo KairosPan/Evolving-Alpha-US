@@ -60,6 +60,9 @@ class SoniaClient:
     def rollback(self, sid: str, mid: str) -> dict:
         return self._request("POST", f"/sessions/{sid}/messages/{mid}/rollback")
 
+    def propose(self, sid: str, mid: str) -> dict:
+        return self._request("POST", f"/sessions/{sid}/messages/{mid}/propose")
+
     def list_conflicts(self) -> list:
         return self._request("GET", "/conflicts")
 
