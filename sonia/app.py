@@ -8,11 +8,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from alpha.harness.metatools import MetaTools
+from alpha.llm.chat import ChatMessage
 from alpha.llm.client import MockLLMClient
 from alpha.llm.config import make_client
-from alpha.meta.agent import MetaAgent
+from alpha.meta.agent import MetaAgent, preview_op
+from alpha.meta.extractor import extract_ops
 from alpha.meta.models import Attachment, Message, Session, new_message_id, new_session_id, now_iso
-from alpha.meta.sonia_agent import SoniaAgent
+from alpha.meta.sonia_agent import SoniaAgent, turn_text
 from alpha.meta.conflict_store import ConflictQueue
 from alpha.meta.store import LiveBrainStore, SessionStore
 
@@ -114,6 +116,31 @@ def create_app() -> FastAPI:
                     sstore.put(sess)
                     return e.model_dump()
         return JSONResponse({"error": "edit not found"}, status_code=404)
+
+    @app.post("/sessions/{sid}/messages/{mid}/propose")
+    def propose(sid: str, mid: str):
+        sstore = _session_store()
+        sess = sstore.get(sid)
+        msg = _find(sess, mid) if sess else None
+        if msg is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        if msg.applied_seqs:
+            return JSONResponse({"error": "already applied"}, status_code=409)
+        idx = sess.messages.index(msg)
+        convo = [ChatMessage(role=m.role, text=turn_text(m)) for m in sess.messages[: idx + 1]]
+        h, _ = _brain_store().load()                                   # read-only
+        try:
+            res = extract_ops(make_client("sonia"), h, convo)
+        except Exception as e:                                         # extractor unavailable — visible, never silent
+            return JSONResponse({"error": f"{type(e).__name__}: {e}"}, status_code=502)
+        if res.ops:
+            msg.edits = [preview_op(h, op) for op in res.ops]
+            msg.proposal_note = ""
+        else:
+            msg.edits = []
+            msg.proposal_note = res.reason
+        sstore.put(sess)
+        return {"session_id": sid, "message": msg.model_dump()}
 
     @app.post("/sessions/{sid}/messages/{mid}/apply")
     def apply_message(sid: str, mid: str):
