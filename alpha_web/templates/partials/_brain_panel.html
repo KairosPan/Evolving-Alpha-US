@@ -3,6 +3,7 @@
     Current brain <span class="caret" aria-hidden="true">&#9656;</span>
   </button>
   <div class="acc-body">
+    {% if not brain.materialized %}<div class="brain-badge">seeds · no live edits yet</div>{% endif %}
     {% for c in brain.components %}
     {% if c.is_stub %}
     <div class="bcomp is-stub" title="{{ c.blurb }}">

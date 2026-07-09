@@ -38,6 +38,19 @@ def test_pending_view_groups_by_message_and_counts_actionable():
     assert v.last_applied == "m3"                               # m3 is the only (and last) applied group
 
 
+def test_brain_view_carries_materialized_flag():
+    state = load_seeds("seeds")
+    assert drawer.brain_view(state).materialized is True                  # default
+    assert drawer.brain_view(state, materialized=False).materialized is False
+
+
+def test_brain_panel_badges_pre_materialization(client, monkeypatch):
+    # A fresh session before any apply: the live store isn't materialized, so the mirror says so.
+    body = client.get("/").text
+    panel = body.split('id="brain-panel"', 1)[1]
+    assert "no live edits yet" in panel
+
+
 def test_brain_view_mirrors_six_components_in_rail_order():
     v = drawer.brain_view(load_seeds("seeds"))
     assert [c.key for c in v.components] == \

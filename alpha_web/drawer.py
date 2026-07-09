@@ -83,16 +83,18 @@ class Component:
 @dataclass(frozen=True)
 class BrainView:
     components: list[Component]
+    materialized: bool = True          # False → live store not yet written (mirror shows frozen seeds)
 
 
-def brain_view(state: HarnessState) -> BrainView:
+def brain_view(state: HarnessState, *, materialized: bool = True) -> BrainView:
     """Mirror the six brain components in the left-rail order: three live (doctrine/memory/skills,
-    with item lists) and three read-only stubs (workflow/connector/subagent)."""
+    with item lists) and three read-only stubs (workflow/connector/subagent). `materialized` reflects
+    whether the LiveBrainStore has been written yet (drives the 'no live edits yet' badge)."""
     doctrine = list(state.doctrine.entries)
     lessons = state.memory.all()
     skills = state.skills.all()
     blurb = {k: b for k, _, b in _STUBS}
-    return BrainView(components=[
+    return BrainView(materialized=materialized, components=[
         Component("doctrine",  "Doctrine",  "/doctrine", len(doctrine), doctrine, False),
         Component("memory",    "Memory",    "/memory",   len(lessons),  lessons,  False),
         Component("workflow",  "Workflow",  "", None, [], True, blurb["workflow"]),
