@@ -50,6 +50,23 @@ def test_accept_then_apply_mutates_brain_and_snapshots(client, monkeypatch):
     assert asst["snapshot_before"]
 
 
+def test_apply_route_stamps_human_approver(client, monkeypatch):
+    """Route-level pin (final review): reverting the route to `.apply(accepted)` without the
+    human_approver kwarg must fail a test — the class-level pins alone don't cover the route."""
+    import os
+    from alpha.meta.store import LiveBrainStore
+
+    sid, mid, eid = _seed_and_propose(client, monkeypatch)
+    client.post(f"/sessions/{sid}/edit/{eid}", json={"action": "accept"})
+    client.post(f"/sessions/{sid}/messages/{mid}/apply")
+
+    _, log = LiveBrainStore(os.environ["ALPHA_LIVE_BRAIN_DIR"]).load()
+    rec = log.records()[-1]
+    assert rec.provenance.path == "teaching"
+    assert rec.provenance.proposer == "sonia"
+    assert rec.provenance.human_approver == "user"
+
+
 def test_rollback_restores_pre_apply_brain(client, monkeypatch):
     sid, mid, eid = _seed_and_propose(client, monkeypatch)
 

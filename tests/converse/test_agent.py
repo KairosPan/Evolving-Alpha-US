@@ -77,3 +77,21 @@ def test_write_mode_none_registry_is_decide_only():
     surface, so offering a stage tool would silently drop stagings at turn end."""
     reg = build_converse_registry(_h(), _agent_llm(), _fake_source(), write_mode="none")
     assert {s["name"] for s in reg.specs()} == {"decide"}
+
+
+def test_bare_converse_passes_write_mode_none(monkeypatch):
+    """Pin the WIRING, not just the builder (final review): converse() must explicitly pass
+    write_mode="none" — the builder default is now "stage", so dropping the argument silently
+    re-adds a stage-and-drop tool."""
+    import alpha.converse.agent as agent_mod
+    captured = {}
+    real = agent_mod.build_converse_registry
+
+    def spy(*args, **kw):
+        captured.update(kw)
+        return real(*args, **kw)
+
+    monkeypatch.setattr(agent_mod, "build_converse_registry", spy)
+    converse(_h(), "hello", agent_llm=_agent_llm(), chat_llm=MockLLMClient(["Just prose."]),
+             source=_fake_source())
+    assert captured.get("write_mode") == "none"

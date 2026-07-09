@@ -3,7 +3,11 @@ every derived record asserting a now-reverted seq must stop asserting it — ses
 (else /propose 409s forever) and workbench staged edits (else dead 'approved+applied' rows).
 Pure functions over the record objects: both faces share ONE brain, so BOTH apps sweep BOTH
 derived stores through these helpers (a sonia rollback must also heal workbench state and
-vice versa). Duck-typed on purpose — no converse imports here (layer spine)."""
+vice versa). Duck-typed on purpose — no converse imports here (layer spine).
+
+Known limitation (recorded): the sweep drops seq >= live_len only. Restoring an abandoned-branch
+snapshot can leave kept records (seq < live_len) whose CONTENT belongs to the other timeline —
+display/provenance confusion only; brain content itself is hash-protected at adopt."""
 from __future__ import annotations
 
 

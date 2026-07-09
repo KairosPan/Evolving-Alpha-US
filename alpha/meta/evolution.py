@@ -12,6 +12,7 @@ the fork ≡ landing the gate-approved results. If the live brain moved (teachin
 rollback happened), the packet is stale and must be re-run, never merged."""
 from __future__ import annotations
 
+import re as _re
 from typing import Callable
 
 from alpha.harness.edit_log import EditLog
@@ -51,11 +52,28 @@ def adopt_proposal(bstore, proposal: EvolutionProposal, *,
                    human_approver: str = "user") -> tuple[bool, str | None]:
     """Land an adopted packet on the live brain. Takes the brain lock itself — callers must NOT
     wrap this in bstore.lock() (flock on a second fd of the same file self-deadlocks).
-    Staleness is checked by content hash (length alone is spoofable by land+rollback)."""
+
+    base_hash pins the packet's BASE; the checks below pin its RESULT — a hand-edited or
+    producer-buggy packet must not land content the gate never saw (2026-07-09 final review):
+    the fork log must EXTEND the live log, the delta the user reviewed must equal the delta that
+    lands, and red-line doctrine entries can never change through the gate, so any honest fork
+    preserves them byte-for-byte."""
     with bstore.lock():
         h, log = bstore.load()
-        if brain_hash(h.to_dict(), log.to_dict()) != proposal.base_hash:
+        live_log_dict = log.to_dict()
+        if brain_hash(h.to_dict(), live_log_dict) != proposal.base_hash:
             return False, "stale: live brain differs from the packet's base; re-run the evolution"
+        if proposal.base_len != len(live_log_dict):
+            return False, f"invalid packet: base_len={proposal.base_len} != live log {len(live_log_dict)}"
+        if proposal.log_dict[:proposal.base_len] != live_log_dict:
+            return False, "invalid packet: fork log does not extend the live log (prefix mismatch)"
+        if proposal.records != proposal.log_dict[proposal.base_len:]:
+            return False, "invalid packet: reviewed records differ from the landing delta"
+        new_h = HarnessState.from_dict(proposal.harness_dict)
+        live_core = [e.model_dump(mode="json") for e in h.doctrine.immutable_core()]
+        new_core = [e.model_dump(mode="json") for e in new_h.doctrine.immutable_core()]
+        if new_core != live_core:
+            return False, "invalid packet: red-line doctrine entries differ from the live brain"
         if not bstore.is_live():
             bstore.save(h, log)                       # materialize before snapshot (seeds-only dir)
         # Re-stamp the delta with the human approver — dict-level transform on the serialized log
@@ -67,6 +85,7 @@ def adopt_proposal(bstore, proposal: EvolutionProposal, *,
                         {"path": "self_study", "proposer": default_proposer})
             prov["human_approver"] = human_approver
             log_dict[i]["provenance"] = prov
-        bstore.snapshot(f"adopt-{proposal.proposal_id}")
-        bstore.save(HarnessState.from_dict(proposal.harness_dict), EditLog.from_dict(log_dict))
+        safe_id = _re.sub(r"[^A-Za-z0-9._-]", "_", proposal.proposal_id)   # snapshot() has no
+        bstore.snapshot(f"adopt-{safe_id}")                                # traversal guard
+        bstore.save(new_h, EditLog.from_dict(log_dict))
     return True, None

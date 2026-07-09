@@ -156,7 +156,9 @@ def create_app() -> FastAPI:
                     se.applied_seq, se.snapshot_before, se.reason = rec.seq, snap, None
                 else:
                     se.status, se.reason = "rejected", reason
-            pstore.put(proj)
+                # persist the derived record INSIDE the flock so it can never lag the brain
+                # across processes (a concurrent restore's sweep reads both under the same lock)
+                pstore.put(proj)
             return {"edit_id": eid, "status": se.status, "reason": se.reason}
 
     @app.post("/edits/{eid}/reject")
@@ -185,18 +187,20 @@ def create_app() -> FastAPI:
                     return JSONResponse({"error": "nothing to roll back"}, status_code=404)
                 target = snaps[-1]
             bstore = _brain_store()
-            with bstore.lock():
-                bstore.restore(target)
+            with bstore.lock():                  # sweep INSIDE the flock: the other face must
+                bstore.restore(target)           # not land/read between restore and reconcile
                 _, log = bstore.load()
-            # Revert reconciles derived state (charter conformance 2026-07-09): sweep BOTH derived
-            # stores — the staged edits here AND the sonia teaching sessions (one shared brain).
-            live_len = len(log)
-            reconcile_staged_edits(proj.staged_edits, live_len)
-            pstore.put(proj)
-            sstore = SessionStore(os.environ.get("ALPHA_SESSIONS_DIR", "./state/sessions"))
-            for s in sstore.list():
-                if reconcile_session(s, live_len):
-                    sstore.put(s)
+                # Revert reconciles derived state (charter conformance 2026-07-09): sweep BOTH
+                # derived stores — ALL projects' staged edits AND the sonia teaching sessions
+                # (one shared brain).
+                live_len = len(log)
+                for p in pstore.list():
+                    if reconcile_staged_edits(p.staged_edits, live_len):
+                        pstore.put(p)
+                sstore = SessionStore(os.environ.get("ALPHA_SESSIONS_DIR", "./state/sessions"))
+                for s in sstore.list():
+                    if reconcile_session(s, live_len):
+                        sstore.put(s)
             return {"ok": True}
 
     return app

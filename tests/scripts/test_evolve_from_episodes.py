@@ -52,6 +52,21 @@ def test_run_evolve_propose_default_packages_then_user_adopts(tmp_path):
     assert log2.records()[-1].provenance.human_approver == "user"
 
 
+def test_run_evolve_autonomous_refuses_without_unsafe_env(tmp_path, monkeypatch):
+    """The env gate is an independent copy in this script — pin it separately from refine_live's."""
+    import pytest
+    monkeypatch.delenv("ALPHA_UNSAFE_AUTONOMOUS", raising=False)
+    brain_dir = tmp_path / "brain"; db = tmp_path / "brain.db"; conflicts = tmp_path / "conflicts"
+    _seed_brain(brain_dir); _seed_episodes(db)
+    mod = importlib.import_module("scripts.evolve_from_episodes")
+    with pytest.raises(RuntimeError, match="ALPHA_UNSAFE_AUTONOMOUS"):
+        mod.run_evolve_from_episodes(brain_dir=str(brain_dir), conflicts_dir=str(conflicts),
+                                     episodes_db=str(db), asof=date(2026, 6, 20),
+                                     mode="autonomous")
+    h, _ = LiveBrainStore(str(brain_dir)).load()
+    assert h.skills.get("s1").status == "incubating"                # live brain untouched
+
+
 def test_run_evolve_autonomous_persists_with_unsafe_env(tmp_path, monkeypatch):
     monkeypatch.setenv("ALPHA_UNSAFE_AUTONOMOUS", "1")
     brain_dir = tmp_path / "brain"; db = tmp_path / "brain.db"; conflicts = tmp_path / "conflicts"

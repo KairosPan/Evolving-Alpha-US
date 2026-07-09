@@ -167,6 +167,75 @@ def test_adopt_mints_provenance_when_delta_record_has_none(tmp_path):
     assert rec.provenance.human_approver == "user"
 
 
+def _clean_packet(tmp_path, bstore):
+    def runner(h, log):
+        _add_lesson(h, log, "m-ok")
+        return h, log
+    return run_forked_evolution(bstore, runner, queue=ProposalQueue(str(tmp_path / "p")),
+                                kind="refine")
+
+
+def test_adopt_rejects_reviewed_records_differing_from_landing_delta(tmp_path):
+    """base_hash pins the BASE, these checks pin the RESULT (final review): the delta the user
+    reviewed must be exactly what lands."""
+    bstore = _store(tmp_path)
+    prop = _clean_packet(tmp_path, bstore)
+    tampered = prop.model_copy(update={"records": []})      # user shown nothing, delta lands
+    ok, reason = adopt_proposal(bstore, tampered)
+    assert ok is False and "reviewed records" in reason
+    assert bstore.load()[0].memory.get("m-ok") is None
+
+
+def test_adopt_rejects_mutated_red_line_doctrine(tmp_path):
+    """A hand-edited packet whose harness_dict tampers with an immutable red-line entry must be
+    rejected — red-lines can never change through the gate, so any honest fork preserves them."""
+    from alpha.harness.loader import load_seeds
+
+    bstore = LiveBrainStore(str(tmp_path / "brain"))
+    bstore.save(load_seeds("seeds"), EditLog())             # seeds carry immutable red-lines
+
+    def runner(h, log):
+        _add_lesson(h, log, "m-rl")
+        return h, log
+
+    prop = run_forked_evolution(bstore, runner, queue=ProposalQueue(str(tmp_path / "p")),
+                                kind="refine")
+    hd = copy.deepcopy(prop.harness_dict)
+    reds = [e for e in hd["doctrine"]["entries"] if e.get("immutable")]
+    assert reds, "seeds must contain red-line entries for this test"
+    reds[0]["guidance"] = "LOOSENED BY A TAMPERED PACKET"
+    tampered = prop.model_copy(update={"harness_dict": hd})
+    ok, reason = adopt_proposal(bstore, tampered)
+    assert ok is False and "red-line" in reason
+
+
+def test_adopt_rejects_non_extending_fork_log(tmp_path):
+    """The fork log must EXTEND the live log — a packet whose prefix rewrites history (or whose
+    base_len lies) must not land, and base_len must not mis-scope the human_approver re-stamp."""
+    bstore = _store(tmp_path)
+    h, log = bstore.load()
+    _add_lesson(h, log, "m-base")
+    bstore.save(h, log)                                     # non-empty base: 1 record
+
+    def runner(h2, log2):
+        _add_lesson(h2, log2, "m-delta")
+        return h2, log2
+
+    prop = _clean = run_forked_evolution(bstore, runner, queue=ProposalQueue(str(tmp_path / "p")),
+                                         kind="refine")
+
+    lied = prop.model_copy(update={"base_len": prop.base_len + 1})
+    ok, reason = adopt_proposal(bstore, lied)
+    assert ok is False and "base_len" in reason
+
+    tampered_prefix = [dict(r) for r in prop.log_dict]
+    tampered_prefix[0] = {**tampered_prefix[0], "summary": "forged history"}
+    forged = prop.model_copy(update={"log_dict": tampered_prefix})
+    ok2, reason2 = adopt_proposal(bstore, forged)
+    assert ok2 is False and "prefix" in reason2
+    assert bstore.load()[0].memory.get("m-delta") is None   # nothing landed
+
+
 def test_brain_hash_round_trips_the_store(tmp_path):
     """The hash computed at fork time must equal the hash of the stored-then-reloaded brain
     (json round-trip stability — the reason to_dict is json-mode)."""

@@ -44,10 +44,12 @@ def _proposal_store() -> ProposalQueue:
     return ProposalQueue(proposals_dir())
 
 
-def _reconcile_all(live_len: int, sstore: SessionStore, current: "Session | None" = None) -> None:
+def _reconcile_all(live_len: int, sstore: SessionStore, current: "Session | None" = None) -> str:
     """After a brain restore: sweep EVERY derived store that can assert reverted seqs — all
     teaching sessions AND the workbench staged edits (both faces share the one brain, so a
-    rollback issued here must also heal workbench state; see alpha/meta/reconcile.py)."""
+    rollback issued here must also heal workbench state; see alpha/meta/reconcile.py).
+    Returns the cross-face sweep status ("ok" | "skipped: …" | "failed: …") — a locked/corrupt
+    workbench DB must be VISIBLE in the response, never a silent ok (final review 2026-07-09)."""
     if current is not None:
         reconcile_session(current, live_len)         # caller persists `current` itself
     for other in sstore.list():
@@ -55,19 +57,24 @@ def _reconcile_all(live_len: int, sstore: SessionStore, current: "Session | None
             continue
         if reconcile_session(other, live_len):
             sstore.put(other)
-    try:                                             # cross-face sweep; no workbench DB → no-op
-        from alpha.converse.sqlite_store import SqliteProjectStore
+    from alpha.converse.sqlite_store import SqliteProjectStore
+    try:
         pstore = SqliteProjectStore.open(
             os.environ.get("ALPHA_PROJECTS_DB", "./state/projects/state.db"),
             create_if_missing=False)
-    except Exception:
-        return
+    except FileNotFoundError:                        # no workbench DB → legitimate no-op
+        return "skipped: no workbench DB"
+    except Exception as e:                           # locked/corrupt — surface, don't swallow
+        return f"failed: {type(e).__name__}: {e}"
     try:
         for proj in pstore.list():
             if reconcile_staged_edits(proj.staged_edits, live_len):
                 pstore.put(proj)
+    except Exception as e:
+        return f"failed: {type(e).__name__}: {e}"
     finally:
         pstore.close()
+    return "ok"
 
 
 class ChatIn(BaseModel):
@@ -207,8 +214,10 @@ def create_app() -> FastAPI:
                 applied, _rows = MetaAgent(MetaTools(h, log), MockLLMClient("{}")).apply(
                     accepted, human_approver="user")
                 bstore.save(h, log)
-            msg.applied_seqs = [r.seq for r in applied]
-            sstore.put(sess)
+                # persist the derived record INSIDE the flock so it can never lag the brain
+                # across processes (a concurrent restore's sweep reads both under the same lock)
+                msg.applied_seqs = [r.seq for r in applied]
+                sstore.put(sess)
             return {"applied": len(applied), "edits": [e.model_dump() for e in msg.edits]}
 
     @app.post("/edit")
@@ -264,6 +273,9 @@ def create_app() -> FastAPI:
             prop = q.get(pid)
             if prop is None:
                 return JSONResponse({"error": "not found"}, status_code=404)
+            if body.decision not in ("adopt", "discard"):           # discard is DESTRUCTIVE —
+                return JSONResponse({"error": f"unknown decision {body.decision!r}; "
+                                              "expected 'adopt' or 'discard'"}, status_code=422)
             if body.decision == "adopt":
                 ok, reason = adopt_proposal(_brain_store(), prop)   # takes the brain lock itself
                 if not ok:
@@ -296,11 +308,11 @@ def create_app() -> FastAPI:
             if not p.exists():
                 return JSONResponse({"error": "not found"}, status_code=404)
             bstore = _brain_store()
-            with bstore.lock():
-                bstore.restore(str(p))
-                _, log = bstore.load()
-            _reconcile_all(len(log), _session_store())
-            return {"ok": True, "restored": name}
+            with bstore.lock():                      # sweep INSIDE the flock: the other face
+                bstore.restore(str(p))               # must not land/read between restore and
+                _, log = bstore.load()               # reconcile (final review 2026-07-09)
+                sweep = _reconcile_all(len(log), _session_store())
+            return {"ok": True, "restored": name, "workbench_sweep": sweep}
 
     @app.post("/sessions/{sid}/messages/{mid}/rollback")
     def rollback_message(sid: str, mid: str):
@@ -311,16 +323,16 @@ def create_app() -> FastAPI:
             if msg is None or not msg.snapshot_before:
                 return JSONResponse({"error": "nothing to roll back"}, status_code=404)
             bstore = _brain_store()
-            with bstore.lock():
+            with bstore.lock():                      # sweep INSIDE the flock (final review)
                 bstore.restore(msg.snapshot_before)
                 _, log = bstore.load()
-            # Revert reconciles derived state (charter conformance 2026-07-09): any record
-            # asserting a now-reverted seq must stop asserting it — else /propose 409s forever
-            # on a rolled-back turn and workbench keeps dead 'approved+applied' rows.
-            _reconcile_all(len(log), sstore, current=sess)
-            sess.notes.append(f"rolled back {mid}")
-            sstore.put(sess)
-            return {"ok": True}
+                # Revert reconciles derived state (charter conformance 2026-07-09): any record
+                # asserting a now-reverted seq must stop asserting it — else /propose 409s forever
+                # on a rolled-back turn and workbench keeps dead 'approved+applied' rows.
+                sweep = _reconcile_all(len(log), sstore, current=sess)
+                sess.notes.append(f"rolled back {mid}")
+                sstore.put(sess)
+            return {"ok": True, "workbench_sweep": sweep}
 
     return app
 

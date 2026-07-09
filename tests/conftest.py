@@ -40,8 +40,14 @@ def fake_source():
 
 @pytest.fixture
 def brain_session_isolation(tmp_path, monkeypatch):
-    """Point the live-brain + sessions dirs at a tmp dir so a test never touches real on-disk state.
-    Shared by tests/web and tests/sonia (their autouse fixtures depend on this — DRY: one definition).
-    Not autouse here, so the offline core suite is unaffected; it activates only where requested."""
+    """Point EVERY shared-state dir at a tmp dir so a test never touches real on-disk state.
+    Shared by tests/web, tests/sonia and tests/workbench (their autouse fixtures depend on this —
+    DRY: one definition). Not autouse here, so the offline core suite is unaffected.
+    ALL FIVE vars matter: the 2026-07-09 cross-face reconcile sweeps make each face open the
+    OTHER face's store too — isolating only your own face's dirs lets a rollback test rewrite
+    the operator's real ./state records (caught by the final review as a blocker)."""
     monkeypatch.setenv("ALPHA_LIVE_BRAIN_DIR", str(tmp_path / "brain"))
     monkeypatch.setenv("ALPHA_SESSIONS_DIR", str(tmp_path / "sessions"))
+    monkeypatch.setenv("ALPHA_PROJECTS_DB", str(tmp_path / "projects" / "state.db"))
+    monkeypatch.setenv("ALPHA_CONFLICTS_DIR", str(tmp_path / "conflicts"))
+    monkeypatch.setenv("ALPHA_PROPOSALS_DIR", str(tmp_path / "proposals"))

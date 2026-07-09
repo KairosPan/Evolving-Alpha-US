@@ -64,9 +64,46 @@ def test_sonia_snapshot_restore_heals_workbench_staged_edit(tmp_path, monkeypatc
     assert se["reason"] == "rolled back"
 
 
+def test_workbench_rollback_heals_sonia_session(tmp_path, monkeypatch):
+    """The MIRROR direction (final review): a rollback issued from the WORKBENCH face must also
+    clear sonia session records asserting the reverted seqs (else the /propose 409 dead-end
+    silently returns whenever the revert comes from the other face)."""
+    import os
+    _env(tmp_path, monkeypatch)
+    wb = _workbench_client()
+
+    # stage + approve a workbench edit → live brain seq 0
+    wb.post("/converse", json={"text": "remember"})
+    eid = wb.get("/project").json()["staged_edits"][0]["edit_id"]
+    wb.post(f"/edits/{eid}/approve")
+    assert wb.get("/healthz").json()["edit_count"] == 1
+
+    # seed a SONIA session that asserts that same seq was applied through it
+    from alpha.meta.models import Message, Session, new_message_id, new_session_id, now_iso
+    from alpha.meta.store import SessionStore
+    sstore = SessionStore(os.environ["ALPHA_SESSIONS_DIR"])
+    msg = Message(message_id=new_message_id(), role="assistant", created_at=now_iso(),
+                  applied_seqs=[0])
+    sess = Session(session_id=new_session_id(), created_at=now_iso(), messages=[msg])
+    sstore.put(sess)
+
+    assert wb.post("/rollback").json()["ok"] is True
+    healed = sstore.get(sess.session_id)
+    assert healed.messages[0].applied_seqs == []           # cross-face heal, workbench → sonia
+
+
 def test_snapshot_restore_rejects_traversal_names(tmp_path, monkeypatch):
+    """NOTE: Starlette percent-decodes before routing, so an encoded ../ never reaches the
+    handler ({name} can't contain '/') — the router 404s. The in-handler is_relative_to guard is
+    unreachable defense-in-depth via HTTP; its store-level twin is pinned directly in
+    tests/meta/test_proposal_store_guard.py. This test pins the routed behavior only."""
     _env(tmp_path, monkeypatch)
     from sonia.app import create_app as sonia_app
     sonia = TestClient(sonia_app())
     r = sonia.post("/snapshots/%2e%2e%2fbrain/restore")
-    assert r.status_code in (400, 404)
+    assert r.status_code == 404                            # router-level rejection
+    r0 = sonia.post("/snapshots/anything/restore")
+    assert r0.status_code == 400                           # no history dir yet → invalid
+    (tmp_path / "brain" / "history").mkdir(parents=True)
+    r2 = sonia.post("/snapshots/no-such-snapshot/restore")
+    assert r2.status_code == 404                           # handler-level not-found

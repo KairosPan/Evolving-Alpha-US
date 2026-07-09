@@ -5,7 +5,7 @@ teacher (`alpha/meta/` + `sonia/`), **Kairos** the worker (`converse/` + `arena/
 Doc/UI rebrand shipped 2026-07-09; import package stays `alpha`, env prefix stays `ALPHA_*`;
 GitHub repo rename pending — see `ROADMAP.md` §7 Naming.)*
 
-> **2026-07-09 — CHARTER-CONFORMANCE ARC SHIPPED (branch `feat/charter-conformance`, 950 tests):**
+> **2026-07-09 — CHARTER-CONFORMANCE ARC SHIPPED (branch `feat/charter-conformance`, 962 tests; final 3-lens whole-branch review folded — adopt validates the RESULT not just the base, resolve validates decision, sweeps inside the flock, cross-face test isolation):**
 > live governance converged to the `../Sonia-Kairos/` charter per its anti-donor list + the
 > verified two-way-alignment findings. (1) Worker face **stage-only** — `write_mode="apply"` +
 > `make_gated_write_tool` retired (raise, never silent-downgrade); bare `converse()` decide-only.

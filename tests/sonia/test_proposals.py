@@ -85,3 +85,13 @@ def test_discard_removes_packet_without_touching_brain(client):
 def test_resolve_unknown_packet_404s(client):
     r = client.post("/proposals/nope/resolve", json={"decision": "adopt"})
     assert r.status_code == 404
+
+
+def test_resolve_unknown_decision_422s_and_keeps_packet(client):
+    """Discard is destructive (a packet is a full, non-reproducible evolution run): a typo like
+    'Adopt' must 422 and leave the packet intact — never fall through to discard."""
+    prop = _stage_packet()
+    r = client.post(f"/proposals/{prop.proposal_id}/resolve", json={"decision": "Adopt"})
+    assert r.status_code == 422
+    assert [p["proposal_id"] for p in client.get("/proposals").json()] == [prop.proposal_id]
+    assert client.get("/healthz").json()["edit_count"] == 0

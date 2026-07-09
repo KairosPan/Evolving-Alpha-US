@@ -162,3 +162,29 @@ byte-unchanged after run), adopt (clean + stale + discard), forge propose mode.
     there; a stage tool would silently drop stagings — decide-only is the honest surface).
 12. Noted, not done: `EpisodeStore` WAL/busy-timeout (propose mode no longer writes episodes;
     concurrent-writer exposure unchanged from before this arc).
+
+**Second fold (final whole-branch review, 3 lenses, all "fix-then-merge" — folded 2026-07-09):**
+
+13. **Test isolation (BLOCKER):** the cross-face sweeps made each face open the OTHER face's
+    store — tests isolating only their own face's dirs would read/write the operator's REAL
+    `./state`. `brain_session_isolation` now sets all five vars (brain/sessions/projects/
+    conflicts/proposals); `tests/workbench/conftest.py` added (autouse).
+14. **adopt validates the RESULT, not just the base (MAJOR):** base_len == live log length;
+    fork log must extend the live log (prefix equality); reviewed `records` == landing delta;
+    red-line `immutable_core` byte-equality vs the live brain; snapshot name sanitized
+    (packet-supplied id fed a guard-less `snapshot()`). Each attack pinned by a test.
+15. **`/proposals/{pid}/resolve` validates `decision` (MAJOR):** anything other than
+    adopt/discard → 422, packet kept — discard is destructive (a packet is a full,
+    non-reproducible evolution run) and used to swallow typos as discards.
+16. **Sweep concurrency + visibility (minors):** the reconcile sweep now runs INSIDE the brain
+    flock in all three revert paths; apply paths persist derived records inside the flock;
+    `_reconcile_all` catches only `FileNotFoundError` as the no-DB no-op and SURFACES other
+    failures in the response (`workbench_sweep` field); workbench `/rollback` sweeps ALL
+    projects. Cross-face heal pinned in BOTH directions; route-level `human_approver` pin added
+    for sonia `/apply`; env-gate refusal pinned for `evolve_from_episodes`; torn-session-file
+    listing pinned; the URL-encoded traversal test was vacuous (Starlette decodes before
+    routing) — replaced by store-level guard unit tests + an honest routed-404 pin.
+17. Noted, not done: a production-seam pin for refine_live's runner returning `mgr` handles
+    (the library seam is pinned; forcing an in-fork breaker trip at script level is
+    disproportionate — revisit if the runner wiring is ever refactored). The reconcile sweep's
+    length-only limitation on abandoned-branch restores is recorded in `alpha/meta/reconcile.py`.

@@ -5,7 +5,7 @@ so it is kept **terse and high-signal** — it states what you must know to edit
 safely, and links out for depth instead of duplicating. When the structure below stops matching
 reality, update this file (and bump the freshness marker).
 
-> **Freshness:** verified against `feat/charter-conformance`, 950 tests. `alpha` v0.0.1.
+> **Freshness:** verified against `feat/charter-conformance`, 962 tests. `alpha` v0.0.1.
 > Owner: KairosPan · last reviewed 2026-07-09.
 > If this drifts from the tree, trust the code and fix this file.
 
@@ -161,7 +161,7 @@ it reintroduces an import-time crash that no test names.
 
 ```bash
 pip install -e ".[dev]"          # base deps; add extras as needed: [live] [web] [sonia]
-python -m pytest -q              # full suite — fully OFFLINE (FakeSource), 950 tests, no network/keys
+python -m pytest -q              # full suite — fully OFFLINE (FakeSource), 962 tests, no network/keys
 
 # the four PIT firewall-surface acceptance tests:
 python -m pytest tests/data/test_source.py::test_guarded_source_blocks_future_snapshot \

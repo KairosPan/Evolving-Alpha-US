@@ -66,3 +66,15 @@ def test_session_store_rejects_path_traversal(tmp_path):
     for bad in ("../evil", "../../etc/passwd", "/etc/passwd"):
         with pytest.raises(ValueError):
             store.delete(bad)
+
+
+def test_session_store_list_skips_unparsable_files(tmp_path):
+    """The post-rollback reconcile sweep relies on list() completing: one torn/foreign .json in
+    the sessions dir must not abort the listing (final review 2026-07-09; ConflictQueue pattern)."""
+    store = SessionStore(tmp_path / "sessions")
+    a = Session(session_id="s-aaa", created_at="2026-07-09T00:00:00+00:00")
+    b = Session(session_id="s-bbb", created_at="2026-07-09T00:00:01+00:00")
+    store.put(a); store.put(b)
+    (tmp_path / "sessions" / "torn.json").write_text("{not json", encoding="utf-8")
+    got = store.list()
+    assert [s.session_id for s in got] == ["s-bbb", "s-aaa"]

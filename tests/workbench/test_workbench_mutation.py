@@ -86,3 +86,40 @@ def test_rollback_reconciles_staged_edit_state(tmp_path, monkeypatch):
     r = c.post(f"/edits/{eid}/approve")                    # recoverable: re-approve re-lands it
     assert r.status_code == 200 and r.json()["status"] == "approved"
     assert c.get("/healthz").json()["edit_count"] == 1
+
+
+def test_rollback_targets_last_apply_not_last_staged(tmp_path, monkeypatch):
+    """Staging order and approval order can differ: /rollback must revert the HIGHEST
+    applied_seq (the true last apply), not the last-staged edit's snapshot — the wrong pick
+    reverts a wider window than the user asked to undo (final review 2026-07-09)."""
+    monkeypatch.setenv("ALPHA_LIVE_BRAIN_DIR", str(tmp_path / "brain"))
+    monkeypatch.setenv("ALPHA_PROJECTS_DB", str(tmp_path / "state.db"))
+    monkeypatch.setenv("ALPHA_WORKSPACE_DIR", str(tmp_path / "ws"))
+    from workbench.app import create_app, set_llms
+    from alpha.llm.client import MockLLMClient
+    set_llms(chat=MockLLMClient([
+        '{"tool": "propose_memory_edit", "args": {"tool": "process_memory", "args": '
+        '{"lesson_id": "mA", "phases": ["trend"], "outcome": "win", "lesson": "a"}, "rationale": "rA"}}',
+        "Staged A.",
+        '{"tool": "propose_memory_edit", "args": {"tool": "process_memory", "args": '
+        '{"lesson_id": "mB", "phases": ["trend"], "outcome": "win", "lesson": "b"}, "rationale": "rB"}}',
+        "Staged B."]), agent=MockLLMClient("{}"), source=_fake_source())
+    c = TestClient(create_app())
+
+    c.post("/converse", json={"text": "stage A"})
+    c.post("/converse", json={"text": "stage B"})
+    edits = c.get("/project").json()["staged_edits"]
+    assert len(edits) == 2
+    eid_a, eid_b = edits[0]["edit_id"], edits[1]["edit_id"]
+
+    # approve OUT of staging order: B first (seq 0), then A (seq 1)
+    c.post(f"/edits/{eid_b}/approve")
+    c.post(f"/edits/{eid_a}/approve")
+    assert c.get("/healthz").json()["edit_count"] == 2
+
+    assert c.post("/rollback").json()["ok"] is True
+    # only the LAST APPLY (A, seq 1) reverted — B (seq 0) still landed
+    assert c.get("/healthz").json()["edit_count"] == 1
+    edits = {e["edit_id"]: e for e in c.get("/project").json()["staged_edits"]}
+    assert edits[eid_a]["status"] == "pending" and edits[eid_a]["applied_seq"] is None
+    assert edits[eid_b]["status"] == "approved" and edits[eid_b]["applied_seq"] == 0
