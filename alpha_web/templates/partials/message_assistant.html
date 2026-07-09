@@ -1,5 +1,7 @@
 <div class="bubble assistant" id="msg-{{ m.message_id }}">
   <div class="prose">{{ m.text | md }}</div>
   {% for d in m.directions %}<div class="direction">▸ {{ d.title }}{% if d.summary %} — {{ d.summary }}{% endif %}</div>{% endfor %}
-  {% if m.edits %}<a class="change-chip" href="#agent-drawer" data-flash="agent-drawer">&#8629; {{ m.edits|length }} proposed change{{ "" if m.edits|length == 1 else "s" }} &rarr;</a>{% endif %}
+  <div class="propose-area" id="propose-{{ m.message_id }}">
+    {% include "partials/_propose_area.html" %}
+  </div>
 </div>

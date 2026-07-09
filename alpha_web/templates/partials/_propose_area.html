@@ -1,0 +1,8 @@
+{% if m.edits %}
+<a class="change-chip" href="#agent-drawer" data-flash="agent-drawer">&#8629; {{ m.edits|length }} proposed change{{ "" if m.edits|length == 1 else "s" }} &rarr;</a>
+{% elif m.proposal_note %}
+<div class="no-edit-note">&#8629; no edit proposed: {{ m.proposal_note }}</div>
+{% elif not m.applied_seqs %}
+<button class="propose-btn" hx-post="/evolve/{{ session_id }}/message/{{ m.message_id }}/propose"
+        hx-target="#propose-{{ m.message_id }}" hx-swap="innerHTML">Propose an edit</button>
+{% endif %}

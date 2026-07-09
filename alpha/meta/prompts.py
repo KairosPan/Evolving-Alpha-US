@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from alpha.harness.state import HarnessState
+from alpha.llm.chat import ChatMessage
 from alpha.llm.extract import extract_json_object
 from alpha.meta.models import ProposedDirection, new_direction_id
 
@@ -31,6 +32,27 @@ def render_brain_summary(h: HarnessState) -> str:
     for l in h.memory.all():
         parts.append(f"- {l.lesson_id} [{l.outcome}] {l.lesson}")
     return "\n".join(parts)
+
+
+_EXTRACTION_INSTRUCTION = (
+    "\n\nYou are crystallizing the conversation above into brain edits. Output ONLY a single JSON "
+    "object, no prose outside it. If the conversation warrants concrete, specific brain change(s), "
+    'output {"ops": [{"tool":..., "args":..., "rationale":...}, ...]} using the EXACT tool vocabulary '
+    "above, with a non-empty rationale on every op. If it does NOT yet warrant a concrete change "
+    '(too vague, still clarifying, purely conversational), output '
+    '{"no_edit": true, "reason": "<one sentence why>"}.'
+)
+
+
+def render_extraction_system(h: HarnessState) -> str:
+    """System prompt for the deterministic crystallization pass: the live brain + the op vocabulary
+    + the strict either-ops-or-no_edit instruction."""
+    return render_brain_summary(h) + "\n\n" + _TOOLS_DOC + _EXTRACTION_INSTRUCTION
+
+
+def render_conversation(messages: list[ChatMessage]) -> str:
+    """Serialize the conversation (up to and including the target turn) into the user prompt."""
+    return "\n\n".join(f"{m.role.upper()}: {m.text}" for m in messages)
 
 
 def parse_directions(raw: str) -> list[ProposedDirection]:

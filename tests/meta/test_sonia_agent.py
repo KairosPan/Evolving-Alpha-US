@@ -30,23 +30,14 @@ def test_directions_become_direction_cards():
     assert "lean into squeezes" not in out.text or out.text.startswith("Here is a direction")
 
 
-def test_ops_become_dryrun_edit_cards_without_mutating_brain():
-    h = load_seeds("seeds")
-    sid = h.skills.all()[0].skill_id
-    scripted = ('proposing a patch. {"ops": [{"tool": "patch_skill", '
-                '"args": {"skill_id": "%s", "notes": "from sonia"}, "rationale": "the writeup shows it"}]}') % sid
-    agent, h = _agent(scripted, h)
-    out = agent.respond(Session(session_id="s1"), _user())
-    assert len(out.edits) == 1 and out.edits[0].status == "proposed"
-    assert out.edits[0].payload["after"] == {"notes": "from sonia"}
-    assert h.skills.get(sid).notes != "from sonia"               # live brain untouched
-
-
-def test_redline_op_becomes_failed_card():
-    scripted = '{"ops": [{"tool": "patch_skill", "args": {"skill_id": "missing"}, "rationale": "r"}]}'
+def test_respond_is_prose_only_even_when_reply_contains_ops():
+    # Chat must NOT crystallize ops anymore — even if the model volunteers an ops block, respond()
+    # returns prose + zero edit cards. Crystallization happens only via the on-demand /propose pass.
+    scripted = ('sure. {"ops": [{"tool": "patch_skill", "args": {"skill_id": "x"}, "rationale": "r"}]}')
     agent, _ = _agent(scripted)
     out = agent.respond(Session(session_id="s1"), _user())
-    assert len(out.edits) == 1 and out.edits[0].status == "failed" and out.edits[0].apply_reason
+    assert out.role == "assistant"
+    assert out.edits == []                       # prose-only: no cards from chat
 
 
 def test_history_is_threaded_into_the_chat_call():

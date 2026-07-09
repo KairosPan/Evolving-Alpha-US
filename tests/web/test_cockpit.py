@@ -58,15 +58,12 @@ def test_user_text_stays_literal_and_assistant_html_is_safe(client, monkeypatch)
     assert "<strong>safe bold</strong>" in r.text           # assistant markdown still renders
 
 
-def test_accept_then_apply_then_rollback(client, monkeypatch):
-    from alpha.harness.loader import load_seeds
-    sid_skill = load_seeds("seeds").skills.all()[0].skill_id
-    monkeypatch.setenv("ALPHA_MOCK_RESPONSE",
-                       '{"ops": [{"tool": "patch_skill", "args": {"skill_id": "%s", "notes": "n"}, "rationale": "r"}]}' % sid_skill)
+def test_message_renders_and_sessions_list_is_accessible(client, monkeypatch):
+    # Chat is now prose-only (no inline edit cards from ops blocks).
+    # Verify the message endpoint works and the session list page renders.
     msg = client.post("/evolve/message", data={"text": "patch it"})
-    # pull ids out of the session via the sessions API the cockpit also uses
     sessions = client.get("/evolve/sessions").text
-    assert "patch_skill" in msg.text and sid_skill in msg.text
+    assert msg.status_code == 200
     # the session list page renders
     assert "<html" in sessions.lower()
 

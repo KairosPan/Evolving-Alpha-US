@@ -360,7 +360,7 @@ def create_app() -> FastAPI:
                 "sessions": _safe_sessions(),
                 "banner": banner,
                 "pending": drawer.pending_view(session),
-                "brain": drawer.brain_view(da.load_brain())}
+                "brain": drawer.brain_view(da.load_brain(), materialized=da.brain_badge()["is_live"])}
 
     def _safe_sessions():
         try:
@@ -397,7 +397,7 @@ def create_app() -> FastAPI:
                       {"session_id": out["session_id"], "user": out["user_message"],
                        "assistant": out["assistant_message"],
                        "pending": drawer.pending_view(session),
-                       "brain": drawer.brain_view(da.load_brain())})
+                       "brain": drawer.brain_view(da.load_brain(), materialized=da.brain_badge()["is_live"])})
 
     def _unavailable(request):
         return render(request, "partials/unavailable.html",
@@ -413,6 +413,17 @@ def create_app() -> FastAPI:
         return render(request, "partials/_pending.html",
                       {"session_id": session_id, "pending": drawer.pending_view(session)})
 
+    @app.post("/evolve/{session_id}/message/{message_id}/propose")
+    def propose(request: Request, session_id: str, message_id: str):
+        try:
+            out = _sonia().propose(session_id, message_id)
+            session = _sonia().get_session(session_id)
+        except httpx.HTTPError:
+            return _unavailable(request)
+        return render(request, "partials/_propose_result.html",
+                      {"session_id": session_id, "m": out["message"],
+                       "pending": drawer.pending_view(session)})
+
     @app.post("/evolve/{session_id}/message/{message_id}/apply")
     def apply(request: Request, session_id: str, message_id: str):
         try:
@@ -422,7 +433,7 @@ def create_app() -> FastAPI:
             return _unavailable(request)
         return render(request, "partials/_drawer_update.html",
                       {"session_id": session_id, "pending": drawer.pending_view(session),
-                       "brain": drawer.brain_view(da.load_brain())})
+                       "brain": drawer.brain_view(da.load_brain(), materialized=da.brain_badge()["is_live"])})
 
     @app.post("/evolve/rollback/{session_id}/{message_id}")
     def rollback(request: Request, session_id: str, message_id: str):
@@ -433,7 +444,7 @@ def create_app() -> FastAPI:
             return _unavailable(request)
         return render(request, "partials/_drawer_update.html",
                       {"session_id": session_id, "pending": drawer.pending_view(session),
-                       "brain": drawer.brain_view(da.load_brain())})
+                       "brain": drawer.brain_view(da.load_brain(), materialized=da.brain_badge()["is_live"])})
 
     @app.get("/evolve/sessions")
     def sessions_index(request: Request):
