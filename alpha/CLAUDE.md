@@ -1,10 +1,10 @@
 # alpha/ — package map, collisions, current-architecture guards
 
-The detail layer under the root CLAUDE.md (which owns identity + the durable red lines).
+The detail layer under the root CLAUDE.md (which holds identity + the standing properties).
 Everything below describes the CURRENT architecture — when a big refactor lands, rewrite this
 file wholesale rather than patching it. Packages are small (~60 lines/file avg).
 
-## Current-architecture guards (they hold while THIS shape stands)
+## How the current shape holds together
 
 - **Dependencies point downward only**: `data→universe→features→state→regime` (perception) →
   `agent` → `eval/sizing/guard` → `refine/loop`, with `harness/` a dependency-free root and

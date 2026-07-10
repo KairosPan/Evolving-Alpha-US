@@ -1,9 +1,9 @@
 # CLAUDE.md
 
-Early-stage project — **expect large architectural changes; trust the code over any doc,
-including this one.** This file stays deliberately small: identity, durable red lines, commands.
-Current-architecture detail lives in per-directory CLAUDE.mds that auto-load where relevant
-(`alpha/` map+collisions+current-architecture guards · `alpha/arena/` · `alpha_web/` · `sonia/` ·
+Early-stage project; the code will keep changing, so **this file describes — it doesn't
+prescribe.** When a description here disagrees with the tree, the code is current and the
+description gets updated. Detail lives in per-directory CLAUDE.mds that auto-load where relevant
+(`alpha/` map+collisions+how-the-current-shape-holds · `alpha/arena/` · `alpha_web/` · `sonia/` ·
 `workbench/`) — after a big refactor, rewrite those freely; this root should barely change.
 
 > Owner: KairosPan · reviewed 2026-07-10 · 963 offline tests.
@@ -19,21 +19,22 @@ design charter): **Sonia** = teacher (`alpha/meta/` + `sonia/` :8810), **Kairos*
 2026-07-09; the deviations ledger is
 `docs/superpowers/specs/2026-07-09-charter-conformance-live-governance.md` §5.
 
-## Red lines — these survive any refactor
+## Standing properties (current facts, pinned by tests)
 
-- **Co-pilot only.** Never submits live orders; every `DecisionPackage` requires explicit human
-  confirmation. Not financial advice.
-- **PIT firewall.** No future leakage, ever: corp actions key on `announce_date` (never
-  `ex_date`), prices stored raw/unadjusted, windowed features trailing-only, learned artifacts
-  carry `learned_asof`. Four firewall regression tests pin this — keep them green.
-- **One write-waist.** Every brain mutation flows through `refine/apply.py::try_apply_op`;
-  red-line doctrine entries are immutable. No side channels, whatever shape the code takes.
-- **Honest eval.** Gross returns, stated not assumed; a delisting/halt-to-zero scores −1.0,
-  never silently dropped.
-- `reference/cn/` + `spikes/` are **read-only reference** (edits denied via
+- **A co-pilot by design.** There is no order-submission path; every `DecisionPackage` goes to
+  a human for explicit confirmation. Not financial advice.
+- **Point-in-time discipline.** Data access is PIT-guarded: corp actions key on
+  `announce_date` (not `ex_date`), prices are stored raw/unadjusted, windowed features use
+  trailing bars only, learned artifacts carry `learned_asof`. Four firewall regression tests
+  pin this.
+- **One write-waist.** Brain mutations flow through `refine/apply.py::try_apply_op`; red-line
+  doctrine entries are immutable objects.
+- **Honest eval.** Returns are gross (stated, not assumed); a delisting/halt-to-zero scores
+  −1.0 rather than being dropped.
+- `reference/cn/` and `spikes/` are read-only reference material (edits denied via
   `.claude/settings.json`); they contain look-alike twins of core files that searches will hit.
-- **All English** — code, comments, docs. Tests run fully offline
-  (`FakeSource`/`MockLLMClient`, temp=0); add a test next to what you change.
+- Code, comments and docs are in English; the test suite runs fully offline
+  (`FakeSource`/`MockLLMClient`, temp=0), with tests living next to what they cover.
 
 ## Commands
 
