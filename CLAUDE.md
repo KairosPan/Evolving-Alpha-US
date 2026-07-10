@@ -5,8 +5,8 @@ so it is kept **terse and high-signal** — it states what you must know to edit
 safely, and links out for depth instead of duplicating. When the structure below stops matching
 reality, update this file (and bump the freshness marker).
 
-> **Freshness:** verified against `main` @ `13ef5ab`, 962 tests. `alpha` v0.0.1.
-> Owner: KairosPan · last reviewed 2026-07-09.
+> **Freshness:** verified against `main` @ `68ae284`, 963 tests. `alpha` v0.0.1.
+> Owner: KairosPan · last reviewed 2026-07-10.
 > If this drifts from the tree, trust the code and fix this file.
 
 ---
@@ -71,6 +71,8 @@ import cycles (§5). `harness` imports nothing from other `alpha.*` subpackages 
 ## 3. Package map
 
 Everything is under `alpha/` unless noted. All packages are small (~60 lines/file avg).
+Four directories carry their own CLAUDE.md with local conventions + scoped commands
+(auto-loaded when you work there): `alpha/arena/` · `alpha_web/` · `sonia/` · `workbench/`.
 
 **Perception (L0/L1)**
 | Package | Owns |
@@ -107,7 +109,7 @@ Everything is under `alpha/` unless noted. All packages are small (~60 lines/fil
 |---|---|
 | `meta/` | The teaching (**Sonia**) side: `sonia_agent.py` (`SoniaAgent.respond`), `agent.py` (`MetaAgent.apply`), `extractor.py` (`extract_ops` — enforced-JSON crystallization, ops-or-`{no_edit,reason}`, never silent), `evolution.py` (fork-and-propose: `run_forked_evolution`/`adopt_proposal` — hash-pinned packets) + `proposal_store.py` (`ProposalQueue`), `reconcile.py` (post-restore derived-state sweep, both faces), `models.py`, `store.py` (`LiveBrainStore`+`SessionStore`), `conflict_store.py`, `prompts.py`, `ingest.py`. |
 | `converse/` | The persisted conversational (**Kairos**) side: `session.py` (`converse_project`), `loop.py` (`run_conversation`), `agent.py`, `tools.py`, `approve.py` (`StagedEdit` + `assert_approvable` — the status gate on the live apply path), `registry.py` (`ToolRegistry`), `project.py`, `sqlite_store.py`, `workspace.py`. |
-| `arena/` | Kairos's live tool surface (the "activity space"): `contract.py` (`CapabilityTier` T0–T4), `policy.py` (`ActivityPolicy.dispatch` — the single tool choke point, fail-closed), `environment.py` (`InProcessEnv`/`LocalEnv` — advisory, not a kernel boundary), `tools.py`, `builder.py` (`build_arena` — decide/read/write/shell, **no order tool**), `experience.py` (observation-only task episodes). `converse` never imports `arena` (AST-guarded); the workbench injects it via `registry_factory`. |
+| `arena/` | Kairos's live tool surface (the "activity space"): a tiered catalog (T0–T4) behind `ActivityPolicy.dispatch` — **the single fail-closed choke point**; `build_arena` = decide/read/write/shell + stage-only brain edit, **no order tool**. Invariants + per-file detail: `alpha/arena/CLAUDE.md`. |
 
 **Apps (top of repo, not under `alpha/`)** — these talk to each other over **HTTP, not imports**.
 | Package | Owns |
@@ -161,7 +163,7 @@ it reintroduces an import-time crash that no test names.
 
 ```bash
 pip install -e ".[dev]"          # base deps; add extras as needed: [live] [web] [sonia]
-python -m pytest -q              # full suite — fully OFFLINE (FakeSource), 962 tests, no network/keys
+python -m pytest -q              # full suite — fully OFFLINE (FakeSource), 963 tests, no network/keys
 
 # the four PIT firewall-surface acceptance tests:
 python -m pytest tests/data/test_source.py::test_guarded_source_blocks_future_snapshot \
@@ -169,9 +171,9 @@ python -m pytest tests/data/test_source.py::test_guarded_source_blocks_future_sn
   tests/data/test_snapshot_source.py::test_bars_are_raw_not_future_adjusted \
   tests/universe/test_build_universe.py::test_rvol_uses_only_trailing_bars -v
 
-python -m alpha_web              # read-only console  :8100
-python -m sonia                  # meta-agent service :8810  (needs DEEPSEEK_API_KEY, or ALPHA_SONIA_PROVIDER=mock)
-python -m workbench              # conversational svc :8820
+python -m alpha_web              # read-only console  :8100 ─┐ run/env incantations, model-id
+python -m sonia                  # meta-agent service :8810  ─┤ gotchas & scoped test commands:
+python -m workbench              # conversational svc :8820 ─┘ each service's own CLAUDE.md
 
 # producers (need a captured PIT window + LLM keys):
 python scripts/capture_window.py 2026-01-02 2026-01-31 snap AAPL MSFT NVDA   # offline PIT snapshot DB
@@ -182,7 +184,7 @@ python scripts/run_verdict.py    snap 2026-01-02 2026-03-31 --windows 3      # H
 
 ## 7. Conventions & gotchas
 
-- **All English** — code, comments, docs. `reference/cn/` is read-only CN algorithmic reference (deleted when the rebuild is done); `spikes/.../​_hermes/` is a gitignored vendor spike. **Never edit either** — they only exist to read from.
+- **All English** — code, comments, docs. `reference/cn/` is read-only CN algorithmic reference (deleted when the rebuild is done); `spikes/.../​_hermes/` is a gitignored vendor spike. **Never edit either** — they only exist to read from (enforced: `.claude/settings.json` denies Edit/Write there).
 - **Branding vs code names.** Product/doc/UI branding = **Sonia-Kairos-US-Stock**; the import package stays `alpha`, the env prefix stays `ALPHA_*`, pyproject `name` stays `alpha`, and the repo name (GitHub remote + local folder) stays `Evolving-Alpha-US` (decided 2026-07-10 — so the design repo's `../evolving-alpha-us/` pointers stay correct).
 - **Frozen pydantic v2** for all value objects. New shared types: pick the lowest layer (§2).
 - **Tests mirror `alpha/`** (`tests/<package>/...`) and run fully offline via `FakeSource`/`MockLLMClient`. Eval determinism uses `temperature=0`. Add a test next to the code you change.

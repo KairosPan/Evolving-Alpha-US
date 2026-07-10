@@ -85,6 +85,7 @@ def _project_view(proj) -> dict:
 
 
 def create_app() -> FastAPI:
+    _assert_brain_outside_workspace()      # boot-time: never serve a brain a live shell can reach
     app = FastAPI(title="Workbench · Kairos conversational face")
 
     @app.get("/healthz")
@@ -206,4 +207,7 @@ def create_app() -> FastAPI:
     return app
 
 
-app = create_app()
+def __getattr__(name):                     # PEP 562: lazy `workbench.app:app` for uvicorn —
+    if name == "app":                      # create_app()'s boot assert fires at SERVICE START,
+        return create_app()                # while plain library imports stay side-effect-free
+    raise AttributeError(name)             # (tests import this module under arbitrary env).

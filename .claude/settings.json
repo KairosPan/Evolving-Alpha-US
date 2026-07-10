@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(/reference/cn/**)",
+      "Write(/reference/cn/**)",
+      "NotebookEdit(/reference/cn/**)",
+      "Edit(/spikes/**)",
+      "Write(/spikes/**)",
+      "NotebookEdit(/spikes/**)"
+    ]
+  }
+}

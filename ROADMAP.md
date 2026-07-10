@@ -218,10 +218,17 @@ documented in CLAUDE.md §1. Remaining steps:
 - [x] ~~EditProvenance vocabulary migration~~ — SHIPPED 2026-07-09 inside the charter-conformance
   arc (proposer += `kairos`/`user`, path += `user_direct`, `human_approver` populated at every
   human-approved landing; `'hermes'` kept read-compat).
-- [ ] **CLAUDE.md spec compliance round** (per `../design-requirements-for-claude-md.md` R2/R4/R8):
-  subdirectory CLAUDE.md files for `alpha_web/` (HTMX gotchas incl. 204+HX-Redirect), `sonia/` +
-  `workbench/` (service env incantations), `alpha/arena/` (tier semantics); committed
-  `.claude/settings.json` deny-list for `reference/cn/**` + `spikes/**` instead of prose rules.
+- [x] ~~CLAUDE.md spec compliance round~~ — SHIPPED 2026-07-10: four subdirectory CLAUDE.md
+  files (`alpha_web/` HTMX gotchas · `sonia/` routes/lock discipline · `workbench/` live-face
+  incantation · `alpha/arena/` tier invariants, each with owner/review footer + verified scoped
+  test command); committed `.claude/settings.json` deny-list (root-anchored `/reference/cn/**`
+  + `/spikes/**` — bare patterns are cwd-relative and silently miss in subdir sessions); root
+  trimmed (arena row → pointer, service run details pushed down). Bonus fixes from the review:
+  workbench boot assert now actually runs at boot (`create_app()` + lazy PEP-562 `app` so
+  library imports stay side-effect-free), and the live-face install line gained `[live]`
+  (decide lazily imports alpaca-py). Residual (accepted): root file is ~200 lines (~5 min read
+  vs the spec's ~2) — next trim candidates are §1's relationship paragraph and §4's terminology
+  bridge if it keeps growing.
 
 ## 8. Known tradeoffs / review leftovers (accepted — no action planned)
 

@@ -59,6 +59,16 @@ def test_rollback_after_approve(tmp_path, monkeypatch):
     assert c.get("/healthz").json()["edit_count"] == 0            # restored to the pre-approve snapshot
 
 
+def test_create_app_fails_fast_when_brain_inside_workspace(tmp_path, monkeypatch):
+    """Boot assert (structural invariant): LocalEnv is not a kernel boundary, so a server whose
+    brain dir sits inside the shell workspace must refuse to start, not mutate-then-trip."""
+    monkeypatch.setenv("ALPHA_WORKSPACE_DIR", str(tmp_path / "ws"))
+    monkeypatch.setenv("ALPHA_LIVE_BRAIN_DIR", str(tmp_path / "ws" / "brain"))
+    from workbench.app import create_app
+    with pytest.raises(RuntimeError, match="inside workspace"):
+        create_app()
+
+
 def test_approve_stamps_kairos_and_human_approver(tmp_path, monkeypatch):
     """Charter conformance 2026-07-09: the landed record names the true principals — the worker
     (kairos) proposed, the user approved."""
