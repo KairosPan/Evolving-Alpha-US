@@ -218,17 +218,14 @@ documented in CLAUDE.md §1. Remaining steps:
 - [x] ~~EditProvenance vocabulary migration~~ — SHIPPED 2026-07-09 inside the charter-conformance
   arc (proposer += `kairos`/`user`, path += `user_direct`, `human_approver` populated at every
   human-approved landing; `'hermes'` kept read-compat).
-- [x] ~~CLAUDE.md spec compliance round~~ — SHIPPED 2026-07-10: four subdirectory CLAUDE.md
-  files (`alpha_web/` HTMX gotchas · `sonia/` routes/lock discipline · `workbench/` live-face
-  incantation · `alpha/arena/` tier invariants, each with owner/review footer + verified scoped
-  test command); committed `.claude/settings.json` deny-list (root-anchored `/reference/cn/**`
-  + `/spikes/**` — bare patterns are cwd-relative and silently miss in subdir sessions); root
-  trimmed (arena row → pointer, service run details pushed down). Bonus fixes from the review:
-  workbench boot assert now actually runs at boot (`create_app()` + lazy PEP-562 `app` so
-  library imports stay side-effect-free), and the live-face install line gained `[live]`
-  (decide lazily imports alpaca-py). Residual (accepted): root file is ~200 lines (~5 min read
-  vs the spec's ~2) — next trim candidates are §1's relationship paragraph and §4's terminology
-  bridge if it keeps growing.
+- [x] ~~CLAUDE.md spec compliance round~~ — SHIPPED 2026-07-10, then SUPERSEDED the same day by
+  the user's early-stage docs policy: **one minimal descriptive root CLAUDE.md only** (~55
+  lines; states current facts, prescribes nothing); all subdirectory CLAUDE.md files removed
+  (their content survives in git history, `docs/`, and cross-session memory). What remains from
+  the round: the committed `.claude/settings.json` deny-list (root-anchored `/reference/cn/**`
+  + `/spikes/**` — bare patterns are cwd-relative), and two code fixes it forced (workbench
+  boot assert runs at boot via `create_app()` + lazy PEP-562 `app`; live-face install needs
+  `[live]`).
 
 ## 8. Known tradeoffs / review leftovers (accepted — no action planned)
 

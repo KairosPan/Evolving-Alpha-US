@@ -2,9 +2,8 @@
 
 Early-stage project; the code will keep changing, so **this file describes — it doesn't
 prescribe.** When a description here disagrees with the tree, the code is current and the
-description gets updated. Detail lives in per-directory CLAUDE.mds that auto-load where relevant
-(`alpha/` map+collisions+how-the-current-shape-holds · `alpha/arena/` · `alpha_web/` · `sonia/` ·
-`workbench/`) — after a big refactor, rewrite those freely; this root should barely change.
+description gets updated. This is the only CLAUDE.md — deeper detail lives in the code itself
+and in `docs/`.
 
 > Owner: KairosPan · reviewed 2026-07-10 · 963 offline tests.
 
@@ -42,7 +41,7 @@ design charter): **Sonia** = teacher (`alpha/meta/` + `sonia/` :8810), **Kairos*
 pip install -e ".[dev]"       # extras as needed: [live] [web] [sonia]
 python -m pytest -q           # full suite, offline, no keys
 python -m alpha_web           # :8100 ─┐
-python -m sonia               # :8810  ├─ run/env details: each service's CLAUDE.md
+python -m sonia               # :8810  ├─ run/env details: README quickstart sections
 python -m workbench           # :8820 ─┘
 ```
 
@@ -51,6 +50,7 @@ python -m workbench           # :8820 ─┘
 `alpha/` layers, roughly: perception (`data→universe→state→regime`) · the playbook (`harness/`)
 · act (`agent/`) · score (`eval/sizing/guard`) · self-evolution (`refine/loop`) · faces
 (`meta/converse/arena`). Apps talk over HTTP, never imports. **Bare names collide across
-packages** (`agent.py` ×3, `registry.py` ×3, "harness"/"kairos" mean different things across
-repos) — read `alpha/CLAUDE.md` before editing there. Backlog: `ROADMAP.md` · built log:
-`docs/PROJECT_STATE.md` · memory: `MEMORY.md`.
+packages** (`agent.py` ×3, `registry.py` ×3, `store.py` ×2; "harness" here = the evolvable
+playbook `H`, which the `../Sonia-Kairos/` charter calls the Body; lowercase `kairos` = the
+sibling CN legal-agent repo) — qualify by package before editing. Backlog: `ROADMAP.md` ·
+built log: `docs/PROJECT_STATE.md` · memory: `MEMORY.md`.
