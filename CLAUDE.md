@@ -183,7 +183,7 @@ python scripts/run_verdict.py    snap 2026-01-02 2026-03-31 --windows 3      # H
 ## 7. Conventions & gotchas
 
 - **All English** — code, comments, docs. `reference/cn/` is read-only CN algorithmic reference (deleted when the rebuild is done); `spikes/.../​_hermes/` is a gitignored vendor spike. **Never edit either** — they only exist to read from.
-- **Branding vs code names.** Product/doc/UI branding = **Sonia-Kairos-US-Stock**; the import package stays `alpha`, the env prefix stays `ALPHA_*`, pyproject `name` stays `alpha` (code-level rename deferred — see `ROADMAP.md` §Naming).
+- **Branding vs code names.** Product/doc/UI branding = **Sonia-Kairos-US-Stock**; the import package stays `alpha`, the env prefix stays `ALPHA_*`, pyproject `name` stays `alpha`, and the repo name (GitHub remote + local folder) stays `Evolving-Alpha-US` (decided 2026-07-10 — so the design repo's `../evolving-alpha-us/` pointers stay correct).
 - **Frozen pydantic v2** for all value objects. New shared types: pick the lowest layer (§2).
 - **Tests mirror `alpha/`** (`tests/<package>/...`) and run fully offline via `FakeSource`/`MockLLMClient`. Eval determinism uses `temperature=0`. Add a test next to the code you change.
 - **Config is currently scattered** — ~31 `ALPHA_*`/`APCA_*` env vars are read inline via `os.environ.get(...)` (no central settings module yet). When adding one, grep for siblings; the `./state/brain` default in particular is duplicated across several files. (Centralizing this is a known backlog item.)

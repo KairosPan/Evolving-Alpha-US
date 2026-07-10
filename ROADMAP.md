@@ -210,11 +210,11 @@ files, 4 lazy-import-held cycles, string uvicorn targets — rename cost ≫ val
 option (A) chosen: the worker face carries the name AS-IS, divergence from the charter pivot
 documented in CLAUDE.md §1. Remaining steps:
 
-- [ ] **GitHub repo rename** `Evolving-Alpha-US` → `Sonia-Kairos-US-Stock` (GitHub redirects old
-  clone URLs) + `git remote set-url origin` + update README clone block + PROJECT_STATE repo line;
-  then sync the two NON-frozen design-repo pointers (`Backend-Design-SoniaKairos.md:5` donor path,
-  `Sonia-Kairos/CLAUDE.md` terminology-traps line) with an "(ex evolving-alpha-us)" gloss. Local
-  folder rename optional, same step.
+- [x] ~~GitHub repo rename~~ — **DECIDED AGAINST 2026-07-10 (user):** the repo name (GitHub
+  remote AND local folder) stays `Evolving-Alpha-US`; **Sonia-Kairos-US-Stock is product/doc/UI
+  branding only.** Consequence: the design repo's `../evolving-alpha-us/` pointers remain
+  permanently correct — no cross-repo pointer sync needed (rev-13 of the 2026-07-09 findings is
+  moot).
 - [x] ~~EditProvenance vocabulary migration~~ — SHIPPED 2026-07-09 inside the charter-conformance
   arc (proposer += `kairos`/`user`, path += `user_direct`, `human_approver` populated at every
   human-approved landing; `'hermes'` kept read-compat).

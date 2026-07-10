@@ -3,7 +3,8 @@
 *(formerly Evolving-Alpha-US; project renamed 2026-07-09 — two named entities: **Sonia** the
 teacher (`alpha/meta/` + `sonia/`), **Kairos** the worker (`converse/` + `arena/` + `workbench/`).
 Doc/UI rebrand shipped 2026-07-09; import package stays `alpha`, env prefix stays `ALPHA_*`;
-GitHub repo rename pending — see `ROADMAP.md` §7 Naming.)*
+the repo name — GitHub remote and local folder — stays `Evolving-Alpha-US` by decision
+2026-07-10: Sonia-Kairos-US-Stock is product/doc/UI branding only.)*
 
 > **2026-07-09 — CHARTER-CONFORMANCE ARC SHIPPED (branch `feat/charter-conformance`, 962 tests; final 3-lens whole-branch review folded — adopt validates the RESULT not just the base, resolve validates decision, sweeps inside the flock, cross-face test isolation):**
 > live governance converged to the `../Sonia-Kairos/` charter per its anti-donor list + the
@@ -42,8 +43,8 @@ fill-feasibility). A human confirms. **No automatic live orders. No financial ad
 straight copy of the CN system. It is a greenfield rebuild — clean US-native data model,
 all-English code and docs.
 
-**Repo:** `KairosPan/Evolving-Alpha-US` (GitHub rename to `Sonia-Kairos-US-Stock` pending, see
-`ROADMAP.md` §7), public, clean-slate git history. Branch `main`.
+**Repo:** `KairosPan/Evolving-Alpha-US` (the repo keeps this name — decided 2026-07-10;
+`Sonia-Kairos-US-Stock` is product branding), public, clean-slate git history. Branch `main`.
 
 ---
 
