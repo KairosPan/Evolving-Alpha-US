@@ -5,7 +5,7 @@ so it is kept **terse and high-signal** — it states what you must know to edit
 safely, and links out for depth instead of duplicating. When the structure below stops matching
 reality, update this file (and bump the freshness marker).
 
-> **Freshness:** verified against `feat/charter-conformance`, 962 tests. `alpha` v0.0.1.
+> **Freshness:** verified against `main` @ `13ef5ab`, 962 tests. `alpha` v0.0.1.
 > Owner: KairosPan · last reviewed 2026-07-09.
 > If this drifts from the tree, trust the code and fix this file.
 
