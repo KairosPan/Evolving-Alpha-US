@@ -1,7 +1,27 @@
-# alpha/ — package map, name collisions, terminology bridge
+# alpha/ — package map, collisions, current-architecture guards
 
-The detail layer under the root CLAUDE.md (which owns the spine, invariants, and commands —
-re-read its §4 red lines before editing here). Packages are small (~60 lines/file avg).
+The detail layer under the root CLAUDE.md (which owns identity + the durable red lines).
+Everything below describes the CURRENT architecture — when a big refactor lands, rewrite this
+file wholesale rather than patching it. Packages are small (~60 lines/file avg).
+
+## Current-architecture guards (they hold while THIS shape stands)
+
+- **Dependencies point downward only**: `data→universe→features→state→regime` (perception) →
+  `agent` → `eval/sizing/guard` → `refine/loop`, with `harness/` a dependency-free root and
+  `meta/converse/arena` above. A shared value object goes in the **lowest layer that needs it**.
+- **Known import cycles** (held by lazy imports, *not* enforced): `state↔features`,
+  `eval↔sizing`, `refine↔memory`, `eval↔refine`. Never convert a lazy/local import to top-level
+  or re-export across these edges — import-time crash no test names.
+- **Verdict symmetry**: in `compare_harnesses`, HCH gets a read-only `recall_store`, NEVER the
+  `episode_store=` write handle — both arms read one fixed pool; don't "unify".
+- **Decorator order**: `SizingPolicy(GuardedPolicy(LLMAgentPolicy))` — guard inner, sizing outer.
+- **Eval is verdict-neutral to sizing**: scoring/breaker/stats never read
+  `size_tier`/`portfolio`.
+- **Fork packets**: `meta/evolution.py::adopt_proposal` lands a fork wholesale only because
+  every edit in it passed the gate on a hash-pinned identical base — keep that proof intact.
+- First symbols you'll need: `eval/decision.py` (**the** data contract),
+  `refine/apply.py::try_apply_op` (**the** edit gate), `state/builder.py::build_market_state`
+  (the real assembler), `llm/config.py::make_client` / `data/registry.py::make_source`.
 
 ## Package map
 
