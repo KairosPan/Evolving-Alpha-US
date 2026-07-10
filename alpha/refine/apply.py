@@ -104,10 +104,15 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
                  min_task_samples: int = 3,
                  min_task_success_rate: float = 0.5,
                  min_task_confirmed_samples: int = 3) -> tuple[EditRecord | None, str | None]:
-    """Gate order: whitelist -> rationale -> empty-patch -> set-once/create guards ->
+    """Gate order: stamp coherence -> whitelist -> rationale -> empty-patch -> set-once/create guards ->
     domain-aware separation -> task floor (PC-8) -> trade floors -> conflict -> dispatch
     (dispatch errors -> clean reject reason). Returns (record, None) on apply | (None, reason)."""
     tid = _target_id(op.tool, op.args)
+    # Stamp coherence (charter drill roster, extended 2026-07-08): a direct edit not carrying
+    # the user-authored stamp is refused at the waist, before any content check.
+    if provenance is not None and provenance.path == "user_direct" and (
+            provenance.proposer != "user" or not provenance.human_approver):
+        return None, "user_direct requires proposer='user' with human_approver (unstamped direct edit refused)"
     if op.tool not in allowed:
         return None, "tool not in this pass or unknown"
     if not op.rationale or not op.rationale.strip():
@@ -164,7 +169,7 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
             contested = meta.log.latest_for(_target_kind(op.tool), tid) if tid else None
             conflict_queue.add(op=op.model_dump(), provenance=provenance.model_dump() if provenance else None,
                                contested=contested.model_dump() if contested else None)
-            return None, "held_for_review: self-study contests a teaching-owned element"
+            return None, "held_for_review: self-study contests a teaching- or user-owned element"
     try:
         rec = _dispatch(meta, op)
     except _DISPATCH_ERRORS as e:

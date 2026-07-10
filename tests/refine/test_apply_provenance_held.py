@@ -69,3 +69,20 @@ def test_no_conflict_queue_means_no_held_path():
                  rationale="r"), allowed=PASS_TOOLS["M"], min_retire_samples=5, min_promote_samples=3,
                  provenance=EditProvenance(path="self_study", proposer="refiner"))   # no queue
     assert reason is None and rec is not None             # applies (no held path without a queue)
+
+
+def test_self_study_contesting_user_direct_is_held_not_applied():
+    h = _h(); log = EditLog(); meta = MetaTools(h, log)
+    # the user's direct hand creates m9 (sonia POST /edit posture: floors lifted, full stamp)
+    try_apply_op(meta, h, RefineOp(tool="process_memory",
+                 args={"lesson_id": "m9", "phases": ["trend"], "outcome": "win", "lesson": "user landed this"},
+                 rationale="user edit"), allowed=PASS_TOOLS["M"], min_retire_samples=0, min_promote_samples=0,
+                 provenance=EditProvenance(path="user_direct", proposer="user", human_approver="user"))
+    q = _FakeQueue()
+    # self-study tries to demote the user_direct-owned m9 -> HELD, live H unchanged
+    rec, reason = try_apply_op(meta, h, RefineOp(tool="demote_memory", args={"lesson_id": "m9", "factor": 0.5},
+                 rationale="data weak"), allowed=PASS_TOOLS["M"], min_retire_samples=5, min_promote_samples=3,
+                 provenance=EditProvenance(path="self_study", proposer="refiner"), conflict_queue=q)
+    assert rec is None and reason.startswith("held_for_review")
+    assert len(q.items) == 1
+    assert h.memory.get("m9").importance.time_decay == 1.0

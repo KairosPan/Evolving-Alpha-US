@@ -6,7 +6,10 @@
       "NotebookEdit(/reference/cn/**)",
       "Edit(/spikes/**)",
       "Write(/spikes/**)",
-      "NotebookEdit(/spikes/**)"
+      "NotebookEdit(/spikes/**)",
+      "Edit(//Users/pan/Desktop/self-evolve/Sonia-Kairos/**)",
+      "Write(//Users/pan/Desktop/self-evolve/Sonia-Kairos/**)",
+      "NotebookEdit(//Users/pan/Desktop/self-evolve/Sonia-Kairos/**)"
     ]
   }
 }

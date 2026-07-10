@@ -180,6 +180,11 @@ derived state across BOTH faces — see `docs/superpowers/specs/2026-07-09-chart
 
 **Broader meta-agent follow-ups (also in spec §11):**
 
+- [ ] **Cockpit UI for the user-direct hand** (2026-07-10) — the charter's second hand is live but
+  HTTP-only (sonia `POST /edit`; no cockpit control). Add a direct Body-edit surface: form →
+  `/edit`, an honest-limits line (a direct edit forgoes packet counsel), and the revert lever
+  (`POST /snapshots/{name}/restore`) surfaced next to it. Own brainstorm→spec→plan round
+  (deferred from the 2026-07-10 landing-doc adoption by user decision).
 - [ ] **Self-learning channel** — the agent's **second learning channel**: a reflection→directions stage
   on top of the Refiner's evidence path, surfaced into the *same* cockpit, so the agent proposes
   evolutions from its **own task runs** (realized-outcome trajectories), not just from human-fed content.

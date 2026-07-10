@@ -3,7 +3,7 @@
 Descriptive, not prescriptive: when this file disagrees with the tree, the code is current and
 this file gets updated. This is the only CLAUDE.md — depth lives in docstrings and `docs/`.
 
-> Owner: KairosPan · reviewed 2026-07-10 · 963 offline tests.
+> Owner: KairosPan · reviewed 2026-07-10 · 969 offline tests.
 
 ## What this is
 
@@ -11,9 +11,10 @@ this file gets updated. This is the only CLAUDE.md — depth lives in docstrings
 doctrine (`../evolving-alpha/轮回.docx`) on the Continual Harness two-loop architecture (paper
 2605.09998). Daily: screen → regime read → LLM agent → ranked `DecisionPackage` for explicit
 human confirmation — no order-submission path exists anywhere (the arena's no-order-tool rule
-is test-pinned). A Refiner evolves the playbook `H` overnight. Two charter entities
-(`../Sonia-Kairos/`): **Sonia** the teacher, **Kairos** the worker. Code, comments and docs are
-English; the CN material is reference only.
+is test-pinned). A Refiner evolves the playbook `H` overnight. Two charter entities (charter:
+`Evolving-Agent-Design-SoniaKairos.md`, moved in-repo 2026-07-10; `../Sonia-Kairos/` = its frozen
+read-only design home, write-denied via committed settings): **Sonia** the teacher, **Kairos**
+the worker. Code, comments and docs are English; the CN material is reference only.
 
 ## Map
 
@@ -65,10 +66,14 @@ python -m workbench               # :8820 ─┘
   `scripts/refine_live.py` is the only intended same-store-for-both caller.
 - **`H` in code is `(p, K, M)`.** `HarnessState` holds doctrine/skills/memory only;
   `PASS_TOOLS["G"]` is a reserved empty pass. Docs writing `H=(p,G,K,M)` describe pass order.
-- **Governance (charter, 2026-07-09).** Worker-agent edits are stage-only (`write_mode="apply"`
-  raises); live self-study forks-and-proposes (`EvolutionProposal`, user adopts in Sonia);
-  in-place autonomy needs `--autonomous` **and** `ALPHA_UNSAFE_AUTONOMOUS=1`. Deviations ledger:
-  `docs/superpowers/specs/2026-07-09-charter-conformance-live-governance.md` §5.
+- **Governance (charter, amended 2026-07-08).** Two hands, one waist: agent proposals need user
+  approval (worker edits stage-only — `write_mode="apply"` raises), or the user edits directly
+  via sonia `POST /edit` (`user_direct` provenance, sample floors lifted, red-lines still bind;
+  revert lever `POST /snapshots/{name}/restore`). Self-study contesting a teaching- or
+  user_direct-owned element is held for user adjudication; a mis-stamped `user_direct` op is
+  refused at the waist. Live self-study forks-and-proposes (`EvolutionProposal`, user adopts in
+  Sonia); in-place autonomy needs `--autonomous` **and** `ALPHA_UNSAFE_AUTONOMOUS=1`. Deviations
+  ledger: `docs/superpowers/specs/2026-07-09-charter-conformance-live-governance.md` §5.
 - **Names collide.** `agent.py` ×3, `registry.py` ×3, `store.py` ×2, `app.py` ×3, `tools.py`
   (converse vs arena), two `build_market_state` (canonical: `alpha/state/builder.py`) — qualify
   by package before editing. Lowercase `kairos` = the sibling CN legal-agent repo.

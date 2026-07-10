@@ -37,3 +37,23 @@ def test_self_study_on_self_study_owned_is_not_conflict():
 def test_untouched_element_is_not_conflict():
     op = RefineOp(tool="demote_memory", args={"lesson_id": "ghost", "factor": 0.5}, rationale="r")
     assert is_conflict(EditLog(), op, SELF) is False
+
+
+USER = EditProvenance(path="user_direct", proposer="user", human_approver="user")
+
+def _log_with_user_direct_lesson():
+    log = EditLog()
+    log.append("process_memory", "memory", "u1", "create", rationale="r")
+    log.stamp_last(EditProvenance(path="user_direct", proposer="user", human_approver="user"))
+    return log
+
+def test_self_study_contesting_user_direct_owned_is_conflict():
+    # charter 2026-07-08 second hand: the user's landed edit is a user act — machine contest is held
+    log = _log_with_user_direct_lesson()
+    op = RefineOp(tool="demote_memory", args={"lesson_id": "u1", "factor": 0.5}, rationale="data says weak")
+    assert is_conflict(log, op, SELF) is True
+
+def test_user_direct_op_never_conflicts():
+    log = _log_with_teaching_lesson()
+    op = RefineOp(tool="demote_memory", args={"lesson_id": "m1", "factor": 0.5}, rationale="r")
+    assert is_conflict(log, op, USER) is False            # only self-study can be held

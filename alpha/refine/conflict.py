@@ -18,13 +18,16 @@ _CONTEST_VERBS: frozenset[str] = frozenset({
 })
 
 def is_conflict(log: EditLog, op: RefineOp, provenance: EditProvenance | None) -> bool:
-    """True iff a self-study op contests a teaching-owned existing H element (spec §5.4 asymmetry)."""
+    """True iff a self-study op contests a teaching- or user_direct-owned existing H element
+    (spec §5.4 asymmetry; user_direct added per the charter's 2026-07-08 second hand — both
+    hands' landings are user acts, so a machine contest goes to user adjudication)."""
     if provenance is None or provenance.path != "self_study":
-        return False                                   # only self-study can be held; teaching applies
+        return False                                   # only self-study can be held; user hands apply
     if op.tool not in _CONTEST_VERBS:
         return False                                   # create verbs never contest
     tid = _target_id(op.tool, op.args)
     if tid is None:
         return False
     latest = log.latest_for(_KIND.get(op.tool, ""), tid)
-    return latest is not None and latest.provenance is not None and latest.provenance.path == "teaching"
+    return (latest is not None and latest.provenance is not None
+            and latest.provenance.path in ("teaching", "user_direct"))
