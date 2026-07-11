@@ -6,6 +6,7 @@ from datetime import date as Date
 import pandas as pd
 
 from alpha.data.calendar import prev_trading_day
+from alpha.data.integrity_check import write_checksums
 from alpha.data.pit_store import PITStore
 
 
@@ -53,3 +54,4 @@ def capture_window(source, store: PITStore, start: Date, end: Date, symbols: lis
     elif not corp.empty:
         corp = corp[corp["symbol"].isin(symbols)].reset_index(drop=True)
     store.put_corp_actions(corp)
+    write_checksums(store.root)   # D6: manifest last, so it covers everything the window just wrote

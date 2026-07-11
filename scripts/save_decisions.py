@@ -27,6 +27,7 @@ from pathlib import Path
 from alpha.agent.agent import LLMAgentPolicy
 from alpha.data.calendar import trading_days_between
 from alpha.data.firewall import AsOfGuard
+from alpha.data.integrity_check import verify_checksums
 from alpha.data.pit_store import PITStore
 from alpha.data.snapshot_source import SnapshotSource
 from alpha.data.source import GuardedSource
@@ -133,7 +134,9 @@ def main() -> None:
     args = ap.parse_args()
 
     s = Settings.from_env()
-    source = SnapshotSource(PITStore(Path(args.pit_root)))
+    pit_root = Path(args.pit_root)
+    source = SnapshotSource(PITStore(pit_root))
+    verify_checksums(pit_root, fail_closed=True)   # D6: fail closed — decisions must ship on pinned data
     store = DecisionStore(args.out_dir)
     brain = args.brain or s.episodes_db
     episode_store = EpisodeStore.open(brain, create_if_missing=False) if brain else None

@@ -22,6 +22,7 @@ import argparse, os, tempfile
 from datetime import date as Date
 from pathlib import Path
 
+from alpha.data.integrity_check import verify_checksums
 from alpha.data.pit_store import PITStore
 from alpha.data.snapshot_source import SnapshotSource
 from alpha.harness.manager import HarnessManager
@@ -108,7 +109,9 @@ def main() -> None:
                     help=f"pre-pivot in-place evolution (requires {_UNSAFE_ENV}=1)")
     args = ap.parse_args()
     s = Settings.from_env()
-    source = SnapshotSource(PITStore(Path(args.pit_root)))
+    pit_root = Path(args.pit_root)
+    source = SnapshotSource(PITStore(pit_root))
+    verify_checksums(pit_root, fail_closed=True)   # D6: fail closed — self-study must run on pinned data
     out = run_refine_live(source, args.start, args.end,
                           brain_dir=s.live_brain_dir,
                           conflicts_dir=s.conflicts_dir,

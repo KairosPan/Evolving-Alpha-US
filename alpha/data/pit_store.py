@@ -30,6 +30,10 @@ class PITStore:
     def __init__(self, root: Path) -> None:
         self._root = Path(root)
 
+    @property
+    def root(self) -> Path:
+        return self._root
+
     def _snap_path(self, day: Date) -> Path:
         return self._root / "snapshot" / f"{day.strftime('%Y%m%d')}.parquet"
 

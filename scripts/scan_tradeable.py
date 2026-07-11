@@ -10,6 +10,7 @@ from pathlib import Path
 
 import statistics as stats
 
+from alpha.data.integrity_check import verify_checksums
 from alpha.data.pit_store import PITStore
 from alpha.data.snapshot_source import SnapshotSource
 from alpha.data.firewall import AsOfGuard
@@ -55,6 +56,7 @@ def fast_universe(guarded, day: Date) -> CandidateUniverse:
 def main() -> None:
     root, start, end = Path(sys.argv[1]), Date.fromisoformat(sys.argv[2]), Date.fromisoformat(sys.argv[3])
     src = SnapshotSource(PITStore(root))
+    verify_checksums(root, fail_closed=False)   # D6: warn — a fast scan tolerates a stale window
     days = trading_days_between(src.trading_calendar(), start, end)
     hist: list[float] = []
     prevg: frozenset[str] = frozenset()

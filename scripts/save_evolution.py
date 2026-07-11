@@ -14,6 +14,7 @@ import tempfile
 from datetime import date as Date
 from pathlib import Path
 
+from alpha.data.integrity_check import verify_checksums
 from alpha.data.pit_store import PITStore
 from alpha.data.snapshot_source import SnapshotSource
 from alpha.harness.loader import load_seeds
@@ -62,7 +63,9 @@ def main() -> None:
     ap.add_argument("--horizon", type=int, default=2)
     args = ap.parse_args()
 
-    source = SnapshotSource(PITStore(Path(args.pit_root)))
+    pit_root = Path(args.pit_root)
+    source = SnapshotSource(PITStore(pit_root))
+    verify_checksums(pit_root, fail_closed=False)   # D6: warn — a dashboard dump tolerates a stale window
     evo = run_evolution(source, args.start, args.end, horizon=args.horizon)
     Path(args.out).write_text(json.dumps(evo, indent=2, default=str), encoding="utf-8")
     print(f"wrote {evo['summary']['n_edits']} edits ({evo['summary']['refines']} refines) -> {args.out}")

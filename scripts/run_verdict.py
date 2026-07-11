@@ -29,6 +29,7 @@ from datetime import date as Date
 from pathlib import Path
 
 from alpha.data.calendar import trading_days_between
+from alpha.data.integrity_check import verify_checksums
 from alpha.data.pit_store import PITStore
 from alpha.data.snapshot_source import SnapshotSource
 from alpha.eval.contribution import ContributionBucket, ContributionReport
@@ -189,7 +190,9 @@ def main() -> None:
                     "(single comparison; pair with --windows 1, the default)")
     args = ap.parse_args()
 
-    source = SnapshotSource(PITStore(Path(args.pit_root)))
+    pit_root = Path(args.pit_root)
+    source = SnapshotSource(PITStore(pit_root))
+    verify_checksums(pit_root, fail_closed=True)   # D6: fail closed — a verdict must run on pinned data
     screen = not args.no_screen
     temp = os.environ.get("ALPHA_LLM_TEMPERATURE", "0")
     print("=== Sonia-Kairos-US-Stock verdict run ===")
