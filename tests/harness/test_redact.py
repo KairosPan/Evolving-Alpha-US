@@ -30,3 +30,7 @@ def test_redact_replaces_values_recursively():
 def test_redact_no_secrets_is_identity():
     obj = {"a": ["x", {"b": "y"}]}
     assert redact(obj, {}) == obj
+
+
+def test_redact_empty_secret_value_is_noop():
+    assert redact("abc", {"X": ""}) == "abc"

@@ -242,6 +242,22 @@ def test_observation_channel_membrane_comprehensive(store):
         )
 
 
+# ── D1: redact secrets out of reflection error strings ───────────────────────
+
+def test_task_reflection_error_strings_are_redacted(store, h, monkeypatch):
+    monkeypatch.setenv("LEAKY_API_KEY", "leaked-value-42xyz")
+    res = ConversationResult(
+        tool_calls=[{"tool": "shell", "args": {},
+                     "result": {"error": "RuntimeError: leaked-value-42xyz"}}],
+        final_text="x", hit_max_iters=False,
+    )
+    ep = record_task_episode(res, h, asof=_D, project_id="p", turn_seq=40,
+                             episode_store=store)
+    assert ep is not None
+    assert "leaked-value-42xyz" not in ep.reflection_text
+    assert "[REDACTED:LEAKY_API_KEY]" in ep.reflection_text
+
+
 def test_experience_no_forbidden_imports():
     """PB-6 BINDING: structural/AST pin — experience.py must not import
     try_apply_op, MetaTools, or SkillStats (observation-channel membrane).

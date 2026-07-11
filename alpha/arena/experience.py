@@ -14,6 +14,7 @@ from datetime import date as Date
 from typing import TYPE_CHECKING
 
 from alpha.memory.episodes import Episode
+from alpha.redact import collect_secrets, redact
 
 if TYPE_CHECKING:
     from alpha.converse.loop import ConversationResult
@@ -79,6 +80,7 @@ def _task_narrative(res: "ConversationResult") -> str:
 
 def _task_reflection(res: "ConversationResult") -> str:
     """Compact JSON summary: tools used (with gate verdicts + shell ok/exit_code), hit_max_iters."""
+    secrets = collect_secrets()
     tools_used = []
     for tc in res.tool_calls:
         entry: dict = {"tool": tc.get("tool", "")}
@@ -91,7 +93,7 @@ def _task_reflection(res: "ConversationResult") -> str:
                 if "exit_code" in result:
                     entry["exit_code"] = result["exit_code"]
             if "error" in result:
-                entry["error"] = result["error"]
+                entry["error"] = redact(result["error"], secrets)
         tools_used.append(entry)
     return json.dumps({"tools": tools_used, "hit_max_iters": res.hit_max_iters},
                       separators=(",", ":"))

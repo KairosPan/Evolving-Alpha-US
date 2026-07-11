@@ -12,6 +12,7 @@ from pathlib import Path
 from alpha.harness.edit_log import EditLog
 from alpha.harness.loader import load_seeds
 from alpha.harness.state import HarnessState
+from alpha.redact import collect_secrets, redact
 
 DEFAULT_SEEDS_DIR = Path(__file__).resolve().parents[2] / "seeds"
 
@@ -110,7 +111,16 @@ class SessionStore:
 
     def put(self, session: Session) -> Path:
         p = self._path(session.session_id)
-        _atomic_write(p, session.model_dump_json())
+        secrets = collect_secrets()
+        d = session.model_dump(mode="json")
+        for m in d["messages"]:
+            m["text"] = redact(m["text"], secrets)
+            for att in m["attachments"]:
+                att["text"] = redact(att["text"], secrets)
+            # NEVER-SCRUB: m["edits"] (ProposedEdit) carries the apply-replay payload verbatim.
+        if d.get("notes"):
+            d["notes"] = redact(d["notes"], secrets)
+        _atomic_write(p, json.dumps(d))
         return p
 
     def get(self, session_id: str) -> Session | None:

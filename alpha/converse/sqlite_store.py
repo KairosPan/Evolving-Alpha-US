@@ -6,6 +6,7 @@ import sqlite3
 
 from alpha.converse.project import Project, ProjectTurn, StagedEdit
 from alpha.llm.chat import ChatMessage
+from alpha.redact import collect_secrets, redact
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS projects (
@@ -61,7 +62,11 @@ class SqliteProjectStore:
         return cls(sqlite3.connect(path))
 
     def put(self, project: Project) -> None:
-        turns = json.dumps([t.model_dump(mode="json") for t in project.turns])
+        secrets = collect_secrets()
+        turns_dumped = [t.model_dump(mode="json") for t in project.turns]
+        turns_dumped = redact(turns_dumped, secrets)
+        turns = json.dumps(turns_dumped)
+        # NEVER-SCRUB: staged_edits carry the rollback-replay payload verbatim.
         staged = json.dumps([s.model_dump(mode="json") for s in project.staged_edits])
         self._conn.execute(
             "INSERT INTO projects (project_id, created_at, title, h_pin, turns, staged_edits) "
@@ -72,10 +77,11 @@ class SqliteProjectStore:
         self._conn.execute("DELETE FROM messages WHERE project_id=?", (project.project_id,))
         self._conn.execute("DELETE FROM messages_fts WHERE project_id=?", (project.project_id,))
         for seq, m in enumerate(project.messages):
+            text = redact(m.text, secrets)
             self._conn.execute("INSERT INTO messages (project_id, seq, role, text) VALUES (?,?,?,?)",
-                               (project.project_id, seq, m.role, m.text))
+                               (project.project_id, seq, m.role, text))
             self._conn.execute("INSERT INTO messages_fts (project_id, seq, text) VALUES (?,?,?)",
-                               (project.project_id, seq, m.text))
+                               (project.project_id, seq, text))
         self._conn.commit()
 
     def get(self, project_id: str) -> Project | None:
@@ -105,10 +111,14 @@ class SqliteProjectStore:
 
     def search(self, query: str) -> list[dict]:
         """Full-text search over message text (FTS5). Returns matched messages, best-rank first.
-        Note: the trigram tokenizer requires queries of at least 3 characters."""
+        Note: the trigram tokenizer requires queries of at least 3 characters.
+        Quoted as an FTS5 phrase so raw query text (e.g. hyphens) is never parsed as MATCH
+        query syntax (column filters / NOT) — a bare `-` mid-string otherwise raises
+        OperationalError instead of just failing to match."""
+        fts_query = '"' + query.replace('"', '""') + '"'
         rows = self._conn.execute(
             "SELECT project_id, seq, text FROM messages_fts WHERE messages_fts MATCH ? "
-            "ORDER BY rank", (query,)).fetchall()
+            "ORDER BY rank", (fts_query,)).fetchall()
         return [{"project_id": r["project_id"], "seq": r["seq"], "text": r["text"]} for r in rows]
 
     def close(self) -> None:

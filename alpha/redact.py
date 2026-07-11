@@ -24,6 +24,8 @@ def collect_secrets(env=None) -> dict[str, str]:
 def redact(obj, secrets: dict[str, str]):
     if isinstance(obj, str):
         for name, value in secrets.items():
+            if not value:
+                continue
             if value in obj:
                 obj = obj.replace(value, f"[REDACTED:{name}]")
         return obj
