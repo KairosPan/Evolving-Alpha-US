@@ -18,7 +18,6 @@ but only the *act* half: it decides and persists, no scoring or refinement.
 from __future__ import annotations
 
 import argparse
-import os
 from datetime import date as Date, datetime as DateTime
 from pathlib import Path
 
@@ -34,6 +33,7 @@ from alpha.guard.screen import GuardedPolicy
 from alpha.harness.loader import load_seeds
 from alpha.llm.config import make_client
 from alpha.memory.store import EpisodeStore
+from alpha.settings import Settings
 from alpha.sizing.policy import SizingPolicy
 from alpha.state.builder import build_market_state
 from alpha.universe.universe import build_universe
@@ -92,9 +92,10 @@ def main() -> None:
                     "defaults to $ALPHA_EPISODES_DB if set")
     args = ap.parse_args()
 
+    s = Settings.from_env()
     source = SnapshotSource(PITStore(Path(args.pit_root)))
     store = DecisionStore(args.out_dir)
-    brain = args.brain or os.environ.get("ALPHA_EPISODES_DB")
+    brain = args.brain or s.episodes_db
     episode_store = EpisodeStore.open(brain, create_if_missing=False) if brain else None
     n = save_decisions(source, args.start, args.end, store,
                        screen=not args.no_screen, size=not args.no_size, episode_store=episode_store)

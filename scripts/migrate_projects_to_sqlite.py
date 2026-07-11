@@ -14,6 +14,7 @@ from pathlib import Path
 
 from alpha.converse.project import Project
 from alpha.converse.sqlite_store import SqliteProjectStore
+from alpha.settings import Settings
 
 
 def migrate_projects(json_dir: str, db_path: str) -> int:
@@ -32,7 +33,8 @@ def migrate_projects(json_dir: str, db_path: str) -> int:
 
 
 if __name__ == "__main__":
+    s = Settings.from_env()
     src = os.environ.get("ALPHA_PROJECTS_DIR", "./state/projects")
-    dst = os.environ.get("ALPHA_PROJECTS_DB", "./state/projects/state.db")
+    dst = s.projects_db
     count = migrate_projects(src, dst)
     print(f"migrated {count} project(s) from {src} -> {dst}")

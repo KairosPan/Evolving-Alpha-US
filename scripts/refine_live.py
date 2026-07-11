@@ -33,6 +33,7 @@ from alpha.meta.evolution import run_forked_evolution
 from alpha.meta.proposal_store import ProposalQueue, proposals_dir
 from alpha.meta.store import LiveBrainStore
 from alpha.meta.conflict_store import ConflictQueue
+from alpha.settings import Settings, EVOLUTION_EPISODES_DB_DEFAULT
 
 _UNSAFE_ENV = "ALPHA_UNSAFE_AUTONOMOUS"
 
@@ -106,12 +107,13 @@ def main() -> None:
     ap.add_argument("--autonomous", action="store_true",
                     help=f"pre-pivot in-place evolution (requires {_UNSAFE_ENV}=1)")
     args = ap.parse_args()
+    s = Settings.from_env()
     source = SnapshotSource(PITStore(Path(args.pit_root)))
     out = run_refine_live(source, args.start, args.end,
-                          brain_dir=os.environ.get("ALPHA_LIVE_BRAIN_DIR", "./state/brain"),
-                          conflicts_dir=os.environ.get("ALPHA_CONFLICTS_DIR", "./state/conflicts"),
+                          brain_dir=s.live_brain_dir,
+                          conflicts_dir=s.conflicts_dir,
                           horizon=args.horizon,
-                          episodes_db=os.environ.get("ALPHA_EPISODES_DB", "./state/brain.db"),
+                          episodes_db=s.episodes_db or EVOLUTION_EPISODES_DB_DEFAULT,
                           mode="autonomous" if args.autonomous else "propose")
     if out["mode"] == "autonomous":
         print(f"{out['n_edits']} self-study edits applied (UNSAFE autonomous mode) · "

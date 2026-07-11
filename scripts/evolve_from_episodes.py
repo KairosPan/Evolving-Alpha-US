@@ -28,6 +28,7 @@ from alpha.meta.evolution import run_forked_evolution
 from alpha.meta.proposal_store import ProposalQueue, proposals_dir
 from alpha.meta.store import LiveBrainStore
 from alpha.refine.forge import forge_skills
+from alpha.settings import Settings, EVOLUTION_EPISODES_DB_DEFAULT
 
 _UNSAFE_ENV = "ALPHA_UNSAFE_AUTONOMOUS"
 
@@ -81,10 +82,11 @@ def main() -> None:
     ap.add_argument("--autonomous", action="store_true",
                     help=f"pre-pivot in-place forge (requires {_UNSAFE_ENV}=1)")
     args = ap.parse_args()
+    s = Settings.from_env()
     out = run_evolve_from_episodes(
-        brain_dir=os.environ.get("ALPHA_LIVE_BRAIN_DIR", "./state/brain"),
-        conflicts_dir=os.environ.get("ALPHA_CONFLICTS_DIR", "./state/conflicts"),
-        episodes_db=os.environ.get("ALPHA_EPISODES_DB", "./state/brain.db"),
+        brain_dir=s.live_brain_dir,
+        conflicts_dir=s.conflicts_dir,
+        episodes_db=s.episodes_db or EVOLUTION_EPISODES_DB_DEFAULT,
         asof=args.asof,
         mode="autonomous" if args.autonomous else "propose",
     )
