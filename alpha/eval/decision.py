@@ -77,6 +77,8 @@ class DecisionPackage(BaseModel):
     key_risks: list[str] = Field(default_factory=list)
     portfolio: Portfolio | None = None
     human_confirm: str | None = None     # human fills: confirm | reject | modify(+reason) -> DAgger label
+    h_digest: str | None = None          # D4: harness_digest(h) at package-build time; optional/additive —
+                                         #   eval scoring and loop drivers never read it (grep-pinned).
 
 
 class DecisionPolicy(Protocol):

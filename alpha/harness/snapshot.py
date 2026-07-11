@@ -6,6 +6,14 @@ from pathlib import Path
 
 from alpha.harness.edit_log import EditLog
 from alpha.harness.state import HarnessState
+from alpha.integrity import sha256_canonical_json
+
+
+def harness_digest(h: HarnessState) -> str:
+    """Canonical content digest of a HarnessState (feeds A10's joint rollback; eval never reads it).
+    Equal content -> equal digest; any content change -> a different digest (sha256 of the canonical
+    JSON of h.to_dict(), via alpha.integrity — the same canonicalizer used for edit-log/file hashing)."""
+    return sha256_canonical_json(h.to_dict())
 
 
 class SnapshotStore:

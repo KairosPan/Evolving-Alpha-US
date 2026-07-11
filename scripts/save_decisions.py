@@ -34,6 +34,7 @@ from alpha.eval.decision import DecisionPackage
 from alpha.eval.decision_store import DecisionStore
 from alpha.guard.screen import GuardedPolicy
 from alpha.harness.loader import load_seeds
+from alpha.harness.snapshot import harness_digest
 from alpha.llm.config import make_client
 from alpha.memory.store import EpisodeStore
 from alpha.redact import collect_secrets, redact
@@ -55,9 +56,12 @@ def produce_decisions(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS
     episode_store: optional read-only brain -> §6 recall (LLMAgentPolicy) + taboo (GuardedPolicy); the
     act path never writes episodes (no scoring/maturity here). Default None -> byte-identical (no §6).
     collect: D3 prompt-audit hook, threaded through the policy stack to build_system_prompt (observe-
-    only; default None -> byte-identical). Records arrive per-day during each yield's decide()."""
+    only; default None -> byte-identical). Records arrive per-day during each yield's decide().
+    Every yielded package carries D4's h_digest = harness_digest(h) (the fixed H this act-only run
+    loaded) — additive, eval/loop never read it."""
     agent_llm_factory = agent_llm_factory or (lambda: make_client("agent"))
     h = load_seeds(seeds_dir)
+    h_digest = harness_digest(h)
     policy = LLMAgentPolicy(h, agent_llm_factory(), episode_store=episode_store)   # §6 recall (read-only)
     if screen:
         policy = GuardedPolicy(policy, source, episode_store=episode_store)   # L4 veto (+ §6 taboo)
@@ -75,7 +79,8 @@ def produce_decisions(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS
                                    history=history, prev_gainers=prev_gainers)
         history.append(state.sentiment_raw)
         prev_gainers = frozenset(s.symbol for s in universe.by_status("gainer"))
-        yield policy.decide(state, universe, **decide_kw)
+        pkg = policy.decide(state, universe, **decide_kw)
+        yield pkg.model_copy(update={"h_digest": h_digest})
 
 
 def _write_prompt_sidecar(dirpath: Path, day: Date, records: list[dict]) -> Path:
