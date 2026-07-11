@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Callable
 
 from alpha.agent.retrieval import (
     DEFAULT_MEMORY_BUDGET, DEFAULT_SKILL_BUDGET, DEFAULT_TRIAL_SLOTS,
@@ -72,16 +73,24 @@ def build_system_prompt(h: HarnessState, *, injection: str = "full", phase_prior
                         trial_slots: int = DEFAULT_TRIAL_SLOTS,
                         available_signals: frozenset[str] | None = None,
                         asof: date | datetime | None = None,
-                        episode_store=None, episode_budget: int = DEFAULT_EPISODE_BUDGET) -> str:
+                        episode_store=None, episode_budget: int = DEFAULT_EPISODE_BUDGET,
+                        collect: Callable[[dict], None] | None = None) -> str:
     """Render H=(p,K,M) + the regime cycle + the output contract into the system prompt.
 
     injection='full' renders all active skills + all lessons; 'retrieval' renders a budgeted slice
     (phase-prior hit first). Rebuilt every decide() so Refiner edits to H are immediately visible.
+
+    `collect`: D3 prompt-audit hook (observe-only; default None is byte-identical to omitting it — no
+    other logic changes). When set, receives one dict per skill/lesson/episode this call considers —
+    `{"kind": "skill"|"lesson"|"episode", "id": ..., "status": "offered"|"dropped", "reason": ...}`
+    (every "dropped" record names a reason: depends_on-unmet / budget-cut / weight-cut) — plus a final
+    `{"kind": "assembled", "text": <the returned prompt>}`.
     """
     asof_d = asof.date() if isinstance(asof, datetime) else asof   # PIT key compares date<=date
     if injection == "retrieval":
         sel = select_for_prompt(h, phase_prior=phase_prior, skill_budget=skill_budget,
-                                memory_budget=memory_budget, trial_slots=trial_slots, asof=asof_d)
+                                memory_budget=memory_budget, trial_slots=trial_slots, asof=asof_d,
+                                collect=collect)
         skills, trials, lessons = sel.skills, sel.trials, sel.lessons
     else:
         skills = [s for s in h.skills.all()
@@ -93,10 +102,27 @@ def build_system_prompt(h: HarnessState, *, injection: str = "full", phase_prior
                    and getattr(l, "domain", "trading") == "trading"]
 
     if available_signals is not None:                    # US-3c: enforce Skill.depends_on (None = off)
+        if collect is not None:
+            for s in skills:
+                if not _depends_on_satisfied(s, available_signals):
+                    collect({"kind": "skill", "id": s.skill_id, "status": "dropped",
+                            "reason": "depends_on-unmet"})
+            for s in trials:
+                if not _depends_on_satisfied(s, available_signals):
+                    collect({"kind": "skill", "id": s.skill_id, "status": "dropped",
+                            "reason": "depends_on-unmet"})
         skills = [s for s in skills if _depends_on_satisfied(s, available_signals)]
         # filtering runs after select_for_prompt's trial-slot budget, so it may leave fewer trials than
         # trial_slots — acceptable (a data-less trial skill carries no signal worth a slot anyway).
         trials = [s for s in trials if _depends_on_satisfied(s, available_signals)]
+
+    if collect is not None:                               # what's left after every filter = offered
+        for s in skills:
+            collect({"kind": "skill", "id": s.skill_id, "status": "offered"})
+        for s in trials:
+            collect({"kind": "skill", "id": s.skill_id, "status": "offered"})
+        for l in lessons:
+            collect({"kind": "lesson", "id": l.lesson_id, "status": "offered"})
 
     parts: list[str] = [
         "You are a US speculative-momentum trading co-pilot. Read the day's state and the candidate "
@@ -125,7 +151,10 @@ def build_system_prompt(h: HarnessState, *, injection: str = "full", phase_prior
             parts.append(f"- [{tag}] {analog}{l.lesson}")
     if episode_store is not None:
         eps = select_episodes_for_prompt(episode_store, phase_prior=phase_prior, asof=asof_d,
-                                         budget=episode_budget)
+                                         budget=episode_budget, collect=collect)
+        if collect is not None:
+            for e in eps:
+                collect({"kind": "episode", "id": e.episode_id, "status": "offered"})
         if eps:
             parts.append("\nRECALLED EPISODES (what happened last time in this regime):")
             for e in eps:
@@ -133,7 +162,10 @@ def build_system_prompt(h: HarnessState, *, injection: str = "full", phase_prior
                 parts.append(f"- [{e.phase}] {e.symbol}/{e.skill_id} -> {e.outcome} "
                              f"(adv {e.advantage:+.1f}){refl}")
     parts.append("\n" + _OUTPUT_CONTRACT)
-    return "\n".join(parts)
+    prompt = "\n".join(parts)
+    if collect is not None:
+        collect({"kind": "assembled", "text": prompt})
+    return prompt
 
 
 def build_user_prompt(state: MarketState, universe: CandidateUniverse) -> str:

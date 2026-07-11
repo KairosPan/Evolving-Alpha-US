@@ -53,6 +53,16 @@ def test_save_decisions_persists_browsable_by_date(tmp_path):
     assert n == 8 and len(store) == 8
     assert store.dates() == src.trading_calendar()
     assert store.latest() is not None and store.get(store.dates()[0]) is not None
+    # D3 end-to-end pin: a prompt-audit sidecar lands beside each day's decision file
+    import json
+    for d in store.dates():
+        side_path = tmp_path / f"{d.isoformat()}.prompt.json"
+        assert side_path.exists(), f"missing prompt sidecar for {d}"
+        side = json.loads(side_path.read_text())
+        assert side["date"] == d.isoformat()
+        assert side["records"], "sidecar records must be non-empty"
+        assert side["assembled"], "sidecar must carry the assembled prompt text"
+        assert all(r["kind"] != "assembled" for r in side["records"])   # lifted to the top-level field
 
 
 # ---------------------------------------------------------------------------

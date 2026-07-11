@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date as Date
+from typing import Callable
 
 import pandas as pd
 
@@ -116,7 +117,11 @@ class GuardedPolicy:
         self._source = source
         self._episode_store = episode_store
 
-    def decide(self, state: MarketState, universe) -> DecisionPackage:
-        decision = self._inner.decide(state, universe)
+    def decide(self, state: MarketState, universe, *,
+              collect: Callable[[dict], None] | None = None) -> DecisionPackage:
+        # `collect`: D3 prompt-audit pass-through (default None = byte-identical). Forwarded to the
+        # inner policy only when set, so stub/baseline inners without a `collect` kwarg are unaffected.
+        kw = {} if collect is None else {"collect": collect}
+        decision = self._inner.decide(state, universe, **kw)
         return screen_decision(decision, source=self._source, state=state,
                                episode_store=self._episode_store)

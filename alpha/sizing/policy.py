@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Callable
+
 from alpha.eval.decision import DecisionPackage, Portfolio
 from alpha.regime.classifier import GCycle
 from alpha.sizing.correlation import Pick
@@ -42,5 +44,8 @@ class SizingPolicy:
     def __init__(self, inner) -> None:
         self._inner = inner
 
-    def decide(self, state: MarketState, universe) -> DecisionPackage:
-        return size_decision(self._inner.decide(state, universe), state=state)
+    def decide(self, state: MarketState, universe, *,
+              collect: Callable[[dict], None] | None = None) -> DecisionPackage:
+        # `collect`: D3 prompt-audit pass-through (default None = byte-identical); see GuardedPolicy.decide.
+        kw = {} if collect is None else {"collect": collect}
+        return size_decision(self._inner.decide(state, universe, **kw), state=state)

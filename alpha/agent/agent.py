@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Callable, Literal
 
 from alpha.agent.parse import parse_decision
 from alpha.agent.prompt import available_data_signals, build_system_prompt, build_user_prompt
@@ -42,12 +42,14 @@ class LLMAgentPolicy:
         self._episode_store = episode_store
         self._phase_prior: str | None = None
 
-    def decide(self, state: MarketState, universe: CandidateUniverse) -> DecisionPackage:
+    def decide(self, state: MarketState, universe: CandidateUniverse, *,
+              collect: Callable[[dict], None] | None = None) -> DecisionPackage:
         system = build_system_prompt(self._harness, injection=self._injection,
                                      phase_prior=self._phase_prior, skill_budget=self._skill_budget,
                                      memory_budget=self._memory_budget, trial_slots=self._trial_slots,
                                      available_signals=available_data_signals(universe),
-                                     asof=state.as_of, episode_store=self._episode_store)
+                                     asof=state.as_of, episode_store=self._episode_store,
+                                     collect=collect)
         user = build_user_prompt(state, universe)
         raw = self._llm.complete(system, user)
         pkg = parse_decision(raw, state.date, universe, as_of=state.as_of)

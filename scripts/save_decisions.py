@@ -18,6 +18,9 @@ but only the *act* half: it decides and persists, no scoring or refinement.
 from __future__ import annotations
 
 import argparse
+import json
+import os
+import tempfile
 from datetime import date as Date, datetime as DateTime
 from pathlib import Path
 
@@ -43,13 +46,15 @@ SEEDS_DIR = Path(__file__).resolve().parents[1] / "seeds"
 
 def produce_decisions(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS_DIR,
                       agent_llm_factory=None, screen: bool = True, size: bool = True,
-                      episode_store=None):
+                      episode_store=None, collect=None):
     """Yield one DecisionPackage per trading day in [start, end] (act-only). `screen`/`size` mirror
     LoopConfig: GuardedPolicy is the L4 veto, SizingPolicy the L3 sizing — both default ON. The
     perception history (sentiment_raw / prior gainers) is threaded forward exactly like InnerLoop so
     the regime read sees frontside on genuine uptrends. Tests inject a MockLLM via agent_llm_factory.
     episode_store: optional read-only brain -> §6 recall (LLMAgentPolicy) + taboo (GuardedPolicy); the
-    act path never writes episodes (no scoring/maturity here). Default None -> byte-identical (no §6)."""
+    act path never writes episodes (no scoring/maturity here). Default None -> byte-identical (no §6).
+    collect: D3 prompt-audit hook, threaded through the policy stack to build_system_prompt (observe-
+    only; default None -> byte-identical). Records arrive per-day during each yield's decide()."""
     agent_llm_factory = agent_llm_factory or (lambda: make_client("agent"))
     h = load_seeds(seeds_dir)
     policy = LLMAgentPolicy(h, agent_llm_factory(), episode_store=episode_store)   # §6 recall (read-only)
@@ -57,6 +62,7 @@ def produce_decisions(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS
         policy = GuardedPolicy(policy, source, episode_store=episode_store)   # L4 veto (+ §6 taboo)
     if size:
         policy = SizingPolicy(policy)                   # L3 sizing (outer; sizes post-veto survivors)
+    decide_kw = {} if collect is None else {"collect": collect}
 
     history: list[float] = []                           # prior-day sentiment_raw
     prev_gainers: frozenset[str] = frozenset()
@@ -68,14 +74,40 @@ def produce_decisions(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS
                                    history=history, prev_gainers=prev_gainers)
         history.append(state.sentiment_raw)
         prev_gainers = frozenset(s.symbol for s in universe.by_status("gainer"))
-        yield policy.decide(state, universe)
+        yield policy.decide(state, universe, **decide_kw)
+
+
+def _write_prompt_sidecar(dirpath: Path, day: Date, records: list[dict]) -> Path:
+    """Write the D3 prompt-audit sidecar `<dir>/<date>.prompt.json` atomically (DecisionStore.put's
+    temp-in-dir + os.replace idiom). `assembled` is lifted out of the kind=='assembled' record; the
+    remaining offered/dropped records stay in `records` (the shape scripts/render_prompt.py reads)."""
+    assembled = next((r.get("text", "") for r in records if r.get("kind") == "assembled"), "")
+    payload = {"date": day.isoformat(),
+               "records": [r for r in records if r.get("kind") != "assembled"],
+               "assembled": assembled}
+    p = dirpath / f"{day.isoformat()}.prompt.json"
+    fd, tmp = tempfile.mkstemp(dir=dirpath, suffix=".prompt.json.tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(payload, f)
+        os.replace(tmp, p)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+    return p
 
 
 def save_decisions(source, start: Date, end: Date, store: DecisionStore, **kw) -> int:
-    """Produce + persist; returns the number of daily packages written."""
+    """Produce + persist; returns the number of daily packages written. Beside each day's decision
+    file it writes the D3 prompt-audit sidecar `<date>.prompt.json` (what the assembled system prompt
+    was, plus every skill/lesson/episode offered or dropped and why)."""
+    records: list[dict] = []                             # this day's audit records (cleared per day)
     n = 0
-    for pkg in produce_decisions(source, start, end, **kw):
-        store.put(pkg)
+    for pkg in produce_decisions(source, start, end, collect=records.append, **kw):
+        p = store.put(pkg)
+        _write_prompt_sidecar(p.parent, pkg.date, records)
+        records.clear()
         n += 1
     return n
 
