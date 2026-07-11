@@ -79,3 +79,16 @@ def test_search_reflects_deletes_and_updates():
 def test_tokenizer_is_recorded():
     s = SqliteProjectStore.in_memory()
     assert s.tokenizer in ("trigram", "unicode61")
+
+
+def test_search_treats_operators_as_literal_phrases():
+    """Regression: FTS5 operator syntax (OR/AND/NOT, prefix *) is disabled by design."""
+    s = SqliteProjectStore.in_memory()
+    s.put(Project(project_id="p1", created_at="2026-06-27T00:00:00", title="x",
+                  messages=[ChatMessage(role="user", text="foo bar baz")]))
+    s.put(Project(project_id="p2", created_at="2026-06-27T00:00:00", title="y",
+                  messages=[ChatMessage(role="user", text="foo only")]))
+    # Literal phrase "foo OR bar" matches neither project (it doesn't contain that exact phrase)
+    assert s.search("foo OR bar") == []
+    # But individual searches still work
+    assert [(h["project_id"], h["seq"]) for h in s.search("foo")] == [("p2", 0), ("p1", 0)]

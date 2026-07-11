@@ -111,10 +111,9 @@ class SqliteProjectStore:
 
     def search(self, query: str) -> list[dict]:
         """Full-text search over message text (FTS5). Returns matched messages, best-rank first.
-        Note: the trigram tokenizer requires queries of at least 3 characters.
-        Quoted as an FTS5 phrase so raw query text (e.g. hyphens) is never parsed as MATCH
-        query syntax (column filters / NOT) — a bare `-` mid-string otherwise raises
-        OperationalError instead of just failing to match."""
+        Queries are matched as literal phrases; FTS5 operator syntax (OR/AND/NOT, prefix *) is
+        intentionally disabled by phrase-quoting to prevent crashes on hyphenated and special-char
+        queries. Note: the trigram tokenizer requires queries of at least 3 characters."""
         fts_query = '"' + query.replace('"', '""') + '"'
         rows = self._conn.execute(
             "SELECT project_id, seq, text FROM messages_fts WHERE messages_fts MATCH ? "
