@@ -381,21 +381,25 @@ env reads with `./state/brain` duplicated in four files.
 
 **Gap.** G12 → A1.
 
-**Landing in place.** A1 — the hygiene + observability floor, all on existing seams: `redact()`
-first (see 2.7); a frozen bounds-validated `Settings` object built once per entry point and
-threaded down (offline defaults byte-identical; kept out of `alpha/harness`); an
-assembled-prompt audit record (optional collect hook in `alpha/agent/prompt.py`, persisted
-beside the `DecisionPackage`) + `scripts/render_prompt.py` — `build_system_prompt` today
-silently drops skills/lessons/episodes over budget, and nothing can prove what a suppressed
-agent was shown; a read-only episode inspector showing the SAME numbers the taboo veto uses,
-plus a `harness_digest` (canonical-JSON sha256 of `HarnessState`, optional `h_digest` on the
-`DecisionPackage` — eval never reads it; feeds A10's joint rollback); a
-`CHECKSUMS` sha256 manifest for captured PIT windows (verified fail-closed by `run_verdict`);
-the `tcb.lock` content-hash manifest over the modification-ladder spec §3 file set (that spec's
-one NOW deliverable, unshipped by P-A; seed of A10's byte-hash pin — folded into A1, decided
-2026-07-10, backend-design round);
-`docs/superpowers/runbooks/` + a Built/Live activation ledger (held in the plan's A1 runbooks
-deliverable). The backup decision
+**Landing in place.** A1 (SHIPPED, landed 2026-07-11) — the hygiene + observability floor, all
+on existing seams: `redact()` first (landed 2026-07-11; see 2.7); a frozen bounds-validated
+`Settings` object built once per entry point and threaded down (landed 2026-07-11; offline
+defaults byte-identical; kept out of `alpha/harness`); an assembled-prompt audit record (landed
+2026-07-11; optional collect hook in `alpha/agent/prompt.py`, persisted beside the
+`DecisionPackage`) + `scripts/render_prompt.py` — `build_system_prompt` today silently drops
+skills/lessons/episodes over budget, and nothing can prove what a suppressed agent was shown; a
+read-only episode inspector (landed 2026-07-11) showing the SAME numbers the taboo veto uses,
+plus a `harness_digest` (landed 2026-07-11; canonical-JSON sha256 of `HarnessState`, optional
+`h_digest` on the `DecisionPackage` — eval never reads it; feeds A10's joint rollback); a
+`CHECKSUMS` sha256 manifest for captured PIT windows (landed 2026-07-11; verified fail-closed by
+`run_verdict`/`save_decisions`/`refine_live`, warn-only by `save_evolution`/`scan_tradeable`) —
+**recorded limit (D6):** the registry snapshot path `make_source("snapshot")` reachable by the
+live faces is NOT checksum-verified, a live-face concern left outside A1's scope; the `tcb.lock`
+content-hash manifest (landed 2026-07-11) over the modification-ladder spec §3 file set (that
+spec's one NOW deliverable, unshipped by P-A; seed of A10's byte-hash pin — folded into A1,
+decided 2026-07-10, backend-design round);
+`docs/superpowers/runbooks/` + a Built/Live activation ledger (landed 2026-07-11; held in the
+plan's A1 runbooks deliverable). The backup decision
 is surfaced by A1 as an explicit record — accept the risk or schedule the tuple; either way,
 recorded.
 
@@ -452,7 +456,7 @@ renumbers them.
 |---|---|---|---|---|
 | G1 | Session | Four persistence surfaces, none event-sourced; no origin stamps, no hash chain | High value, not urgent — forgeable tool-result origin is the sharpest edge | A4 |
 | G2 | Body | Body Store is `brain.json`, not a git repo — no commit-per-apply audit, no stable body-version | Medium; cheap to close at one save waist | A5 |
-| G3 | Vault | Vault absent; secrets are env vars/`.env.alpaca`; VERIFIED leak: T2 shell env → persisted transcripts | **Urgent** (verified leak) — redaction first, split later | A1 + A9 |
+| G3 | Vault | Vault absent; secrets are env vars/`.env.alpaca`; VERIFIED leak: T2 shell env → persisted transcripts — redact leg closed 2026-07-11 (A1); vault/rotation/split remains open (A9) | **Urgent** (verified leak) — redaction first, split later | A1 + A9 |
 | G4 | Sandbox | No egress ladder; `LocalEnv` net flag is a documented no-op | Medium; monitor rung is cheap | A9 |
 | G5 | Spend | Zero metering anywhere — no tokens, no cost, no ceilings | Medium; both charter cost adversaries are live today | A6 |
 | G6 | Kernel | Kernel is conventional (tests + code discipline), not physical; `SandboxedEnv` deferred | Accepted posture; stays behind the commercial gate | A10 |
@@ -461,7 +465,7 @@ renumbers them.
 | G9 | Memory | Substrate divergence: charter decided Mem0 store-of-record (2026-07-09); repo = H-lessons + `EpisodeStore`, no journal-replay rollback (the observation channel maps to the charter's kernel-written observability exception, not the retired waist — §2.4) | Decision point, not a build; code never wins silently | A11 |
 | G10 | Kernel | No context management for long sessions (pruning/offload/compaction) | Precondition of the self-learning channel | A3 |
 | G11 | Evolution | P-B/P-C experience/fitness coupling built but DORMANT (4-step activation checklist logged) | High leverage; built code earning nothing | A2 |
-| G12 | Operations | Observability floor gaps: no prompt audit record, no episode inspector, no `harness_digest`, no CHECKSUMS, no `tcb.lock`, no runbooks/activation ledger, ~32 scattered env reads | **Urgent-adjacent**; blocks diagnosing P2 | A1 |
+| G12 | Operations | Observability floor gaps: no prompt audit record, no episode inspector, no `harness_digest`, no CHECKSUMS, no `tcb.lock`, no runbooks/activation ledger, ~32 scattered env reads — closed 2026-07-11 (A1) | **Urgent-adjacent**; blocks diagnosing P2 | A1 |
 | G13 | Evolution | Drills are CI-tests only; no scheduled live drills against running services | Low; drill runner queued behind A1's runbooks; the restore/rollback drill subset additionally wants A4/A5 | architecture-track tail note |
 | G14 | Model | No failover/caching policy; usage discarded (charter v4: collect traces; failover/caching are repo-local hardening, uncited in the charter) | Low; seam exists, nothing blocks on it | deferred ledger |
 

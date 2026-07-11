@@ -39,8 +39,8 @@ python -m pytest -q \
 ## §1 The wires
 
 Warning (verbatim, kairos-mining §1.2): **the headline wires are NOT sufficient** — each row below
-is necessary; none is a complete activation on its own, and the four in the "code (A2)" column of
-§2 do not exist yet.
+is necessary; none is a complete activation on its own, and the four A2-owned rows of §2 do not
+exist yet.
 
 | Wire | Role | Without it |
 |---|---|---|

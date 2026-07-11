@@ -135,44 +135,9 @@ partial-write silent days). Sources: ROADMAP §6 optional-polish prose; kairos-m
 ## §2 ARCHITECTURE TRACK — A1..A12
 Every arc cites the Backend-Design.md §4 gap-ledger row(s) it closes (G1..G14).
 
-### A1 — Hygiene + observability floor *(START HERE)*
-**Closes G12 + the redact leg of G3.**
-**Goal.** The floor everything later stands on, redaction first because the leak is verified:
-- **`redact()` at persistence waists** — `LocalEnv.run` inherits the parent env; a T2 shell `env`
-  puts DEEPSEEK/APCA keys verbatim into `ProjectTurn.tool_calls` (converse sqlite store — the
-  VERIFIED leak; Sonia registers no shell tool). One dependency-free recursive `redact()` at the
-  converse sqlite store + `alpha/meta/store.SessionStore` (the latter on its own rationale:
-  user-pasted/relayed secrets in chat) (`experience_writer` cheap third); key/credential-scoped only —
-  never scrub market/PIT data or rollback-replay payloads. Ordering invariant: redact before hash
-  (A4). (kairos-mining §1.5 CONFIRMED + §4.3.)
-- **Frozen `Settings` model** at each entry point (alpha_web/sonia/workbench/producers) — ~32 inline
-  `ALPHA_*`/`APCA_*` env reads, `./state/brain` duplicated in 4 files, per-request env reads in
-  route handlers. Bounds-validated, constructed once, threaded as constructor args; kept OUT of
-  `alpha/harness` and off the 4 lazy-import cycle edges; offline defaults byte-identical; document
-  co-flip couplings (the P-B/P-C flag set) next to each flag. (kairos-mining §2.7.)
-- **Assembled-prompt audit record + `scripts/render_prompt.py`** — `build_system_prompt` silently
-  drops skills failing `depends_on`, lessons under weight/budget, episodes beyond budget; nothing
-  persists what a decision's prompt contained. Optional collect hook (default None = byte-identical)
-  in `alpha/agent/prompt.py`, persisted beside the DecisionPackage. Directly serves P2 diagnosis.
-  (kairos-mining §1.6.)
-- **Episode inspector + `harness_digest`** — `scripts/inspect_episodes.py` (or `/episodes`) over
-  `EpisodeStore.for_asof` showing the SAME summarize/taboo numbers the veto uses (write path stays
-  gated); canonical-JSON sha256 of `HarnessState` in `snapshot.py` with optional `h_digest` on
-  DecisionPackage (eval never reads it; feeds A10's joint rollback). (kairos-mining §3.)
-- **CHECKSUMS manifest** for captured PIT windows — `capture_window.py` writes a sha256 manifest
-  committed to git (parquet stays gitignored); `run_verdict.py` verifies fail-closed, ad-hoc
-  exploration warns. (kairos-mining §2.6.)
-- **`docs/superpowers/runbooks/` + the activation ledger** — the Activation ledger table lives at
-  the top of this file (one-place discipline, not duplicated here); each capability's runbook rows
-  bind a named proving test + blocker type. First runbook shipped:
-  `docs/superpowers/runbooks/p-b-p-c-activation.md`; absorbs the docs-day item now that ROADMAP is
-  deleted. (kairos-mining §1.1/§1.2/§4.1.)
-- **`tcb.lock` content-hash manifest** — `scripts/gen_tcb_lock.py` over the modification-ladder spec
-  §3 file set + a `--check` pytest; the spec declared defining the manifest a NOW deliverable and
-  the P-A build did not ship it. Seed of A10's byte-hash pin (folded into A1, decided 2026-07-10,
-  backend-design round). (kairos-mining §2.1.)
-**Acceptance gate.** A T2 shell `env` lands no key material in any persisted transcript
-(regression); offline defaults byte-identical; `render_prompt` reproduces a decision's prompt.
+### A1 — Hygiene + observability floor
+A1 SHIPPED 2026-07-11 → `docs/PROJECT_STATE.md` (spec
+`docs/superpowers/specs/2026-07-10-a1-hygiene-floor-design.md`).
 
 ### A2 — P-B/P-C live activation
 **Closes G11.**

@@ -3,7 +3,7 @@
 Descriptive, not prescriptive: when this file disagrees with the tree, the code is current and
 this file gets updated. This is the only CLAUDE.md — depth lives in docstrings and `docs/`.
 
-> Owner: KairosPan · reviewed 2026-07-10 · 969 offline tests.
+> Owner: KairosPan · reviewed 2026-07-11 · 1001 offline tests.
 
 ## What this is
 
