@@ -35,7 +35,7 @@ class Settings(BaseModel):
     sessions_dir: str = "./state/sessions"
     projects_db: str = "./state/projects/state.db"
     conflicts_dir: str = "./state/conflicts"
-    proposals_dir: str = "./state/proposals"
+    proposals_dir: str = "./state/proposals"  # mirror only; alpha/meta/proposal_store.proposals_dir() is authoritative (TCB file, reads env itself)
     workspace_dir: str = "./state/workspaces"
     episodes_db: str | None = None
     sonia_url: str = "http://127.0.0.1:8810"

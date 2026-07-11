@@ -63,6 +63,9 @@ def test_save_decisions_persists_browsable_by_date(tmp_path):
         assert side["records"], "sidecar records must be non-empty"
         assert side["assembled"], "sidecar must carry the assembled prompt text"
         assert all(r["kind"] != "assembled" for r in side["records"])   # lifted to the top-level field
+    # h_digest e2e pin: stored package carries the digest
+    pkg = store.get(store.dates()[0])
+    assert pkg.h_digest is not None
 
 
 # ---------------------------------------------------------------------------
