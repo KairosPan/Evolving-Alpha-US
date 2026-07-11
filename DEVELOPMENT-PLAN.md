@@ -20,6 +20,12 @@ Two tracks interleave — §1 PRODUCT (the co-pilot trades better) and §2 ARCHI
 gets safer/more governable). Neither blocks the other. Start order (user-approved): **A1 first**
 (small, urgent — a verified secret leak), then **P1+P2**. Cadence and gates: §5.
 
+## Activation ledger (capability = done only when live)
+| Capability | Built | Live in prod | Path to ON |
+|---|---|---|---|
+| P-B/P-C operational-K coupling | ✓ (882-test arc, dark) | ✗ | `docs/superpowers/runbooks/p-b-p-c-activation.md` (A2 builds the missing steps) |
+| Daily production loop | producers only (`save_decisions` / `run_verdict --json` / `save_evolution`) | ✗ | P9 |
+
 ---
 
 ## §1 PRODUCT TRACK — P1..P9
@@ -156,10 +162,11 @@ Every arc cites the Backend-Design.md §4 gap-ledger row(s) it closes (G1..G14).
 - **CHECKSUMS manifest** for captured PIT windows — `capture_window.py` writes a sha256 manifest
   committed to git (parquet stays gitignored); `run_verdict.py` verifies fail-closed, ad-hoc
   exploration warns. (kairos-mining §2.6.)
-- **`docs/superpowers/runbooks/` + the activation ledger** — the Capability | Built | Live-in-prod
-  ledger (clean day-0 rows: P-B/P-C coupling built/dark/4 steps; production loop producers-only),
-  each row bound to a named proving test + blocker type; absorbs the docs-day item now that ROADMAP
-  is deleted. (kairos-mining §1.1/§1.2/§4.1.)
+- **`docs/superpowers/runbooks/` + the activation ledger** — the Activation ledger table lives at
+  the top of this file (one-place discipline, not duplicated here); each capability's runbook rows
+  bind a named proving test + blocker type. First runbook shipped:
+  `docs/superpowers/runbooks/p-b-p-c-activation.md`; absorbs the docs-day item now that ROADMAP is
+  deleted. (kairos-mining §1.1/§1.2/§4.1.)
 - **`tcb.lock` content-hash manifest** — `scripts/gen_tcb_lock.py` over the modification-ladder spec
   §3 file set + a `--check` pytest; the spec declared defining the manifest a NOW deliverable and
   the P-A build did not ship it. Seed of A10's byte-hash pin (folded into A1, decided 2026-07-10,
