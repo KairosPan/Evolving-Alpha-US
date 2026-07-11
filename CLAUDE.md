@@ -90,5 +90,6 @@ python -m workbench               # :8820 ─┘
 - **`LocalEnv` is not a security boundary** — the compensating control is workbench's boot
   assert that the brain lives outside the workspace.
 
-Backlog: `ROADMAP.md` (the single live backlog) · built log: `docs/PROJECT_STATE.md` ·
+Design: `Backend-Design.md` · plan/backlog: `DEVELOPMENT-PLAN.md` (the single forward-looking
+doc) · built log: `docs/PROJECT_STATE.md` ·
 `docs/blueprint.md` is stale on structure (perception/eval reference only).
