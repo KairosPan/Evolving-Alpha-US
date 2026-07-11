@@ -3,14 +3,13 @@ longer land edits on the live brain — they run on a fork and package the survi
 EvolutionProposal for the USER to adopt or discard. Flat by-id store, ConflictQueue file pattern."""
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import tempfile
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from alpha.integrity import canonical_json, sha256_canonical_json
 from alpha.meta.models import new_session_id, now_iso
 
 PROPOSALS_DIR_ENV = "ALPHA_PROPOSALS_DIR"
@@ -21,15 +20,8 @@ def proposals_dir() -> str:
     return os.environ.get(PROPOSALS_DIR_ENV, DEFAULT_PROPOSALS_DIR)
 
 
-def canonical_json(payload) -> str:
-    """THE one canonicalizer for brain hashing. Defined once and imported by both the fork-time
-    packager and the adopt-time recompute — two spellings would produce permanent false-stale."""
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
-
 def brain_hash(harness_dict: dict, log_dict: list[dict]) -> str:
-    return hashlib.sha256(
-        canonical_json({"harness": harness_dict, "log": log_dict}).encode("utf-8")).hexdigest()
+    return sha256_canonical_json({"harness": harness_dict, "log": log_dict})
 
 
 class EvolutionProposal(BaseModel):
