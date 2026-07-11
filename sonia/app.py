@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import threading
 from pathlib import Path
 
@@ -24,20 +23,21 @@ from alpha.meta.evolution import adopt_proposal
 from alpha.meta.proposal_store import ProposalQueue, proposals_dir
 from alpha.meta.reconcile import reconcile_session, reconcile_staged_edits
 from alpha.meta.store import LiveBrainStore, SessionStore
+from alpha.settings import Settings
 
 _MUTATION_LOCK = threading.Lock()
 
 
 def _brain_store() -> LiveBrainStore:
-    return LiveBrainStore(os.environ.get("ALPHA_LIVE_BRAIN_DIR", "./state/brain"))
+    return LiveBrainStore(Settings.from_env().live_brain_dir)
 
 
 def _session_store() -> SessionStore:
-    return SessionStore(os.environ.get("ALPHA_SESSIONS_DIR", "./state/sessions"))
+    return SessionStore(Settings.from_env().sessions_dir)
 
 
 def _conflict_store() -> ConflictQueue:
-    return ConflictQueue(os.environ.get("ALPHA_CONFLICTS_DIR", "./state/conflicts"))
+    return ConflictQueue(Settings.from_env().conflicts_dir)
 
 
 def _proposal_store() -> ProposalQueue:
@@ -60,7 +60,7 @@ def _reconcile_all(live_len: int, sstore: SessionStore, current: "Session | None
     from alpha.converse.sqlite_store import SqliteProjectStore
     try:
         pstore = SqliteProjectStore.open(
-            os.environ.get("ALPHA_PROJECTS_DB", "./state/projects/state.db"),
+            Settings.from_env().projects_db,
             create_if_missing=False)
     except FileNotFoundError:                        # no workbench DB → legitimate no-op
         return "skipped: no workbench DB"
@@ -286,7 +286,7 @@ def create_app() -> FastAPI:
             return {"resolved": pid, "decision": "discard"}
 
     def _history_dir() -> Path:
-        return Path(os.environ.get("ALPHA_LIVE_BRAIN_DIR", "./state/brain")) / "history"
+        return Path(Settings.from_env().live_brain_dir) / "history"
 
     @app.get("/snapshots")
     def list_snapshots():

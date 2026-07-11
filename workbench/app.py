@@ -19,6 +19,7 @@ from alpha.meta.reconcile import reconcile_session, reconcile_staged_edits
 from alpha.meta.store import SessionStore
 from alpha.arena.builder import build_arena
 from alpha.arena.environment import LocalEnv
+from alpha.settings import Settings
 
 DEFAULT_PROJECT_ID = "default"
 _MUTATION_LOCK = threading.Lock()
@@ -38,22 +39,22 @@ def _source():    return _SOURCE if _SOURCE is not None else make_source()
 
 
 def _brain_store():   return LiveBrainStore(_brain_dir())
-def _project_store(): return SqliteProjectStore.open(os.environ.get("ALPHA_PROJECTS_DB", "./state/projects/state.db"))
+def _project_store(): return SqliteProjectStore.open(Settings.from_env().projects_db)
 
 
 def _workspace():
-    ws = Workspace(os.path.join(os.environ.get("ALPHA_WORKSPACE_DIR", "./state/workspaces"), DEFAULT_PROJECT_ID))
+    ws = Workspace(os.path.join(Settings.from_env().workspace_dir, DEFAULT_PROJECT_ID))
     ws.init()
     return ws
 
 
 def _brain_dir() -> str:
-    return os.environ.get("ALPHA_LIVE_BRAIN_DIR", "./state/brain")
+    return Settings.from_env().live_brain_dir
 
 
 def _assert_brain_outside_workspace() -> None:
     """Fail fast if the brain dir is inside the workspace — a live shell could then reach it."""
-    ws_root = _Path(os.environ.get("ALPHA_WORKSPACE_DIR", "./state/workspaces")).resolve()
+    ws_root = _Path(Settings.from_env().workspace_dir).resolve()
     brain = _Path(_brain_dir()).resolve()
     if brain == ws_root or brain.is_relative_to(ws_root):
         raise RuntimeError(
@@ -198,7 +199,7 @@ def create_app() -> FastAPI:
                 for p in pstore.list():
                     if reconcile_staged_edits(p.staged_edits, live_len):
                         pstore.put(p)
-                sstore = SessionStore(os.environ.get("ALPHA_SESSIONS_DIR", "./state/sessions"))
+                sstore = SessionStore(Settings.from_env().sessions_dir)
                 for s in sstore.list():
                     if reconcile_session(s, live_len):
                         sstore.put(s)

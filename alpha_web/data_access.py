@@ -7,7 +7,6 @@ the regime colour language; its membership/order/frontside set mirrors `alpha.re
 from __future__ import annotations
 
 import math
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +16,7 @@ from alpha.harness.memory import Lesson
 from alpha.harness.skill import Skill
 from alpha.harness.state import HarnessState
 from alpha.meta.store import LiveBrainStore
+from alpha.settings import Settings
 
 # ── locations ────────────────────────────────────────────────────────────────
 WEB_DIR = Path(__file__).resolve().parent
@@ -51,7 +51,7 @@ PHASE_BY_KEY: dict[str, Phase] = {p.key: p for p in PHASES}
 
 
 def _live_store() -> LiveBrainStore | None:
-    root = os.environ.get("ALPHA_LIVE_BRAIN_DIR")
+    root = Settings.from_env().web_live_brain_dir
     return LiveBrainStore(root) if root else None
 
 

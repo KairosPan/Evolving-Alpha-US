@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import html
 import json
-import os
 from datetime import date as Date
 from pathlib import Path
 
@@ -22,6 +21,7 @@ from alpha.eval.decision import DecisionPackage
 from alpha.eval.decision_store import DecisionStore
 from alpha.eval.verdict_store import VerdictStore
 from alpha.meta.ingest import ingest_attachments
+from alpha.settings import Settings
 from alpha_web import data_access as da
 from alpha_web import drawer
 from alpha_web import sample
@@ -117,7 +117,7 @@ def _decision_context(selected_iso: str = "") -> dict:
     the path is operator-supplied, not adversarial. Returns the decisions.html context fragment."""
     base = {"pkg": None, "is_sample": True, "load_error": "", "dates": [], "selected": None}
 
-    f = os.environ.get("ALPHA_WEB_DECISION")
+    f = Settings.from_env().web_decision
     if f and Path(f).exists():
         try:
             return {**base, "pkg": DecisionPackage.model_validate_json(Path(f).read_text("utf-8")),
@@ -125,7 +125,7 @@ def _decision_context(selected_iso: str = "") -> dict:
         except Exception as e:
             return {**base, "pkg": sample.sample_decision(), "load_error": f"{Path(f).name}: {type(e).__name__}."}
 
-    d = os.environ.get("ALPHA_WEB_DECISIONS_DIR")
+    d = Settings.from_env().web_decisions_dir
     if d:
         store = DecisionStore(d)
         dates = [x.isoformat() for x in store.dates()]
@@ -159,7 +159,7 @@ def _verdict_context(selected_label: str = "") -> dict:
     Mis-shaped/stale JSON falls back to the SAMPLE with a human-readable error, never a 500."""
     base = {"report": None, "is_sample": True, "load_error": "", "runs": [], "selected": None}
 
-    f = os.environ.get("ALPHA_WEB_VERDICT")
+    f = Settings.from_env().web_verdict
     if f and Path(f).exists():
         try:
             return {**base, "report": _validated_verdict(json.loads(Path(f).read_text("utf-8"))),
@@ -167,7 +167,7 @@ def _verdict_context(selected_label: str = "") -> dict:
         except Exception as e:
             return {**base, "report": sample.sample_verdict(), "load_error": f"{Path(f).name}: {type(e).__name__}."}
 
-    d = os.environ.get("ALPHA_WEB_VERDICTS_DIR")
+    d = Settings.from_env().web_verdicts_dir
     if d:
         store = VerdictStore(d)
         runs = store.names()
@@ -187,7 +187,7 @@ def _evolution_context() -> dict:
     """Resolve the Evolution page artifact: a single run's edit trajectory via ALPHA_WEB_EVOLUTION
     (the JSON `scripts/save_evolution.py` writes), else the badged SAMPLE. Mis-shaped JSON falls back."""
     base = {"evo": None, "is_sample": True, "load_error": ""}
-    f = os.environ.get("ALPHA_WEB_EVOLUTION")
+    f = Settings.from_env().web_evolution
     if f and Path(f).exists():
         try:
             data = json.loads(Path(f).read_text("utf-8"))
