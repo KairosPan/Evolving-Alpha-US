@@ -36,6 +36,7 @@ from alpha.guard.screen import GuardedPolicy
 from alpha.harness.loader import load_seeds
 from alpha.llm.config import make_client
 from alpha.memory.store import EpisodeStore
+from alpha.redact import collect_secrets, redact
 from alpha.settings import Settings
 from alpha.sizing.policy import SizingPolicy
 from alpha.state.builder import build_market_state
@@ -85,6 +86,8 @@ def _write_prompt_sidecar(dirpath: Path, day: Date, records: list[dict]) -> Path
     payload = {"date": day.isoformat(),
                "records": [r for r in records if r.get("kind") != "assembled"],
                "assembled": assembled}
+    payload = redact(payload, collect_secrets())   # new A1 persistence surface -> same redaction waist
+
     p = dirpath / f"{day.isoformat()}.prompt.json"
     fd, tmp = tempfile.mkstemp(dir=dirpath, suffix=".prompt.json.tmp")
     try:
