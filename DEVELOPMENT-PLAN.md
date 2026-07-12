@@ -55,6 +55,13 @@ claim; move them into a declared params object inside `H`, edited via a new meta
 **Acceptance gate.** A real US window classifies frontside days at a plausible base rate; the
 production-posture verdict is no longer thin-by-construction; P1 battery still green.
 **Sources.** `docs/findings/2026-06-22-us-hch-vs-hexpert-verdict.md` §4; kairos-mining §4.5.
+**2026-07-12 pivot note.** The user redirected doctrine from small-cap momo speculation to
+hot-sector growth investing (weeks–months horizon), keeping the sentiment-cycle and leader ideas
+at the concept level only. Recalibration should target that frame, not the current day-scale one —
+see `docs/research/2026-07-11-us-growth-unknown-unknowns.html` (adversarially verified research:
+three-layer regime proposal — market three-state × risk layer [momentum-crash panic state / rates /
+liquidity] × theme lifecycle; Trend Template universe filter; earnings calendar = first data gap).
+The user will write the new strategies into H (harness + memory) themselves.
 
 ### P3 — Corp-actions tri-state guard-blind fix (verified hole)
 **Goal.** Absent `corp_actions.parquet` → empty frame → dilution/reverse-split (and

@@ -1,0 +1,500 @@
+<title>美股成长股 Unknown Unknowns 必修课</title>
+<style>
+  :root {
+    --paper: #F6F5F1;
+    --ink: #1F2229;
+    --muted: #5C6068;
+    --line: #DEDCD4;
+    --cn: #A83A32;          /* A股侧：朱红 */
+    --cn-soft: #F3E4E2;
+    --us: #1D5C48;          /* 美股侧：深绿 */
+    --us-soft: #E2ECE7;
+    --chip-bg: #ECEAE3;
+    --chip-ink: #3A3E33;
+    --card: #FDFCF9;
+    --warn: #8A5A18;
+    --warn-soft: #F4EAD8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #16181D; --ink: #E3E1D8; --muted: #9A9DA6; --line: #2C2F37;
+      --cn: #D9736B; --cn-soft: #33221FCC; --us: #5FB893; --us-soft: #1D2B25CC;
+      --chip-bg: #24262D; --chip-ink: #C9CCBF; --card: #1C1E24;
+      --warn: #D9A75B; --warn-soft: #2E2617;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #16181D; --ink: #E3E1D8; --muted: #9A9DA6; --line: #2C2F37;
+    --cn: #D9736B; --cn-soft: #33221FCC; --us: #5FB893; --us-soft: #1D2B25CC;
+    --chip-bg: #24262D; --chip-ink: #C9CCBF; --card: #1C1E24;
+    --warn: #D9A75B; --warn-soft: #2E2617;
+  }
+  :root[data-theme="light"] {
+    --paper: #F6F5F1; --ink: #1F2229; --muted: #5C6068; --line: #DEDCD4;
+    --cn: #A83A32; --cn-soft: #F3E4E2; --us: #1D5C48; --us-soft: #E2ECE7;
+    --chip-bg: #ECEAE3; --chip-ink: #3A3E33; --card: #FDFCF9;
+    --warn: #8A5A18; --warn-soft: #F4EAD8;
+  }
+
+  html { background: var(--paper); }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    line-height: 1.85; font-size: 16px;
+    margin: 0; padding: 0 20px;
+  }
+  main { max-width: 46rem; margin: 0 auto; padding: 3.5rem 0 6rem; }
+
+  h1, h2, h3 { font-family: "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", serif; text-wrap: balance; line-height: 1.35; }
+  h1 { font-size: 2.3rem; font-weight: 900; margin: 0.8rem 0 0.5rem; letter-spacing: 0.01em; }
+  h2 { font-size: 1.55rem; font-weight: 700; margin: 0 0 0.4rem; }
+  h3 { font-size: 1.12rem; font-weight: 700; margin: 2.2rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  section { margin-top: 4.2rem; }
+
+  .eyebrow { font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted);
+             font-family: ui-monospace, Menlo, monospace; }
+  .lede { color: var(--muted); font-size: 1.02rem; margin-top: 0.4rem; }
+
+  /* 红绿反转题眼 */
+  .emblem { display: flex; gap: 1px; margin: 2rem 0 1rem; border: 1px solid var(--line); width: max-content; max-width: 100%; }
+  .emblem > div { padding: 0.55rem 1.1rem; font-size: 0.85rem; font-weight: 600; }
+  .emblem .a { background: var(--cn-soft); color: var(--cn); }
+  .emblem .b { background: var(--us-soft); color: var(--us); }
+  .emblem small { display: block; font-weight: 400; font-size: 0.72rem; opacity: 0.75; }
+  .thesis { font-family: "Songti SC", "STSong", serif; font-size: 1.15rem; border-left: 3px solid var(--ink); padding-left: 1rem; margin: 1.6rem 0; }
+
+  /* 课程编号 */
+  .lesson-no { font-family: ui-monospace, Menlo, monospace; font-size: 0.75rem; letter-spacing: 0.14em;
+               color: var(--muted); display: block; margin-bottom: 0.3rem; }
+  .lesson-rule { border: none; border-top: 2px solid var(--ink); margin: 0 0 1.2rem; width: 3.5rem; }
+
+  /* TOC */
+  nav.toc { border: 1px solid var(--line); background: var(--card); padding: 1.2rem 1.4rem; margin-top: 2.4rem; }
+  nav.toc ol { margin: 0.4rem 0 0; padding-left: 1.4rem; }
+  nav.toc li { margin: 0.35rem 0; }
+  nav.toc a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
+  nav.toc a:hover, nav.toc a:focus-visible { border-bottom-color: var(--ink); }
+  nav.toc .toc-hint { color: var(--muted); font-size: 0.85rem; }
+
+  /* 术语 chip */
+  code.t { font-family: ui-monospace, Menlo, "SF Mono", monospace; font-size: 0.82em;
+           background: var(--chip-bg); color: var(--chip-ink); padding: 0.1em 0.42em; border-radius: 3px;
+           white-space: nowrap; }
+  code.path { font-family: ui-monospace, Menlo, monospace; font-size: 0.82em; color: var(--muted); white-space: nowrap; }
+
+  /* 证据徽章 */
+  .badge { display: inline-block; font-family: ui-monospace, Menlo, monospace; font-size: 0.68rem;
+           letter-spacing: 0.06em; padding: 0.12em 0.5em; border-radius: 2px; vertical-align: 0.14em; margin-left: 0.35em; }
+  .badge.v { background: var(--us-soft); color: var(--us); border: 1px solid color-mix(in srgb, var(--us) 35%, transparent); }
+  .badge.m { background: var(--chip-bg); color: var(--chip-ink); border: 1px solid var(--line); }
+  .badge.k { background: transparent; color: var(--muted); border: 1px dashed var(--line); }
+
+  /* 发现卡片 */
+  .finding { background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--us);
+             padding: 1.1rem 1.3rem; margin: 1.4rem 0; }
+  .finding.cn-side { border-top-color: var(--cn); }
+  .finding.warn-side { border-top-color: var(--warn); }
+  .finding h4 { margin: 0 0 0.5rem; font-size: 1rem; font-family: "Songti SC", "STSong", serif; }
+  .finding p { margin: 0.55rem 0; font-size: 0.95rem; }
+  .finding .src { font-size: 0.78rem; color: var(--muted); font-family: ui-monospace, Menlo, monospace;
+                  margin-top: 0.7rem; overflow-wrap: anywhere; }
+  .finding .src a { color: var(--muted); }
+
+  /* 表格 */
+  .tablewrap { overflow-x: auto; margin: 1.3rem 0; border: 1px solid var(--line); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; background: var(--card); }
+  th, td { text-align: left; padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 0.75rem; letter-spacing: 0.1em; color: var(--muted); font-weight: 600;
+       font-family: ui-monospace, Menlo, monospace; background: var(--paper); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  td.cn-col { border-left: 3px solid var(--cn); background: color-mix(in srgb, var(--cn-soft) 40%, transparent); }
+  td.us-col { border-left: 3px solid var(--us); background: color-mix(in srgb, var(--us-soft) 40%, transparent); }
+  td .verdict { font-size: 0.75rem; font-weight: 700; }
+  .keep { color: var(--us); } .adapt { color: var(--warn); } .drop { color: var(--cn); }
+  td { min-width: 8rem; font-variant-numeric: tabular-nums; }
+
+  /* 警示块 */
+  .danger { background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+            padding: 1rem 1.3rem; margin: 1.4rem 0; }
+  .danger strong:first-child { color: var(--warn); }
+
+  /* prompt 块 */
+  pre.prompt { background: var(--card); border: 1px solid var(--line); padding: 1.1rem 1.3rem;
+               overflow-x: auto; font-size: 0.84rem; line-height: 1.7;
+               font-family: ui-monospace, Menlo, "SF Mono", monospace; white-space: pre-wrap; }
+
+  ul, ol { padding-left: 1.5rem; }
+  li { margin: 0.45rem 0; }
+  li::marker { color: var(--muted); }
+  strong { font-weight: 700; }
+  a { color: inherit; }
+  .footnote { color: var(--muted); font-size: 0.85rem; }
+  .divider { border: none; border-top: 1px solid var(--line); margin: 3rem 0; }
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+</style>
+
+<main>
+<header>
+  <span class="eyebrow">Sonia-Kairos · 投资稿重写 · 前置研究 · 2026-07-11</span>
+  <h1>从游资到成长股：<br>你的 Unknown Unknowns 地图</h1>
+  <p class="lede">A股情绪周期 / 龙头doctrine（轮回）→ 美股热门赛道成长股投资。基于104个研究代理、13组经三票对抗验证的发现，以及对你仓库（GCycle、seeds、MarketState、universe）的逐文件勘察。</p>
+
+  <div class="emblem" role="img" aria-label="A股红色代表上涨，美股红色代表下跌">
+    <div class="a">红 = 涨<small>你来的市场</small></div>
+    <div class="b">红 = 跌<small>你要去的市场</small></div>
+  </div>
+  <p class="thesis">同一个符号，在两个市场里含义相反——而你不会因为"不知道"而报错，只会安静地亏钱。这份报告处理的就是这一类问题：不是你答错的题，是你不知道存在的题。</p>
+
+  <nav class="toc" aria-label="目录">
+    <span class="eyebrow">课程目录</span>
+    <ol>
+      <li><a href="#l0">诊断：你的系统现在停在哪里</a> <span class="toc-hint">——错的不是"直译"，是时间尺度</span></li>
+      <li><a href="#l1">为什么直译注定失败：三条因果证据</a> <span class="toc-hint">——不是执行问题，是制度过拟合</span></li>
+      <li><a href="#l2">目的地的地图：美股成长股框架词汇</a> <span class="toc-hint">——CANSLIM · Minervini · Stage · PEAD</span></li>
+      <li><a href="#l3">可迁移的资产：情绪周期与龙头思想的对应物</a> <span class="toc-hint">——你的核心直觉大部分能带走</span></li>
+      <li><a href="#l4">最危险的未知：美股特有的左尾</a> <span class="toc-hint">——momentum crash · 利率久期 · 财报缺口</span></li>
+      <li><a href="#l5">落地：重写投资稿的 prompt 工具箱</a> <span class="toc-hint">——术语表 · 数据清单 · regime · prompt骨架</span></li>
+    </ol>
+    <p class="toc-hint" style="margin-bottom:0">证据标注：<span class="badge v">已验证 3-0</span> 三个独立反驳代理均未能推翻，附一手来源；<span class="badge m">已验证·二手源</span> 3-0 通过但主引用为二手来源；<span class="badge k">框架知识</span> 教科书级共识，本轮未做对抗验证——写进投资稿前值得让 Sonia 再查证。</p>
+  </nav>
+</header>
+
+<!-- ─────────────────── 第0课 ─────────────────── -->
+<section id="l0">
+  <span class="lesson-no">第 0 课 · 诊断</span>
+  <hr class="lesson-rule">
+  <h2>你的系统现在停在哪里</h2>
+
+  <p>先纠正一个自我诊断：你说"直接拿A股投机策略用到美股"——严格地说，<strong>你的系统已经不是直译了</strong>。读一遍 <code class="path">alpha/regime/cycle.py</code> 和 <code class="path">seeds/doctrine.json</code> 就会发现，GCycle 六相（<code class="t">washout → recovery → ignition → trend → distribution → flush</code>）和 doctrine 里的 <code class="t">gap-and-go</code>、<code class="t">lead runner</code>、<code class="t">sympathy</code>、<code class="t">SSR</code>，是相当地道的<strong>美股小盘动量短线（momo day/swing trading）方言</strong>——Qullamaggie 一系的词汇。真正的直译残留在特征层（连板 → <code class="t">follow_through_rate</code> 恒0、<code class="t">RunnerRung</code> 梯队）。</p>
+
+  <p>所以这次转向的本质不是"换市场"，而是<strong>在美股内部换赛道</strong>：从"隔日情绪接力的投机"换到"赛道成长股的投资"。三样东西同时要换：</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>维度</th><th>系统现状（momo投机）</th><th>目的地（赛道成长股）</th></tr></thead>
+    <tbody>
+      <tr><td><strong>时间尺度</strong></td><td>天级——今天的涨幅榜、明天的接力</td><td>周–月–季级——一条产业趋势走完要几个季度</td></tr>
+      <tr><td><strong>驱动力</strong></td><td>盘面情绪、资金接力、隔日溢价</td><td>财报与盈利修正（<code class="t">earnings</code> / <code class="t">estimate revisions</code>）、产业周期、机构建仓</td></tr>
+      <tr><td><strong>对手盘</strong></td><td>其他短线资金</td><td>机构（共同基金/对冲基金/量化/被动指数），它们建仓需要数周——这正是"底部形态（base）"存在的原因</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>三层错位，逐文件对号：</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>层</th><th>文件</th><th>现状</th><th>成长股投资需要什么</th></tr></thead>
+    <tbody>
+      <tr><td>宇宙筛选</td><td><code class="path">alpha/universe/universe.py</code></td><td><code class="t">gainer_pct=10.0</code>：当日涨幅&gt;10% 的票——这是投机宇宙，选出来的天然是波动最剧烈的尾部</td><td>趋势确认宇宙：Minervini <code class="t">Trend Template</code> 八条过滤（第2课），选"处于确认上升趋势的领导股"</td></tr>
+      <tr><td>感知特征</td><td><code class="path">alpha/state/market.py</code></td><td>全部是当日盘面情绪（gainer/gap/failed-breakout/runner梯队）——<strong>没有一个财报、RS、板块、基本面字段</strong></td><td>财报日历与意外、RS 排名、行业组相对强度、距52周高点距离、breadth 族、宏观日历</td></tr>
+      <tr><td>Regime + doctrine</td><td><code class="path">alpha/regime/cycle.py</code> · <code class="path">seeds/doctrine.json</code></td><td>天级情绪相位机 + runner playbook</td><td>三层 regime（大盘三态 × 风险层 × 题材生命周期，第5课）+ 成长股 playbook</td></tr>
+    </tbody>
+  </table></div>
+
+  <p class="footnote">好消息：架构不用动。感知 → regime → 决策 → 门禁 → 评估的管线、PIT 防火墙、write-waist，全都中立于策略内容。要换的是<strong>种子知识和特征面</strong>，这恰好是你的系统设计为"可进化"的那部分。</p>
+</section>
+
+<!-- ─────────────────── 第1课 ─────────────────── -->
+<section id="l1">
+  <span class="lesson-no">第 1 课 · 因果证据</span>
+  <hr class="lesson-rule">
+  <h2>为什么直译注定失败：三条因果证据</h2>
+
+  <p>这一课的目的不是批评，而是<strong>卸下心理包袱</strong>：连板/打板体系在美股失效，不是你功力不够，而是它在学术上已被证明是<strong>A股制度的人工产物</strong>。你的直觉不是"交易经验"这种可携带资产，其中相当一部分是"对特定制度的过拟合"。分清哪部分是哪种，是整个迁移的第一步。</p>
+
+  <div class="finding cn-side">
+    <h4>① 连板动量是涨跌停制度造出来的<span class="badge v">已验证 3-0</span></h4>
+    <p>"续涨 + 长期反转"的模式<strong>只出现在真正触及10%涨停之后</strong>（主要体现在次日开盘价）；当日大涨9%多但没封板的股票不出现这个模式。ST股 5% 涨跌停提供了准实验的因果证据。更扎心的是深交所账户级数据（2012–2015）：大户系统性地在涨停日买入、次日卖出，散户恰好反向接盘；大户净买入越大，之后反转越强——论文作者直接把打板定性为 <code class="t">destructive trading</code>（以其他投资者为对手盘的破坏性交易）。美股没有收盘价格限制（<code class="t">LULD</code> 只是盘中暂停机制），这个信号在美股<strong>机械性地无定义</strong>——和你实测"连板特征恒0"完全一致。</p>
+    <p class="src">Chen, Gao, He, Jiang &amp; Xiong, “Daily Price Limits and Destructive Market Behavior”, <em>Journal of Econometrics</em> 2019 · <a href="https://www.princeton.edu/~wxiong/papers/PriceLimit.pdf">princeton.edu/~wxiong/papers/PriceLimit.pdf</a></p>
+  </div>
+
+  <div class="finding cn-side">
+    <h4>② "隔夜收益之谜"是中国独有的<span class="badge v">已验证 3-0</span></h4>
+    <p>A股隔夜收益（开盘价对昨收）<strong>平均为负</strong>（约14bp的开盘折价），根源是 T+1；包括美股在内的其他市场几乎一致报告<strong>平均隔夜收益为正</strong>。这意味着所有依赖 T+1 微观结构的隔夜逻辑——打板次日卖、竞价接力、隔日溢价预期链——直译到 T+0 的美股时，统计前提直接不成立。轮回里整个"竞价战法/预期差"章节的度量衡（封单、竞昨成比、开盘预期档位）都建立在这个不存在的前提上。</p>
+    <p class="src">Qiao &amp; Dam, “The overnight return puzzle and the ‘T+1’ trading rule in Chinese stock markets”, <em>Journal of Financial Markets</em> 2020 · <a href="https://www.sciencedirect.com/science/article/abs/pii/S1386418120300033">sciencedirect.com/…/S1386418120300033</a></p>
+  </div>
+
+  <div class="finding cn-side">
+    <h4>③ 两个市场的因子结构本来就不同<span class="badge v">已验证 3-0</span></h4>
+    <p>对2000–2019年32个异象的检验：A股里，美股最稳健的<strong>价格动量（momentum）证据显著偏弱</strong>，反而残差动量（<code class="t">residual momentum</code>）与<strong>反转（reversal）很强</strong>。也就是说：你在A股练出的"涨多了要回落、超跌有反抽"的反转直觉，到了动量为王的美股会双向失效——该拿的龙头你会提前下车，该回避的破位你会去抄底。并且论文检验过：卖空限制、国企占比这些单一制度特征并不是异象存在与否的主因——<strong>失效根源在因子行为本身</strong>，不能指望"美股可做空所以差不多"这类表面推理。</p>
+    <p class="src">Jansen, Swinkels &amp; Zhou, “Anomalies in the China A-share market”, <em>Pacific-Basin Finance Journal</em> 2021 · <a href="https://www.sciencedirect.com/science/article/pii/S0927538X21001141">sciencedirect.com/…/S0927538X21001141</a></p>
+  </div>
+
+  <p><strong>本课要带走的一句话：</strong>制度层（涨停、T+1、封单、竞价）的直觉全部作废；因子层的直觉要反过来用（美股动量强、反转弱）；概念层（情绪有周期、强者是信号、题材有生命）可以带走——但每一个都要换度量。第3课讲怎么换。</p>
+</section>
+
+<!-- ─────────────────── 第2课 ─────────────────── -->
+<section id="l2">
+  <span class="lesson-no">第 2 课 · 目的地地图</span>
+  <hr class="lesson-rule">
+  <h2>美股成长股投资的框架词汇</h2>
+
+  <p>你要去的地方不是无人区。"热门赛道成长股 + 市场情绪 + 龙头思想"这个组合，在美股有一条延续了六十年的成熟谱系：Nicolas Darvas → William O'Neil（CANSLIM / IBD）→ Stan Weinstein（Stage Analysis）→ Mark Minervini（SEPA）。它们全都是"<strong>基本面加速选股 + 技术面确认买卖 + 大盘 regime 择时</strong>"的三件套——和轮回"题材逻辑 + 盘面确认 + 情绪周期"同构，只是每一件的度量完全不同。</p>
+
+  <h3>CANSLIM：一套现成的"赛道龙头"检查清单<span class="badge m">已验证·二手源</span></h3>
+  <p>O'Neil 对历史大牛股的复盘归纳，七个字母就是七个筛选器。对你最重要的量化门槛：</p>
+  <ul>
+    <li><strong>C</strong>（<code class="t">Current quarterly earnings</code>）：最近一季 EPS 同比增长 <strong>≥25%</strong>——增速还要在<em>加速</em>更好；</li>
+    <li><strong>A</strong>（<code class="t">Annual earnings</code>）：过去三年年度盈利增长 ≥25%；</li>
+    <li><strong>N</strong>（<code class="t">New</code>）：新产品/新管理层/新价格高点——你会认出来，这就是"新题材、新面孔"；</li>
+    <li><strong>S</strong>（<code class="t">Supply &amp; demand</code>）：流通盘与成交量的供需——"盘子"思维直接可迁移；</li>
+    <li><strong>L</strong>（<code class="t">Leader or laggard</code>）：只买领先行业里的领先股（第3课细讲——这就是龙头战法）；</li>
+    <li><strong>I</strong>（<code class="t">Institutional sponsorship</code>）：要有机构增持——注意方向反转：A股怕"机构盘"，美股成长股<strong>需要</strong>机构接力，机构就是你的"接力资金"；</li>
+    <li><strong>M</strong>（<code class="t">Market direction</code>）：大盘三态 regime（第5课直接给你当 GCycle 映射模板）。</li>
+  </ul>
+  <p><strong>出场纪律</strong>：无例外硬止损——亏损不得超过买入点下方 <strong>7–8%</strong>（弱市 IBD 建议收紧到 3–4%）。在没有涨跌停的市场里，<strong>百分比止损取代了"断板/炸板"作为出场信号</strong>——这一条要一字不差写进投资稿的 immutable doctrine，你的 <code class="t">stop_discipline</code> 红线条目已经有了骨架，现在有了数字。</p>
+
+  <h3>Minervini Trend Template：可以直接写成 screener 的"确认趋势"定义<span class="badge m">已验证·二手源</span></h3>
+  <p>完整八条（验证代理特意补上了常被遗漏的后三条），全部是字面过滤器，替换你 <code class="path">universe.py</code> 里"当日涨幅&gt;10%"的入口：</p>
+  <ol>
+    <li>股价 &gt; 50日、150日、200日均线（SMA）；</li>
+    <li>150日线 &gt; 200日线；</li>
+    <li>50日线 &gt; 150日和200日线；</li>
+    <li>200日线上行至少1个月（4–5个月更佳）；</li>
+    <li>股价较52周低点至少高 30%；</li>
+    <li>股价距52周高点不超过 25%；</li>
+    <li>相对强度评级 <code class="t">RS rating</code> ≥ 70（龙头买 80–90+，第3课）；</li>
+    <li>（贯穿）处于 Weinstein 意义上的 Stage 2 上升期。</li>
+  </ol>
+  <p class="src">ChartMill / Deepvue / TradingView / GitHub 多个独立实现互相印证 · <a href="https://www.chartmill.com/documentation/stock-screener/technical-analysis-trading-strategies/496-Mark-Minervini-Trend-Template-A-Step-by-Step-Guide-for-Beginners">chartmill.com/…/Minervini-Trend-Template</a></p>
+
+  <h3>Stage Analysis：情绪周期的"个股K线"翻译<span class="badge k">框架知识</span></h3>
+  <p>Weinstein 把任何股票的生命周期分四阶段：<code class="t">Stage 1</code> 筑底（basing）→ <code class="t">Stage 2</code> 上升（advancing，唯一该做多的阶段）→ <code class="t">Stage 3</code> 做顶（topping）→ <code class="t">Stage 4</code> 下跌（declining）。配套的形态词汇：<code class="t">base</code>（底部平台，机构建仓期，常持续5–15周）、<code class="t">breakout</code>（放量突破 pivot）、<code class="t">pullback</code>（回踩）、<code class="t">climax run</code>（末段加速赶顶——就是你说的"加速高潮/毕业照"）。核心纪律与轮回一致但时间放大：<strong>只在 Stage 2 做多</strong> ≈ "只做主升，不做退潮"。</p>
+
+  <h3>PEAD / earnings momentum：接力的美股对应物<span class="badge v">已验证 3-0</span></h3>
+  <p>美股最著名的反应不足异象：财报意外（<code class="t">earnings surprise</code>，按 <code class="t">SUE</code> 标准化）公布后，股价沿意外方向<strong>持续漂移数周到数月</strong>——早期证据下 SUE 十分位多空组合年化异常收益约18%（≈4%/季度）。这就是"利好接力"的美股版本：不是隔日一进二，而是<strong>财报日 gap 之后的数周漂移</strong>。配套词汇：<code class="t">beat and raise</code>（超预期+上调指引，最强催化组合）、<code class="t">guidance</code>（指引比本季数字更重要）、<code class="t">estimate revisions</code>（分析师上调盈利预期，是持续漂移的燃料）。</p>
+  <div class="danger"><strong>Anti-Goodhart 警告：</strong>该收益正在被套利侵蚀——大盘股 PEAD 自约2006年起接近于零（Martineau 2022），残余效应集中在小盘、高套利成本票。<strong>投资稿里可以写机制，绝不能按论文历史数字设预期</strong>；这正是你系统"honest eval"哲学要盯住的地方。</div>
+  <p class="src">Fink, “A Review of the Post-Earnings-Announcement Drift”, <em>J. Behavioral &amp; Experimental Finance</em> 2021（215篇文献综述）· <a href="https://www.sciencedirect.com/science/article/pii/S2214635020303750">sciencedirect.com/…/S2214635020303750</a></p>
+
+  <h3>时间尺度对照：把你的钟表调慢一个数量级</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>阶段</th><th class="cn-col">A股情绪周期（轮回）</th><th class="us-col">美股成长股周期</th></tr></thead>
+    <tbody>
+      <tr><td>酝酿</td><td class="cn-col">冰点/混沌，1–3天</td><td class="us-col"><code class="t">base</code> 筑底 + 机构吸筹，<strong>5–15周</strong></td></tr>
+      <tr><td>启动</td><td class="cn-col">首板→一进二，1–2天</td><td class="us-col"><code class="t">breakout</code> + 财报确认，1–2周</td></tr>
+      <tr><td>主升</td><td class="cn-col">连板梯队，3–10天</td><td class="us-col">Stage 2 趋势 + 沿50日线台阶，<strong>数月到一年+</strong>，中途穿越多个财报季</td></tr>
+      <tr><td>高潮</td><td class="cn-col">加速/毕业照，1–2天</td><td class="us-col"><code class="t">climax run</code> / 远离均线的抛物线，数天到数周</td></tr>
+      <tr><td>退潮</td><td class="cn-col">退一退二，3–6天</td><td class="us-col">Stage 3 做顶→Stage 4，数周到数月；大盘层面用 <code class="t">distribution days</code> 计数</td></tr>
+    </tbody>
+  </table></div>
+  <p class="footnote">推论：日频决策循环仍然成立（每天读 regime、管理持仓），但<strong>开平仓频率、持有期、以及 H 里 lesson 的时间常数都要以周为单位重写</strong>。你的 59 天 verdict 验证床对投机策略够长，对成长股策略只覆盖不到一个完整财报季——评估窗口也要相应拉长。</p>
+</section>
+
+<!-- ─────────────────── 第3课 ─────────────────── -->
+<section id="l3">
+  <span class="lesson-no">第 3 课 · 可迁移资产</span>
+  <hr class="lesson-rule">
+  <h2>情绪周期与龙头思想的美股对应物</h2>
+  <p>这一课是资产清点：你最值钱的直觉，大部分<strong>在概念层能带走</strong>，且美股给了更可量化的度量。</p>
+
+  <h3>龙头思想 → L 准则：几乎逐字对应<span class="badge m">已验证·二手源</span></h3>
+  <p>CANSLIM 的 L 明确定义为"<strong>领先行业中的领先股</strong>"（the leading stock in a leading industry group），用 <code class="t">relative strength</code> 客观度量——IBD 的 RS Rating 是对全市场按尾部12个月相对表现的百分位排名：O'Neil 要求买 RS ≥ 80，历史大牛股启动前平均 RS 为 87。并且 O'Neil 明确警告<strong>避开 <code class="t">sympathy plays</code>（跟风股）</strong>——"做龙头不做跟风"你已经刻在骨子里了，这一条是纯粹的资产迁移。对应关系：</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th class="cn-col">轮回概念</th><th class="us-col">美股对应</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr><td class="cn-col">龙头（总龙/周期龙）</td><td class="us-col"><code class="t">leader</code>：领先行业组里 RS 最高、率先创52周新高的票；每轮牛市的 <code class="t">liquid leaders</code></td><td><span class="verdict keep">✓ 直接迁移</span></td></tr>
+      <tr><td class="cn-col">龙头高度锚定情绪（前高标定空间）</td><td class="us-col">领导股健康度锚定周期：leaders 创新高 = frontside；<code class="t">leader breakdown</code>（放量跌破50日线）= 周期预警——你 doctrine 里已有雏形</td><td><span class="verdict keep">✓ 换度量迁移</span></td></tr>
+      <tr><td class="cn-col">龙头断板带崩板块</td><td class="us-col">龙头放量破位是题材见顶领先指标；O'Neil：领导股见顶常领先大盘顶部数周<span class="badge k">框架知识</span></td><td><span class="verdict keep">✓ 换度量迁移</span></td></tr>
+      <tr><td class="cn-col">补涨龙 / 后排跟风</td><td class="us-col"><code class="t">laggard</code>：轮动到后排 = 题材晚期信号（"当跟风股开始领涨，周期已老"）——但<strong>不做</strong>补涨套利，只做周期计时器</td><td><span class="verdict adapt">△ 只留信号，丢掉玩法</span></td></tr>
+      <tr><td class="cn-col">卡位 / 一进二 / 弱转强 / 反核反包</td><td class="us-col">无对应物——这些是 T+1 + 涨停板的接力微观结构（第1课证据①②）</td><td><span class="verdict drop">✗ 丢弃</span></td></tr>
+      <tr><td class="cn-col">弱转强（概念层：超预期才有大肉）</td><td class="us-col"><code class="t">shakeout + reclaim</code>、<code class="t">undercut &amp; rally</code>（挖坑后收复）、财报 <code class="t">gap up</code> 后不回补——"该弱不弱就是强"的直觉在周线级别依然成立<span class="badge k">框架知识</span></td><td><span class="verdict adapt">△ 换时间尺度迁移</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>题材思想 → theme lifecycle：横向/纵向延伸的直觉完全适用<span class="badge k">框架知识</span></h3>
+  <p>轮回里"题材的时间和空间"一节（横向延伸→纵向延伸产业链→轮动加速=尾声）是你写得最好、也最可迁移的部分——美股的主题行情结构完全同构，只是以<strong>季度</strong>为单位展开。用 AI 行情做对照练习：NVDA（总龙/中军合一）→ 横向延伸到 AMD、AVGO（同业）→ 纵向延伸到产业链上下游：HBM 存储、服务器（SMCI/DELL）、电力与散热（VRT、Constellation 等核电）、光模块——最后延伸到"讲故事"的边缘应用股时，就是你熟悉的"炒到产业链下游+新颖概念=尾声"。<strong>5个共振的判断法（中美/周期/机构散户/政策/一二级共振）原样可用</strong>——美股大题材同样要求产业事实（财报兑现）+ 机构共识 + 散户参与的共振。差别只有一个：A股题材靠"预期不能兑现"维持想象空间，美股赛道行情靠<strong>每个季度财报持续兑现</strong>续命——兑现不是利好出尽，而是燃料。</p>
+
+  <h3>情绪周期 → 可计算的 regime 度量</h3>
+  <p>"赚钱效应/亏钱效应"没有涨停家数可数了，但美股给了三层现成的、经过验证的度量：</p>
+
+  <div class="finding">
+    <h4>① 大盘三态：IBD Market Pulse<span class="badge m">已验证·二手源</span></h4>
+    <p>M 准则把大盘离散成三态，每态带操作规则：<code class="t">confirmed uptrend</code>（确认上升，<code class="t">follow-through day</code> 之后可进攻）／ <code class="t">uptrend under pressure</code>（承压，减仓约50%）／ <code class="t">market in correction</code>（调整，高现金）。配套计数器<span class="badge k">框架知识</span>：<code class="t">distribution day</code>（指数放量下跌日，25日内累计5–6个=转弱）和 <code class="t">follow-through day</code>（调整后第4–7天指数放量大涨=新上升确认，O'Neil：无一轮牛市不以它开始）。这就是"新周期确立日：全市成交量放大+共振走强"的美股孪生兄弟——你会一眼认出来。</p>
+  </div>
+
+  <div class="finding">
+    <h4>② 跨资产 risk-on/off：KC Fed RORO 指数<span class="badge v">已验证 3-0</span></h4>
+    <p>堪萨斯城联储把含糊的"风险偏好"正式化：取四大类信号（发达市场信用风险、股票波动率、融资条件、货币与黄金）日度变动的<strong>第一主成分</strong>，&gt;0 为 risk-off。构造完全可复现、数据公开（已入 FRED；公开序列月度更新，回测够用、日度实盘有滞后）。它证明了一件对你很重要的事：<strong>情绪周期可以用横截面资产价格做 PCA 度量，不需要涨停板</strong>。你的 <code class="t">sentiment_norm</code> 可以照这个思路，用全市场 breadth 族做第一主成分重建。</p>
+    <p class="src">Chari, Dilts Stedman &amp; Lundblad, NBER WP 31907；<em>J. Int'l Money &amp; Finance</em> 2025 · <a href="https://www.kansascityfed.org/data-and-trends/risk-on-risk-off-index/">kansascityfed.org/data-and-trends/risk-on-risk-off-index</a></p>
+  </div>
+
+  <div class="finding">
+    <h4>③ 拥挤度：Lou–Polk comomentum<span class="badge v">已验证 3-0</span></h4>
+    <p>动量股之间的高频异常收益相关性（<code class="t">comomentum</code>）= 学术验证的<strong>套利拥挤度</strong>：低拥挤时动量交易起稳定作用，高拥挤时动量股随后强烈反转。量级巨大且<strong>事前可测</strong>：拥挤度最高20%时期对最低20%时期，动量策略第一年收益低12.7%、第二年再低13%，两年累计差超过25个百分点。这是"高潮再高潮、一致性到极致就是反着做"的直觉在美股的严格版——<strong>连你最玄的那部分盘感，美股都有论文给你算成了指标</strong>。（限定：预测力特定于收益相关性构造的拥挤度量，机构持仓类代理结论相反，落地时别搞混。）</p>
+    <p class="src">Lou &amp; Polk, “Comomentum: Inferring Arbitrage Activity from Return Correlations”, <em>Review of Financial Studies</em> 2022 · <a href="https://personal.lse.ac.uk/polk/research/hhab117.pdf">personal.lse.ac.uk/polk/research/hhab117.pdf</a></p>
+  </div>
+
+  <p>再加一层 breadth 家族<span class="badge k">框架知识</span>，都能从你已有的全市场日线直接计算：<code class="t">% of stocks above 200-day MA</code>、<code class="t">net new highs</code>（52周新高−新低）、<code class="t">advance-decline line</code>、McClellan Oscillator。"赚钱效应"→ breadth 扩张 + 新高数增加；"亏钱效应"→ 指数新高但 breadth 背离（顶部经典形态：Mag7 撑指数、中军掉队——你熟悉的"中位股掉队传导到高位"）。</p>
+</section>
+
+<!-- ─────────────────── 第4课 ─────────────────── -->
+<section id="l4">
+  <span class="lesson-no">第 4 课 · 左尾清单</span>
+  <hr class="lesson-rule">
+  <h2>最危险的未知：美股特有的左尾</h2>
+  <p>前三课讲"能带什么走"，这一课讲"哪里会死人"。排序按危险度：第一条直接与你最强的直觉正面冲突。</p>
+
+  <div class="finding warn-side">
+    <h4>① Momentum crash：你的"冰点后做修复"直觉，在美股是自杀时机<span class="badge v">已验证 3-0</span></h4>
+    <p>Daniel–Moskowitz（JFE 2016）：动量崩溃发生在可识别的 <code class="t">panic states</code>——<strong>大跌之后、波动率高企、市场急速反弹时</strong>。1932年7–8月：输家组合两个月+232%，赢家只+32%（市场+82%）；2009年3–5月：输家+163%，赢家只+8%（市场+26%）。机制：恐慌后的动量组合隐含做空高beta，形同卖出的看涨期权（up-market beta 是 down-market beta 的两倍以上）。对你的多头成长策略，教训是：<strong>情绪冰点后的V型反弹初期，"强者恒强"系统性失效——领涨的是烂票，你的龙头名单会严重跑输</strong>。</p>
+    <p>这与轮回的本能（"亏钱效应末期极值最好做"、冰点后抢修复龙头）<strong>方向相反</strong>：A股冰点后你做的是几天的情绪修复；美股 panic-rebound 是持续数月的<strong>垃圾股反弹（junk rally）</strong>，赢家/龙头是被抛弃的一边。2020年11月疫苗日、2009年3月都是样本外确认。<strong>写进 regime：熊市标志 + 高波动 + 急反弹 = 龙头策略禁买窗口，而非最佳窗口</strong>（Daniel–Moskowitz 显示按此条件化可约使动量策略 alpha/Sharpe 翻倍）。等待信号：新的 base 形成 + <code class="t">follow-through day</code> + 新领导股名单浮现（新一轮的龙头往往不是上一轮的）。</p>
+    <p class="src">Daniel &amp; Moskowitz, “Momentum Crashes”, <em>JFE</em> 2016 · <a href="https://www.kentdaniel.net/papers/published/jfe_16.pdf">kentdaniel.net/papers/published/jfe_16.pdf</a></p>
+  </div>
+
+  <div class="finding warn-side">
+    <h4>② 利率久期：成长股是长久期资产<span class="badge v">已验证 3-0</span></h4>
+    <p>高增长公司的价值不成比例来自远期现金流，利率上升时远期现金流现值跌得更狠（DCF 分母效应）。实证锚点：2022加息周期，Nasdaq 较峰值跌约35%，标普剔除信息技术只跌约20%。A股游资框架里<strong>完全没有宏观利率这个变量</strong>（超短周期太短，宏观进不了决策），但美股赛道股行情里 FOMC、CPI 是能单日改写 regime 的事件。（限定：效应主要经由通胀预期通道，历史幅度有争议，但2020后相关性极强。）投资稿必须新增：<strong>宏观事件日历意识 + rate regime 状态变量</strong>。</p>
+    <p class="src">Kim, Nissim &amp; Song, Columbia Business School 2024 · <a href="https://business.columbia.edu/sites/default/files-efs/citation_file_upload/Interest%20rate%20sensitivity%20and%20growth_Nov13_2024.pdf">business.columbia.edu/…/Interest rate sensitivity and growth</a></p>
+  </div>
+
+  <div class="finding warn-side">
+    <h4>③ 财报缺口：没有跌停板兜底的隔夜风险<span class="badge k">框架知识</span></h4>
+    <p>没有涨跌停 = 财报夜可以直接 −30%，跳过你所有的止损价位（止损单以开盘价成交，不是你设的价）。成长股估值前置了未来多个季度的预期，miss 一次 guidance 惩罚极重。<strong>hold-through-earnings 必须是显式决策</strong>：每个持仓在财报日前，要么减仓/清仓、要么书面写下"为什么这次值得扛"。配套概念：<code class="t">IV crush</code>（财报后期权隐含波动率坍缩）、财报后 gap 的方向比幅度信息量更大（联动 PEAD，gap-up 不回补=机构确认）。这条应该成为 L4 guard 的新红线：<strong>财报日前未标注 earnings-decision 的持仓 = veto</strong>。你的 corp-actions 管道已经有财报以外的公司行为，财报日历是下一个要接的数据源。</p>
+  </div>
+
+  <div class="finding warn-side">
+    <h4>④ 流动性 regime：动量收益的一部分本来就是风险补偿<span class="badge v">已验证 3-0</span></h4>
+    <p>Sadka（JFE 2006）：动量与 PEAD 的收益相当一部分是对市场级流动性中"可变价格冲击分量"意外波动的补偿——不是免费的错误定价。含义：<strong>流动性恶化的 regime 里动量策略系统性受损</strong>，这是在 regime 定义里纳入流动性状态变量（如价差、成交额分布、小盘相对大盘流动性）的学术依据。也解释了为什么危机中"所有动量策略一起死"——它们共享同一个风险因子。</p>
+    <p class="src">Sadka, “Momentum and post-earnings-announcement drift anomalies: The role of liquidity risk”, <em>JFE</em> 2006 · <a href="https://www.sciencedirect.com/science/article/abs/pii/S0304405X05001819">sciencedirect.com/…/S0304405X05001819</a></p>
+  </div>
+
+  <h3>其余必修概念（本轮未逐条对抗验证，写稿前让 Sonia 复核）<span class="badge k">框架知识</span></h3>
+  <ul>
+    <li><strong>期权市场反身性</strong>：<code class="t">gamma squeeze</code>（期权做市商对冲追涨形成正反馈）、<code class="t">0DTE</code>（当日到期期权已占标普期权量近半，放大日内波动）——美股的"情绪放大器"不是涨停板心理，是期权 dealer 对冲流；</li>
+    <li><strong>做空生态</strong>：<code class="t">short interest</code>／<code class="t">days to cover</code>／<code class="t">borrow fee</code>——高做空盘既是燃料（squeeze）也是聪明钱警告；GME 式 <code class="t">short squeeze</code> 是美股最接近"妖股"的现象，但驱动是期权+逼空结构而非接力共识；</li>
+    <li><strong>稀释与增发</strong>：小盘热门股暴涨后立刻 <code class="t">ATM offering</code>（市价增发）砸盘是常规操作——你的 EDGAR 侧 dilution kinds（atm/shelf/offering）已经预留了这个位置，这在成长股宇宙里权重远比现在大；对应轮回"买之前关注公告：减持就跑"，美股看 <code class="t">Form 4</code>（内部人卖出）与 <code class="t">S-3</code>（shelf 注册）；</li>
+    <li><strong>被动资金与指数事件</strong>：<code class="t">index inclusion</code>（纳入标普/罗素的被动买盘事件）、月末/季末再平衡流——美股特有的"无逻辑但真实"的资金流日历；</li>
+    <li><strong>锁定期</strong>：IPO 后 <code class="t">lockup expiration</code>（通常180天）的供给冲击——次新股玩法的美股结构差异；</li>
+    <li><strong>制度杂项</strong>：<code class="t">PDT</code> 规则（保证金账户&lt;$25k限制日内往返）、<code class="t">LULD</code> 盘中熔断带、<code class="t">SSR</code>（跌10%触发的做空限制，你 doctrine 里已有）、盘前盘后流动性稀薄（财报反应主要发生在 extended hours）。</li>
+  </ul>
+</section>
+
+<!-- ─────────────────── 第5课 ─────────────────── -->
+<section id="l5">
+  <span class="lesson-no">第 5 课 · Prompt 工具箱</span>
+  <hr class="lesson-rule">
+  <h2>落地：重写投资稿的 prompt 工具箱</h2>
+
+  <h3>5.1 术语表：让你能用行话提问</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>域</th><th>术语</th><th>一句话释义（括号内=最近的A股类比）</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="4">框架</td><td><code class="t">CANSLIM</code> / <code class="t">IBD</code></td><td>O'Neil 成长股七字诀与其研究机构（游资的"轮回"，机构化版本）</td></tr>
+      <tr><td><code class="t">SEPA</code> / <code class="t">Trend Template</code></td><td>Minervini 的选股体系与八条趋势过滤器（"模式内才做"）</td></tr>
+      <tr><td><code class="t">Stage 2</code></td><td>Weinstein 四阶段中唯一做多的上升期（"主升期"）</td></tr>
+      <tr><td><code class="t">momentum factor</code> / <code class="t">12-1 momentum</code></td><td>学术动量因子：过去12个月剔除最近1个月的收益排名（美股强、A股弱）</td></tr>
+      <tr><td rowspan="5">技术</td><td><code class="t">base</code> / <code class="t">breakout</code> / <code class="t">pivot</code></td><td>底部平台/放量突破/突破买点（"平台整理→启动"，但以周计）</td></tr>
+      <tr><td><code class="t">RS line</code> / <code class="t">RS rating</code></td><td>个股对标普的相对强度线/全市场百分位排名（"辨识度/身位"的量化）</td></tr>
+      <tr><td><code class="t">VCP</code></td><td>Minervini 波动收缩形态：回调幅度逐次收窄+缩量（"缩量洗筹"）</td></tr>
+      <tr><td><code class="t">climax run</code> / <code class="t">blowoff top</code></td><td>末段加速赶顶（"加速高潮/毕业照"）</td></tr>
+      <tr><td><code class="t">shakeout</code> / <code class="t">undercut &amp; rally</code></td><td>挖坑洗盘后收复（"挖坑/诱空"）</td></tr>
+      <tr><td rowspan="5">财报</td><td><code class="t">EPS/sales growth acceleration</code></td><td>盈利/营收增速的加速度——C 与 A 准则的核心</td></tr>
+      <tr><td><code class="t">SUE</code> / <code class="t">earnings surprise</code></td><td>标准化盈利意外——PEAD 的排序变量</td></tr>
+      <tr><td><code class="t">beat and raise</code> / <code class="t">guidance</code></td><td>超预期并上调指引——最强单一催化（"超预期，买"）</td></tr>
+      <tr><td><code class="t">estimate revisions</code></td><td>分析师预期上调——中期漂移的燃料（"逻辑还在发酵"）</td></tr>
+      <tr><td><code class="t">IV crush</code> / <code class="t">hold-through-earnings</code></td><td>财报后隐波坍缩／是否扛财报的显式决策</td></tr>
+      <tr><td rowspan="4">情绪/regime</td><td><code class="t">follow-through day</code> / <code class="t">distribution day</code></td><td>调整后放量确认日（"新周期确立日"）／指数放量下跌计数（"退潮预警"）</td></tr>
+      <tr><td><code class="t">breadth</code> / <code class="t">net new highs</code></td><td>涨跌广度族（"赚钱效应/亏钱效应"的度量）</td></tr>
+      <tr><td><code class="t">risk-on / risk-off</code>（RORO）</td><td>跨资产风险偏好，KC Fed 有 PCA 官方度量（"大周期情绪"）</td></tr>
+      <tr><td><code class="t">comomentum</code> / <code class="t">crowding</code></td><td>动量拥挤度，事前预测动量收益时变（"一致性极致=反着做"）</td></tr>
+      <tr><td rowspan="4">风险</td><td><code class="t">momentum crash</code> / <code class="t">panic state</code></td><td>熊市+高波动+急反弹时赢家系统性跑输（与"冰点抢修复"直觉相反！）</td></tr>
+      <tr><td><code class="t">equity duration</code></td><td>成长股=长久期资产，利率敏感（A股框架无此变量）</td></tr>
+      <tr><td><code class="t">gamma squeeze</code> / <code class="t">0DTE</code></td><td>期权对冲流放大器（美股的"情绪放大器"）</td></tr>
+      <tr><td><code class="t">ATM offering</code> / <code class="t">Form 4</code> / <code class="t">lockup</code></td><td>市价增发／内部人交易披露／IPO锁定期到期（"减持就跑"的美股三件套）</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>5.2 数据需求清单：现有 vs 缺口</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>数据</th><th>用途</th><th>现状</th></tr></thead>
+    <tbody>
+      <tr><td>全市场日线（PIT捕获）</td><td>RS rating、breadth 族、Trend Template 均线——<strong>全部可从现有数据计算</strong></td><td><span class="verdict keep">✓ 已有</span>（Alpaca bars + capture_window）</td></tr>
+      <tr><td>公司行为/增发稀释</td><td>ATM/shelf/offering 警报</td><td><span class="verdict adapt">△ 半有</span>（corp-actions 已接；dilution kinds 在 EDGAR 侧未接）</td></tr>
+      <tr><td><strong>财报日历 + 实际/预期 EPS 与营收</strong></td><td>C/A 准则、SUE、earnings-decision guard——<strong>第一优先缺口</strong></td><td><span class="verdict drop">✗ 缺</span>（候选：EDGAR facts 免费、Alpha Vantage/FMP/Polygon 日历）</td></tr>
+      <tr><td>行业/板块分组（GICS 或 IBD 行业组）</td><td>industry group RS——"领先行业"的判定基础，theme 标签的骨架</td><td><span class="verdict drop">✗ 缺</span>（静态映射表即可起步）</td></tr>
+      <tr><td>分析师预期修正（estimate revisions）</td><td>漂移燃料监测</td><td><span class="verdict drop">✗ 缺</span>（可后置）</td></tr>
+      <tr><td>宏观日历（FOMC/CPI/NFP）</td><td>事件风险窗口、rate regime</td><td><span class="verdict drop">✗ 缺</span>（静态日历文件即可起步）</td></tr>
+      <tr><td>short interest / 期权流</td><td>squeeze 燃料与拥挤度</td><td><span class="verdict drop">✗ 缺</span>（可后置，FINRA 双周数据免费）</td></tr>
+    </tbody>
+  </table></div>
+  <p class="footnote">注意排序：<strong>缺口里只有"财报"是重写投资稿的硬依赖</strong>；RS/breadth/Trend Template 用现有 bars 就能算全——先改稿和特征，再接新数据源。</p>
+
+  <h3>5.3 Regime 重定义建议：GCycle 从一层变三层</h3>
+  <p>现在的六相是"一层天级情绪相位"。成长股投资的 regime 是三个<strong>正交</strong>的层，建议分开建模、let LLM 合成：</p>
+  <ol>
+    <li><strong>大盘三态层</strong>（M 准则骨架）：<code class="t">confirmed uptrend / under pressure / correction</code>，由 follow-through day 与 distribution day 计数驱动。六相可以折叠映射进去（washout+recovery→correction末段；ignition→FTD；trend→confirmed uptrend；distribution+flush→under pressure→correction），<strong>骨架保留、时间常数放大到周级</strong>；</li>
+    <li><strong>风险因子层</strong>（新增，A股框架没有）：<code class="t">panic state</code> 布尔（熊市标志+高波动+急反弹 → 龙头禁买窗口）、<code class="t">rate regime</code>（宏观事件临近+利率趋势）、流动性状态、（进阶）comomentum 式拥挤度；</li>
+    <li><strong>题材生命周期层</strong>（你的 per-narrative regime 设想，正好归位）：每条 theme 打 <code class="t">emerging → institutional → public/laggard → exhaustion</code> 标签，由 theme 内 breadth、龙头健康度、laggard 参与度驱动——横向/纵向延伸的判断逻辑在这里复活。</li>
+  </ol>
+
+  <h3>5.4 Prompt 骨架：直接可用</h3>
+  <p>给 Sonia（或任何 LLM）下达重写任务时，把"框架名 + 量化门槛 + 时间尺度 + 禁用词 + 证据边界"全部显式给出。可复制骨架：</p>
+  <pre class="prompt">任务：重写 Sonia-Kairos 的投资稿（doctrine 种子），从美股小盘动量投机
+转向"热门赛道成长股"的周–月级 swing/position 投资。
+
+框架锚定（必须使用这些框架的原生词汇与门槛）：
+- 选股：CANSLIM——C: 最近一季 EPS 同比≥25%；A: 三年年增≥25%；
+  L: 只买领先行业组里 RS rating≥80 的 leader，明确避开 sympathy plays。
+- 宇宙：Minervini Trend Template 完整8条（价&gt;50/150/200SMA、50&gt;150&gt;200、
+  200SMA上行≥1月、距52周低点≥+30%、距52周高点≤25%、RS≥70）。
+- 出场：7-8% 硬止损（弱市3-4%），无例外；climax run / 放量跌破50日线减仓。
+- 财报：earnings surprise 后的中期漂移（PEAD）是接力的替代物；
+  hold-through-earnings 必须是每仓位的显式决策，财报前未决策=veto。
+- Regime 三层：大盘三态（follow-through day / distribution day 计数）×
+  风险层（momentum-crash panic state、rate regime、流动性）×
+  题材生命周期（emerging/institutional/public/exhaustion）。
+
+保留的思想资产（换度量后写入）：
+- 龙头思想 → L 准则 + leader breakdown 作题材预警；
+- 题材横向/纵向延伸 + 轮动加速=尾声 + 5共振 → theme lifecycle 判定；
+- 一个题材=一注（同 narrative 净额）——已有 doctrine 保留；
+- "超预期买、不及预期卖" → beat-and-raise / guidance 语义。
+
+硬性禁用（A股微观结构词，出现即返工）：
+连板/打板/封单/竞价/一进二/弱转强(日内义)/炸板/反包/地天板/卡位/
+隔日溢价/T+1/涨停潮/空间板高度。
+
+证据边界（写进稿子的谦逊条款）：
+- PEAD 大盘股已近消失（2006后），只作机制不作预期收益；
+- panic state（熊市+高波动+急反弹）中"强者恒强"失效，龙头禁买；
+- 成长股是长久期资产，FOMC/CPI 是 regime 级事件；
+- 所有阈值（25%、7-8%、RS 80）标注为"文献值，待本系统 verdict 校准"。
+
+输出：与 seeds/doctrine.json 同构的条目列表（section/regime/immutable/
+guidance），immutable 红线单列；每条 guidance ≤2句、可执行、含量化门槛。</pre>
+
+  <h3>5.5 继续挖 unknown unknowns 的提问模式</h3>
+  <p>这次帮你把"不知道自己不知道"变成了"知道自己不知道"。以后让每一次提问都自带这个转换：</p>
+  <ul>
+    <li><strong>映射式</strong>："在 [CANSLIM/Stage Analysis] 里，我的 [轮回概念X] 对应什么？<em>在哪个前提下这个对应会误导我？</em>"——后半句才是挖掘 unknown unknowns 的部分；</li>
+    <li><strong>反向式</strong>："美股成长股投资者有哪些<em>我这个框架里根本没有名字</em>的日常概念？按'不知道会亏多少钱'排序。"</li>
+    <li><strong>对抗式</strong>："这是我重写的投资稿。请扮演一个只做美股成长股20年的基金经理，找出暴露我A股出身的三个细节，并给出每个细节对应的真实亏损场景。"</li>
+    <li><strong>制度式</strong>："列出所有依赖 [T+1/涨停板/散户对手盘] 才成立的推理，即使它们表面上已经翻译成了英文术语。"——防止"英文皮、A股骨"（你现有 doctrine 里 runner/梯队就是例子）；</li>
+    <li><strong>时间尺度式</strong>："这条规则的时间常数是多少？它在天级成立还是周级成立？换到周级后阈值应该怎么变？"</li>
+  </ul>
+</section>
+
+<hr class="divider">
+
+<!-- ─────────────────── 附录 ─────────────────── -->
+<section id="appendix">
+  <span class="lesson-no">附录 · 证据与方法</span>
+  <hr class="lesson-rule">
+  <h2>方法与来源</h2>
+  <p class="footnote">研究方法：deep-research 工作流，104 个子代理——5 路角度化搜索 → 来源抓取与可证伪声明提取 → 每条声明 3 个独立"反驳者"代理对抗验证（≥2/3 反驳即杀）→ 综合。13 组声明全部 3-0 存活，0 组被杀。仓库勘察：轮回.docx 全文（1716行）、<code class="path">alpha/regime/{cycle,classifier}.py</code>、<code class="path">seeds/doctrine.json</code>、<code class="path">alpha/state/market.py</code>、<code class="path">alpha/universe/universe.py</code>。</p>
+  <ol class="footnote">
+    <li>Chen, Gao, He, Jiang &amp; Xiong (2019). Daily Price Limits and Destructive Market Behavior. <em>Journal of Econometrics</em>.</li>
+    <li>Qiao &amp; Dam (2020). The overnight return puzzle and the "T+1" trading rule. <em>Journal of Financial Markets</em>.</li>
+    <li>Jansen, Swinkels &amp; Zhou (2021). Anomalies in the China A-share market. <em>Pacific-Basin Finance Journal</em>.</li>
+    <li>Daniel &amp; Moskowitz (2016). Momentum Crashes. <em>Journal of Financial Economics</em>.</li>
+    <li>Lou &amp; Polk (2022). Comomentum. <em>Review of Financial Studies</em>.</li>
+    <li>Fink (2021). A Review of the Post-Earnings-Announcement Drift. <em>J. Behavioral &amp; Experimental Finance</em>.</li>
+    <li>Sadka (2006). Momentum and PEAD anomalies: The role of liquidity risk. <em>Journal of Financial Economics</em>.</li>
+    <li>Chari, Dilts Stedman &amp; Lundblad (2023). NBER WP 31907 / KC Fed RORO Index.</li>
+    <li>Kim, Nissim &amp; Song (2024). Interest rate sensitivity and growth. Columbia Business School.</li>
+    <li>O'Neil / CAN SLIM（C·A 门槛、L 准则、M 三态、7-8% 止损）——Wikipedia 逐字核实 + IBD 官方出版物佐证（二手源，评级 medium）。</li>
+    <li>Minervini Trend Template 完整8条——ChartMill/Deepvue/TradingView/GitHub 多实现互证（二手源，评级 medium）。</li>
+  </ol>
+  <p class="footnote">标注为「框架知识」的内容（Stage Analysis 细节、breadth 指标族、财报机制、期权/做空/增发/被动资金生态、题材生命周期案例）来自训练知识，本轮未做对抗验证——写入投资稿前建议逐条让 Sonia 复核。</p>
+</section>
+</main>
