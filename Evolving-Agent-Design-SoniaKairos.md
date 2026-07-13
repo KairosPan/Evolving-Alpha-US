@@ -278,6 +278,29 @@ Body-layer applicability (decided 2026-07-04): the principle extends to executab
 
 ### Decision for SoniaKairos
 
+> **AMENDMENT — store of record (decided 2026-07-13, user-ratified; SUPERSEDES the 2026-07-09
+> Mem0 store-of-record decision for the SoniaKairos IMPLEMENTATION).** The built system's memory
+> store of record is the **in-repo SQLite/JSON substrate — `EpisodeStore` (PIT episodic memory,
+> `brain.db`, keyed on `learned_asof`) + the H-lessons in `HarnessState`/`brain.json`** — NOT Mem0.
+> The **git-committed Body journal (A5 Body-Store-as-git) + the hash-chained `EditLog` (A4)** are the
+> reconcile/audit authority (the role this section had assigned to "the git memory journal"). **Mem0
+> is not adopted.** Reasons (full analysis: `docs/superpowers/specs/2026-07-13-a11-mem0-decision-memo.md`):
+> (1) adopting Mem0 adds a hard external dependency + an embedder/vector backend to a suite that is
+> deliberately **offline, keyless, no-new-deps** (1874 tests); (2) it would re-plumb the **PIT
+> firewall** (`learned_asof` masking, `for_asof` caps, the verdict-symmetric read-only `recall_store`,
+> the `kind∈{trade,task}` fence) through a third party whose recall ordering is not PIT-aware; (3) it
+> duplicates what **A2–A9** already hardened on this substrate (scope labels, hash-chained EditLog,
+> git Body audit, forgery-resistant gate, egress/credential split, spend metering). A **Mem0
+> *retrieval* adapter behind the existing recall seam** remains a clean FUTURE option if semantic
+> recall is later wanted, WITHOUT ceding store-of-record. Everything else this section establishes
+> holds unchanged: Kairos never writes memory; Sonia is the sole agent proposer (or the User edits
+> directly, 2026-07-08); the Applier is the sole writer through `try_apply_op`; content is typed
+> (facts/state only); never-auto-destroy; the read-only-against-memory activity-plane invariant. The
+> detailed Mem0 prose below (Substrate, `infer=False`, journal-reconcile, tiers, retrieval-CI) is
+> **retained as the design study / rationale that produced this decision**, superseded only on the
+> store-of-record question. (Authority chain: this is a charter-level amendment, the User's to make;
+> ratified 2026-07-13 — "按你的推荐走".)
+
 Layered, not either/or:
 
 - **Agent working memory** (project state, engineering notes, learned facts): **store of record is Mem0** (decided 2026-07-09 — supersedes the earlier file-based Philosophy-A choice; see *Substrate* below). This adopts Philosophy B's substrate (vector store + retrieval) for working memory, but under this design's governance and with its two main Philosophy-B liabilities designed out: **fidelity** — approved content is stored `infer=False` (verbatim), so the lossy extraction that makes Mem0 an "opinion engine" is confined to Sonia's *drafting* and never touches stored text; **tamper resistance** — Kairos's runtime holds a retrieval-only Mem0 client with no write path (process/network isolation), the structural successor to the filesystem `read_only` mount. Since the 2026-07-06 pivot this memory is **written by Sonia as deliberation proposals — or (2026-07-08) by the User directly through the Applier — never by Kairos**, and is **typed** — facts/state only; procedures live in Sonia-authored skills/workflows, never as memory content. The hand-curated `CLAUDE.md`/skills layer is the read-only end of this same spectrum. Post-pivot invariant (recorded 2026-07-07, mechanism updated 2026-07-09): the activity plane is read-only against memory — the Applier is the sole writer (now via Mem0's write API), and trial-run forks get a read-only retrieval view — so the read-only defense is a global invariant of the activity plane, not a per-store setting; Mem0's `read_write` client has no Kairos-side consumer.

@@ -155,13 +155,18 @@ consumed by prompt recall (memory-like consumption); SkillStats carry task-outco
 charter telemetry is execution-level. Conversely this repo's `learned_asof`
 PIT discipline is STRONGER than anything in the charter, which has no PIT concept.
 
-**Landing in place.** A11 — a decision point, not a build: either adopt Mem0 + journal (episodes
-and lessons become derivations of an append-only committed journal; the observation channel
-stays kernel-written — observability rows are not Applier cargo in the charter), or amend the
-charter to record permanent divergence — code never
-wins silently. Either way, carry the PIT discipline upstream as a charter amendment candidate.
-The convergence principle already holds locally (superseded flags, demote-not-delete, archive
-semantics in the skill ladder — no auto-destroy anywhere).
+**Landing in place → RESOLVED 2026-07-13 (Option B, user-ratified "按你的推荐走"; A11 memo
+`docs/superpowers/specs/2026-07-13-a11-mem0-decision-memo.md`).** The decision point was: either adopt
+Mem0 + journal, or amend the charter to record permanent divergence — code never wins silently. **The
+charter was amended** (its *Memory Design → Decision for SoniaKairos* now carries a dated superseding
+note): **Mem0 is NOT adopted**; the store of record is the in-repo SQLite/JSON substrate
+(`EpisodeStore` + H-lessons) with the A5 git Body journal + A4 hash-chained `EditLog` as
+reconcile/audit authority; a Mem0 *retrieval* adapter behind the existing recall seam stays a future
+option. G9 = divergence RECORDED, not a build. The PIT discipline (`learned_asof`) — stronger than
+anything in the charter — is now the charter-endorsed substrate. `brain.db` non-rollback (G9 substance)
+stays an open follow-up, tracked separately from the store-of-record question. The convergence
+principle already holds locally (superseded flags, demote-not-delete, archive semantics — no
+auto-destroy anywhere).
 
 ### 2.5 Session
 
@@ -462,7 +467,7 @@ renumbers them.
 | G6 | Kernel | Kernel is conventional (tests + code discipline), not physical; `SandboxedEnv` deferred | Accepted posture; stays behind the commercial gate | A10 |
 | G7 | Evolution | Worker still proposes (charter: Kairos does not propose at all) — named deviation, spec §5.4 | Medium; deviation is recorded, not hidden | A7 |
 | G8 | Evolution | Packet counsel absent (behavior diff, scope-mismatch, dedup, coverage); teaching apply unpinned; two teach-ish surfaces over one brain | Medium-high; the deliberation channel is the charter's heaviest-loaded component | A8 |
-| G9 | Memory | Substrate divergence: charter decided Mem0 store-of-record (2026-07-09); repo = H-lessons + `EpisodeStore`, no journal-replay rollback (the observation channel maps to the charter's kernel-written observability exception, not the retired waist — §2.4) | Decision point, not a build; code never wins silently | A11 |
+| G9 | Memory | **RESOLVED 2026-07-13 (Option B, user-ratified):** charter AMENDED — Mem0 not adopted; store of record = H-lessons + `EpisodeStore` (SQLite/JSON), A5 git journal + A4 EditLog as reconcile authority; Mem0 retrieval adapter a future option. `brain.db` non-rollback stays a separate open follow-up. | Divergence recorded, not a build | A11 ✅ |
 | G10 | Kernel | No context management for long sessions (pruning/offload/compaction) | Precondition of the self-learning channel | A3 |
 | G11 | Evolution | P-B/P-C experience/fitness coupling built but DORMANT (4-step activation checklist logged) | High leverage; built code earning nothing | A2 |
 | G12 | Operations | Observability floor gaps: no prompt audit record, no episode inspector, no `harness_digest`, no CHECKSUMS, no `tcb.lock`, no runbooks/activation ledger, ~32 scattered env reads — closed 2026-07-11 (A1) | **Urgent-adjacent**; blocks diagnosing P2 | A1 |
@@ -489,12 +494,14 @@ cited here, not restated.
 - **`--autonomous` escape hatch** (spec §5.3): pre-pivot in-place evolution, including live
   machine-revert by the breaker, survives behind `--autonomous` AND `ALPHA_UNSAFE_AUTONOMOUS=1`.
   A recorded non-conformance with a future decision point: remove, or keep permanently recorded.
-- **Mem0 non-conformance** (G9): a substrate divergence — no Mem0, no journal-replay rollback.
-  The observation channel (`apply_credit`) maps to the charter's kernel-written
-  observability/ledger-row exception, NOT the retired memory-content waist (reframed 2026-07-10,
-  backend-design round); the honest residuals are in-place counter mutation vs the charter's
-  append-only rows, recall-consumption of episodes, and task-outcome credit vs execution-level
-  telemetry. A11 is the decision point; silence is not an option.
+- **Mem0 non-conformance** (G9): **RESOLVED 2026-07-13 (Option B, user-ratified) — charter amended,
+  Mem0 NOT adopted; the SQLite/JSON substrate IS the store of record** (A5 git journal + A4 EditLog =
+  reconcile authority; Mem0 retrieval adapter a future option). The observation channel (`apply_credit`)
+  maps to the charter's kernel-written observability/ledger-row exception, NOT the retired
+  memory-content waist (reframed 2026-07-10); the honest residuals are in-place counter mutation vs the
+  charter's append-only rows, recall-consumption of episodes, and task-outcome credit vs execution-level
+  telemetry. A11 was the decision point; it is now decided (`brain.db` non-rollback stays a separate
+  open follow-up, below).
 - **Adopted forks don't retro-write episodes** (spec §5.2 accepted cost): propose-mode threads
   `episode_store=None`, so an ADOPTED packet's run leaves no episodes either; episodic evidence
   accrues only from future live decisions. Revisit only on real evidence starvation.

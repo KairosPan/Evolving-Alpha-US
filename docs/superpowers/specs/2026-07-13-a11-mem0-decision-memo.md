@@ -1,8 +1,15 @@
-# A11 — Mem0 store-of-record: DECISION MEMO (needs user ratification)
+# A11 — Mem0 store-of-record: DECISION MEMO (RESOLVED)
 
-**Status:** DECISION MEMO — awaits USER decision. Per the authority chain (charter > Backend-Design >
-plan > code), **code never wins silently**: this memo must be resolved (adopt OR amend the charter)
-before any A11 code. No code written.
+**Status: RESOLVED 2026-07-13 → Option B (AMEND the charter; Mem0 not adopted). User-ratified
+("按你的推荐走").** The charter's *Memory Design → Decision for SoniaKairos* now carries a dated
+superseding amendment recording that the store of record is the in-repo SQLite/JSON substrate
+(`EpisodeStore` + H-lessons) with the A5 git Body journal + A4 hash-chained EditLog as
+reconcile/audit authority; Mem0 is not adopted; a Mem0 *retrieval* adapter behind the existing recall
+seam stays a future option. Backend-Design G9 closed accordingly. No A11 Mem0 code was written.
+
+**Original memo (for the record):** Per the authority chain (charter > Backend-Design > plan > code),
+**code never wins silently**: this memo had to be resolved (adopt OR amend the charter) before any A11
+code.
 
 ## The conflict
 

@@ -273,15 +273,15 @@ reach the brain around the gate; today's control is the workbench boot assert on
 precondition for any multi-user/untrusted arena use. Charter: *Immutable Kernel: The Trust Base of
 Evolution*. Sources: modification-ladder spec §5–§9; activity-space spec §3/§8 P-D.
 
-### A11 — Mem0 decision point
-**Closes G9 (either way).**
-The charter decided memory's **store of record is Mem0 OSS** (2026-07-09, user-ratified — *Memory
-Design → Decision for SoniaKairos*: Applier writes `add(infer=False)` verbatim, Kairos reads
-retrieval-only, git journal reconcile-authoritative). This repo's substrate is H-lessons +
-`EpisodeStore` (SQLite). Decide explicitly: **adopt** (Mem0 + journal-replay reconcile pattern,
-mapped onto the existing gate/waist), or **amend the charter** to record permanent divergence —
-code never wins silently; per the authority chain, amend upstream first, then sync down dated.
-**Acceptance gate.** A decision memo referencing the charter section, before any code.
+### A11 — Mem0 decision point — RESOLVED 2026-07-13 (Option B, user-ratified) — **closes G9**
+Decision memo `docs/superpowers/specs/2026-07-13-a11-mem0-decision-memo.md` resolved to **Option B —
+AMEND the charter; Mem0 NOT adopted** ("按你的推荐走"). The charter's *Memory Design → Decision for
+SoniaKairos* now carries a dated superseding amendment: the store of record is the in-repo SQLite/JSON
+substrate (`EpisodeStore` + H-lessons), with the A5 git Body journal + A4 hash-chained EditLog as
+reconcile/audit authority; a Mem0 *retrieval* adapter behind the existing recall seam stays a future
+option. Backend-Design G9 closed (row + prose + summary). No A11 Mem0 code written. Remaining
+follow-up (separate, not the store-of-record question): `brain.db` does not yet roll back with the
+brain (G9 substance).
 
 ### A12 — GEPA population search *(ordered here; STAYS DEFERRED)*
 Substance + triggers held in the §4 ledger row; kept in the track so the ordering intent (after
