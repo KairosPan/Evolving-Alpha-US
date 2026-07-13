@@ -48,3 +48,9 @@ class SnapshotSource:
 
     def corporate_actions_known(self, as_of: Date) -> pd.DataFrame:
         return known_corporate_actions(self._store.get_corp_actions(), as_of)
+
+    def corp_actions_available(self) -> bool:
+        """False iff corp_actions.parquet is absent — the guard could not check reverse-split/dilution.
+        True for a present (even empty) artifact. Distinguishes MISSING from checked-and-clean, which
+        both otherwise collapse to an empty frame -> False flags (see alpha/data/corp_actions.py)."""
+        return self._store.has_corp_actions()

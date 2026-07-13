@@ -22,6 +22,11 @@ from alpha.state.market import MarketState
 SSR_DROP_PCT = -10.0   # Reg SHO Rule 201: a >=10% prior-day decline restricts short sales the next session
 HALT_SPIKE_PCT = 0.15   # an intraday high >=15% above prior close ~ a LULD halt-up (Tier-1 band) event
 
+# P3: surfaced into key_risks (warn-the-human, NOT a veto) when the corp-actions artifact is MISSING, so
+# reverse-split-pending / dilution could not be checked — distinct from a checked-and-clean empty frame.
+CORP_BLIND_NOTE = ("corp-actions guard ran blind: artifact missing — reverse-split-pending / dilution "
+                   "checks did not run (an unflagged split or dilution overhang may have passed)")
+
 
 def _num(value) -> float | None:
     """None-and-NaN-safe scalar float (snapshot rows can carry NaN)."""
@@ -107,6 +112,8 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
     regime = (GrowthMarketClock().read(history or (), state) if vocabulary == "growth"
               else GCycle().read(state))
     corp = guarded.corporate_actions_known(as_of)
+    corp_available = guarded.corp_actions_available()  # P3: False -> corp artifact MISSING (reverse-split /
+                                                       #   dilution ran blind); an empty-but-present frame is True
     snap = guarded.daily_snapshot(as_of)               # day's OHLC for the halt-then-dump proxy (guard-safe)
     rows = ({str(r["symbol"]): r for r in snap.to_dict("records")}
             if snap is not None and not snap.empty else {})
@@ -130,6 +137,8 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
             notes.append(f"vetoed {c.symbol}: {'; '.join(v.reasons)}")
         else:
             kept.append(c)
+    if not corp_available and any(candidate_action(c) == "enter" for c in decision.candidates):
+        notes.append(CORP_BLIND_NOTE)   # P3: once per package, and only when a blind check gated an entry
     update = {"candidates": kept, "regime": regime, "key_risks": list(decision.key_risks) + notes}
     if not kept and decision.candidates:
         update["no_trade_reason"] = decision.no_trade_reason or "all candidates vetoed by L4 guard"

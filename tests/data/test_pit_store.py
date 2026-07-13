@@ -41,3 +41,17 @@ def test_missing_returns_none(tmp_path):
     assert store.get_bars("NOPE") is None
     assert store.get_calendar() is None
     assert store.get_corp_actions() is None
+
+
+def test_has_corp_actions_distinguishes_missing_from_present_but_empty(tmp_path):
+    # P3: the tri-state seam — the ONLY place "artifact absent" is knowable. `get_corp_actions()`
+    # collapses absent(None)/empty into a False-yielding empty frame downstream; has_corp_actions keeps it.
+    store = PITStore(tmp_path)
+    assert store.has_corp_actions() is False                          # MISSING: no parquet written
+    store.put_corp_actions(pd.DataFrame(
+        columns=["symbol", "announce_date", "ex_date", "kind", "ratio"]))
+    assert store.has_corp_actions() is True                           # PRESENT-BUT-EMPTY: checked, nothing announced
+    store.put_corp_actions(pd.DataFrame({"symbol": ["RUN"], "announce_date": [date(2026, 6, 9)],
+                                         "ex_date": [date(2026, 6, 20)], "kind": ["reverse_split"],
+                                         "ratio": [0.1]}))
+    assert store.has_corp_actions() is True                           # AVAILABLE with rows

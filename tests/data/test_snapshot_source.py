@@ -43,3 +43,14 @@ def test_bars_are_raw_not_future_adjusted(tmp_path):
     src = _seed(tmp_path)
     bars = src.daily_bars("RUN", date(2026, 6, 11), date(2026, 6, 11))
     assert bars.iloc[0]["close"] == 14.0     # raw, NOT 140.0
+
+
+def test_corp_actions_available_reflects_artifact_presence(tmp_path):
+    """P3: SnapshotSource surfaces the store's MISSING/present distinction so screen_decision can
+    tell 'no corp_actions.parquet' (guard blind) apart from 'checked, nothing announced'."""
+    store = PITStore(tmp_path)
+    src = SnapshotSource(store)
+    assert src.corp_actions_available() is False                     # no parquet -> MISSING
+    store.put_corp_actions(pd.DataFrame(
+        columns=["symbol", "announce_date", "ex_date", "kind", "ratio"]))
+    assert src.corp_actions_available() is True                      # present-but-empty -> checkable

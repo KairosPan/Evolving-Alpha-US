@@ -21,6 +21,7 @@ class MarketDataSource(Protocol):
     def daily_snapshot(self, day: Date) -> pd.DataFrame: ...
     def corporate_actions(self, start: Date, end: Date) -> pd.DataFrame: ...
     def corporate_actions_known(self, as_of: Date) -> pd.DataFrame: ...
+    def corp_actions_available(self) -> bool: ...   # False = corp artifact MISSING (guard cannot check)
 
 
 class FakeSource:
@@ -29,12 +30,16 @@ class FakeSource:
     def __init__(self, *, calendar: list[Date],
                  bars: dict[str, pd.DataFrame],
                  snapshots: dict[Date, pd.DataFrame],
-                 corp_actions: pd.DataFrame | None = None) -> None:
+                 corp_actions: pd.DataFrame | None = None,
+                 corp_actions_available: bool = True) -> None:
         self._calendar = list(calendar)
         self._bars = {k: v.copy() for k, v in bars.items()}
         self._snapshots = {k: v.copy() for k, v in snapshots.items()}
         self._corp = (corp_actions.copy() if corp_actions is not None
                       else pd.DataFrame(columns=_EMPTY_CORP))
+        # In-memory sources are always checkable; the flag lets a test simulate a MISSING corp artifact
+        # (the file-backed SnapshotSource derives this from PITStore.has_corp_actions).
+        self._corp_available = corp_actions_available
 
     def trading_calendar(self) -> list[Date]:
         return list(self._calendar)
@@ -58,6 +63,9 @@ class FakeSource:
     def corporate_actions_known(self, as_of: Date) -> pd.DataFrame:
         """Corp actions ANNOUNCED by as_of (PIT-by-announcement), incl. future ex_dates (pending)."""
         return known_corporate_actions(self._corp, as_of)
+
+    def corp_actions_available(self) -> bool:
+        return self._corp_available
 
 
 class GuardedSource:
@@ -85,3 +93,9 @@ class GuardedSource:
     def corporate_actions_known(self, as_of: Date) -> pd.DataFrame:
         self._guard.check(as_of)
         return self._inner.corporate_actions_known(as_of)
+
+    def corp_actions_available(self) -> bool:
+        # Date-independent (the parquet is the whole PIT snapshot), so no AsOfGuard.check. An inner that
+        # predates the capability -> treated as available (byte-identical; same posture as optional collect).
+        probe = getattr(self._inner, "corp_actions_available", None)
+        return probe() if callable(probe) else True

@@ -250,3 +250,9 @@ class AlpacaSource:
         # firewall's PIT query — never the ex-windowed one, which would drop pending future-ex splits.
         corp = _normalize_corp(self._fetch_corp_actions(as_of - timedelta(days=_KNOWN_LOOKBACK_DAYS), as_of))
         return known_corporate_actions(corp, as_of)
+
+    def corp_actions_available(self) -> bool:
+        # The live feed is always checkable: a fetch either returns real actions or raises (fails loud);
+        # a successful fetch with zero actions is a true empty, never the silent MISSING the offline
+        # snapshot path can hit. So corp availability is unconditionally True here.
+        return True

@@ -67,6 +67,12 @@ class PITStore:
             return None
         return [pd.to_datetime(s).date() for s in pd.read_parquet(p)["date"]]
 
+    def has_corp_actions(self) -> bool:
+        """Whether corp_actions.parquet was written (tri-state seam, mirrors has_snapshot): True even for
+        an empty frame (checked, nothing announced); False ONLY when the artifact is absent — the one
+        place 'guard could not check' is distinguishable from 'checked, clean'."""
+        return (self._root / "corp_actions.parquet").exists()
+
     def put_corp_actions(self, df: pd.DataFrame) -> None:
         out = df.copy()
         for c in ("announce_date", "ex_date"):

@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 
 from alpha.data.alpaca import AlpacaSource
-from alpha.data.registry import make_source
+from alpha.data.registry import _SOURCES, make_source
 from alpha.data.snapshot_source import SnapshotSource
 
 
@@ -50,3 +50,14 @@ def test_snapshot_requires_pit_root(monkeypatch):
     monkeypatch.delenv("ALPHA_PIT_ROOT", raising=False)
     with pytest.raises(ValueError, match="pit_root"):
         make_source()
+
+
+@pytest.mark.parametrize("name", sorted(_SOURCES))
+def test_every_registered_source_implements_corp_actions_available(name, apca, monkeypatch, tmp_path):
+    """P3 conformance: corp_actions_available is the MarketDataSource Protocol's ONLY fail-open method —
+    omitting any other crashes at first use, but omitting THIS one reads silently as 'checked', re-hiding
+    the exact guard-blind class P3 fixed (and the SnapshotSource reference a future vendor copies returns
+    empty-on-missing). Every REGISTERED source must expose it (structural test doubles keep the
+    spec-adjudicated GuardedSource default-True)."""
+    monkeypatch.setenv("ALPHA_PIT_ROOT", str(tmp_path))
+    assert callable(getattr(make_source(name), "corp_actions_available", None))

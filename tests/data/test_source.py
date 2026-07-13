@@ -54,6 +54,33 @@ def test_corporate_actions_known_is_guard_safe(fake_source):
         gs.corporate_actions_known(date(2026, 6, 13))                                 # future as_of blocked
 
 
+def test_fake_source_corp_actions_available_defaults_true(fake_source):
+    # P3: in-memory sources are always checkable -> default True (present-but-empty & rows both report True)
+    assert fake_source.corp_actions_available() is True
+
+
+def test_fake_source_corp_actions_available_flag_simulates_missing():
+    from alpha.data.source import FakeSource
+    src = FakeSource(calendar=[date(2026, 6, 12)], bars={}, snapshots={},
+                     corp_actions_available=False)
+    assert src.corp_actions_available() is False
+
+
+def test_guarded_source_passes_through_corp_actions_available(fake_source):
+    from alpha.data.source import FakeSource
+    assert GuardedSource(fake_source, AsOfGuard(date(2026, 6, 12))).corp_actions_available() is True
+    blind = FakeSource(calendar=[date(2026, 6, 12)], bars={}, snapshots={},
+                       corp_actions_available=False)
+    assert GuardedSource(blind, AsOfGuard(date(2026, 6, 12))).corp_actions_available() is False
+
+
+def test_guarded_source_tolerates_inner_without_probe():
+    # a minimal structural source predating the capability -> treated as available (byte-identical posture)
+    class _Stub:
+        pass
+    assert GuardedSource(_Stub(), AsOfGuard(date(2026, 6, 12))).corp_actions_available() is True
+
+
 def test_snapshot_source_corporate_actions_known(tmp_path):
     # SnapshotSource is the production OFFLINE source (PITStore-backed) — lock the new primitive there too.
     import pandas as pd

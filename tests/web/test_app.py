@@ -198,6 +198,21 @@ def test_single_decision_file_overrides_the_store(client, tmp_path, monkeypatch)
     assert r.status_code == 200 and "FILEX" in r.text and "DIRX" not in r.text
 
 
+def test_decisions_renders_corp_blind_note(client, tmp_path, monkeypatch):
+    # P3: a persisted package's corp-actions blind note (a plain key_risks string) round-trips through
+    # DecisionStore and renders in the console key_risks list without breaking the page.
+    from datetime import date
+    from alpha.eval.decision import Candidate, DecisionPackage
+    from alpha.eval.decision_store import DecisionStore
+    from alpha.guard.screen import CORP_BLIND_NOTE
+    DecisionStore(tmp_path).put(DecisionPackage(
+        date=date(2026, 3, 3), candidates=[Candidate(symbol="GAIN", pattern="gap_and_go")],
+        key_risks=[CORP_BLIND_NOTE]))
+    monkeypatch.setenv("ALPHA_WEB_DECISIONS_DIR", str(tmp_path))
+    r = client.get("/decisions")
+    assert r.status_code == 200 and "guard ran blind" in r.text
+
+
 # ── verdict store browsing (ALPHA_WEB_VERDICTS_DIR) ────────────────────────────
 def test_verdict_store_browse_by_run(client, tmp_path, monkeypatch):
     import json
