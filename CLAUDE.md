@@ -93,4 +93,5 @@ python -m workbench               # :8820 ─┘
 
 Design: `Backend-Design.md` · plan/backlog: `DEVELOPMENT-PLAN.md` (the single forward-looking
 doc) · built log: `docs/PROJECT_STATE.md` ·
-`docs/blueprint.md` is stale on structure (perception/eval reference only).
+`docs/blueprint.md` formally demoted (perception/eval algorithmic reference only; doctrinally
+superseded by the growth pivot + structurally pre-build-out).
