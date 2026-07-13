@@ -284,11 +284,12 @@ A3/A6, atop whole-H coherence) stays visible.
   + regen ritual). Until then growth skills order by phase_prior only (P2 carry-forward).
 - ~~**Growth console instrument**~~ SHIPPED 2026-07-13 (three-state market-clock dial + panic badge,
   momo ring byte-identical; spec `2026-07-13-growth-console-instrument-design.md`) → PROJECT_STATE.
-- **Sonia small fixes** (2 of 4 SHIPPED 2026-07-13: `/chat` brain-load inside the error boundary +
-  `edit_action` under `_MUTATION_LOCK`). REMAINING: file-count/aggregate-size cap in
-  `ingest_attachments` (in `alpha/meta/ingest.py`, no sonia seam — needs an alpha/meta owner; the
-  network/SSRF leg rides A9's non-localhost precondition); split "Sonia 404" from "Sonia
-  unavailable" in the console banner (`ConnectError` vs `HTTPStatusError`, alpha_web).
+- **Sonia small fixes** (3 of 4 SHIPPED 2026-07-13: `/chat` brain-load inside the error boundary +
+  `edit_action` under `_MUTATION_LOCK` + the file-count/aggregate-size cap in `ingest_attachments`
+  — `_MAX_FILES=20` / `_MAX_TOTAL_BYTES=20MB`, fail-open with a summarizing note, 13 tests in
+  `tests/meta/test_ingest_attachments.py`; the network/SSRF leg is A9's netguard). REMAINING: split
+  "Sonia 404" from "Sonia unavailable" in the console banner (`ConnectError` vs `HTTPStatusError`,
+  alpha_web).
 - **Cockpit direct-edit UI for the user-direct hand** — form → `POST /edit`, an honest-limits line
   (a direct edit forgoes packet counsel), revert lever `POST /snapshots/{name}/restore` beside it.
   Own brainstorm→spec→plan round; deferred 2026-07-10 by user (landing-doc spec D6).
@@ -303,8 +304,9 @@ A3/A6, atop whole-H coherence) stays visible.
 - **Delete-× while Sonia is DOWN** swaps the unavailable banner into the `<li>` — cosmetic.
 - **Agent-modification drawer polish** — post-apply diff overlay, cross-session PENDING
   aggregation, drawer on other pages, optional Playwright resize test (drawer spec §7).
-- **`docs/blueprint.md` demotion** — stale on structure; refresh or formally demote to
-  perception/eval reference pointing at CLAUDE.md + PROJECT_STATE (docs-day leftover).
+- ~~**`docs/blueprint.md` demotion**~~ SHIPPED 2026-07-13 (14ac8ba) — formal-demotion banner: both
+  doctrinally superseded (growth pivot) + structurally pre-build-out; points to the growth doctrine
+  draft + CLAUDE.md + PROJECT_STATE + DEVELOPMENT-PLAN as authoritative; CLAUDE.md pointer synced.
 - **EpisodeStore WAL / busy-timeout** — concurrent-writer exposure on `brain.db`; small SQLite
   pragma change (charter-conformance §5.12 "noted, not done").
 - **Console/UI trigger for forge + refine_live** — both self-study producers are operator scripts;
