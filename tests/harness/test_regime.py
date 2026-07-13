@@ -30,6 +30,20 @@ def test_normalize_phases_accepts_string():
     assert normalize_phases("momentum") == (["trend"], False)
 
 
+def test_normalize_phases_warns_on_dropped_token(capsys):
+    # the silent-drop is today's worst failure shape (no crash, just wrong); the drop stays but is loud.
+    phases, applies_all = normalize_phases(["trend", "bogus_phase"])
+    assert phases == ["trend"] and applies_all is False   # drop behavior byte-identical
+    out = capsys.readouterr().out
+    assert "warning" in out.lower() and "bogus_phase" in out   # names the dropped token
+
+
+def test_normalize_phases_silent_when_all_recognized(capsys):
+    # no false-positive warning: an alias (momentum->trend), a dedup, and 'all' are all "recognized".
+    normalize_phases(["trend", "momentum", "all"])
+    assert capsys.readouterr().out == ""
+
+
 def test_is_family():
     assert is_family("runner") is True
     assert is_family("crypto") is False

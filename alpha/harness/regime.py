@@ -50,13 +50,19 @@ def normalize_phases(raw: str | list[str] | None) -> tuple[list[str], bool]:
         raw = [raw]
     phases: list[str] = []
     applies_all = False
+    dropped: list[object] = []
     for item in raw or []:
         if isinstance(item, str) and item.strip().lower() == "all":
             applies_all = True
             continue
         p = normalize_phase(item)
-        if p is not None and p not in phases:
+        if p is None:
+            dropped.append(item)           # unrecognized: still dropped, but named below (not silent)
+        elif p not in phases:
             phases.append(p)
+    if dropped:                            # loud, not silent (repo idiom: print 'warning:'; see integrity_check)
+        print(f"warning: normalize_phases dropped unrecognized phase token(s) {dropped}; "
+              f"canonical = {CANONICAL_PHASES}")
     return (phases, applies_all)
 
 
