@@ -74,3 +74,10 @@ def growth_scale_of(token: str) -> str | None:
     """The scale of a legal growth token, or None if the token is not legal."""
     p = normalize_growth_phase(token)
     return p.split(":", 1)[0] if p is not None else None
+
+
+# NO RUNTIME BRIDGE between momo and growth vocabularies — by user-ratified decision (P0.1 memo §4/§5,
+# reaffirmed on adjudication 2026-07-13 after a bridge briefly existed here in the P0.5 batch and was
+# deleted pre-commit). Translating the momo GCycle read into growth tokens would lend a miscalibrated
+# instrument new-vocabulary authority; the P2 three-clock classifier reads breadth/FTD/distribution
+# natively instead. The human-facing fold lives in the manuscript's Appendix A and the plan's P2 note.

@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 from alpha.harness.edit_log import EditLog
-from alpha.harness.loader import load_seeds
+from alpha.harness.loader import load_pack, load_seeds
 from alpha.harness.state import HarnessState
 from alpha.redact import collect_secrets, redact
 
@@ -34,9 +34,11 @@ class LiveBrainStore:
     """The persistent evolving brain (HarnessState + EditLog) as one JSON. Empty/missing -> seeds
     in-memory (no write on read). Rollback is a pre-apply file copy under history/."""
 
-    def __init__(self, root: str | Path, *, seeds_dir: str | Path = DEFAULT_SEEDS_DIR) -> None:
+    def __init__(self, root: str | Path, *, seeds_dir: str | Path | None = None) -> None:
         self._root = Path(root)
-        self._seeds_dir = Path(seeds_dir)
+        # seeds_dir=None (default) resolves the active pack on empty-brain init (env ALPHA_SEED_PACK,
+        # momo default = byte-identical, P0.5); an explicit dir stays momo (back-compat / tests).
+        self._seeds_dir = Path(seeds_dir) if seeds_dir is not None else None
         self._brain = self._root / "brain.json"
         self._history = self._root / "history"
 
@@ -45,7 +47,8 @@ class LiveBrainStore:
 
     def load(self) -> tuple[HarnessState, EditLog]:
         if not self._brain.exists():
-            return load_seeds(self._seeds_dir), EditLog()
+            h = load_pack() if self._seeds_dir is None else load_seeds(self._seeds_dir)
+            return h, EditLog()
         data = json.loads(self._brain.read_text(encoding="utf-8"))
         return HarnessState.from_dict(data["harness"]), EditLog.from_dict(data["log"])
 

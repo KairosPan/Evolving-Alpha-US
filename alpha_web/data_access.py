@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from alpha.harness.doctrine import DoctrineEntry
-from alpha.harness.loader import load_seeds
+from alpha.harness.loader import load_pack, load_seeds
 from alpha.harness.memory import Lesson
 from alpha.harness.skill import Skill
 from alpha.harness.state import HarnessState
@@ -55,13 +55,14 @@ def _live_store() -> LiveBrainStore | None:
     return LiveBrainStore(root) if root else None
 
 
-def load_brain(seeds_dir: str | Path = SEEDS_DIR) -> HarnessState:
+def load_brain(seeds_dir: str | Path | None = None) -> HarnessState:
     """The live brain: prefer the LiveBrainStore (ALPHA_LIVE_BRAIN_DIR) when it exists, else the
-    frozen seeds. Side-effect-free: a GET never writes (init-from-seeds happens only on apply)."""
+    frozen seeds. Side-effect-free: a GET never writes (init-from-seeds happens only on apply).
+    Pack-aware (P0.5): seeds_dir=None resolves the active pack (env ALPHA_SEED_PACK, momo default)."""
     store = _live_store()
     if store is not None and store.is_live():
         return store.load()[0]
-    return load_seeds(seeds_dir)
+    return load_pack() if seeds_dir is None else load_seeds(seeds_dir)
 
 
 def brain_badge() -> dict:

@@ -55,6 +55,25 @@ def test_roundtrip_preserves_immutable_guard():
         core.guidance = "tampered"
 
 
+def test_vocabulary_defaults_momo_and_survives_roundtrip():
+    """P0.5: the pack vocabulary rides ON the H. Default is 'momo'; an explicit stamp survives
+    to_dict() -> from_dict()."""
+    assert _state().vocabulary == "momo"                 # default when unstamped
+    st = _state()
+    st.vocabulary = "growth"
+    d = st.to_dict()
+    assert d["vocabulary"] == "growth"                   # serialised (not silently dropped)
+    assert HarnessState.from_dict(d).vocabulary == "growth"
+
+
+def test_legacy_dump_without_vocabulary_defaults_momo():
+    """A pre-P0.5 brain.json / snapshot carries no `vocabulary` key -> loads as momo (byte-identical
+    to the old behaviour, no migration needed)."""
+    legacy = _state().to_dict()
+    legacy.pop("vocabulary")                             # simulate an old dump
+    assert HarnessState.from_dict(legacy).vocabulary == "momo"
+
+
 def test_domain_survives_harness_roundtrip():
     """PC-3 Fork-E pin: Skill.domain and Lesson.domain survive to_dict() → from_dict()."""
     st = _state_with_operational()

@@ -21,15 +21,19 @@ ALL_TOOLS = frozenset().union(*PASS_TOOLS.values())
 _DISPATCH_ERRORS = (HarnessError, KeyError, ValueError, ValidationError, TypeError, AttributeError)
 
 
-def _dispatch(meta: MetaTools, op: RefineOp) -> EditRecord:
+def _dispatch(meta: MetaTools, op: RefineOp, *, normalize) -> EditRecord:
     """Map an op to its MetaTools call. Defensive: force write_skill->incubating + strip stats;
-    strip importance on process_memory (the create paths the Refiner already sanitizes)."""
+    strip importance on process_memory (the create paths the Refiner already sanitizes).
+
+    `normalize` selects the phase vocabulary for the create paths (write_skill/process_memory);
+    `try_apply_op` resolves it from the H being edited (`h.vocabulary`) — never the process env —
+    so a live growth-H edit keeps its scale-typed tokens instead of dropping them (P0.5 / P0.3 §5)."""
     tool, args, r = op.tool, dict(op.args), op.rationale
     m = meta
     if tool == "write_skill":
         args.pop("stats", None)
         args["status"] = "incubating"
-        return m.write_skill(Skill.from_seed(args), rationale=r)
+        return m.write_skill(Skill.from_seed(args, normalize=normalize), rationale=r)
     if tool == "patch_skill":
         sid = args.pop("skill_id")
         return m.patch_skill(sid, rationale=r, **args)
@@ -43,7 +47,7 @@ def _dispatch(meta: MetaTools, op: RefineOp) -> EditRecord:
         return m.promote_skill(args.pop("skill_id"), rationale=r)
     if tool == "process_memory":
         args.pop("importance", None)
-        return m.process_memory(Lesson.from_seed(args), rationale=r)
+        return m.process_memory(Lesson.from_seed(args, normalize=normalize), rationale=r)
     if tool == "update_memory":
         lid = args.pop("lesson_id")
         return m.update_memory(lid, rationale=r, **args)
@@ -103,10 +107,19 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
                  task_stats: "TaskStats | None" = None,
                  min_task_samples: int = 3,
                  min_task_success_rate: float = 0.5,
-                 min_task_confirmed_samples: int = 3) -> tuple[EditRecord | None, str | None]:
+                 min_task_confirmed_samples: int = 3,
+                 normalize=None) -> tuple[EditRecord | None, str | None]:
     """Gate order: stamp coherence -> whitelist -> rationale -> empty-patch -> set-once/create guards ->
     domain-aware separation -> task floor (PC-8) -> trade floors -> conflict -> dispatch
-    (dispatch errors -> clean reject reason). Returns (record, None) on apply | (None, reason)."""
+    (dispatch errors -> clean reject reason). Returns (record, None) on apply | (None, reason).
+
+    `normalize` (keyword-only) selects the create-path phase vocabulary; None → resolved FROM THE H
+    being edited (`harness.vocabulary`), never the process env, so pack identity rides with the harness
+    (a growth-H edit keeps its scale-typed tokens; a momo-H edit stays momo even under a divergent
+    ALPHA_SEED_PACK). Enforcement is unchanged — this only picks the create-path normalizer (P0.5 / P0.3 §5)."""
+    if normalize is None:                       # resolve the create-path vocabulary from the H being
+        from alpha.harness.loader import normalizer_for   # edited (h.vocabulary), NOT the process env
+        normalize = normalizer_for(harness.vocabulary)
     tid = _target_id(op.tool, op.args)
     # Stamp coherence (charter drill roster, extended 2026-07-08): a direct edit not carrying
     # the user-authored stamp is refused at the waist, before any content check.
@@ -143,7 +156,7 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
             return None, (f"task floor: confirmed_success_rate={task_stats.confirmed_success_rate:.3f} "
                           f"< min_task_success_rate={min_task_success_rate}")
         try:
-            rec = _dispatch(meta, op)
+            rec = _dispatch(meta, op, normalize=normalize)
         except _DISPATCH_ERRORS as e:
             return None, f"{type(e).__name__}: {e}"
         rec = meta.log.stamp_last(provenance)
@@ -171,7 +184,7 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
                                contested=contested.model_dump() if contested else None)
             return None, "held_for_review: self-study contests a teaching- or user-owned element"
     try:
-        rec = _dispatch(meta, op)
+        rec = _dispatch(meta, op, normalize=normalize)
     except _DISPATCH_ERRORS as e:
         return None, f"{type(e).__name__}: {e}"
     if provenance is not None:

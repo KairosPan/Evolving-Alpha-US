@@ -53,7 +53,7 @@ def load_seeds(seeds_dir: str | Path, *, vocabulary: str = "momo") -> HarnessSta
         [Lesson.from_seed(x, normalize=normalize) for x in _read_json_list(d / "memory.json")])
     doctrine = Doctrine.from_seed_list(_read_json_list(d / "doctrine.json"), normalize=normalize)
     # US-1e adds: cycle = StateMachine.from_seed_list(_read_json_list(d / "state_machine.json"))
-    return HarnessState(doctrine=doctrine, skills=skills, memory=memory)
+    return HarnessState(doctrine=doctrine, skills=skills, memory=memory, vocabulary=vocabulary)
 
 
 def active_pack_name() -> str:
@@ -74,3 +74,16 @@ def load_pack(name: str | None = None) -> HarnessState:
     """Load the named seed pack (or the active one — env ALPHA_SEED_PACK, default momo)."""
     seeds_dir, vocabulary = resolve_pack(name)
     return load_seeds(seeds_dir, vocabulary=vocabulary)
+
+
+def normalizer_for(vocabulary: str):
+    """The phase normalizer for a vocabulary NAME (as stamped on `HarnessState.vocabulary`).
+
+    The write-waist (`alpha/refine/apply.py`) resolves the create-path normalizer from the H being
+    edited (`h.vocabulary`), NOT the process env, so pack identity rides with the harness: a growth-H
+    edit keeps its scale-typed tokens even under a divergent env, and a momo-H edit normalizes momo
+    even under `ALPHA_SEED_PACK=growth` (P0.5). Unknown vocabulary raises (fail-loud, matching load_seeds).
+    """
+    if vocabulary not in _VOCABULARIES:
+        raise ValueError(f"unknown vocabulary {vocabulary!r}; known = {sorted(_VOCABULARIES)}")
+    return _VOCABULARIES[vocabulary]

@@ -33,7 +33,7 @@ from alpha.data.integrity_check import verify_checksums
 from alpha.data.pit_store import PITStore
 from alpha.data.snapshot_source import SnapshotSource
 from alpha.eval.contribution import ContributionBucket, ContributionReport
-from alpha.harness.loader import load_seeds
+from alpha.harness.loader import load_pack, load_seeds
 from alpha.harness.snapshot import SnapshotStore
 from alpha.loop.compare import ComparisonReport, MultiWindowReport, compare_harnesses, multi_window
 from alpha.loop.inner_loop import LoopConfig
@@ -61,7 +61,7 @@ def split_windows(calendar: list[Date], start: Date, end: Date, n: int, *, horiz
     return out
 
 
-def run_verdict(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS_DIR, horizon: int = 2,
+def run_verdict(source, start: Date, end: Date, *, seeds_dir: Path | None = None, horizon: int = 2,
                 windows: int = 1, shadow: bool = False, screen: bool = True,
                 agent_llm_factory=None, refiner_llm_factory=None, recall_store=None):
     """Run the §9/§10 comparison over the captured `source`. Returns a ComparisonReport (windows<=1) or a
@@ -69,10 +69,14 @@ def run_verdict(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS_DIR, 
 
     All arms get a FRESH H / LLM client / store (factory injection — no cross-arm pollution). `screen`
     defaults ON (production posture), so HCH and the Hexpert/Hmin arms are guarded symmetrically; pass
-    screen=False (CLI --no-screen) for the raw-agent-skill diagnostic that bypasses the L4 regime veto."""
+    screen=False (CLI --no-screen) for the raw-agent-skill diagnostic that bypasses the L4 regime veto.
+
+    Pack-aware (P0.5): seeds_dir=None resolves the active pack (env ALPHA_SEED_PACK, momo default =
+    byte-identical). The SAME factory feeds every arm, so both read one pack — verdict symmetry holds
+    (a growth run measures growth-vs-growth, never a mixed pair)."""
     agent_llm_factory = agent_llm_factory or (lambda: make_client("agent"))
     refiner_llm_factory = refiner_llm_factory or (lambda: make_client("refiner"))
-    harness_factory = lambda: load_seeds(seeds_dir)
+    harness_factory = (lambda: load_pack()) if seeds_dir is None else (lambda: load_seeds(seeds_dir))
     store_factory = lambda: SnapshotStore(tempfile.mkdtemp())
     cfg = LoopConfig(horizon=horizon, screen=screen)  # screen ON = production posture; OFF = raw-skill
     kw = dict(agent_llm_factory=agent_llm_factory, refiner_llm_factory=refiner_llm_factory,
@@ -130,14 +134,16 @@ def format_comparison(cr: ComparisonReport, *, header: str = "") -> str:
 
 
 def comparison_to_view(cr: ComparisonReport, *, start: Date, end: Date, horizon: int,
-                       screen: bool, universe_screen: str = "gainer") -> dict:
+                       screen: bool, universe_screen: str = "gainer", seed_pack: str = "momo") -> dict:
     """Map a ComparisonReport to the flat UI dict the web console's verdict page consumes (the shape of
     `alpha_web.sample.sample_verdict()`, NOT ComparisonReport's own shape). Write this with `--json` and
     point `ALPHA_WEB_VERDICT` (or drop several into `ALPHA_WEB_VERDICTS_DIR`) at it to browse a real run.
 
     `universe_screen` is the RESOLVED candidate screen ("gainer"/"trend_template") — recorded under its
     own unambiguous key, distinct from `screen` (the L4 guard flag), so the browsed run is unambiguous
-    about which universe entry produced it."""
+    about which universe entry produced it. `seed_pack` is the RESOLVED pack the H loaded from (the loaded
+    H's `vocabulary`, momo/growth) — both arms ran on it (verdict symmetry), so the browsed run records
+    which pack produced the comparison."""
     def arm(a) -> dict:
         r = a.report
         d = {"n_decisions": r.n_decisions, "n_candidates": r.n_candidates,
@@ -161,7 +167,8 @@ def comparison_to_view(cr: ComparisonReport, *, start: Date, end: Date, horizon:
 
     return {
         "window": {"start": start.isoformat(), "end": end.isoformat(), "horizon": horizon,
-                   "windows": 1, "screen": screen, "universe_screen": universe_screen},
+                   "windows": 1, "screen": screen, "universe_screen": universe_screen,
+                   "seed_pack": seed_pack},
         "arms": {name: arm(a) for name, a in cr.arms.items()},
         "headline": {"hch_minus_hexpert": cr.hch_minus_hexpert_mean_excess,
                      "hch_beats_hexpert": cr.hch_beats_hexpert},
@@ -200,10 +207,12 @@ def main() -> None:
     verify_checksums(pit_root, fail_closed=True)   # D6: fail closed — a verdict must run on pinned data
     screen = not args.no_screen
     universe_screen = resolve_universe_screen()   # RESOLVED entry the build will use (env ALPHA_UNIVERSE_SCREEN)
+    seed_pack = load_pack().vocabulary            # RESOLVED pack the arms will load (the loaded H's vocabulary);
+                                                  #   raises here (boot time) on an invalid ALPHA_SEED_PACK
     temp = os.environ.get("ALPHA_LLM_TEMPERATURE", "0")
     print("=== Sonia-Kairos-US-Stock verdict run ===")
     print(f"window: {args.start} .. {args.end}   horizon={args.horizon}  windows={args.windows}  "
-          f"screen={screen}  universe_screen={universe_screen}  shadow={args.shadow}")
+          f"screen={screen}  universe_screen={universe_screen}  seed_pack={seed_pack}  shadow={args.shadow}")
     for role in ("agent", "refiner"):
         prov = os.environ.get(f"ALPHA_{role.upper()}_PROVIDER", "(default)")
         model = os.environ.get(f"ALPHA_{role.upper()}_MODEL", "(default)")
@@ -213,6 +222,9 @@ def main() -> None:
     if universe_screen != "gainer":
         print(f"  WARNING: ALPHA_UNIVERSE_SCREEN={universe_screen} — this verdict measures the "
               f"{universe_screen} screen, NOT the default gainer universe.")
+    if seed_pack != "momo":
+        print(f"  WARNING: ALPHA_SEED_PACK={seed_pack} — this verdict measures the {seed_pack} pack "
+              f"(both arms), NOT the default momo pack.")
     print()
 
     recall_store = EpisodeStore.open(args.brain, create_if_missing=False) if args.brain else None
@@ -229,7 +241,7 @@ def main() -> None:
         if args.json:
             view = comparison_to_view(result, start=args.start, end=args.end,
                                       horizon=args.horizon, screen=screen,
-                                      universe_screen=universe_screen)
+                                      universe_screen=universe_screen, seed_pack=seed_pack)
             Path(args.json).write_text(json.dumps(view, indent=2), encoding="utf-8")
             print(f"  wrote console JSON -> {args.json}  (ALPHA_WEB_VERDICT={args.json} python -m alpha_web)")
 

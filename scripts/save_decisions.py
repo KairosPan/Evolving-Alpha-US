@@ -34,20 +34,22 @@ from alpha.data.source import GuardedSource
 from alpha.eval.decision import DecisionPackage
 from alpha.eval.decision_store import DecisionStore
 from alpha.guard.screen import GuardedPolicy
-from alpha.harness.loader import load_seeds
+from alpha.harness.loader import load_pack, load_seeds
 from alpha.harness.snapshot import harness_digest
+from alpha.harness.state import HarnessState
 from alpha.llm.config import make_client
 from alpha.memory.store import EpisodeStore
 from alpha.redact import collect_secrets, redact
 from alpha.settings import Settings
 from alpha.sizing.policy import SizingPolicy
 from alpha.state.builder import build_market_state
-from alpha.universe.universe import build_universe
+from alpha.universe.universe import build_universe, resolve_universe_screen
 
 SEEDS_DIR = Path(__file__).resolve().parents[1] / "seeds"
 
 
-def produce_decisions(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS_DIR,
+def produce_decisions(source, start: Date, end: Date, *, seeds_dir: Path | None = None,
+                      harness: "HarnessState | None" = None,
                       agent_llm_factory=None, screen: bool = True, size: bool = True,
                       episode_store=None, collect=None):
     """Yield one DecisionPackage per trading day in [start, end] (act-only). `screen`/`size` mirror
@@ -59,9 +61,14 @@ def produce_decisions(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS
     collect: D3 prompt-audit hook, threaded through the policy stack to build_system_prompt (observe-
     only; default None -> byte-identical). Records arrive per-day during each yield's decide().
     Every yielded package carries D4's h_digest = harness_digest(h) (the fixed H this act-only run
-    loaded) — additive, eval/loop never read it."""
+    loaded) — additive, eval/loop never read it.
+    harness: a pre-loaded H (its `vocabulary` is the run's true pack). None -> load it here from
+    seeds_dir (None -> active pack). save_decisions passes the H it loaded so the sidecar's seed_pack
+    is sourced from the SAME H that produced the decisions (not a separate env read)."""
     agent_llm_factory = agent_llm_factory or (lambda: make_client("agent"))
-    h = load_seeds(seeds_dir)
+    # Pack-aware default (P0.5): seeds_dir=None resolves the active pack (env ALPHA_SEED_PACK, momo
+    # default = byte-identical); an explicit dir stays momo (back-compat / tests).
+    h = harness if harness is not None else (load_pack() if seeds_dir is None else load_seeds(seeds_dir))
     h_digest = harness_digest(h)
     policy = LLMAgentPolicy(h, agent_llm_factory(), episode_store=episode_store)   # §6 recall (read-only)
     if screen:
@@ -84,12 +91,21 @@ def produce_decisions(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS
         yield pkg.model_copy(update={"h_digest": h_digest})
 
 
-def _write_prompt_sidecar(dirpath: Path, day: Date, records: list[dict]) -> Path:
+def _write_prompt_sidecar(dirpath: Path, day: Date, records: list[dict],
+                          *, universe_screen: str, seed_pack: str) -> Path:
     """Write the D3 prompt-audit sidecar `<dir>/<date>.prompt.json` atomically (DecisionStore.put's
     temp-in-dir + os.replace idiom). `assembled` is lifted out of the kind=='assembled' record; the
-    remaining offered/dropped records stay in `records` (the shape scripts/render_prompt.py reads)."""
+    remaining offered/dropped records stay in `records` (the shape scripts/render_prompt.py reads).
+
+    `universe_screen` / `seed_pack` are the P0.5 run-provenance keys: which universe entry (gainer /
+    trend_template) and which seed pack (momo / growth) produced the day's decision. `seed_pack` is
+    sourced from the LOADED H's `vocabulary` (the pack that actually produced the decisions), not a
+    separate env read, so it can never diverge from the H. They ride this sidecar (the JSON wrapper
+    save_decisions owns), NOT the frozen DecisionStore package, so eval scoring — which reads only the
+    package — never sees them (verdict-neutrality)."""
     assembled = next((r.get("text", "") for r in records if r.get("kind") == "assembled"), "")
     payload = {"date": day.isoformat(),
+               "universe_screen": universe_screen, "seed_pack": seed_pack,
                "records": [r for r in records if r.get("kind") != "assembled"],
                "assembled": assembled}
     payload = redact(payload, collect_secrets())   # new A1 persistence surface -> same redaction waist
@@ -112,10 +128,15 @@ def save_decisions(source, start: Date, end: Date, store: DecisionStore, **kw) -
     file it writes the D3 prompt-audit sidecar `<date>.prompt.json` (what the assembled system prompt
     was, plus every skill/lesson/episode offered or dropped and why)."""
     records: list[dict] = []                             # this day's audit records (cleared per day)
+    universe_screen = resolve_universe_screen()          # RESOLVED entry the build used (env ALPHA_UNIVERSE_SCREEN)
+    seeds_dir = kw.get("seeds_dir")                       # load the H ONCE here so the sidecar's seed_pack
+    h = load_pack() if seeds_dir is None else load_seeds(seeds_dir)   # is sourced from the SAME H that
+    seed_pack = h.vocabulary                              # produces the decisions (never a divergent env read)
     n = 0
-    for pkg in produce_decisions(source, start, end, collect=records.append, **kw):
+    for pkg in produce_decisions(source, start, end, harness=h, collect=records.append, **kw):
         p = store.put(pkg)
-        _write_prompt_sidecar(p.parent, pkg.date, records)
+        _write_prompt_sidecar(p.parent, pkg.date, records,
+                              universe_screen=universe_screen, seed_pack=seed_pack)
         records.clear()
         n += 1
     return n

@@ -17,7 +17,7 @@ from pathlib import Path
 from alpha.data.integrity_check import verify_checksums
 from alpha.data.pit_store import PITStore
 from alpha.data.snapshot_source import SnapshotSource
-from alpha.harness.loader import load_seeds
+from alpha.harness.loader import load_pack, load_seeds
 from alpha.harness.manager import HarnessManager
 from alpha.harness.snapshot import SnapshotStore
 from alpha.llm.config import make_client
@@ -41,13 +41,15 @@ def evolution_view(edit_dicts: list[dict], report, start: Date, end: Date) -> di
     }
 
 
-def run_evolution(source, start: Date, end: Date, *, seeds_dir: Path = SEEDS_DIR,
+def run_evolution(source, start: Date, end: Date, *, seeds_dir: Path | None = None,
                   agent_llm_factory=None, refiner_llm_factory=None, horizon: int = 2) -> dict:
     """Run the InnerLoop (agent + Refiner) over [start, end] and return the Evolution view dict.
-    Tests inject MockLLM factories; the live path uses per-role make_client (temp=0)."""
+    Tests inject MockLLM factories; the live path uses per-role make_client (temp=0).
+    Pack-aware (P0.5): seeds_dir=None resolves the active pack (env ALPHA_SEED_PACK, momo default)."""
     agent_llm_factory = agent_llm_factory or (lambda: make_client("agent"))
     refiner_llm_factory = refiner_llm_factory or (lambda: make_client("refiner"))
-    mgr = HarnessManager(load_seeds(seeds_dir), SnapshotStore(tempfile.mkdtemp()))
+    h = load_pack() if seeds_dir is None else load_seeds(seeds_dir)
+    mgr = HarnessManager(h, SnapshotStore(tempfile.mkdtemp()))
     loop = InnerLoop(mgr, source, start, end, agent_llm_factory(), refiner_llm_factory(),
                      config=LoopConfig(horizon=horizon))
     report = loop.run()

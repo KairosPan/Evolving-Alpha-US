@@ -17,6 +17,10 @@ class HarnessState:
     doctrine: Doctrine          # p
     skills: SkillRegistry       # K
     memory: MemoryStore         # M
+    vocabulary: str = "momo"    # phase-token pack this H speaks ("momo"/"growth"); rides WITH the harness
+                                #   so the write-waist normalizer and the prompt persona follow the H, not
+                                #   the process env (P0.5). load_seeds/load_pack stamp it; legacy dumps
+                                #   without the field default "momo".
 
     def active_skills_for(self, phase: str) -> list[Skill]:
         return [s for s in self.skills.by_phase(phase) if s.status == "active"]
@@ -29,6 +33,7 @@ class HarnessState:
             "skills": [s.model_dump(mode="json") for s in self.skills.all()],
             "memory": [l.model_dump(mode="json") for l in self.memory.all()],
             "doctrine": self.doctrine.model_dump(mode="json"),
+            "vocabulary": self.vocabulary,
         }
 
     @classmethod
@@ -40,4 +45,5 @@ class HarnessState:
             doctrine=Doctrine.model_validate(d["doctrine"]),
             skills=SkillRegistry.from_skills([Skill.model_validate(x) for x in d["skills"]]),
             memory=MemoryStore.from_lessons([Lesson.model_validate(x) for x in d["memory"]]),
+            vocabulary=d.get("vocabulary", "momo"),   # legacy dumps (pre-P0.5) had no field -> momo
         )

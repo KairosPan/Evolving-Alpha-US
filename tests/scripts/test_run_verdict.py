@@ -87,6 +87,17 @@ def test_comparison_to_view_records_universe_screen():
     assert default["window"]["universe_screen"] == "gainer"          # default momo entry
 
 
+def test_comparison_to_view_records_seed_pack():
+    # the resolved pack (the loaded H's vocabulary) rides its own key in the console JSON, so a browsed
+    # verdict is unambiguous about which pack (both arms) produced the comparison.
+    src, start, end = _fake()
+    cr = rv.run_verdict(src, start, end, agent_llm_factory=_AGENT, refiner_llm_factory=_REFINER)
+    view = rv.comparison_to_view(cr, start=start, end=end, horizon=2, screen=True, seed_pack="growth")
+    assert view["window"]["seed_pack"] == "growth"
+    default = rv.comparison_to_view(cr, start=start, end=end, horizon=2, screen=True)
+    assert default["window"]["seed_pack"] == "momo"                  # default momo pack
+
+
 def test_run_verdict_json_flag_writes_console_file(tmp_path, monkeypatch):
     # the CLI --json path: write a file the console can read back
     import json

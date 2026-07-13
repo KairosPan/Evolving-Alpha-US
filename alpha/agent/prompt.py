@@ -51,6 +51,53 @@ _OUTPUT_CONTRACT = (
     '"no_trade_reason": "<reason if no trade, else empty string>"}'
 )
 
+# ── momo (default) persona + cycle line, factored out so the growth branch is a clean sibling. The
+# momo strings are the pre-P0.5 literals verbatim, so the momo prompt stays byte-identical. ──
+_MOMO_PERSONA = (
+    "You are a US speculative-momentum trading co-pilot. Read the day's state and the candidate "
+    "universe and propose ranked candidates with a plan. A human confirms; you never place orders."
+)
+_MOMO_CYCLE_LINE = (
+    "\nMARKET REGIME CYCLE (per-day phase): " + " -> ".join(CANONICAL_PHASES)
+    + " (frontside/backside is a per-line momentum-direction read — early/healthy vs late/topping"
+    + " — not a fixed function of phase)."
+)
+
+# ── growth pack (P0.5): thesis-first sector-growth persona, the three scale-typed clocks, and an
+# output contract whose regime_read enum carries the growth market-clock tokens (Option B). ──
+_GROWTH_PERSONA = (
+    "You are a US sector-growth investing co-pilot (weeks-to-months horizon, earnings- and "
+    "industry-cycle driven). Reason thesis-first: read the market clock, the theme's lifecycle "
+    "stage, and the leading stock's stage, then propose ranked candidates whose primary reason is "
+    "an industry thesis, never an indicator. A human confirms; you never place orders."
+)
+_GROWTH_CLOCK_LINE = (
+    "\nMARKET CLOCK (weeks-to-months): market:confirmed_uptrend -> market:under_pressure -> "
+    "market:correction, cross-cut by the market:panic_state flag (a momentum-crash regime). Also "
+    "read the theme lifecycle (theme:emerging -> theme:institutional -> theme:public_laggard -> "
+    "theme:exhaustion) and the stock stage (stock:base -> stock:advance -> stock:top -> "
+    "stock:decline). A higher scale vetoes a lower one; a lower scale never scores a higher one."
+)
+_GROWTH_OUTPUT_CONTRACT = (
+    'Output STRICT JSON (no markdown fences): '
+    '{"regime_read": "<the market-clock state: one of market:confirmed_uptrend / '
+    'market:under_pressure / market:correction, optionally noting market:panic_state>", '
+    '"candidates": [{"symbol": "<MUST be a ticker from the candidate universe>", '
+    '"pattern": "<the matched skill_id>", "reason": "<cite the thesis card, not an indicator>", '
+    '"confidence": <0..1>, '
+    '"narrative": "<the theme key, e.g. ai-compute; the SAME key on two names means they are ONE '
+    'correlated bet (sized together, not stacked); empty if the name stands alone>"}], '
+    '"no_trade_reason": "<reason if no trade, else empty string>"}'
+)
+
+
+def _red_line(e) -> str:
+    return f"- [RED-LINE] {e.section}: {e.guidance}"
+
+
+def _mutable_doctrine_line(e) -> str:
+    return f"- {e.section} [{'/'.join(e.phases) or 'all'}]: {e.guidance}"
+
 
 def _skill_line(s: Skill) -> str:
     line = (f"- {s.name} ({s.skill_id}) [{s.type}, {s.family or 'any'}] phases[{'/'.join(s.phases)}] "
@@ -74,11 +121,20 @@ def build_system_prompt(h: HarnessState, *, injection: str = "full", phase_prior
                         available_signals: frozenset[str] | None = None,
                         asof: date | datetime | None = None,
                         episode_store=None, episode_budget: int = DEFAULT_EPISODE_BUDGET,
-                        collect: Callable[[dict], None] | None = None) -> str:
+                        collect: Callable[[dict], None] | None = None,
+                        pack: str | None = None) -> str:
     """Render H=(p,K,M) + the regime cycle + the output contract into the system prompt.
 
     injection='full' renders all active skills + all lessons; 'retrieval' renders a budgeted slice
     (phase-prior hit first). Rebuilt every decide() so Refiner edits to H are immediately visible.
+
+    `pack` (P0.5) selects the persona / clock line / doctrine order / output contract. None reads
+    the vocabulary stamped ON THE H being rendered (`h.vocabulary`; momo default = byte-identical to
+    the pre-P0.5 prompt) — the pack rides WITH the harness, not the process env, so a momo H always
+    renders the momo persona even under ALPHA_SEED_PACK=growth (and vice-versa). The growth pack
+    rewrites the persona (sector-growth, thesis-first), injects the doctrine prose before the
+    quantitative skill panel, moves the red-lines to tail constraints, and swaps the output-contract
+    regime enum to the growth market-clock tokens.
 
     `collect`: D3 prompt-audit hook (observe-only; default None is byte-identical to omitting it — no
     other logic changes). When set, receives one dict per skill/lesson/episode this call considers —
@@ -124,20 +180,21 @@ def build_system_prompt(h: HarnessState, *, injection: str = "full", phase_prior
         for l in lessons:
             collect({"kind": "lesson", "id": l.lesson_id, "status": "offered"})
 
-    parts: list[str] = [
-        "You are a US speculative-momentum trading co-pilot. Read the day's state and the candidate "
-        "universe and propose ranked candidates with a plan. A human confirms; you never place orders.",
-        "\nMARKET REGIME CYCLE (per-day phase): " + " -> ".join(CANONICAL_PHASES)
-        + " (frontside/backside is a per-line momentum-direction read — early/healthy vs late/topping"
-        + " — not a fixed function of phase).",
-        "\nDOCTRINE (immutable red-lines are absolute):",
-    ]
-    for e in h.doctrine.immutable_core():
-        if getattr(e, "domain", "trading") == "trading":
-            parts.append(f"- [RED-LINE] {e.section}: {e.guidance}")
-    for e in h.doctrine.mutable_entries():
-        if getattr(e, "domain", "trading") == "trading":
-            parts.append(f"- {e.section} [{'/'.join(e.phases) or 'all'}]: {e.guidance}")
+    is_growth = (pack or h.vocabulary) == "growth"   # pack rides with the H, not the process env (P0.5)
+    _trading = lambda e: getattr(e, "domain", "trading") == "trading"
+    reds = [e for e in h.doctrine.immutable_core() if _trading(e)]
+    muts = [e for e in h.doctrine.mutable_entries() if _trading(e)]
+
+    if is_growth:
+        # Isomorphism: thesis/cycle doctrine prose leads, before the quantitative skill panel; the
+        # red-lines (guard/limit state) inject as tail constraints only (below).
+        parts = [_GROWTH_PERSONA, _GROWTH_CLOCK_LINE,
+                 "\nDOCTRINE (thesis & cycle reasoning — read this before the detectors):"]
+        parts += [_mutable_doctrine_line(e) for e in muts]
+    else:
+        parts = [_MOMO_PERSONA, _MOMO_CYCLE_LINE, "\nDOCTRINE (immutable red-lines are absolute):"]
+        parts += [_red_line(e) for e in reds]
+        parts += [_mutable_doctrine_line(e) for e in muts]
     parts.append("\nSKILLS (K):")
     parts += [_skill_line(s) for s in skills]
     if trials:
@@ -161,7 +218,10 @@ def build_system_prompt(h: HarnessState, *, injection: str = "full", phase_prior
                 refl = f": {e.reflection_text}" if e.reflection_text else ""
                 parts.append(f"- [{e.phase}] {e.symbol}/{e.skill_id} -> {e.outcome} "
                              f"(adv {e.advantage:+.1f}){refl}")
-    parts.append("\n" + _OUTPUT_CONTRACT)
+    if is_growth:                                        # guard/limit state as tail constraints only
+        parts.append("\nHARD CONSTRAINTS (red-lines — absolute; they override everything above):")
+        parts += [_red_line(e) for e in reds]
+    parts.append("\n" + (_GROWTH_OUTPUT_CONTRACT if is_growth else _OUTPUT_CONTRACT))
     prompt = "\n".join(parts)
     if collect is not None:
         collect({"kind": "assembled", "text": prompt})
