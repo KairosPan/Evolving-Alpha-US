@@ -89,6 +89,15 @@ def _element_domain(h: HarnessState, tool: str, tid: str | None, args: dict) -> 
     return getattr(el, "domain", None) if el is not None else None
 
 
+def _is_taboo_less_trading_pattern(typ, domain, taboo) -> bool:
+    """PC-9 predicate (魂骨宪法 §4 红线): a trading `type='pattern'` skill carrying no REAL red-line —
+    i.e. a "do X" pattern with no non-blank "except when Y" taboo. Operational patterns (govern the
+    agent's operation, not trading) and non-pattern skills (feature/failure_detector) are exempt. A
+    `['']` blank entry does NOT count as a red-line (closes the blank-taboo loophole)."""
+    return (typ == "pattern" and (domain or "trading") != "operational"
+            and not any(isinstance(t, str) and t.strip() for t in (taboo or [])))
+
+
 def _derive_confirmed_task_ids(log) -> frozenset[str]:
     """Externally-confirmed task episode ids from DURABLE records only (A2 / kairos-mining §2.3).
 
@@ -280,6 +289,25 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
     if op.tool in ("write_skill", "process_memory") and op.args.get("domain") == "operational":
         if provenance is None or provenance.evidence_kind != "task":
             return None, "create may not mint operational under trade evidence"
+    # PC-9 (red-line lint, kairos-mining §1.4/§2.4/§4.4): a trading `type='pattern'` skill MUST carry
+    # >=1 non-blank taboo — a "do X" with no red-line ("except when Y") violates the 魂骨宪法 (§4 红线).
+    # Enforced at CREATE (write_skill) AND at any PATCH that touches `type`/`taboo` — because both are
+    # freely patchable through the K pass, a create-only gate is defeated by a follow-up patch that
+    # (a) flips an exempt feature to a pattern or (b) strips the taboo from an already-passed pattern
+    # (review-confirmed 2026-07-13). A patch touching NEITHER field is not re-linted (a pre-existing
+    # taboo-less pattern is a separate grandfathering concern, not this patch's doing). Operational
+    # patterns route through the task branch (returned above) and are exempt; domain is set-once so a
+    # patch cannot relabel it. The 6 seed trading patterns all carry a taboo -> zero valid-op breakage.
+    if op.tool == "write_skill":
+        if _is_taboo_less_trading_pattern(op.args.get("type"), op.args.get("domain", "trading"),
+                                          op.args.get("taboo")):
+            return None, "red-line: a new trading pattern skill must carry >=1 taboo entry (魂骨宪法 §4)"
+    elif op.tool == "patch_skill" and tid is not None and ("type" in op.args or "taboo" in op.args):
+        existing = harness.skills.get(tid)
+        if existing is not None and _is_taboo_less_trading_pattern(
+                op.args.get("type", existing.type), existing.domain,
+                op.args.get("taboo", existing.taboo)):
+            return None, "red-line: patch would leave a trading pattern skill with no taboo (魂骨宪法 §4)"
     if op.tool == "retire_skill" and tid is not None:
         sk = harness.skills.get(tid)
         if sk is not None and sk.stats.n < min_retire_samples:

@@ -272,13 +272,108 @@ def test_create_guard_trade_evidenced_write_skill_trading_passes():
     op = RefineOp(tool="write_skill",
                   args={"skill_id": "s_tr", "name": "s_tr", "type": "pattern",
                         "trigger": "look for runner", "phases": ["trend"],
-                        "domain": "trading"},
+                        "domain": "trading", "taboo": ["thesis broken"]},   # PC-9: trading pattern needs a taboo
                   rationale="normal trading create")
     rec, reason = try_apply_op(meta, h, op, allowed=PASS_TOOLS["K"],
                                min_retire_samples=5, min_promote_samples=3)
     assert reason is None
     assert rec is not None
     assert len(log) == 1
+
+
+# ── PC-9: red-line lint — a NEW trading pattern skill MUST carry >=1 taboo (魂骨宪法 §4) ──
+
+def _pc9_op(*, type="pattern", domain="trading", taboo=None):
+    args = {"skill_id": "s", "name": "S", "type": type, "trigger": "t", "phases": ["trend"]}
+    if domain is not None:
+        args["domain"] = domain
+    if taboo is not None:
+        args["taboo"] = taboo
+    return RefineOp(tool="write_skill", args=args, rationale="create")
+
+
+def _apply_k(h, op):
+    meta = MetaTools(h, EditLog())
+    return try_apply_op(meta, h, op, allowed=PASS_TOOLS["K"],
+                        min_retire_samples=5, min_promote_samples=3)
+
+
+def test_pc9_taboo_less_trading_pattern_is_rejected():
+    rec, reason = _apply_k(_h(), _pc9_op(taboo=[]))          # empty taboo
+    assert rec is None and reason is not None and "red-line" in reason
+    rec2, reason2 = _apply_k(_h(), _pc9_op(taboo=None))      # missing taboo -> same reject
+    assert rec2 is None and "red-line" in reason2
+
+
+def test_pc9_trading_pattern_with_a_taboo_passes():
+    rec, reason = _apply_k(_h(), _pc9_op(taboo=["thesis broken"]))
+    assert reason is None and rec is not None
+
+
+def test_pc9_exempts_non_pattern_skills():
+    # a feature/failure_detector isn't a "do X" pattern -> no taboo required
+    rec, reason = _apply_k(_h(), _pc9_op(type="feature", taboo=[]))
+    assert reason is None and rec is not None
+
+
+def test_pc9_default_domain_trading_is_covered():
+    # domain omitted defaults to 'trading' -> the lint still fires (no relabel escape)
+    rec, reason = _apply_k(_h(), _pc9_op(domain=None, taboo=[]))
+    assert rec is None and "red-line" in reason
+
+
+# operational patterns are structurally exempt: an operational create routes through the
+# task-evidence branch (returns before PC-9), and a TRADE-evidenced operational create is already
+# rejected by PC-4 — so PC-9 never sees an operational pattern. (Covered by the PC-4/PC-5 tests.)
+
+
+# ── PC-9 patch-bypass closure (review-confirmed 2026-07-13): type/taboo are freely patchable, so a
+#    create-only gate is defeated by a follow-up patch — PC-9 also fires on patch_skill. ──
+
+def _sk(sid, *, type="pattern", domain="trading", taboo=None):
+    return Skill(skill_id=sid, name=sid, type=type, domain=domain,
+                 taboo=(taboo if taboo is not None else ["thesis broken"]))
+
+
+def test_pc9_patch_feature_to_trading_pattern_without_taboo_is_rejected():
+    # Vector 4a: an exempt trading FEATURE (no taboo) patched INTO a pattern -> would be a red-line-less
+    # trading pattern; the patch is rejected.
+    h = _h(skills=[_sk("sf", type="feature", taboo=[])])
+    rec, reason = _apply_k(h, RefineOp(tool="patch_skill", args={"skill_id": "sf", "type": "pattern"},
+                                       rationale="flip to pattern"))
+    assert rec is None and "red-line" in reason
+
+
+def test_pc9_patch_stripping_taboo_from_a_trading_pattern_is_rejected():
+    # Vector 4b: an already-passed trading pattern patched to an EMPTY taboo -> strips the red-line; rejected.
+    h = _h(skills=[_sk("sp", taboo=["thesis broken"])])
+    rec, reason = _apply_k(h, RefineOp(tool="patch_skill", args={"skill_id": "sp", "taboo": []},
+                                       rationale="strip the taboo"))
+    assert rec is None and "red-line" in reason
+
+
+def test_pc9_patch_flip_to_pattern_WITH_a_taboo_passes():
+    # feature -> pattern in ONE patch that also supplies a taboo -> the result is a valid red-lined pattern.
+    h = _h(skills=[_sk("sf2", type="feature", taboo=[])])
+    rec, reason = _apply_k(h, RefineOp(
+        tool="patch_skill", args={"skill_id": "sf2", "type": "pattern", "taboo": ["thesis broken"]},
+        rationale="flip with a taboo"))
+    assert reason is None and rec is not None
+
+
+def test_pc9_patch_not_touching_type_or_taboo_is_not_relinted():
+    # A patch to an unrelated field on a (grandfathered) taboo-less trading pattern is NOT re-linted —
+    # PC-9 only fires when the patch itself touches type/taboo (no over-reach on unrelated edits).
+    h = _h(skills=[_sk("sg", type="pattern", taboo=[])])          # a pre-existing taboo-less pattern
+    rec, reason = _apply_k(h, RefineOp(tool="patch_skill", args={"skill_id": "sg", "trigger": "new t"},
+                                       rationale="edit trigger only"))
+    assert reason is None and rec is not None
+
+
+def test_pc9_blank_taboo_string_is_not_a_red_line():
+    # taboo=[''] is a non-empty list but a BLANK red-line -> PC-9 rejects it at create (loophole closed).
+    rec, reason = _apply_k(_h(), _pc9_op(taboo=[""]))
+    assert rec is None and "red-line" in reason
 
 
 # ── PC-4 (c) → PC-5: task-evidenced create with domain='operational' now SUCCEEDS ──

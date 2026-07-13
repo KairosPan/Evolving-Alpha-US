@@ -25,7 +25,8 @@ def _h(vocabulary="momo"):
 def _write_skill_op(skill_id, phases):
     return RefineOp(tool="write_skill",
                     args={"skill_id": skill_id, "name": skill_id, "type": "pattern",
-                          "trigger": "t", "entry": "e", "exit_stop": "x", "phases": phases},
+                          "trigger": "t", "entry": "e", "exit_stop": "x", "phases": phases,
+                          "taboo": ["thesis broken"]},   # PC-9 red-line lint: a trading pattern needs >=1 taboo
                     rationale="grow the growth H")
 
 
