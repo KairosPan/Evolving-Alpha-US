@@ -6,14 +6,14 @@ from html.parser import HTMLParser
 from io import BytesIO
 from typing import Callable
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
-
-# Only fetch over http(s). Blocks file:// / ftp:// / gopher:// / data: — closing the Local File
-# Disclosure / SSRF-by-scheme vector that urllib.urlopen otherwise honors. (Private-IP-range SSRF
-# blocking is a separate hardening still gated on non-localhost serving — see the spec roadmap.)
-_ALLOWED_SCHEMES = ("http", "https")
 
 from alpha.meta.models import Attachment, LessonSource
+from alpha.meta.netguard import guarded_fetch_text
+
+# Only fetch over http(s). Blocks file:// / ftp:// / gopher:// / data: at the scheme layer — closing
+# the Local File Disclosure / SSRF-by-scheme vector urllib otherwise honors. Private/loopback/
+# link-local/metadata-IP blocking + DNS-rebind pinning is added by netguard in _urllib_fetcher.
+_ALLOWED_SCHEMES = ("http", "https")
 
 
 class IngestError(Exception):
@@ -61,10 +61,10 @@ class _TextExtractor(HTMLParser):
 
 
 def _urllib_fetcher(url: str) -> str:
-    req = Request(url, headers={"User-Agent": "sonia-kairos-cockpit/1.0"})
-    with urlopen(req, timeout=15) as resp:           # noqa: S310 (operator-supplied URL, localhost tool)
-        charset = resp.headers.get_content_charset() or "utf-8"
-        return resp.read().decode(charset, errors="replace")
+    # SSRF-hardened (alpha/meta/netguard.py): resolve DNS once and pin the IP, block private/loopback/
+    # link-local/cloud-metadata destinations, re-validate redirects, byte-cap the body. The scheme
+    # allowlist is enforced in fetch_url above.
+    return guarded_fetch_text(url, timeout=15, max_bytes=5_000_000)
 
 
 def fetch_url(url: str, *, fetcher: Callable[[str], str] | None = None) -> LessonSource:

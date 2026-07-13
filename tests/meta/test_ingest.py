@@ -28,3 +28,12 @@ def test_fetch_url_rejects_non_http_schemes_no_file_disclosure():
     for bad in ("file:///etc/passwd", "ftp://example.com/x", "gopher://x", "data:text/plain,hi"):
         with _pytest.raises(IngestError):
             fetch_url(bad)            # no fetcher injected -> must be blocked BEFORE any real fetch
+
+
+def test_default_fetcher_blocks_private_and_metadata_ssrf():
+    """The default (non-injected) fetcher routes through netguard: a private/metadata destination is
+    blocked as an IngestError before any body is returned — the A9 SSRF precondition, offline."""
+    for bad in ("http://127.0.0.1:6379/", "http://169.254.169.254/latest/meta-data/",
+                "http://10.0.0.5/", "http://[::1]/"):
+        with pytest.raises(IngestError):
+            fetch_url(bad)            # no fetcher injected -> netguard rejects the IP literal, no socket
