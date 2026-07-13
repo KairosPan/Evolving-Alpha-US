@@ -8,9 +8,14 @@
 # a whole-source vendor).
 #
 # PIT key = the DISCLOSURE date the float figure became knowable (FloatFact.knowable_date), NOT the period
-# it measures. Prefer a per-record disclosure/filing/effective date; a record that carries only its period
-# date falls back to that period as a conservative never-early key (being late is a safe under-claim of
-# knowability, being early would leak — see alpha/data/float_shares.py).
+# it measures. A per-record disclosure/filing/effective date IS the key; a record carrying ONLY its
+# measurement period (no disclosure date) has NO lookahead-safe key and is DROPPED. The period ALWAYS
+# precedes its disclosure (a 10-Q dated 3/31 is filed ~5/1, ~40 days later), so keying on the period would
+# admit the float ~40 days EARLY = a lookahead leak. And unlike FINRA's FIXED ~8-business-day dissemination
+# schedule (which lets FinraSource derive a provably-late key by a bounded calendar cushion), the SEC filing
+# lag is VARIABLE/unbounded (30-90+ days by filer class, plus late NT filings), so no finite period-offset
+# is provably never-early. Dropping mirrors EdgarSource dropping filed=None rows and corp_actions'
+# announce_date:=process_date — always key on the LATER, knowable date (see alpha/data/float_shares.py:14).
 #
 # NOTE: free float has no single canonical free API — it is vendor-derived, or reconstructed from EDGAR
 # cover-page shares outstanding minus Forms 3/4/5 + Rule-144 restricted. The concrete vendor endpoint/auth
@@ -85,25 +90,30 @@ class FloatSource:
         except urllib.error.URLError as e:
             raise RuntimeError(f"float-vendor GET {url} failed: network error ({e.reason}).") from e
 
-    def _knowable_date(self, record: dict, period: Date | None) -> Date | None:
-        """Prefer a per-record disclosure/filing/effective date; else fall back to the period date as a
-        conservative never-early key (a period date can only precede its disclosure, so it never leaks)."""
+    def _knowable_date(self, record: dict) -> Date | None:
+        """The DISCLOSURE date this figure became knowable — the first present per-record filing/effective
+        date. Returns None when the record carries NO such date: the measurement period ALONE is NOT a
+        lookahead-safe key (it precedes its disclosure by the ~40-day filing lag, so keying on it would leak),
+        and no finite period-offset is provably never-early (the SEC filing lag is variable/unbounded). A
+        record with no disclosure date therefore has no PIT key and is dropped by _symbol_records."""
         for key in ("disclosureDate", "filingDate", "effectiveDate", "knowable_date"):
             d = _to_date(record.get(key))
             if d is not None:
                 return d
-        return period
+        return None
 
     def _symbol_records(self, symbol: str) -> list[FloatFact]:
         payload = self._get_json(_FLOAT_URL.format(symbol=symbol.upper()))
         rows = payload if isinstance(payload, list) else (payload.get("data") or payload.get("records") or [])
         out: list[FloatFact] = []
         for r in rows:
-            period = _to_date(_first_present(r, "periodDate", "as_of_period"))
-            knowable = self._knowable_date(r, period)
+            period = _to_date(_first_present(r, "periodDate", "as_of_period"))  # informational only, never the key
+            knowable = self._knowable_date(r)
             free_float = _opt_float(_first_present(r, "freeFloat", "free_float"))
             if knowable is None or free_float is None:
-                continue                                    # a row without the load-bearing fields -> skip
+                # No lookahead-safe disclosure date (a period alone would leak the ~40-day filing lag) or no
+                # float -> DROP this row (mirrors EdgarSource dropping filed=None; PIT is fail-closed).
+                continue
             out.append(FloatFact(
                 symbol=symbol.upper(), free_float=free_float, knowable_date=knowable, as_of_period=period,
                 shares_outstanding=_opt_float(_first_present(r, "sharesOutstanding", "shares_outstanding")),

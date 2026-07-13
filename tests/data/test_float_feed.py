@@ -40,12 +40,28 @@ def test_pit_filters_on_disclosure_date():
     assert len(src.float_known("ACME", date(2026, 5, 1))) == 1
 
 
-def test_fallback_key_uses_period_only_when_no_disclosure_date():
-    # a record with no disclosure field falls back to periodDate — a conservative never-early key
+def test_period_only_record_is_dropped_no_lookahead_safe_key():
+    # a record with ONLY a measurement period (no disclosure/filing/effective date) has NO lookahead-safe
+    # key -> DROPPED. Keying on the period would admit the float ~40 days before its real filing (a leak);
+    # unlike FINRA's fixed dissemination schedule, the SEC filing lag is variable/unbounded so no finite
+    # offset is provably never-early. Mirrors EdgarSource dropping filed=None rows.
+    src = _StubFloatSource(_payload([
+        {"symbol": "ACME", "freeFloat": 8_000_000, "periodDate": "2026-03-31"},               # dropped (no key)
+        {"symbol": "ACME", "freeFloat": 5_000_000, "disclosureDate": "2026-05-01",
+         "periodDate": "2026-03-31"}]))                                                        # kept (has key)
+    facts = src.float_known("ACME", date(2027, 1, 1))                                          # far-future as_of
+    assert [f.free_float for f in facts] == [5_000_000.0]                                      # only the disclosed one
+    assert facts[0].knowable_date == date(2026, 5, 1) and facts[0].as_of_period == date(2026, 3, 31)
+
+
+def test_period_only_never_visible_before_disclosure_leak_regression():
+    # LEAK REGRESSION (adversarial-review finding): a period-only fact must be invisible at EVERY as_of —
+    # never at its period date (before it was measured/filed), never mid filing-lag, never ever. If keying
+    # ever falls back to the period, this fires (a period-dated 10-Q is not filed until ~40 days later).
     src = _StubFloatSource(_payload([
         {"symbol": "ACME", "freeFloat": 8_000_000, "periodDate": "2026-03-31"}]))
-    facts = src.float_known("ACME", date(2026, 3, 31))
-    assert len(facts) == 1 and facts[0].knowable_date == date(2026, 3, 31)
+    for as_of in (date(2026, 3, 31), date(2026, 4, 15), date(2026, 5, 1), date(2027, 1, 1)):
+        assert src.float_known("ACME", as_of) == []      # never leaks in early, at any horizon
 
 
 def test_skips_rows_missing_load_bearing_fields():

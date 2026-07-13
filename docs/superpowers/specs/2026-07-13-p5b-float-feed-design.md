@@ -78,8 +78,14 @@ Wired through all five source shapes identically to the other P5 feeds:
 
 **Live backend** `alpha/data/float_feed.py::FloatSource` — the `float`-capability-only backend (mirrors
 `FinraSource`): a stdlib-`urllib` `_get_json` mockable seam (fully offline-testable), maps a vendor JSON
-record → `FloatFact` with `knowable_date` from the record's disclosure/filing date (falls back to
-`as_of_period` **only if** no disclosure date — a conservative never-early key), and serves ONLY `float_*`;
+record → `FloatFact` with `knowable_date` from the record's disclosure/filing/effective date. A record
+carrying ONLY its measurement period (no disclosure date) has **no lookahead-safe key and is DROPPED** — the
+period always precedes its disclosure by the ~40-day filing lag (a 10-Q dated 3/31 is filed ~5/1), so keying
+on it would admit the float ~40 days **early** = a leak; and unlike FINRA's *fixed* dissemination schedule
+(which lets `FinraSource` derive a provably-late key by a bounded calendar cushion), the SEC filing lag is
+variable/unbounded (30-90+ days by filer class, plus late NT filings), so **no finite period-offset is
+provably never-early**. Dropping mirrors `EdgarSource` dropping `filed=None` rows and corp_actions'
+`announce_date := process_date` (always the LATER, knowable date). It serves ONLY `float_*`;
 every other `MarketDataSource` method raises `NotImplementedError`. The concrete vendor endpoint/auth is a
 documented live-integration stub (free float has no single canonical free API — it is vendor-derived, or
 reconstructed from EDGAR cover-page shares outstanding minus Forms 3/4/5 + Rule-144 restricted); the built
@@ -154,7 +160,8 @@ Data (`tests/data/test_float_shares.py`, `test_float_feed.py`, extend `test_comp
 - pure-swap — `FloatSource` raises `NotImplementedError` on every non-float method.
 - CompositeSource routes the `float` group; fail-closed availability (`float_available` default `False`).
 - PITStore round-trip + `has_float` tri-state (present-empty vs MISSING).
-- `_get_json` seam mockable offline; conservative fallback key (`as_of_period` only when no disclosure date).
+- `_get_json` seam mockable offline; a period-only record (no disclosure date) is DROPPED, and the leak
+  regression pins it invisible at EVERY as_of (never keyed on the raw measurement period).
 
 Sizing (`tests/sizing/test_float_size.py`, extend `test_policy.py`):
 - small float → capped tier (`heavy`→`core`/`probe`); huge float → unchanged; `None` → unchanged.
