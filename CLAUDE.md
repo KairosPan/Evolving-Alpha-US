@@ -66,10 +66,11 @@ python -m workbench               # :8820 ─┘
   `scripts/refine_live.py` is the only intended same-store-for-both caller.
 - **`H` in code is `(p, K, M)`.** `HarnessState` holds doctrine/skills/memory only;
   `PASS_TOOLS["G"]` is a reserved empty pass. Docs writing `H=(p,G,K,M)` describe pass order.
-- **Governance (charter, amended 2026-07-08).** Two hands, one waist: agent proposals need user
-  approval (worker edits stage-only — `write_mode="apply"` raises), or the user edits directly
-  via sonia `POST /edit` (`user_direct` provenance, sample floors lifted, red-lines still bind;
-  revert lever `POST /snapshots/{name}/restore`). Self-study contesting a teaching- or
+- **Governance (charter, amended 2026-07-08; worker-propose retired 2026-07-13/A7).** Two hands,
+  one waist: the WORKER DOES NOT PROPOSE at all — only a Sonia proposal (incl. the A3 reflect
+  channel) or the user's direct edit via sonia `POST /edit` (`user_direct` provenance, sample
+  floors lifted, red-lines still bind; revert lever `POST /snapshots/{name}/restore`) reaches
+  `try_apply_op`, which refuses `proposer∈{kairos,hermes}` at the waist. Self-study contesting a teaching- or
   user_direct-owned element is held for user adjudication; a mis-stamped `user_direct` op is
   refused at the waist. Live self-study forks-and-proposes (`EvolutionProposal`, user adopts in
   Sonia); in-place autonomy needs `--autonomous` **and** `ALPHA_UNSAFE_AUTONOMOUS=1`. Deviations

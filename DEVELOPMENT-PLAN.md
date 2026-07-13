@@ -25,10 +25,12 @@ P0 + P1 + P2 shipped 2026-07-13 → product track resumes at **P3**. Cadence and
 ## Activation ledger (capability = done only when live)
 | Capability | Built | Live in prod | Path to ON |
 |---|---|---|---|
-| P-B/P-C operational-K coupling | ✓ (882-test arc, dark) | ✗ | `docs/superpowers/runbooks/p-b-p-c-activation.md` (A2 builds the missing steps) |
-| Daily production loop | producers only (`save_decisions` / `run_verdict --json` / `save_evolution`) | ✗ | P9 |
-| Growth-doctrine H (seeds v2) | ✓ (P0+P2: offline-produce-capable, growth regime read live in drivers) | ✗ | P9 (daily loop); trend_template screen blocked on P5 split cross-check |
-| Panic-state L4 veto | ✓ (P1+P2: live on history-threaded decide/verdict paths, both vocabularies) | ✗ (scheduled prod = P9) | P9 |
+| P-B/P-C operational-K coupling | ✓ (A2: opt-in, forgery-resistant gate) | ✗ | ALPHA_EPISODES_DB Stage-2 shadow; Stage-3 = approve-path evidence stamp + task_forge wiring |
+| Daily production loop | ✓ (P9: stage-then-finalize, loud) | ✗ | the cron/systemd scheduler (needs-the-machine) |
+| Growth-doctrine H (seeds v2) | ✓ (P0+P2: offline-produce-capable, growth regime read live in drivers) | ✗ | P9 daily loop scheduled; trend_template screen blocked on P5 split cross-check |
+| Panic-state L4 veto | ✓ (P1+P2: live on history-threaded decide/verdict paths) | ✗ (scheduled prod) | P9 scheduler |
+| Self-learning + context trio (A3) | ✓ (dormant mechanism) | ✗ | A2 activation evidence + a live LLM summarizer |
+| Git Body audit / spend meter / SSRF guard (A5/A6/A9) | ✓ (opt-in / default-off) | ✗ | operator opt-in (ALPHA_BODY_GIT / a Budget / non-localhost serving after A10) |
 
 ---
 
@@ -93,8 +95,11 @@ decision). Carry-forward: conditional `DataConfig` object only if per-source cto
 - **THEME/SECTOR BREADTH** — **SHIPPED 2026-07-13** (`sector_map` + `theme_breadth`; the growth
   §1.2 theme-clock's data prerequisite, unblocking the per-narrative-line regime read). The
   theme-CLOCK consumer + narrative clustering remain (an alpha/regime + alpha/state step).
-- **Float feed → float-based L3 sizing** (`size_tier` is wired; share-count sizing needs real float)
-  — IN PROGRESS 2026-07-13.
+- **Float feed → float-based L3 sizing** — **SHIPPED 2026-07-13** (spec
+  `2026-07-13-p5b-float-feed-design.md`): FloatFact keyed on knowable_date (period-only records
+  DROPPED — no lookahead-safe key), float-capped tier + float-participation share-count, additive/
+  default-off, verdict-neutral. `short_squeeze` full activation still needs the consume-path wiring
+  (percent_of_float = shares_short / float, into MarketStock).
 - **Options-flow + social-sentiment** (`gamma_squeeze`/`social_euphoria_top` consume paths wired) —
   remaining.
 - **capture_window persistence + CHECKSUMS** for all the new feeds (earnings/short-interest/
@@ -153,72 +158,31 @@ A1 SHIPPED 2026-07-11 → `docs/PROJECT_STATE.md` (spec
 `docs/superpowers/specs/2026-07-10-a1-hygiene-floor-design.md`).
 
 ### A2 — P-B/P-C live activation
-**Closes G11.**
-**Goal.** The built-but-DORMANT experience/fitness coupling goes live via its logged 4-step
-checklist: (1) route operational task ops through `conflict_queue`; (2) reject-or-amend
-operational-M scope; (3) wire `confirmed_ids` resolution; (4) pin the task-episode asof to the
-logical date. Plus two before-live items from kairos-mining: gate-side re-derivation of task
-evidence (thread a read-only PIT-pinned episode-store handle into `try_apply_op`'s task branch;
-derive `confirmed_ids` from durable records, not producer input — §2.3) and guard the unguarded
-`experience_writer` call in `session.py` (a writer exception kills the live turn — §4.6). Ship the
-flip as a **runbook** with kill switch (A1's runbooks/). Verify against code whether the arena-spec
-§5 SkillStats-accrual intent for K-skills used/written in task episodes shipped (the gate floor
-reads `TaskStats`, not `sk.stats`) before planning any extension; avoid inventing a parallel
-ToolStats absent real need.
-**Acceptance gate.** Verdict-neutrality regression stays bit-identical; kill switch proven.
-**Sources.** PROJECT_STATE P-B/P-C entry; pb-pc spec; kairos-mining §1.2/§2.3/§4.6.
-
+A2 SHIPPED 2026-07-13 (closes G11) → `docs/PROJECT_STATE.md`. Opt-in/default-off (ALPHA_EPISODES_DB
+shadow switch); 4+2 checklist wired; gate-side re-derivation forgery-resistant + waist-enforced
+human_approver; verdict-neutral bit-identical; kill switch. Stage-3 (approve-path evidence stamp +
+task_forge live-wiring) remains a user-gated step.
 ### A3 — Self-learning channel (the headline next step)
-**Closes G10 (precondition), builds the second learning channel.**
-**Goal.** Precondition first — the **context-management trio** for long Sonia/workbench sessions:
-provenance-preserving pruning (lose bytes not handles: `[...elided – recall hash=X]`),
-content-addressed offload (store rooted INSIDE the Workspace, under the arena path-guard) + a T0
-recall tool through the choke point, 4-phase compaction with
-protected bookends (turn-0 task + last-N); `FakeSummarizer` keeps the suite offline. Then the
-channel: a reflection→directions stage on the Refiner's evidence path, surfaced into the SAME
-cockpit, so the agent proposes evolutions from its own task runs. Design inputs: deterministic
-forge-style detectors over `kind="task"` episodes (PIT `for_asof` reads) → proposals into the Sonia
-review queue via `try_apply_op`; human-rejection mining as negative constraints only.
-Charter: *Session Is Not the Context Window* — recoverable context storage (session) separated from
-arbitrary context engineering (loop); *Dreaming: Letting Agents Improve Between Sessions*.
-**Acceptance gate.** A task-run trace yields an `EvolutionProposal` in `/proposals` with zero live
-H writes; trio changes are byte-identical when off.
-**Sources.** ROADMAP §6 self-learning (absorbed); kairos-mining §3 (context row, detectors row).
-
+A3 SHIPPED 2026-07-13 (closes G10 precondition) → `docs/PROJECT_STATE.md` (spec
+`2026-07-13-a3-self-learning-design.md`). Context-management trio (provenance-preserving pruning +
+content-addressed workspace-path-guarded offload + T0 recall + 4-phase compaction) + the
+reflection→directions self-learning channel (kind=task detectors → EvolutionProposal, zero live
+write, conflict→held, negative-constraint mining). Dormant/default-off. Deferred: live LLM
+summarizer; new-skill authorship; negative-constraint expiry.
 ### A4 — Session organ, phase 1
-**Closes G1 (first slice).**
-**Goal.** (a) **Origin-stamp vocabulary + emit seam** at the converse/sonia persistence boundaries —
-today tool results are re-injected as `role="user"` messages with a `"[tool:{name} result]"` string
-prefix, i.e. tool-result origin is a text convention the model itself could forge; no
-kernel/system origin class exists. `EditProvenance` already stamps H mutations; extend the idea to
-message capture. (b) **Hash-chained EditLog with external anchor** — `prev_chain_hash`/`chain_hash`
-+ `verify_chain()` finalized at persist time, legacy snapshots = unchained prefix, PLUS an external
-chain-head anchor (git-committed head hash or surfaced on `/evolution`). Honest limit, one home,
-here: **without the anchor this is corruption-detection only** under the accepted T2-shell
-operator-trust posture (value downgraded 4→2-3, kairos-mining §2.9); groundwork for A10's deferred
-`BodyLog`. Ordering invariant: A1's redact runs before hashing. (c) **Scope label on every
-learned-context write** — the charter's scope field {agent-global / per-party / per-session} rides
-every lesson/skill/episode write (*The External Channel*; *Memory Design → scope labels from day
-one*). This is a TIMING DEVIATION from the charter's day-one rule (recorded 2026-07-10,
-backend-design round): until A4 lands, today's learning accumulates unlabeled — exactly the
-un-retrofittable risk the charter names.
-Charter: *Trust Roots & Principal Authentication* + *Session Is Not the Context Window → Traces* —
-four trace pieces are carved out **non-deferred**: the attribution-tuple stamp (body-version ×
-model-id × kernel-version), the kernel counter-event schema, the principal-origin stamp, and the
-append-time integrity chain. The attribution tuple lands here in A4, alongside the stamp work
-(A1's `h_digest` covers the body-version leg).
-**Acceptance gate.** Forged-origin regression (a model-authored "[tool:…]" string ≠ a stamped tool
-result); `verify_chain()` green across a rollback; new lessons/skills/episodes carry a scope label.
-
+A4 SHIPPED 2026-07-13 (closes G1 first slice) → `docs/PROJECT_STATE.md` (spec
+`2026-07-13-a4-session-organ-design.md`). Origin-stamp class (forge-resistant), hash-chained EditLog
++ external anchor (corruption-detection-only honest limit), scope labels on learned-context writes
+(resolves the 2026-07-10 unlabeled-learning timing deviation), attribution tuple. NEEDS A8-era call:
+scope defaults agent-global (A8 derives narrowest for its gate). verify_chain live wake()/load
+wiring is A5/A10.
 ### A5 — Body-Store-as-git
-**Closes G2.**
-**Goal.** The Body today is `brain.json` + SnapshotStore — no commit-per-apply audit. Move to one
-git repository per instance: every `try_apply_op` landing = one commit; audit = the commit trail;
-rollback reconciled with SnapshotStore/epoch semantics. Charter (*Second Founding Principle*): "the
-**Body Store**, one git repository per Kairos instance"; write access is the Applier's alone.
-**Acceptance gate.** One landed op ↔ one commit carrying provenance; revert lever still reconciles
-derived state across both faces.
-
+A5 SHIPPED 2026-07-13 (closes G2) → `docs/PROJECT_STATE.md` (spec
+`2026-07-13-a5-body-store-git-design.md`). Commit-per-apply audit via GitBodyStore (opt-in
+ALPHA_BODY_GIT, default-off byte-identical; git leg audit-mirror-only, never aborts a landed op;
+Applier-alone; forward-revert rollback). NEEDS USER JUDGMENT: whether GitBodyStore joins tcb.lock
+(TCB additions are human-only; precedent excludes LiveBrainStore). True git-checkout rollback
+deferred to A10.
 ### A6 — Spend metering
 A6 SHIPPED 2026-07-13 (closes G5) → `docs/PROJECT_STATE.md` (spec
 `docs/superpowers/specs/2026-07-13-a6-spend-metering-design.md`): MeteredClient at the make_client
@@ -231,55 +195,25 @@ counsel); daily_loop metering is a small additive thread; the richer charter lad
 pause-and-prompt, cross-session accumulator, egress meter, per-party rate limiting) is queued.
 
 ### A7 — Sonia-side proposer over worker traces
-**Closes G7 (the named deviation).**
-**Goal.** The 2026-07-09 arc killed worker self-LANDING only; the worker still proposes staged
-edits. Charter (*First Founding Principle*): "only two hands may send it there" — a Sonia proposal
-or the User's direct edit; Kairos does not propose at all. Build the Sonia-side proposer that reads
-worker traces (A3's detectors are natural input) and does the proposing; retire or gate off the
-worker's staged-edit proposing path.
-**Acceptance gate.** Deviations-ledger row (charter-conformance spec §5.4) closed; no
-worker-originated `StagedEdit` reaches the gate.
-
+A7 SHIPPED 2026-07-13 (closes G7) → `docs/PROJECT_STATE.md` (spec
+`2026-07-13-a7-sonia-proposer-design.md`). The worker's propose path is RETIRED (channel removed +
+teach_surface kairos leg dropped + waist refuses proposer kairos/hermes); two hands only — a Sonia
+proposal (A3 reflect channel) or the user's direct edit. Worker compute-use retained. Inert
+staged-edit UI plumbing left for a future repurpose to review Sonia proposals.
 ### A8 — Canonical teach surface + deliberation-packet counsel
-**Closes G8.**
-**Goal.** (a) Consolidate the two teach-ish surfaces over one brain (Sonia + workbench) into a
-canonical surface with a unified write scope (deliberately deferred out of teach-crystallize v5).
-Note: the old "thread conflict_queue into the teach path" sibling item is likely MOOT —
-charter-conformance D2 established teaching-path ops never trip `is_conflict`. (b) Add the
-charter's packet counsel fields to `EvolutionProposal`: before/after **behavior diff** from fork
-trial runs, dedup against pending/landed edits, and evidence coverage —
-charter: *Evolution Deliberation Channel & Preference Charter* ("standard contents"; the
-non-behavior delta is generated by kernel code from the diff, never authored by the proposer).
-Plus the **gate-level scope-mismatch check** — an edit landing at a scope wider than its cited
-evidence's scope FAILS the static policy gate and bounces to Sonia; a GATE refusal, not advisory
-counsel (charter: *The External Channel* — "live from day one"). Carrying it here, not day-one, is
-a TIMING DEVIATION from the charter (recorded 2026-07-10, backend-design round; consumes A4's
-scope labels). (c) **Staleness pin for teaching `/apply`** — pin the previewed brain hash at
-accept; `/apply` refuses (re-preview) on mismatch (Backend-Design G8: "teaching apply unpinned").
-**Acceptance gate.** One canonical teach surface; every packet renders the counsel fields; a
-wider-than-evidence scope bounces at the gate; what was previewed is what lands (staleness pin);
-direct-edit hand still bypasses counsel with its honest-limits line (see §3 cockpit item).
-**Sources.** teach-crystallize spec §10 + §2; charter sections above.
-
+A8 SHIPPED 2026-07-13 (closes G8) → `docs/PROJECT_STATE.md` (spec
+`2026-07-13-a8-teach-counsel-design.md`). One teach write-scope authority (all four sites);
+kernel-generated counsel (behavior_diff forge-resistant) + A6 cost on the packet; the gate-level
+scope-mismatch refusal; teaching /apply staleness pin. NEEDS USER RATIFICATION: the scope-mismatch
+gate derives the effective evidence scope as NARROWEST (dormant today; load-bearing in the
+multi-party future) — a governance-behavior choice.
 ### A9 — Egress ladder + two-class credential split
-**Closes G4, and G3 long-term (the vault split; A1 took the redact leg).**
-**Goal.** **M1 monitor-everything** — typed `sandbox_egress` audit records at the choke point
-(`LocalEnv` `net` is a documented no-op today) → **M2 deny-by-default allowlist**; resource
-ceilings declared in the image manifest, policy may only tighten. Two-class credential split per
-the charter (*Security Boundary: Two-Class Credentials — the Work Token Is Contained; Everything
-Else Never Enters*; *Sandbox egress: default-deny + destination allowlist*): the work token is
-repo-scoped and physically incapable of reaching the Body remote; everything else never enters the
-sandbox — replaces today's env-var custody where the arena shell can read every key. Sub-item:
-**SSRF IP-range hardening** (BLOCKING precondition before any non-localhost / multi-user serving):
-reject private/loopback/link-local ranges + `169.254.169.254`, DNS-rebinding-safe — resolve once,
-require every resolved IP `is_global`, connect by pinned IP with Host preserved, re-validate
-redirects in `_urllib_fetcher`, keep the byte cap (stdlib-only `alpha/meta/netguard.py`, verified
-not built). The `ingest_attachments` cap (§3) and the no-Origin/CSRF loopback-approval accepted
-risk ride this same precondition.
-**Acceptance gate.** M1: every arena net touch produces an audit record. M2/vault: a stolen work
-token has one useful destination; keys absent from the sandbox env.
-**Answers** the activity-space spec §10 open question on the LocalEnv allowlist shape.
-
+A9 SHIPPED 2026-07-13 (closes G4 + G3 long-term) → `docs/PROJECT_STATE.md` (spec
+`2026-07-13-a9-egress-creds-ssrf-design.md`). SSRF guard netguard.py (resolve-once/all-IPs-is_global/
+pin-IP/redirect-revalidate/metadata-block — bypass-swept), egress deny-by-default allowlist (M1/M2,
+the activity-space §10 answer), two-class credential ALLOWLIST split. NEEDS USER JUDGMENT: netguard.py
+should join tcb.lock (human-only). REMAINING before non-localhost serving: kernel netns egress
+(A10), content DLP, CSRF/Origin loopback check, data-source-fetcher adoption.
 ### A10 — Kernel SandboxedEnv + body axis R3+ *(ordered here; STAYS DEFERRED — commercial)*
 **Closes G6 when built.**
 The whole deferred program: kernel `SandboxedEnv` (Seatbelt/bwrap/Docker/microVM) behind the
