@@ -98,8 +98,9 @@ decision). Carry-forward: conditional `DataConfig` object only if per-source cto
   corp-veto-lift case is architecturally excluded — no production corp backend emits dilution kinds;
   reviewed 0 confirmed, refuted on three grounds; recorded in the P5-consume spec.)
 - **THEME/SECTOR BREADTH** — **SHIPPED 2026-07-13** (`sector_map` + `theme_breadth`; the growth
-  §1.2 theme-clock's data prerequisite, unblocking the per-narrative-line regime read). The
-  theme-CLOCK consumer + narrative clustering remain (an alpha/regime + alpha/state step).
+  §1.2 theme-clock's data prerequisite). The theme-CLOCK CONSUMER also SHIPPED (`GrowthThemeClock`,
+  f60f5a3). Narrative clustering (dynamic per-narrative-line theme discovery from the agent's
+  `narrative` key) remains — see §1.5 THREE-CLOCK ACTIVATION below (small-N breadth caveat).
 - **Float feed → float-based L3 sizing** — **SHIPPED 2026-07-13** (spec
   `2026-07-13-p5b-float-feed-design.md`): FloatFact keyed on knowable_date (period-only records
   DROPPED — no lookahead-safe key), float-capped tier + float-participation share-count, additive/
@@ -117,6 +118,32 @@ decision). Carry-forward: conditional `DataConfig` object only if per-source cto
 `depends_on` skills activate only when the feed is present.
 **Sources.** ROADMAP §3 (absorbed); PROJECT_STATE US-3c/d/f; kairos-mining §3; the 2026-07-13 P5
 feed specs.
+
+### PX — Three-clock activation (clock_cadence orchestration) — THE next coherent product arc
+The doctrine (§1) fractals the sentiment cycle into THREE scale-typed clocks. **All three LEAVES are
+now built as pure `s_t`-side READS (never written into H), each with state-machine hysteresis:**
+- **market** (§1.1) — `GrowthMarketClock` (P2, `market:confirmed_uptrend`/`under_pressure`/`correction`).
+- **theme** (§1.2) — `GrowthThemeClock` (theme-clock consumer, f60f5a3; over `sector_map` groups).
+- **stock** (§1.3) — `StockStageClock` (31d6a4e; `stock:base`/`advance`/`top`/`decline` + `climax_run`
+  reduce-flag) + `detect_stock_reread_events` (§1.4 triggers, detector only).
+
+**NONE is live-wired yet** — deliberately DORMANT (like P2's own dormant→live sequence). Remaining =
+one coherent activation arc, NOT piecemeal per-clock consume (wiring stock stage into state alone would
+not compose with the deferred market+theme activation). Scope:
+1. **§1.4 clock_cadence authority** — high-scale VETOES low-scale (market vetoes theme vetoes stock),
+   low-scale does NOT score high-scale; phases modulate appetite/guard/sizing (the way P2 maps market
+   state → `frontside`/`risk_gate`). The composition RULE is user-specified in manuscript §1.4 (not an
+   invention). `event_reread` (§1.4) is the intra-cadence override forcing high-scale re-read.
+2. Thread each clock's read into `MarketState`/the decide path on its cadence (market daily / theme
+   weekly / stock weekly), computed from the tape cross-section + `sector_map`.
+3. **Narrative clustering** (theme's dynamic half): cluster candidates by the agent's `narrative` key,
+   run the theme phase logic per-cluster. CAVEAT: small-N breadth — a narrative line is 3-5 names
+   (§2.5 theme_portfolio), so per-cluster `pct_above_200dma` is statistically thin; may need a
+   min-cluster-size floor or a design pass before it's meaningful.
+**Posture.** Build DORMANT/additive/default-off (thresholds are all 文献值待verdict校准 — activating
+uncalibrated clocks into guard/sizing before P6 calibration would degrade decisions; the plumbing +
+authority composition ship default-off, the flip-on waits on verdict calibration or a user call).
+Touches guard/sizing/state (+ likely TCB veto/retrieval). Own brainstorm→spec→plan→build→review round.
 
 ### P6 — Eval methodology
 P6 SHIPPED 2026-07-13 → `docs/PROJECT_STATE.md` (spec
