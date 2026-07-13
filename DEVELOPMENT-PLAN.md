@@ -140,17 +140,28 @@ not compose with the deferred market+theme activation). Scope:
    run the theme phase logic per-cluster. CAVEAT: small-N breadth — a narrative line is 3-5 names
    (§2.5 theme_portfolio), so per-cluster `pct_above_200dma` is statistically thin; may need a
    min-cluster-size floor or a design pass before it's meaningful.
-**Posture / sequencing decision (HELD FOR USER).** The three clock LEAVES were safe to build dormant
-because they are pure READS (stable, zero decide-path integration). This arc is the INTEGRATION — how
-the three reads compose authority (market vetoes theme vetoes stock) and how each phase maps to
-`frontside`/`risk_gate`/appetite/guard/sizing. That integration SHAPE is exactly what P6's calibration
-(stratified verdicts over captured PIT windows — the tool exists, the constants stay 待verdict校准)
-should inform. **Engineering recommendation: CALIBRATE FIRST, then build the integration** — building
-the authority composition ahead of the calibration that should shape it is building ahead of
-validation. (The alternative — build it DORMANT/default-off now, flip on after calibration — matches
-the P2/theme/stock dormant pattern but risks reworking the integration once calibration lands.) Either
-way touches guard/sizing/state (+ likely TCB veto/retrieval) and wants its own
-brainstorm→spec→plan→build→review round. **User picks the sequencing.**
+**Posture / sequencing decision (HELD FOR USER).** The three clock LEAVES are pure READS; this arc is
+the INTEGRATION — how the three reads compose authority (market vetoes theme vetoes stock) and how each
+phase maps to `frontside`/`risk_gate`/appetite/guard/sizing (composition RULE is manuscript §1.4,
+threshold-independent). Touches guard/sizing/state (+ likely TCB veto/retrieval); own
+brainstorm→spec→build→review round.
+
+> **CALIBRATION FINDING (2026-07-13, `08715d0` — calibrate_{theme,stock}_clock.py on verdict_pit_broad):**
+> calibrate-first HIT A DATA WALL. The 90-day bed cannot form the clocks' literature windows (200-day
+> breadth MA, 126/252-day RS) → with literature defaults BOTH clocks are inert (theme 100% abstain,
+> stock 100% base). Under bed-fitted windows the machines are **SOUND, not degenerate** (theme all four
+> phases, low flicker, no ABAB; stock base/advance/decline, ~zero flicker) — every "never fires" traces
+> to the 90-day bed + a sparse ~140-name bootstrap sector map, NOT a mis-set constant. **So the clocks
+> are VALIDATED; the NUMERIC thresholds can't be tied out on this bed.** True calibration needs **≥1 yr
+> of captured bars** (native 200/126/252 windows) **+ a richer sector map** (real GICS/IBD vs the ~140-name
+> bootstrap). THREE PATHS (user picks): (a) **acquire data** — a ≥1yr capture_window run (live keys;
+> Alpaca free IEX ~2021+ so ≥1yr is available) + a sector-map feed → then calibrate → then integrate
+> (true calibrate-first, but a data-acquisition step vs the user's "暂不需要第二数据商" appetite);
+> (b) **build the integration DORMANT now** with literature defaults (clocks validated-sound, §1.4
+> composition threshold-independent, zero live effect until flip-on), flip-on gated on a future
+> calibration; (c) **PARK** the integration until the data exists (don't build dormant plumbing that
+> can't be activated). Recommendation: (b) if the goal is to keep the plumbing ready, else (c) —
+> because (a)'s data step is what actually unblocks turning the clocks ON.
 
 ### P6 — Eval methodology
 P6 SHIPPED 2026-07-13 → `docs/PROJECT_STATE.md` (spec
