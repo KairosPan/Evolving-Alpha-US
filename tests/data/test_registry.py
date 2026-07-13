@@ -52,6 +52,24 @@ def test_snapshot_requires_pit_root(monkeypatch):
         make_source()
 
 
+def test_edgar_is_registered_earnings_backend(monkeypatch):
+    from alpha.data.edgar import EdgarSource
+    monkeypatch.delenv("ALPHA_DATA_SOURCE", raising=False)
+    assert "edgar" in _SOURCES
+    assert isinstance(make_source("edgar"), EdgarSource)             # keyless construction (no network)
+
+
+def test_composite_routes_earnings_to_edgar(apca, monkeypatch):
+    # end-to-end env wiring: base=alpaca (bars/snapshot), earnings overridden to the EDGAR backend.
+    from alpha.data.composite import CompositeSource
+    from alpha.data.edgar import EdgarSource
+    monkeypatch.setenv("ALPHA_DATA_COMPOSITE", "earnings=edgar")
+    comp = make_source("composite")
+    assert isinstance(comp, CompositeSource)
+    assert isinstance(comp._route("earnings"), EdgarSource)
+    assert comp.earnings_available() is True                         # routed to the (live) EDGAR backend
+
+
 @pytest.mark.parametrize("name", sorted(_SOURCES))
 def test_every_registered_source_implements_corp_actions_available(name, apca, monkeypatch, tmp_path):
     """P3 conformance: corp_actions_available is the MarketDataSource Protocol's ONLY fail-open method —

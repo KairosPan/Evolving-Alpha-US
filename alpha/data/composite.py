@@ -11,13 +11,16 @@ from datetime import date as Date
 
 import pandas as pd
 
+from alpha.data.earnings import EarningsCalendarEntry, EarningsFact
 from alpha.data.source import MarketDataSource
 
 # The routable units. `corp_actions` groups the three coupled corp methods so a corp-backend override
 # moves corporate_actions + _known + _available together: corp_actions_available() reports whether THAT
 # backend can check reverse-split/dilution (the P3 tri-state fix), so routing the probe apart from the
-# corp data it describes would let the probe lie. P5 feeds add their own groups when their methods land.
-_CAPABILITIES = frozenset({"calendar", "bars", "snapshot", "corp_actions"})
+# corp data it describes would let the probe lie. `earnings` (P5a) groups its three coupled methods for
+# the same reason (earnings_available describes whichever backend serves the earnings data). P5 feeds add
+# their own groups when their methods land.
+_CAPABILITIES = frozenset({"calendar", "bars", "snapshot", "corp_actions", "earnings"})
 
 
 class CompositeSource:
@@ -66,3 +69,14 @@ class CompositeSource:
         # GuardedSource — composite backends are full MarketDataSources by contract, no legacy inners).
         # So a composite whose corp backend reports MISSING reports False even if base would report True.
         return self._route("corp_actions").corp_actions_available()
+
+    # ── earnings group (P5a) — routes together to the earnings backend; falls to base (and base's
+    #    NotImplementedError) when un-overridden, exactly like the corp path ──
+    def earnings_known(self, symbol: str, as_of: Date) -> list[EarningsFact]:
+        return self._route("earnings").earnings_known(symbol, as_of)
+
+    def earnings_calendar(self, as_of: Date) -> list[EarningsCalendarEntry]:
+        return self._route("earnings").earnings_calendar(as_of)
+
+    def earnings_available(self) -> bool:
+        return self._route("earnings").earnings_available()

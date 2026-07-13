@@ -5,6 +5,14 @@ from datetime import date as Date
 import pandas as pd
 
 from alpha.data.corp_actions import known_corporate_actions
+from alpha.data.earnings import (
+    EarningsCalendarEntry,
+    EarningsFact,
+    calendar_from_frame,
+    facts_from_frame,
+    known_calendar,
+    known_earnings,
+)
 from alpha.data.pit_store import PITStore
 
 _EMPTY_BARS = ["date", "open", "high", "low", "close", "volume"]
@@ -54,3 +62,15 @@ class SnapshotSource:
         True for a present (even empty) artifact. Distinguishes MISSING from checked-and-clean, which
         both otherwise collapse to an empty frame -> False flags (see alpha/data/corp_actions.py)."""
         return self._store.has_corp_actions()
+
+    # ── earnings (P5a) — served from PITStore fixtures, PIT-filtered on filing_date / known_asof ──
+    def earnings_known(self, symbol: str, as_of: Date) -> list[EarningsFact]:
+        facts = facts_from_frame(self._store.get_earnings())
+        return [f for f in known_earnings(facts, as_of) if f.symbol == symbol]
+
+    def earnings_calendar(self, as_of: Date) -> list[EarningsCalendarEntry]:
+        return known_calendar(calendar_from_frame(self._store.get_earnings_calendar()), as_of)
+
+    def earnings_available(self) -> bool:
+        """False iff the earnings artifact is absent (MISSING) — mirrors corp_actions_available."""
+        return self._store.has_earnings()

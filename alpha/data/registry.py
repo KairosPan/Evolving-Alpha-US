@@ -17,6 +17,7 @@ from pathlib import Path
 
 from alpha.data.alpaca import AlpacaSource
 from alpha.data.composite import CompositeSource
+from alpha.data.edgar import EdgarSource
 from alpha.data.pit_store import PITStore
 from alpha.data.snapshot_source import SnapshotSource
 from alpha.data.source import MarketDataSource
@@ -24,6 +25,12 @@ from alpha.data.source import MarketDataSource
 
 def _build_alpaca(*, pit_root: str | None = None) -> MarketDataSource:
     return AlpacaSource()                       # reads APCA_* + ALPHA_DATA_FEED from env itself
+
+
+def _build_edgar(*, pit_root: str | None = None) -> MarketDataSource:
+    # Earnings-only backend (P5a) — reads ALPHA_EDGAR_USER_AGENT from env itself; composed for the
+    # `earnings` capability via `ALPHA_DATA_COMPOSITE=earnings=edgar` or make_composite_source.
+    return EdgarSource()
 
 
 def _build_snapshot(*, pit_root: str | None = None) -> MarketDataSource:
@@ -70,7 +77,8 @@ def _build_composite(*, pit_root: str | None = None) -> MarketDataSource:
     return make_composite_source(base, overrides, pit_root=pit_root)
 
 
-_SOURCES = {"alpaca": _build_alpaca, "snapshot": _build_snapshot, "composite": _build_composite}
+_SOURCES = {"alpaca": _build_alpaca, "snapshot": _build_snapshot, "composite": _build_composite,
+            "edgar": _build_edgar}
 
 
 def make_source(name: str | None = None, *, pit_root: str | None = None) -> MarketDataSource:

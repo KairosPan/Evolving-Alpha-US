@@ -6,6 +6,12 @@ from typing import Protocol
 import pandas as pd
 
 from alpha.data.corp_actions import known_corporate_actions
+from alpha.data.earnings import (
+    EarningsCalendarEntry,
+    EarningsFact,
+    known_calendar,
+    known_earnings,
+)
 from alpha.data.firewall import AsOfGuard
 
 _EMPTY_BARS = ["date", "open", "high", "low", "close", "volume"]
@@ -22,6 +28,11 @@ class MarketDataSource(Protocol):
     def corporate_actions(self, start: Date, end: Date) -> pd.DataFrame: ...
     def corporate_actions_known(self, as_of: Date) -> pd.DataFrame: ...
     def corp_actions_available(self) -> bool: ...   # False = corp artifact MISSING (guard cannot check)
+    # ── earnings (P5a; OPTIONAL capability — a source without it raises NotImplementedError, like
+    #    daily_snapshot on AlpacaSource). filing_date/known_asof are the PIT keys (alpha/data/earnings.py).
+    def earnings_known(self, symbol: str, as_of: Date) -> list[EarningsFact]: ...   # filing_date <= as_of
+    def earnings_calendar(self, as_of: Date) -> list[EarningsCalendarEntry]: ...    # known_asof  <= as_of
+    def earnings_available(self) -> bool: ...        # False = earnings artifact MISSING (fail-closed)
 
 
 class FakeSource:
@@ -31,7 +42,10 @@ class FakeSource:
                  bars: dict[str, pd.DataFrame],
                  snapshots: dict[Date, pd.DataFrame],
                  corp_actions: pd.DataFrame | None = None,
-                 corp_actions_available: bool = True) -> None:
+                 corp_actions_available: bool = True,
+                 earnings: list[EarningsFact] | None = None,
+                 earnings_calendar: list[EarningsCalendarEntry] | None = None,
+                 earnings_available: bool | None = None) -> None:
         self._calendar = list(calendar)
         self._bars = {k: v.copy() for k, v in bars.items()}
         self._snapshots = {k: v.copy() for k, v in snapshots.items()}
@@ -40,6 +54,13 @@ class FakeSource:
         # In-memory sources are always checkable; the flag lets a test simulate a MISSING corp artifact
         # (the file-backed SnapshotSource derives this from PITStore.has_corp_actions).
         self._corp_available = corp_actions_available
+        # Earnings default OFF (absent artifact): no earnings passed -> earnings_available() False, so a
+        # bare FakeSource stays byte-identical to pre-P5a. Pass earnings=[...] (even empty) to mark present,
+        # or set earnings_available explicitly to simulate present-but-empty vs MISSING.
+        self._earnings = list(earnings) if earnings is not None else []
+        self._earnings_cal = list(earnings_calendar) if earnings_calendar is not None else []
+        self._earnings_available = (earnings_available if earnings_available is not None
+                                    else earnings is not None or earnings_calendar is not None)
 
     def trading_calendar(self) -> list[Date]:
         return list(self._calendar)
@@ -66,6 +87,15 @@ class FakeSource:
 
     def corp_actions_available(self) -> bool:
         return self._corp_available
+
+    def earnings_known(self, symbol: str, as_of: Date) -> list[EarningsFact]:
+        return [f for f in known_earnings(self._earnings, as_of) if f.symbol == symbol]
+
+    def earnings_calendar(self, as_of: Date) -> list[EarningsCalendarEntry]:
+        return known_calendar(self._earnings_cal, as_of)
+
+    def earnings_available(self) -> bool:
+        return self._earnings_available
 
 
 class GuardedSource:
@@ -99,3 +129,20 @@ class GuardedSource:
         # predates the capability -> treated as available (byte-identical; same posture as optional collect).
         probe = getattr(self._inner, "corp_actions_available", None)
         return probe() if callable(probe) else True
+
+    # ── earnings (P5a) — guard the two dated fetches on as_of, mirror corporate_actions_known ──
+    def earnings_known(self, symbol: str, as_of: Date) -> list[EarningsFact]:
+        self._guard.check(as_of)
+        return self._inner.earnings_known(symbol, as_of)
+
+    def earnings_calendar(self, as_of: Date) -> list[EarningsCalendarEntry]:
+        self._guard.check(as_of)
+        return self._inner.earnings_calendar(as_of)
+
+    def earnings_available(self) -> bool:
+        # Date-independent, like corp_actions_available. Unlike corp (default-True for legacy inners
+        # predating the capability), earnings is brand new with no legacy inners, so an inner lacking it
+        # is genuinely MISSING -> default FALSE (fail-closed: a future guard treats absence as "cannot
+        # check", never as "no upcoming earnings").
+        probe = getattr(self._inner, "earnings_available", None)
+        return probe() if callable(probe) else False

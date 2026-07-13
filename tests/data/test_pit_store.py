@@ -55,3 +55,23 @@ def test_has_corp_actions_distinguishes_missing_from_present_but_empty(tmp_path)
                                          "ex_date": [date(2026, 6, 20)], "kind": ["reverse_split"],
                                          "ratio": [0.1]}))
     assert store.has_corp_actions() is True                           # AVAILABLE with rows
+
+
+def test_earnings_roundtrip_preserves_dates_and_optionals(tmp_path):
+    # P5a: facts persist via the earnings.py frame converters (iso dates on write, parsed on read),
+    # round-tripping back to the exact models incl. None optionals (revenue absent stays None, not NaN).
+    from alpha.data.earnings import (EarningsCalendarEntry, EarningsFact,
+                                     calendar_from_frame, calendar_to_frame,
+                                     facts_from_frame, facts_to_frame)
+    store = PITStore(tmp_path)
+    assert store.has_earnings() is False                              # MISSING: no parquet
+    facts = [EarningsFact(symbol="RUN", fiscal_period="2026Q1", period_end=date(2026, 3, 31),
+                          filing_date=date(2026, 5, 6), form="10-Q", actual_eps=1.2, source="edgar")]
+    store.put_earnings(facts_to_frame(facts))
+    assert store.has_earnings() is True                              # PRESENT
+    assert facts_from_frame(store.get_earnings()) == facts           # exact round-trip, revenue -> None
+    cal = [EarningsCalendarEntry(symbol="RUN", expected_date=date(2026, 5, 6),
+                                 known_asof=date(2026, 4, 20), is_confirmed=True)]
+    store.put_earnings_calendar(calendar_to_frame(cal))
+    assert calendar_from_frame(store.get_earnings_calendar()) == cal
+    assert store.get_earnings_calendar().iloc[0]["known_asof"] == date(2026, 4, 20)   # date parsed back

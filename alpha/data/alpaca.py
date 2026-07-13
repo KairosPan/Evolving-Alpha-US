@@ -256,3 +256,14 @@ class AlpacaSource:
         # a successful fetch with zero actions is a true empty, never the silent MISSING the offline
         # snapshot path can hit. So corp availability is unconditionally True here.
         return True
+
+    # ── earnings (P5a): Alpaca has no earnings feed. Pure-swap contract — the data methods raise
+    #    NotImplementedError; compose EdgarSource for the `earnings` capability instead. ──
+    def earnings_known(self, symbol: str, as_of: Date):
+        raise NotImplementedError("Alpaca has no earnings feed; compose an EdgarSource for `earnings`")
+
+    def earnings_calendar(self, as_of: Date):
+        raise NotImplementedError("Alpaca has no earnings feed; compose an EdgarSource for `earnings`")
+
+    def earnings_available(self) -> bool:
+        return False        # no earnings feed present (MISSING; fail-closed)

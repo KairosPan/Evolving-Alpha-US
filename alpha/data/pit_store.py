@@ -89,3 +89,46 @@ class PITStore:
             if c in df.columns:
                 df[c] = pd.to_datetime(df[c]).dt.date
         return df
+
+    # ── earnings (P5a) — facts keyed on filing_date, calendar on known_asof; frames from
+    #    alpha/data/earnings.py's converters. has_earnings() is the tri-state MISSING seam (mirrors
+    #    has_corp_actions): True even for an empty facts frame, False only when the artifact is absent. ──
+    def _earnings_facts_path(self) -> Path:
+        return self._root / "earnings_facts.parquet"
+
+    def has_earnings(self) -> bool:
+        return self._earnings_facts_path().exists()
+
+    def put_earnings(self, df: pd.DataFrame) -> None:
+        out = df.copy()
+        for c in ("period_end", "filing_date"):
+            if c in out.columns:
+                out[c] = out[c].map(lambda d: d.isoformat() if d is not None else None)
+        _atomic_to_parquet(out, self._earnings_facts_path())
+
+    def get_earnings(self) -> pd.DataFrame | None:
+        p = self._earnings_facts_path()
+        if not p.exists():
+            return None
+        df = pd.read_parquet(p)
+        for c in ("period_end", "filing_date"):
+            if c in df.columns:
+                df[c] = pd.to_datetime(df[c]).dt.date
+        return df
+
+    def put_earnings_calendar(self, df: pd.DataFrame) -> None:
+        out = df.copy()
+        for c in ("expected_date", "known_asof"):
+            if c in out.columns:
+                out[c] = out[c].map(lambda d: d.isoformat() if d is not None else None)
+        _atomic_to_parquet(out, self._root / "earnings_calendar.parquet")
+
+    def get_earnings_calendar(self) -> pd.DataFrame | None:
+        p = self._root / "earnings_calendar.parquet"
+        if not p.exists():
+            return None
+        df = pd.read_parquet(p)
+        for c in ("expected_date", "known_asof"):
+            if c in df.columns:
+                df[c] = pd.to_datetime(df[c]).dt.date
+        return df

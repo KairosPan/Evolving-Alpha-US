@@ -81,6 +81,58 @@ def test_guarded_source_tolerates_inner_without_probe():
     assert GuardedSource(_Stub(), AsOfGuard(date(2026, 6, 12))).corp_actions_available() is True
 
 
+# ── earnings capability (P5a) ───────────────────────────────────────────────────────────────────────
+
+def _earnings_fake():
+    from alpha.data.source import FakeSource
+    from alpha.data.earnings import EarningsFact, EarningsCalendarEntry
+    facts = [EarningsFact(symbol="RUN", fiscal_period="2026Q1", period_end=date(2026, 3, 31),
+                          filing_date=date(2026, 5, 6), actual_eps=1.2),
+             EarningsFact(symbol="FLOP", fiscal_period="2026Q1", period_end=date(2026, 3, 31),
+                          filing_date=date(2026, 5, 8), actual_eps=-0.3)]
+    cal = [EarningsCalendarEntry(symbol="RUN", expected_date=date(2026, 5, 6),
+                                 known_asof=date(2026, 4, 20), is_confirmed=True)]
+    return FakeSource(calendar=[], bars={}, snapshots={}, earnings=facts, earnings_calendar=cal)
+
+
+def test_fake_source_earnings_known_pit_and_symbol_filter():
+    src = _earnings_fake()
+    assert src.earnings_known("RUN", date(2026, 4, 15)) == []          # filed 5/6, invisible on 4/15
+    got = src.earnings_known("RUN", date(2026, 5, 7))
+    assert [f.fiscal_period for f in got] == ["2026Q1"]                # RUN only, FLOP excluded by symbol
+    assert src.earnings_known("FLOP", date(2026, 5, 8))[0].symbol == "FLOP"   # FLOP filed 5/8
+
+
+def test_fake_source_earnings_calendar_pit():
+    src = _earnings_fake()
+    assert src.earnings_calendar(date(2026, 4, 19)) == []              # before known_asof 4/20
+    assert len(src.earnings_calendar(date(2026, 4, 20))) == 1
+
+
+def test_fake_source_earnings_available_flag():
+    from alpha.data.source import FakeSource
+    assert _earnings_fake().earnings_available() is True               # earnings passed -> present
+    bare = FakeSource(calendar=[date(2026, 6, 12)], bars={}, snapshots={})
+    assert bare.earnings_available() is False                         # none passed -> MISSING (fail-closed)
+
+
+def test_guarded_source_blocks_future_earnings():
+    src = _earnings_fake()
+    gs = GuardedSource(src, AsOfGuard(date(2026, 5, 6)))
+    assert [f.symbol for f in gs.earnings_known("RUN", date(2026, 5, 6))] == ["RUN"]   # as_of == cursor ok
+    with pytest.raises(LookaheadError):
+        gs.earnings_known("RUN", date(2026, 5, 7))                    # future as_of blocked
+    with pytest.raises(LookaheadError):
+        gs.earnings_calendar(date(2026, 5, 7))
+
+
+def test_guarded_source_earnings_available_defaults_false_when_absent():
+    # fail-closed: an inner predating the capability reports MISSING (False), NOT the corp default-True.
+    class _Stub:
+        pass
+    assert GuardedSource(_Stub(), AsOfGuard(date(2026, 6, 12))).earnings_available() is False
+
+
 def test_snapshot_source_corporate_actions_known(tmp_path):
     # SnapshotSource is the production OFFLINE source (PITStore-backed) — lock the new primitive there too.
     import pandas as pd

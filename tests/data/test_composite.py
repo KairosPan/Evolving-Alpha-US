@@ -175,3 +175,52 @@ def test_default_source_byte_identical_when_composite_unused(apca, monkeypatch):
     monkeypatch.delenv("ALPHA_DATA_SOURCE", raising=False)
     assert isinstance(make_source(), AlpacaSource)
     assert isinstance(make_source("alpaca"), AlpacaSource)
+
+
+# ── earnings capability routing (P5a) ───────────────────────────────────────────────────────────────
+
+def _earnings_backend() -> FakeSource:
+    """An earnings-only backend (a distinct symbol EARN; no bars)."""
+    from alpha.data.earnings import EarningsCalendarEntry, EarningsFact
+    facts = [EarningsFact(symbol="EARN", fiscal_period="2026Q1", period_end=date(2026, 3, 31),
+                          filing_date=date(2026, 6, 5), actual_eps=2.0)]
+    cal = [EarningsCalendarEntry(symbol="EARN", expected_date=date(2026, 6, 5),
+                                 known_asof=date(2026, 5, 20), is_confirmed=True)]
+    return FakeSource(calendar=[], bars={}, snapshots={}, earnings=facts, earnings_calendar=cal)
+
+
+def test_earnings_capability_routes_to_earnings_backend():
+    comp = CompositeSource(_base_source(), {"earnings": _earnings_backend()})
+    got = comp.earnings_known("EARN", date(2026, 6, 12))
+    assert [f.symbol for f in got] == ["EARN"]                    # from the earnings backend
+    assert len(comp.earnings_calendar(date(2026, 6, 12))) == 1
+    assert comp.earnings_available() is True
+    # bars/snapshot still on base — a misroute to the earnings backend (no bars) would be empty
+    assert not comp.daily_bars("RUN", date(2026, 6, 10), date(2026, 6, 12)).empty
+
+
+def test_unset_earnings_falls_to_base_and_raises_not_implemented():
+    # base is a plain FakeSource — has earnings methods but earnings_available False (none passed);
+    # an EDGAR-less base like AlpacaSource would raise NotImplementedError. Prove both shapes:
+    comp = CompositeSource(_base_source())                        # no earnings override
+    assert comp.earnings_available() is False                     # falls to base (no earnings) -> MISSING
+    from alpha.data.alpaca import AlpacaSource
+
+    class _NoEarnAlpaca(AlpacaSource):
+        def __init__(self):
+            pass                                                  # skip key check for the unit test
+    with pytest.raises(NotImplementedError):
+        CompositeSource(_NoEarnAlpaca()).earnings_known("X", date(2026, 6, 12))
+
+
+def test_guarded_composite_blocks_future_earnings():
+    comp = CompositeSource(_base_source(), {"earnings": _earnings_backend()})
+    gs = GuardedSource(comp, AsOfGuard(date(2026, 6, 5)))
+    assert [f.symbol for f in gs.earnings_known("EARN", date(2026, 6, 5))] == ["EARN"]   # as_of == cursor
+    with pytest.raises(LookaheadError):
+        gs.earnings_known("EARN", date(2026, 6, 6))              # composite adds no lookahead
+
+
+def test_earnings_is_a_known_capability():
+    from alpha.data.composite import _CAPABILITIES
+    assert "earnings" in _CAPABILITIES

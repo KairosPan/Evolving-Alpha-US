@@ -54,3 +54,43 @@ def test_corp_actions_available_reflects_artifact_presence(tmp_path):
     store.put_corp_actions(pd.DataFrame(
         columns=["symbol", "announce_date", "ex_date", "kind", "ratio"]))
     assert src.corp_actions_available() is True                      # present-but-empty -> checkable
+
+
+# ── earnings (P5a) ────────────────────────────────────────────────────────────────────────────────
+
+def _seed_earnings(tmp_path):
+    from alpha.data.earnings import (EarningsCalendarEntry, EarningsFact,
+                                     calendar_to_frame, facts_to_frame)
+    store = PITStore(tmp_path)
+    facts = [EarningsFact(symbol="RUN", fiscal_period="2026Q1", period_end=date(2026, 3, 31),
+                          filing_date=date(2026, 5, 6), actual_eps=1.2, actual_revenue=5.0e8),
+             EarningsFact(symbol="OTH", fiscal_period="2026Q1", period_end=date(2026, 3, 31),
+                          filing_date=date(2026, 5, 6), actual_eps=0.4)]
+    cal = [EarningsCalendarEntry(symbol="RUN", expected_date=date(2026, 5, 6),
+                                 known_asof=date(2026, 4, 20), is_confirmed=True, session="amc")]
+    store.put_earnings(facts_to_frame(facts))
+    store.put_earnings_calendar(calendar_to_frame(cal))
+    return SnapshotSource(store), store
+
+
+def test_snapshot_earnings_pit_and_symbol_filter(tmp_path):
+    src, _ = _seed_earnings(tmp_path)
+    assert src.earnings_known("RUN", date(2026, 4, 15)) == []        # filed 5/6, invisible on 4/15
+    got = src.earnings_known("RUN", date(2026, 5, 6))
+    assert len(got) == 1 and got[0].symbol == "RUN" and got[0].actual_revenue == 5.0e8
+    assert src.earnings_known("OTH", date(2026, 5, 6))[0].symbol == "OTH"   # symbol filter
+
+
+def test_snapshot_earnings_calendar_pit(tmp_path):
+    src, _ = _seed_earnings(tmp_path)
+    assert src.earnings_calendar(date(2026, 4, 19)) == []            # before known_asof 4/20
+    cal = src.earnings_calendar(date(2026, 4, 20))
+    assert len(cal) == 1 and cal[0].session == "amc" and cal[0].is_confirmed is True
+
+
+def test_snapshot_earnings_available_reflects_artifact_presence(tmp_path):
+    store = PITStore(tmp_path)
+    src = SnapshotSource(store)
+    assert src.earnings_available() is False                         # no parquet -> MISSING (fail-closed)
+    _seed_earnings(tmp_path)
+    assert SnapshotSource(store).earnings_available() is True        # present -> checkable
