@@ -284,12 +284,13 @@ A3/A6, atop whole-H coherence) stays visible.
   + regen ritual). Until then growth skills order by phase_prior only (P2 carry-forward).
 - ~~**Growth console instrument**~~ SHIPPED 2026-07-13 (three-state market-clock dial + panic badge,
   momo ring byte-identical; spec `2026-07-13-growth-console-instrument-design.md`) → PROJECT_STATE.
-- **Sonia small fixes** (3 of 4 SHIPPED 2026-07-13: `/chat` brain-load inside the error boundary +
-  `edit_action` under `_MUTATION_LOCK` + the file-count/aggregate-size cap in `ingest_attachments`
-  — `_MAX_FILES=20` / `_MAX_TOTAL_BYTES=20MB`, fail-open with a summarizing note, 13 tests in
-  `tests/meta/test_ingest_attachments.py`; the network/SSRF leg is A9's netguard). REMAINING: split
-  "Sonia 404" from "Sonia unavailable" in the console banner (`ConnectError` vs `HTTPStatusError`,
-  alpha_web).
+- ~~**Sonia small fixes**~~ ALL 4 SHIPPED 2026-07-13: `/chat` brain-load inside the error boundary;
+  `edit_action` under `_MUTATION_LOCK`; the file-count/aggregate-size cap in `ingest_attachments`
+  (`_MAX_FILES=20` / `_MAX_TOTAL_BYTES=20MB`, fail-open with a summarizing note, 13 tests in
+  `tests/meta/test_ingest_attachments.py`; the network/SSRF leg is A9's netguard); and the console
+  banner split "Sonia 404" (`HTTPStatusError` → "service is up but the request failed") vs "Sonia
+  unavailable" (`ConnectError` → "start it") — `app.py::_sonia_banner`, wired at all 3 call sites,
+  3 tests in `tests/web/test_cockpit.py`.
 - **Cockpit direct-edit UI for the user-direct hand** — form → `POST /edit`, an honest-limits line
   (a direct edit forgoes packet counsel), revert lever `POST /snapshots/{name}/restore` beside it.
   Own brainstorm→spec→plan round; deferred 2026-07-10 by user (landing-doc spec D6).
