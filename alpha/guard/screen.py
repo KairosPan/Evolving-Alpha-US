@@ -11,6 +11,7 @@ from alpha.data.corp_actions import has_dilution_filing, has_reverse_split_pendi
 from alpha.data.firewall import AsOfGuard
 from alpha.data.source import GuardedSource
 from alpha.eval.decision import DecisionPackage
+from alpha.features.earnings import days_to_earnings, has_upcoming_earnings
 from alpha.guard.panic import detect_panic_state
 from alpha.guard.veto import CandidateContext, veto
 from alpha.memory.aggregate import is_episode_taboo, summarize
@@ -26,6 +27,18 @@ HALT_SPIKE_PCT = 0.15   # an intraday high >=15% above prior close ~ a LULD halt
 # reverse-split-pending / dilution could not be checked — distinct from a checked-and-clean empty frame.
 CORP_BLIND_NOTE = ("corp-actions guard ran blind: artifact missing — reverse-split-pending / dilution "
                    "checks did not run (an unflagged split or dilution overhang may have passed)")
+
+EARNINGS_T_MINUS = 3   # §4.5 earnings_gap_discipline: the T-3 checklist window (has_upcoming_earnings default)
+
+
+def earnings_checklist_note(symbol: str, days: int) -> str:
+    """P5b: the §4.5 `earnings_gap_discipline` checklist requirement, surfaced into key_risks (warn-the-
+    human, NOT a veto). A new-entry candidate reporting within T-3 opens a hold-through-earnings exposure;
+    the doctrine mandates the thesis checklist be completed before carrying it. The guard can KNOW the date
+    is within T-3 (骨) but cannot KNOW whether the prose checklist is done (魂) — so it surfaces the mandate
+    at the human confirm point rather than vetoing (spec 2026-07-13-p5b, §4.8 red-line-candidate rationale)."""
+    return (f"{symbol}: earnings in {days}d (within the §4.5 T-3 window) — hold-through requires the thesis "
+            f"checklist: verification node registered? counter-thesis evidence? which number falsifies?")
 
 
 def _num(value) -> float | None:
@@ -103,6 +116,11 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
     (default "enter"); no producer emits trim/exit yet (holdings aren't modeled), so this is inert /
     byte-identical today and activates the moment a producer sets the field (spec 2026-07-13-p06 §3.3).
 
+    P5b: when an earnings feed is present, a KEPT new-entry candidate reporting within T-3 surfaces the
+    §4.5 `earnings_gap_discipline` checklist requirement into key_risks — warn-the-human, NOT a veto (the
+    checklist's completeness is a prose/human judgment the code-side guard cannot make; see
+    `earnings_checklist_note` and spec 2026-07-13-p5b). No earnings feed -> byte-identical (no note).
+
     PIT-safe: all data reads go through a fresh GuardedSource(AsOfGuard(state.date)); SSR reads only
     prior-day bars (< as_of) and corp actions are announce-keyed (<= as_of); episode recall is masked at
     `for_asof(state.date)`. Vetoed candidates are dropped (never entered/scored) rather than annotated — a
@@ -114,6 +132,9 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
     corp = guarded.corporate_actions_known(as_of)
     corp_available = guarded.corp_actions_available()  # P3: False -> corp artifact MISSING (reverse-split /
                                                        #   dilution ran blind); an empty-but-present frame is True
+    earnings_available = guarded.earnings_available()  # P5b: False -> no earnings feed -> no T-3 note (byte-
+    earnings_cal = (guarded.earnings_calendar(as_of)   #   identical). The calendar is PIT-guarded (known_asof
+                    if earnings_available else [])     #   <= as_of) exactly like corporate_actions_known.
     snap = guarded.daily_snapshot(as_of)               # day's OHLC for the halt-then-dump proxy (guard-safe)
     rows = ({str(r["symbol"]): r for r in snap.to_dict("records")}
             if snap is not None and not snap.empty else {})
@@ -137,6 +158,11 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
             notes.append(f"vetoed {c.symbol}: {'; '.join(v.reasons)}")
         else:
             kept.append(c)
+            if earnings_available and has_upcoming_earnings(earnings_cal, c.symbol, as_of, EARNINGS_T_MINUS):
+                # P5b: a KEPT new entry reporting within T-3 -> surface the §4.5 checklist requirement
+                # (warn-the-human, not a veto). Only here: a trim/exit never reaches this branch (P0.6
+                # continue above), and a vetoed candidate is dropped, not warned about.
+                notes.append(earnings_checklist_note(c.symbol, days_to_earnings(earnings_cal, c.symbol, as_of)))
     if not corp_available and any(candidate_action(c) == "enter" for c in decision.candidates):
         notes.append(CORP_BLIND_NOTE)   # P3: once per package, and only when a blind check gated an entry
     update = {"candidates": kept, "regime": regime, "key_risks": list(decision.key_risks) + notes}
