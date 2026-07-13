@@ -20,6 +20,7 @@ class CandidateContext:
     regulatory: bool = False                # SEC/exchange action (US-3)
     ssr: bool = False                       # short-sale restriction active (US-3)
     episode_taboo: bool = False             # from §6: strong PIT-masked nuke history for this symbol
+    panic_state: bool = False               # P1: bear + high-vol + sharp rebound (momentum-crash window)
 
 
 @dataclass(frozen=True)
@@ -51,4 +52,7 @@ def veto(ctx: CandidateContext) -> VetoVerdict:
         reasons.append("short-sale restriction active (SSR): don't fight it")
     if ctx.episode_taboo:
         reasons.append("episode taboo: strong nuke history (don't chase)")
+    if ctx.panic_state:
+        reasons.append("panic-state rebound: leaders systematically underperform — "
+                       "wait for new base + FTD + new leader list")
     return VetoVerdict(vetoed=bool(reasons), reasons=reasons)

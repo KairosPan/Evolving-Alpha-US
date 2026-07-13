@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date as Date
 from typing import Callable
 
@@ -10,6 +11,7 @@ from alpha.data.corp_actions import has_dilution_filing, has_reverse_split_pendi
 from alpha.data.firewall import AsOfGuard
 from alpha.data.source import GuardedSource
 from alpha.eval.decision import DecisionPackage
+from alpha.guard.panic import detect_panic_state
 from alpha.guard.veto import CandidateContext, veto
 from alpha.memory.aggregate import is_episode_taboo, summarize
 from alpha.regime.classifier import GCycle
@@ -71,11 +73,17 @@ def ssr_active(source, symbol: str, as_of: Date) -> bool:
     return pct is not None and pct <= SSR_DROP_PCT
 
 
-def screen_decision(decision: DecisionPackage, *, source, state: MarketState, episode_store=None) -> DecisionPackage:
+def screen_decision(decision: DecisionPackage, *, source, state: MarketState, episode_store=None,
+                    history: Sequence[MarketState] | None = None) -> DecisionPackage:
     """Apply the L4 hard veto to a freshly-produced DecisionPackage: DROP candidates the immutable-core
     guard blocks (SSR / reverse-split-pending / risk-off / backside regime) — plus, when an `episode_store`
     is wired, an §6 episode-taboo (a symbol with a strong PIT-masked nuke history). Record dropped reasons
     in key_risks, and populate the structured regime. Frozen models -> rebuilt via model_copy.
+
+    `history` (P1): the strictly-prior daily `MarketState`s. When threaded, a panic-state read (bear +
+    high-vol backdrop + sharp rebound — the momentum-crash window a single-day GCycle reads as frontside
+    `trend`) vetoes every new entry. Default None -> the detector never runs -> byte-identical to every
+    pre-P1 caller (P2's three-clock regime reader owns the live-history wiring).
 
     The new-entry veto applies to `enter` candidates only (P0.6): a `trim`/`exit` recommendation is a
     derisk on a HELD name, not a new chase, so it passes through unvetoed. `Candidate.action` exists
@@ -95,6 +103,7 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
             if snap is not None and not snap.empty else {})
     taboo_stats = (summarize(episode_store.for_asof(as_of, limit=None), key=lambda e: e.symbol)
                    if episode_store is not None else {})   # limit=None: full PIT history (past the 50-cap)
+    panic = detect_panic_state(history, state) if history else False   # P1: momentum-crash window (per-day, not per-name)
     kept, notes = [], []
     for c in decision.candidates:
         if candidate_action(c) != "enter":     # P0.6: a trim/exit is a derisk on a HELD name, not a
@@ -105,7 +114,8 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
                                reverse_split_pending=has_reverse_split_pending(corp, c.symbol, as_of),
                                dilution=has_dilution_filing(corp, c.symbol, as_of),
                                halt_then_dump=halt_then_dump_proxy(rows.get(c.symbol)),
-                               episode_taboo=is_episode_taboo(taboo_stats.get(c.symbol)))
+                               episode_taboo=is_episode_taboo(taboo_stats.get(c.symbol)),
+                               panic_state=panic)
         v = veto(ctx)
         if v.vetoed:
             notes.append(f"vetoed {c.symbol}: {'; '.join(v.reasons)}")
@@ -121,10 +131,15 @@ class GuardedPolicy:
     """Composable L4 guard: wraps any DecisionPolicy; runs it, then applies screen_decision so the
     immutable-core hard veto overrides the agent. Works in any driver that calls policy.decide()."""
 
-    def __init__(self, inner, source, *, episode_store=None) -> None:
+    def __init__(self, inner, source, *, episode_store=None,
+                 state_history: Sequence[MarketState] | None = None) -> None:
         self._inner = inner
         self._source = source
         self._episode_store = episode_store
+        # P1: the driver's growing list of strictly-prior daily MarketStates (mirrors episode_store) —
+        # the panic-state veto's backdrop context. Default None -> byte-identical (no panic detection);
+        # P2's three-clock reader threads real live history here to flip it on symmetrically.
+        self._state_history = state_history
 
     def decide(self, state: MarketState, universe, *,
               collect: Callable[[dict], None] | None = None) -> DecisionPackage:
@@ -133,4 +148,4 @@ class GuardedPolicy:
         kw = {} if collect is None else {"collect": collect}
         decision = self._inner.decide(state, universe, **kw)
         return screen_decision(decision, source=self._source, state=state,
-                               episode_store=self._episode_store)
+                               episode_store=self._episode_store, history=self._state_history)
