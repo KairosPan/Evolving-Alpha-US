@@ -157,11 +157,24 @@ brainstorm→spec→build→review round.
 > bootstrap). THREE PATHS (user picks): (a) **acquire data** — a ≥1yr capture_window run (live keys;
 > Alpaca free IEX ~2021+ so ≥1yr is available) + a sector-map feed → then calibrate → then integrate
 > (true calibrate-first, but a data-acquisition step vs the user's "暂不需要第二数据商" appetite);
-> (b) **build the integration DORMANT now** with literature defaults (clocks validated-sound, §1.4
-> composition threshold-independent, zero live effect until flip-on), flip-on gated on a future
-> calibration; (c) **PARK** the integration until the data exists (don't build dormant plumbing that
-> can't be activated). Recommendation: (b) if the goal is to keep the plumbing ready, else (c) —
-> because (a)'s data step is what actually unblocks turning the clocks ON.
+> (b) **build the integration DORMANT now** with literature defaults; (c) **PARK** the integration.
+>
+> **RESOLVED 2026-07-13: user picked (a) — data acquired + calibrated + integration building.** A 2yr
+> bed `verdict_pit_2yr` (800 symbols × 526 days, 2024-06-03..2026-07-09, Alpaca IEX — SAME vendor, not a
+> second) was captured (resumable/retry driver survived a transient timeout). **Literature-window
+> calibration verdict (definitive, supersedes the 90-day finding):**
+> - **stock CLEAN** — base/advance/decline all populate + `top` now fires (0.6%; the 90-day ~0% was a
+>   bed-length artifact), advance 17.2% (literature-RS conservative vs bed-fitted 27%), flicker ~zero
+>   (3 transitions/symbol over 526 days).
+> - **market SANE** — 91.3% confirmed_uptrend (a 2024-26 bull tape), 4.6/4.2 pressure/correction; ONE
+>   mild flag: ~3.4% ABAB day-parity flicker (18 pts/526 days) on the confirmed↔under_pressure boundary
+>   → a stronger hysteresis is a flip-on TUNE (it is the top authority, so worth smoothing).
+> - **theme threshold-SANE but SECTOR-MAP-LIMITED** — all four phases fire, but 24 ABAB pts from THIN
+>   per-group breadth (bootstrap map = 3-19 members/group, 657/800 unmapped). The flicker is thin-N
+>   noise, NOT a mis-set threshold → a richer GICS/IBD sector map is the theme leg's real unblock.
+> No threshold is obviously mis-set. **Integration builds NOW additive/default-off (spec
+> `2026-07-13-three-clock-activation-design.md`, `8e3caea`; arc-clockwire); flip-on preconditions =
+> the market ABAB tune + a richer sector map for the theme leg.**
 
 ### P6 — Eval methodology
 P6 SHIPPED 2026-07-13 → `docs/PROJECT_STATE.md` (spec
