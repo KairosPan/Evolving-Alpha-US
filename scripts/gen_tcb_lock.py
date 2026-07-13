@@ -28,13 +28,16 @@ TCB_FILES = [
     "alpha/arena/policy.py",        # single dispatch choke point + tiers
     "alpha/meta/evolution.py",      # adopt-time red-line/prefix validation (added 2026-07-10, user-approved)
     "alpha/meta/proposal_store.py", # brain_hash staleness pin (added 2026-07-10, user-approved)
+    "alpha/meta/body_git.py",       # A5 Body-Store-as-git audit mirror (added 2026-07-13, user-approved)
+    "alpha/meta/netguard.py",       # A9 SSRF/egress trust root (added 2026-07-13, user-approved)
 ]
 
 def generate(repo: Path) -> str:
     lines = [f"{sha256_file(repo / f)}  {f}" for f in sorted(TCB_FILES)]
     header = ("# tcb.lock — TCB content hashes (modification-ladder spec §3; additions human-only)\n"
               "# Row 13 (red-line lint / try_promote_body / verifier harness): declared, not yet built.\n"
-              "# alpha/meta/{evolution,proposal_store}.py added 2026-07-10 (user-approved, backend-design round).\n")
+              "# alpha/meta/{evolution,proposal_store}.py added 2026-07-10 (user-approved, backend-design round).\n"
+              "# alpha/meta/{body_git,netguard}.py added 2026-07-13 (user-approved; A5 Body-git audit, A9 SSRF trust root).\n")
     return header + "\n".join(lines) + "\n"
 
 def read_lock(path: Path) -> dict[str, str]:

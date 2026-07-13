@@ -1,6 +1,7 @@
 # tcb.lock — TCB content hashes (modification-ladder spec §3; additions human-only)
 # Row 13 (red-line lint / try_promote_body / verifier harness): declared, not yet built.
 # alpha/meta/{evolution,proposal_store}.py added 2026-07-10 (user-approved, backend-design round).
+# alpha/meta/{body_git,netguard}.py added 2026-07-13 (user-approved; A5 Body-git audit, A9 SSRF trust root).
 9aa30204905d0a697f613520c9670e7a517676144ebe35e3326c7a10ddd4ac0c  alpha/agent/retrieval.py
 666e0590bf9c9cd937f8c92983253e053826f696897097fae1423b44cf5c7334  alpha/arena/policy.py
 7f9b9ce63d380c7a03b0f181fe66e95ce986d72b40d51846f47128c308d5e1e6  alpha/data/firewall.py
@@ -11,7 +12,9 @@
 945a04942d7be20c9a4ff501e5876973a9d3cad03cff5d5b4aaa15713fbbb798  alpha/harness/snapshot.py
 7676d416cde0627bc07c1b7bc0ce5a95e55f8f8c217fdf1326cb03c244cf2f09  alpha/loop/floor_breaker.py
 120568c59f751cf95ba86cc7ce9cb330a078c5c79c1d5c980f9fe90f9d11d970  alpha/memory/store.py
+af24ac75355680b079f3e1b3b616bac70e2df513fac4e4fcfaeb031d822ddce1  alpha/meta/body_git.py
 8566da1b2d8e61a67c0e3dfa2b68b9afc383ed8204ad1a2fbbe1543e26373303  alpha/meta/evolution.py
+8d4aee16b7ff482ad1d93ebfef1fd9496541a902cd9e787b20391aa4fadac0b8  alpha/meta/netguard.py
 8b29f92683b9834745e131b90db1a93297dcbac763f3a6755f2deaca60c9afde  alpha/meta/proposal_store.py
 452df1d26a47eff9d59a214d84e9979e9182270d8041f4351b4d2aaecfb14661  alpha/refine/apply.py
 cf9386758ffe1684335f772d8fa3be9aefbebd28b0656421c26fdbe1b9bfdd43  alpha/refine/conflict.py
