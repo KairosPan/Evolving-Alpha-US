@@ -79,31 +79,40 @@ decision). Carry-forward: conditional `DataConfig` object only if per-source cto
   (spec `docs/superpowers/specs/2026-07-13-p5a-earnings-feed-design.md`; PROJECT_STATE): EarningsFact
   (filing_date PIT key) + EarningsCalendarEntry (known_asof), Protocol `earnings` capability,
   EdgarSource (data.sec.gov XBRL, mockable seam) + offline PITStore backend, feature helpers
-  (days_to_earnings / has_upcoming_earnings(T-3)). **CONSUME-PATH ACTIVATION STILL PENDING** (the
-  next step): wire `earnings_gap_discipline.rule` (§4.5 T-3 gate) into the guard/doctrine decide
-  path; thread days_to_earnings into the per-candidate state; capture_window earnings + CHECKSUMS;
-  the vendor consensus/estimate backend (EDGAR has no consensus → estimate legs are None). This
-  activation is queued in P5b.
-- **FINRA short interest** — **INGESTION SHIPPED 2026-07-13** (`short_interest` capability, keyed on
-  publication_date; spec `2026-07-13-p5b-shortinterest-offerings-design.md`). `short_squeeze`
-  activation still needs the consume-path (populate MarketStock.short_interest %-of-float +
-  days_to_cover) AND the float feed (the %-of-float leg).
-- **EDGAR/SEC offerings** — **INGESTION + LIFECYCLE SHIPPED 2026-07-13** (typed
-  announce/effective/withdrawn/expired events keyed on their own process_date, active/closed state
-  machine, safety-only-tightens; veto-forever fail-closed default when absent). REMAINING: the
-  guard-side veto swap (`has_dilution_filing` → `is_dilution_overhang` when the feed is present).
+  (days_to_earnings / has_upcoming_earnings(T-3)). Capture persistence SHIPPED (P5-consume,
+  878dee1). **CONSUME-PATH T-3 GATE STILL PENDING**: wire `earnings_gap_discipline.rule` (§4.5 T-3
+  gate) + the 扛 hold-through-earnings veto into the guard/doctrine decide path — BLOCKED on a
+  holdings producer (the hold branch needs a position book); the vendor consensus/estimate backend
+  (EDGAR has no consensus → estimate legs are None) also remains.
+- **FINRA short interest** — INGESTION SHIPPED 2026-07-13 + **CONSUME-PATH SHIPPED 2026-07-13**
+  (P5-consume, 878dee1; spec `2026-07-13-p5-consume-path-activations-design.md`): `short_squeeze`
+  now populates (short_interest %-of-float, days_to_cover) on both builders via
+  `alpha/features/short_squeeze.py`; feeds ONLY the agent skill menu (`depends_on`), never the L4
+  veto or scorer; days_to_cover rides short-interest alone, %-of-float needs the float feed too
+  (else the skill stays dormant). Feed absent → byte-identical.
+- **EDGAR/SEC offerings** — INGESTION + LIFECYCLE SHIPPED + **VETO SWAP SHIPPED 2026-07-13**
+  (P5-consume, 878dee1): `screen_decision` uses `is_dilution_overhang(offering_events_known)` when
+  `offerings_available()`, else `has_dilution_filing` (veto-forever fail-closed, unchanged);
+  a withdrawn/expired shelf lifts the veto as of its own process_date and no earlier; same guarded
+  source both verdict arms → symmetric + PIT. safety-only-tightens. (The present-but-empty-feed
+  corp-veto-lift case is architecturally excluded — no production corp backend emits dilution kinds;
+  reviewed 0 confirmed, refuted on three grounds; recorded in the P5-consume spec.)
 - **THEME/SECTOR BREADTH** — **SHIPPED 2026-07-13** (`sector_map` + `theme_breadth`; the growth
   §1.2 theme-clock's data prerequisite, unblocking the per-narrative-line regime read). The
   theme-CLOCK consumer + narrative clustering remain (an alpha/regime + alpha/state step).
 - **Float feed → float-based L3 sizing** — **SHIPPED 2026-07-13** (spec
   `2026-07-13-p5b-float-feed-design.md`): FloatFact keyed on knowable_date (period-only records
   DROPPED — no lookahead-safe key), float-capped tier + float-participation share-count, additive/
-  default-off, verdict-neutral. `short_squeeze` full activation still needs the consume-path wiring
-  (percent_of_float = shares_short / float, into MarketStock).
+  default-off, verdict-neutral. `short_squeeze` %-of-float denominator now consumed (P5-consume,
+  878dee1); the SEPARATE float→StockSnapshot.free_float state channel + float-aware sizing wiring
+  (float-feed spec §7) remains.
 - **Options-flow + social-sentiment** (`gamma_squeeze`/`social_euphoria_top` consume paths wired) —
   remaining.
-- **capture_window persistence + CHECKSUMS** for all the new feeds (earnings/short-interest/
-  offerings/theme-breadth) — the producer step, remaining (scripts/).
+- **capture_window persistence + CHECKSUMS** — **SHIPPED 2026-07-13** (P5-consume, 878dee1):
+  `_capture_feeds` persists earnings/short-interest/offerings/float knowable-by-window-end, scoped
+  to captured symbols; `write_checksums` auto-covers the new parquets. Theme-breadth is N/A (derived
+  at state-build from the captured snapshot + static sector_map — a replayed window reconstructs it).
+  Default source (Alpaca) → all absent → byte-identical capture.
 **Acceptance gate.** Per feed: PIT-guard tests (announce-date keying), offline suite stays keyless,
 `depends_on` skills activate only when the feed is present.
 **Sources.** ROADMAP §3 (absorbed); PROJECT_STATE US-3c/d/f; kairos-mining §3; the 2026-07-13 P5
