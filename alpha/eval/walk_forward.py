@@ -8,6 +8,7 @@ from alpha.data.calendar import trading_days_between
 from alpha.eval.decision import DecisionPolicy
 from alpha.eval.metrics import EvalReport, ScoredCandidate, build_report
 from alpha.eval.oracle import PoolRecord, classify_day
+from alpha.eval.purged_cv import embargo_trajectory
 from alpha.eval.return_oracle import ReturnOracle
 from alpha.eval.scorer import PoolScorer
 from alpha.eval.trajectory import Trajectory, TrajectoryStep, report_from_trajectory
@@ -27,14 +28,18 @@ class WalkForwardEval:
     left unscored (the full per-step Trajectory is US-2).
     """
 
-    def __init__(self, source, start: Date, end: Date, horizon: int = 2, scorer=None) -> None:
+    def __init__(self, source, start: Date, end: Date, horizon: int = 2, scorer=None,
+                 embargo: int = 0) -> None:
         if horizon < 2:
             raise ValueError(f"horizon must be >=2 (no same-day round-trip), got {horizon}")
+        if embargo < 0:
+            raise ValueError(f"embargo must be >=0, got {embargo}")
         self._source = source
         self._start = start
         self._end = end
         self._horizon = horizon
         self._scorer = scorer or PoolScorer()
+        self._embargo = embargo   # P6: drop `embargo` MORE trailing scored decisions (purged-CV right edge)
 
     def walk(self, policy: DecisionPolicy) -> Trajectory:
         """Forward-replay capturing the full per-day record (the Refiner's evidence). Same scoring as
@@ -77,7 +82,10 @@ class WalkForwardEval:
             steps.append(TrajectoryStep(date=cursor, market=markets[i], decision=decisions[i],
                                         entries=entries, outcomes=scored_by_day.get(cursor, {}),
                                         scored=(i <= n - 1 - self._horizon)))
-        return Trajectory(steps=steps)
+        # P6: the embargo is the ONE shared purge implementation both arms call (compare_harnesses
+        # applies the identical embargo_trajectory to the HCH loop trajectory) -> symmetric right-edge
+        # purge; embargo=0 returns the trajectory unchanged (byte-identical).
+        return embargo_trajectory(Trajectory(steps=steps), self._embargo)
 
     def run(self, policy: DecisionPolicy) -> EvalReport:
         return report_from_trajectory(self.walk(policy), horizon=self._horizon)

@@ -92,7 +92,8 @@ class InnerLoop:
                  refiner_config: RefinerConfig | None = None, scorer=None,
                  agent_factory: Callable[[HarnessState], DecisionPolicy] | None = None,
                  shadow_daily: dict[Date, float] | None = None,
-                 episode_store=None, conflict_queue=None, recall_store=None) -> None:
+                 episode_store=None, conflict_queue=None, recall_store=None,
+                 credit_fn: Callable | None = None) -> None:
         self._mgr = manager
         self._source = source
         self._start = start
@@ -108,6 +109,10 @@ class InnerLoop:
         self._recall_store = recall_store     # READ-only: recall + taboo into the policy stack (NOT the
         #   apply_credit WRITE handle above) — lets the verdict feed both arms a fixed pool, no self-write
         self._conflict_queue = conflict_queue
+        # P6: credit-assignment seam is injectable so compare_harnesses can build the Hcredit ABLATION
+        # arm (credit_fn=ablate_credit -> a no-op that updates no SkillStats). Default = the real
+        # apply_credit -> byte-identical to today.
+        self._credit_fn = credit_fn or apply_credit
         # P2: the forward-only growing window of strictly-prior daily MarketStates threaded into the
         # GuardedPolicy (panic veto + growth market-clock). Persistent by design — a breaker rollback
         # rebuilds the policy via _rebind but the SAME list rides through (the regime context is an
@@ -196,7 +201,7 @@ class InnerLoop:
             for step in newly:
                 if frozen:
                     continue
-                per_step_credits.append(apply_credit(Trajectory(steps=[step]), self._mgr.harness,
+                per_step_credits.append(self._credit_fn(Trajectory(steps=[step]), self._mgr.harness,
                                                      decay=cfg.credit_decay, episode_store=self._episode_store))
                 advs = [c.advantage for c in step.outcomes.values()]
                 # empty outcomes (no oracle data / all dropped) contribute 0.0 — a neutral day, not excluded
