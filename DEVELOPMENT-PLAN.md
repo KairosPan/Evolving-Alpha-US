@@ -335,19 +335,15 @@ A3/A6, atop whole-H coherence) stays visible.
 - **`tweak` action** — manual inline arg-editing of a proposed edit (no LLM; cockpit spec §8 route
   table) — merged with teach-crystallize §10's "re-preview when `ProposedEdit.args` is edited
   between propose and apply"; they ship together.
-- **Post-apply red-line lint + mandatory-taboo gate step** — step 1: gate-side check in
-  `try_apply_op`'s `write_skill` branch that a new `type='pattern', domain='trading'` skill carries
-  ≥1 taboo entry, + wire-or-fix the unconsumed `GateSpec` (confirmed 2026-07-13: `.gate` has ZERO
-  production consumers — the docstring's `eval/rule_policy` consumer does not exist); step 2:
-  safety-only-tightens monotonic check (needs a typed safety surface); the semantic contradiction
-  check needs its own design. (kairos-mining §1.4/§2.4/§4.4.)
-  > **HELD FOR USER (investigated 2026-07-13, NOT a "cheap" step):** (1) it encodes a DOCTRINE POLICY —
-  > "every trading pattern skill MUST carry a red-line taboo" is the user's 魂骨宪法 to ratify (the 6
-  > seed pattern/trading skills all carry one = convention; enforcing it AT THE WAIST is a new rejection
-  > path). (2) It breaks ~6 existing tests that create taboo-less pattern skills for UNRELATED reasons
-  > (`tests/refine/test_apply_growth_vocab.py::_write_skill_op` tests phase-vocab, no taboo). RECOMMEND
-  > enforcing (matches doctrine + seeds; cost = add a taboo to those ~6 test ops) — but it changes
-  > write-waist gate semantics, so it wants a user OK before shipping.
+- **Post-apply red-line lint + mandatory-taboo gate step** — **step 1 SHIPPED 2026-07-13 (bc082a6,
+  user-ratified "按你的推荐走"):** PC-9 in `try_apply_op` rejects a red-line-less trading `type='pattern'`
+  skill (>=1 NON-BLANK taboo required) — enforced at CREATE (write_skill) AND at any PATCH touching
+  type/taboo (adversarial review CONFIRMED a patch-bypass: feature→pattern or taboo-strip smuggled one
+  past a create-only gate; closed + blank-taboo `['']` loophole closed). Operational/feature exempt; the
+  6 seed patterns all carry a taboo; +9 tests, 6 unrelated test-ops got a taboo. `.gate` confirmed to
+  have ZERO production consumers (documented; the wire-or-fix of GateSpec deferred with step 2). STILL
+  REMAINING: step 2 safety-only-tightens monotonic check (needs a typed safety surface); the semantic
+  contradiction check (own design); wiring/removing the unconsumed `GateSpec`. (kairos-mining §1.4/§2.4/§4.4.)
 - **Delete-× while Sonia is DOWN** swaps the unavailable banner into the `<li>` — cosmetic.
 - **Agent-modification drawer polish** — post-apply diff overlay, cross-session PENDING
   aggregation, drawer on other pages, optional Playwright resize test (drawer spec §7).
