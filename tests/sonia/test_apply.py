@@ -86,3 +86,24 @@ def test_apply_with_no_accepted_edits_is_a_noop(client, monkeypatch):
     apply_resp = client.post(f"/sessions/{sid}/messages/{mid}/apply").json()
     assert apply_resp["applied"] == 0
     assert client.get("/healthz").json()["edit_count"] == 0
+
+
+def test_edit_action_holds_the_mutation_lock(client, monkeypatch):
+    """The accept/reject flip is a read-modify-write on the session record; it must run under the
+    same _MUTATION_LOCK apply/rollback hold, else a concurrent apply can lose the status flip.
+    Pin: while edit_action writes the session, the lock is held. Pre-fix it was not."""
+    import sonia.app as app_mod
+
+    sid, mid, eid = _seed_and_propose(client, monkeypatch)
+
+    seen = {}
+    real_put = app_mod.SessionStore.put
+
+    def spy_put(self, sess):                           # patched AFTER seeding, so it only fires
+        seen["locked"] = app_mod._MUTATION_LOCK.locked()   # on edit_action's own put
+        return real_put(self, sess)
+
+    monkeypatch.setattr(app_mod.SessionStore, "put", spy_put)
+    r = client.post(f"/sessions/{sid}/edit/{eid}", json={"action": "accept"})
+    assert r.status_code == 200
+    assert seen["locked"] is True

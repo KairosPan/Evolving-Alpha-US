@@ -141,10 +141,10 @@ def create_app() -> FastAPI:
             sess.title = (body.text or "untitled").strip()[:60] or "untitled"
         user_msg = Message(message_id=new_message_id(), role="user", created_at=now_iso(),
                            text=body.text, attachments=body.attachments)
-        h, log = _brain_store().load()
         try:
-            agent = SoniaAgent(MetaTools(h, log), make_client("sonia"))
-            asst = agent.respond(sess, user_msg)
+            h, log = _brain_store().load()                           # inside the boundary: a locked/
+            agent = SoniaAgent(MetaTools(h, log), make_client("sonia"))  # corrupt brain load must not
+            asst = agent.respond(sess, user_msg)                     # 500 either — keep the user turn
         except Exception as e:                                       # never 500: keep the user turn
             asst = Message(message_id=new_message_id(), role="assistant", created_at=now_iso(),
                            text=f"(Sonia couldn't respond: {type(e).__name__}: {e})")
@@ -159,17 +159,18 @@ def create_app() -> FastAPI:
 
     @app.post("/sessions/{sid}/edit/{eid}")
     def edit_action(sid: str, eid: str, body: EditAction):
-        sstore = _session_store()
-        sess = sstore.get(sid)
-        if sess is None:
-            return JSONResponse({"error": "not found"}, status_code=404)
-        for m in sess.messages:
-            for e in m.edits:
-                if e.edit_id == eid:
-                    e.status = "accepted" if body.action == "accept" else "rejected"
-                    sstore.put(sess)
-                    return e.model_dump()
-        return JSONResponse({"error": "edit not found"}, status_code=404)
+        with _MUTATION_LOCK:                                  # read-modify-write on the session record —
+            sstore = _session_store()                        # serialize with apply/rollback (same lock)
+            sess = sstore.get(sid)                            # so a concurrent apply can't lose this flip
+            if sess is None:
+                return JSONResponse({"error": "not found"}, status_code=404)
+            for m in sess.messages:
+                for e in m.edits:
+                    if e.edit_id == eid:
+                        e.status = "accepted" if body.action == "accept" else "rejected"
+                        sstore.put(sess)
+                        return e.model_dump()
+            return JSONResponse({"error": "edit not found"}, status_code=404)
 
     @app.post("/sessions/{sid}/messages/{mid}/propose")
     def propose(sid: str, mid: str):

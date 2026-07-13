@@ -46,6 +46,23 @@ def test_chat_is_graceful_when_copilot_unavailable(client, monkeypatch):
     assert body["user_message"]["text"] == "hi"                      # user turn preserved
 
 
+def test_chat_is_graceful_when_brain_load_fails(client, monkeypatch):
+    """The brain load lives INSIDE /chat's error boundary: a locked/corrupt brain returns a clean
+    turn, never an unhandled 500. Pre-fix the load was outside the try and escaped the handler."""
+    import sonia.app as app_mod
+
+    class _BoomStore:
+        def load(self):
+            raise RuntimeError("brain corrupt")
+
+    monkeypatch.setattr(app_mod, "_brain_store", lambda: _BoomStore())
+    r = client.post("/chat", json={"text": "hi"})
+    assert r.status_code == 200
+    body = r.json()
+    assert "couldn't respond" in body["assistant_message"]["text"].lower()
+    assert body["user_message"]["text"] == "hi"                      # user turn preserved
+
+
 def test_chat_never_returns_edit_cards_now(client, monkeypatch):
     from alpha.harness.loader import load_seeds
     sid = load_seeds("seeds").skills.all()[0].skill_id
