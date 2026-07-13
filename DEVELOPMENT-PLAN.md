@@ -82,18 +82,27 @@ decision). Carry-forward: conditional `DataConfig` object only if per-source cto
   path; thread days_to_earnings into the per-candidate state; capture_window earnings + CHECKSUMS;
   the vendor consensus/estimate backend (EDGAR has no consensus → estimate legs are None). This
   activation is queued in P5b.
-- **FINRA short interest** (`short_interest`/`days_to_cover`; activates `short_squeeze` via `depends_on`).
-- **EDGAR/SEC offerings** for dilution + the **withdrawal/expiry lifecycle** — today any announced
-  ATM/shelf/offering vetoes forever. Design input (kairos-mining §3): `updates_since`-shaped typed
-  events, each keyed on its own announce/process date (PIT); veto-forever stays the explicit
-  fail-closed no-connector default.
-- **Options-flow + social-sentiment** (`gamma_squeeze`/`social_euphoria_top` consume paths wired).
-- **Float feed → float-based L3 sizing** (`size_tier` is wired; share-count sizing needs real float).
-- **Per-narrative-line regime read** (per-line `GCycle` vs today's global one) — blocked on a
-  theme/sector breadth feed landing here; narrative clustering is the other half.
+- **FINRA short interest** — **INGESTION SHIPPED 2026-07-13** (`short_interest` capability, keyed on
+  publication_date; spec `2026-07-13-p5b-shortinterest-offerings-design.md`). `short_squeeze`
+  activation still needs the consume-path (populate MarketStock.short_interest %-of-float +
+  days_to_cover) AND the float feed (the %-of-float leg).
+- **EDGAR/SEC offerings** — **INGESTION + LIFECYCLE SHIPPED 2026-07-13** (typed
+  announce/effective/withdrawn/expired events keyed on their own process_date, active/closed state
+  machine, safety-only-tightens; veto-forever fail-closed default when absent). REMAINING: the
+  guard-side veto swap (`has_dilution_filing` → `is_dilution_overhang` when the feed is present).
+- **THEME/SECTOR BREADTH** — **SHIPPED 2026-07-13** (`sector_map` + `theme_breadth`; the growth
+  §1.2 theme-clock's data prerequisite, unblocking the per-narrative-line regime read). The
+  theme-CLOCK consumer + narrative clustering remain (an alpha/regime + alpha/state step).
+- **Float feed → float-based L3 sizing** (`size_tier` is wired; share-count sizing needs real float)
+  — IN PROGRESS 2026-07-13.
+- **Options-flow + social-sentiment** (`gamma_squeeze`/`social_euphoria_top` consume paths wired) —
+  remaining.
+- **capture_window persistence + CHECKSUMS** for all the new feeds (earnings/short-interest/
+  offerings/theme-breadth) — the producer step, remaining (scripts/).
 **Acceptance gate.** Per feed: PIT-guard tests (announce-date keying), offline suite stays keyless,
 `depends_on` skills activate only when the feed is present.
-**Sources.** ROADMAP §3 (absorbed); PROJECT_STATE US-3c/d/f; kairos-mining §3.
+**Sources.** ROADMAP §3 (absorbed); PROJECT_STATE US-3c/d/f; kairos-mining §3; the 2026-07-13 P5
+feed specs.
 
 ### P6 — Eval methodology
 P6 SHIPPED 2026-07-13 → `docs/PROJECT_STATE.md` (spec
@@ -106,15 +115,16 @@ embargo from measured return autocorrelation; running the stratified readings in
 constants (a calibration RUN over captured PIT windows — the tool exists, the constants stay
 待verdict校准).
 
-### P7 — Episodic refinements (each its own small spec)
-**Goal.** Deepen the shipped v1 memory capabilities: **recall** — soft blended score;
-narrative-scoped recall (blocked on pre-decision narrative/theme signals). **Taboo** — phase-scoped
-(veto only if the name nukes in the current regime) + recency-windowed variants. **Forge** —
-patch-on-promote, per-narrative/phase-scoped aggregation (lesson demote stays the Refiner's job).
-**Retire-on-task** — a confirmed-failure floor symmetric to P-C's confirmed-positive counting
-(deferred out of P-C; no design yet — queue after A2 activation evidence accrues).
-**Acceptance gate.** Each refinement additive/default-off; verdict symmetry and PIT masking pinned.
-**Sources.** recall/taboo/forge specs 2026-06-26/27 (Out-of-scope sections); pb-pc spec.
+### P7 — Episodic refinements
+P7 SHIPPED 2026-07-13 → `docs/PROJECT_STATE.md` (spec
+`docs/superpowers/specs/2026-07-13-p7-episodic-refinements-design.md`): recall soft-blend
+(recall_score.py leaf, calibratable weights), phase-scoped + recency-windowed taboo, forge
+patch-on-promote + per-phase/narrative aggregation (retire stays GLOBAL). Additive/default-off,
+review 0 findings, no TCB touched. Carry-forwards: consumer wiring for the recall blend (into TCB
+retrieval.py) + taboo-scoping (into guard/screen.py) ship as follow-ups; narrative-scoped recall
+inert (blocked on pre-decision narrative signals); **Retire-on-task** still deferred (confirmed-
+failure floor symmetric to P-C; no design; queue after A2 activation evidence); the §4 offline
+recall-weight tuner is the calibrator for the hand-set weights.
 
 ### P8 — Intraday path
 **Goal.** Real LULD halts / halt-count (tick feed), **MWCB / `Breaker` portfolio wiring** (P&L state
@@ -125,13 +135,13 @@ annotation — today the guard DROPS vetoed candidates rather than annotating).
 Sources: ROADMAP §5 (absorbed); PROJECT_STATE US-3e + L3-sizing deferrals.
 
 ### P9 — Live daily production loop
-**Goal.** A scheduled loop that writes `DecisionStore`/`VerdictStore`/evolution artifacts
-automatically, replacing the three on-demand producers (`save_decisions` / `run_verdict --json` /
-`save_evolution`); the console then reads a living record.
-**Why this order.** Last: wants P3 (no silent guard-blind days unattended) and A1's runbooks +
-activation-ledger discipline.
-**Acceptance gate.** One scheduled run produces all three artifacts end-to-end; failure is loud (no
-partial-write silent days). Sources: ROADMAP §6 optional-polish prose; kairos-mining §1.1 ledger row.
+P9 SHIPPED 2026-07-13 → `docs/PROJECT_STATE.md` (spec
+`docs/superpowers/specs/2026-07-13-p9-daily-loop-design.md`; `scripts/daily_loop.py`:
+stage-then-finalize all-or-nothing, decision published last, precondition gate [non-empty window +
+same-filesystem destinations] + finalize-plan-before-execute [review-hardened], corp-blind note into
+the manifest, loud non-zero-exit failure). Carry-forward: the scheduler (cron/systemd) is the
+needs-the-machine runbook step; the loop is invocable + idempotent. A browsable evolution history
+(vs the single overwritten file) is a small Settings + alpha_web follow-up.
 
 ---
 
@@ -210,14 +220,15 @@ rollback reconciled with SnapshotStore/epoch semantics. Charter (*Second Foundin
 derived state across both faces.
 
 ### A6 — Spend metering
-**Closes G5.**
-**Goal.** Zero metering exists anywhere. Meter at the `make_client` seam → per-run budgets
-(refine_live, verdict, dreaming/replay batches) → a watchdog ladder that treats spend as an
-enforced signal beside failure. Charter: *Resources as Security: Cost Is Also the Adversary's
-Weapon* — "a *reported* scalar is not a *governed* one"; both §4.3 adversaries (injected session,
-looping Body) are live today on the single-user machine.
-**Acceptance gate.** Every LLM call carries a cost record; a budget breach halts the run loudly;
-per-refinement cost appears on proposal packets (feeds A8).
+A6 SHIPPED 2026-07-13 (closes G5) → `docs/PROJECT_STATE.md` (spec
+`docs/superpowers/specs/2026-07-13-a6-spend-metering-design.md`): MeteredClient at the make_client
+seam (real usage side-channel + estimate fallback + fail-toward-metering on unknown models),
+Budget (positive ceiling, soft warn / HARD breach → BudgetExceeded → non-zero exit — governed not
+reported, adversarially confirmed un-swallowed), threaded into refine_live/run_verdict/save_decisions
+(shared meter across verdict arms = symmetric). Additive/default-off. Carry-forward: the
+per-refinement cost on the EvolutionProposal OBJECT needs a TCB edit → folded into **A8** (packet
+counsel); daily_loop metering is a small additive thread; the richer charter ladder (foreground
+pause-and-prompt, cross-session accumulator, egress meter, per-party rate limiting) is queued.
 
 ### A7 — Sonia-side proposer over worker traces
 **Closes G7 (the named deviation).**
@@ -328,12 +339,13 @@ A3/A6, atop whole-H coherence) stays visible.
 - **Growth skill phase-ordering** — thread the growth market-clock read into skill selection
   ordering (`phase_from_read` → retrieval; touches TCB `alpha/agent/retrieval.py` — minimal seam
   + regen ritual). Until then growth skills order by phase_prior only (P2 carry-forward).
-- **Growth console instrument** — a three-state market-clock ring/legend for growth packages
-  (today: graceful degradation to raw tokens, no 500s; P2 carry-forward, own design round).
-- **Sonia small fixes ×4** (ROADMAP §6 absorbed): widen `/chat`'s `try` to include the brain load
-  (`sonia/app.py:144`); `edit_action` under `_MUTATION_LOCK`; file-count/aggregate-size cap in
-  `ingest_attachments` (rides A9's non-localhost precondition); split "Sonia 404" from "Sonia
-  unavailable" in the console banner (`ConnectError` vs `HTTPStatusError`).
+- ~~**Growth console instrument**~~ SHIPPED 2026-07-13 (three-state market-clock dial + panic badge,
+  momo ring byte-identical; spec `2026-07-13-growth-console-instrument-design.md`) → PROJECT_STATE.
+- **Sonia small fixes** (2 of 4 SHIPPED 2026-07-13: `/chat` brain-load inside the error boundary +
+  `edit_action` under `_MUTATION_LOCK`). REMAINING: file-count/aggregate-size cap in
+  `ingest_attachments` (in `alpha/meta/ingest.py`, no sonia seam — needs an alpha/meta owner; the
+  network/SSRF leg rides A9's non-localhost precondition); split "Sonia 404" from "Sonia
+  unavailable" in the console banner (`ConnectError` vs `HTTPStatusError`, alpha_web).
 - **Cockpit direct-edit UI for the user-direct hand** — form → `POST /edit`, an honest-limits line
   (a direct edit forgoes packet counsel), revert lever `POST /snapshots/{name}/restore` beside it.
   Own brainstorm→spec→plan round; deferred 2026-07-10 by user (landing-doc spec D6).
