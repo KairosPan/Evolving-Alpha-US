@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import phase_ring, phase_pill %}
+{% from "_macros.html" import phase_ring, phase_pill, growth_clock, panic_badge %}
 {% block title %}Deck{% endblock %}
 {% set fam_hue = {"runner": "var(--trend)", "swing": "var(--recovery)", "event": "var(--ignition)", "meme": "var(--flush)"} %}
 
@@ -18,12 +18,15 @@
       <h2>Regime</h2>
       <span class="eyebrow">G&#95;cycle read</span>
     </div>
-    <div class="panel-pad">
+    <div class="panel-pad">{% if is_growth_phase(regime.phase) %}
+      {{ growth_clock(regime.phase) }}
+      {% if detect_panic(regime.phase) %}{{ panic_badge() }}
+      {% endif %}{% else %}
       {{ phase_ring(regime.phase) }}
       <p class="muted" style="text-align:center; margin:14px auto 18px; max-width:46ch;">
         {# P2: guard the lookup — a growth market-clock phase isn't in the six-phase PHASE_BY_KEY #}
         {{ phase_by_key[regime.phase].tagline if regime.phase in phase_by_key else "" }}
-      </p>
+      </p>{% endif %}
       <div class="gate">
         <div class="kv"><span class="k">Risk appetite (gate)</span><span class="v">{{ "%.2f"|format(regime.risk_gate) }}</span></div>
         <div class="track"><span class="fill" style="width: {{ (regime.risk_gate * 100)|round|int }}%"></span></div>

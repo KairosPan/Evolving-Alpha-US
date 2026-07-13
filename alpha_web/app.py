@@ -95,6 +95,12 @@ def _make_templates() -> Jinja2Templates:
         nav=NAV,
         brain_keys=BRAIN_KEYS,
         ring=da.ring_segments(),
+        growth_states=da.GROWTH_STATES,                 # the three market-clock states (dial legend)
+        growth_state_by_key=da.GROWTH_STATE_BY_KEY,
+        growth_dial=da.growth_dial_arcs(),              # precomputed dial arc geometry (Jinja has no trig)
+        is_growth_phase=da.is_growth_phase,             # render-time routing: growth dial vs momo ring
+        growth_state_key=da.growth_state_key,
+        detect_panic=da.detect_panic,
         tape_regime=sample.sample_regime(),       # the omnipresent regime read (sample state)
         tape_state=sample.sample_market_state(),
         fmt_val=lambda v: ", ".join(map(str, v)) if isinstance(v, list) else str(v),

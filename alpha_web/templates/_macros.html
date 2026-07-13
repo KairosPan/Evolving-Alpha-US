@@ -57,6 +57,53 @@
   </div>
 {%- endmacro %}
 
+{# ── growth market-clock instrument (P2) ──────────────────────────────────────
+   The growth pack reads a three-state MARKET clock ("market:confirmed_uptrend" etc), disjoint from
+   the momo six-phase ring. `growth_clock` is a top-semicircle dial (stop | caution | go, left→right
+   = rising risk appetite); the active arc brightens + gets a marker, the state label reads out below
+   (never colour-only), a legend names all three with a tagline. Routing is by is_growth_phase. #}
+{% macro growth_pill(token) -%}
+  {%- set st = growth_state_by_key.get(growth_state_key(token)) -%}
+  <span class="pill phase-pill tone--{{ st.tone if st else 'stop' }}"><span class="dot"></span>{{ st.label if st else token }}</span>
+{%- endmacro %}
+
+{% macro panic_badge() -%}
+  <div class="panic-badge" role="status">
+    <span class="pk">⚠ panic-state</span>
+    <span class="pt">leaders systematically underperform — a momentum-crash rebound; new leader buys are banned.</span>
+  </div>
+{%- endmacro %}
+
+{% macro growth_clock(active) -%}
+  {%- set key = growth_state_key(active) -%}
+  {%- set st = growth_state_by_key.get(key) -%}
+  <div class="gdialwrap">
+    <svg class="gdial" viewBox="6 5 108 62" width="228" height="131" role="img"
+         aria-label="Growth market clock, current state {{ st.label if st else active }}">
+      {% for s in growth_dial.segments %}
+      <circle class="garc tone--{{ s.state.tone }}{% if s.state.key == key %} on{% endif %}"
+              cx="{{ growth_dial.cx }}" cy="{{ growth_dial.cy }}" r="{{ growth_dial.r }}"
+              style="stroke: var(--c);" stroke-dasharray="{{ s.dasharray }}"
+              transform="rotate({{ s.rotate }} {{ growth_dial.cx }} {{ growth_dial.cy }})"></circle>
+      {% endfor %}
+      {% for s in growth_dial.segments if s.state.key == key %}
+      <circle class="gmarker pulse tone--{{ s.state.tone }}" cx="{{ s.mx }}" cy="{{ s.my }}" r="4.4" style="fill: var(--c);"></circle>
+      {% endfor %}
+    </svg>
+    <div class="gdial-read{% if st %} tone--{{ st.tone }}{% endif %}">
+      <span class="gstate" style="color: var(--ct);">{{ st.label if st else active }}</span>
+      {% if st %}<span class="gtone">{{ st.tone }}</span>{% endif %}
+    </div>
+    <div class="gdial-legend">
+      {% for s in growth_states %}
+      <span class="gli tone--{{ s.tone }}{% if s.key == key %} on{% endif %}">
+        <span class="gd"></span><b>{{ s.label }}</b><span class="gt">{{ s.tagline }}</span>
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+{%- endmacro %}
+
 {# A filter chip. hx-get drives the in-place swap (target wraps the whole panel so chip states
    re-render); a plain click still works without JS (server returns the full page). #}
 {% macro chip(href, label, on, target, count=None) -%}

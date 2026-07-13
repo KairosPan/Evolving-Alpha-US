@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import phase_pill, size_gauge, conf_bar %}
+{% from "_macros.html" import phase_pill, size_gauge, conf_bar, growth_clock, growth_pill, panic_badge %}
 {% block title %}Decision{% endblock %}
 
 {% block content %}
@@ -35,9 +35,12 @@
   <section class="panel">
     <div class="panel-head"><h2>Regime read</h2><span class="eyebrow">gates every size</span></div>
     <div class="panel-pad">
-      {% if pkg.regime %}
+      {% if pkg.regime %}{% if is_growth_phase(pkg.regime.phase) %}
+      {{ growth_clock(pkg.regime.phase) }}
+      {% if detect_panic(pkg.regime.phase, pkg.key_risks) %}{{ panic_badge() }}
+      {% endif %}{% endif %}
       <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-        {{ phase_pill(pkg.regime.phase) }}
+        {% if is_growth_phase(pkg.regime.phase) %}{{ growth_pill(pkg.regime.phase) }}{% else %}{{ phase_pill(pkg.regime.phase) }}{% endif %}
         <span class="pill {{ 'up' if pkg.regime.frontside else 'down' }}" style="border-color:var(--line-2);">
           {{ 'frontside' if pkg.regime.frontside else 'backside' }}</span>
       </div>
