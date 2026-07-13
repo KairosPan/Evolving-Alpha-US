@@ -64,24 +64,24 @@ P3 SHIPPED 2026-07-13 → `docs/PROJECT_STATE.md` (spec
 recorded there: ssr/halt_then_dump missing-BARS blindness is a separate tape-data seam,
 deliberately not covered (revisit with P5 feeds or P9 trust review).
 
-### P4 — Data-source layer (mechanism shipped 2026-06-22; narrowed 2026-07-13)
-**Goal (narrowed — user decision 2026-07-13: no second vendor for now; (a)+(c) moved to the §4
-deferred ledger).** (b) **`CompositeSource`** — per-capability composition, the natural home for
-P5's enrichment feeds (own spec) — this is now P4's whole substance, ordered as P5's prerequisite.
-(d) Conditional: a validated **`DataConfig`** object, only if per-source constructor params
-proliferate (overlaps A1's frozen Settings — reconcile there first).
-**Acceptance gate.** Pure-swap contract holds (full Protocol or NotImplementedError); `make_source`
-still returns RAW; PIT firewall tests untouched.
-**Sources.** `docs/superpowers/specs/2026-06-22-multi-source-switching-design.md` (Future work).
-**Consequence accepted with the deferral:** eval windows stay bounded at ~2021+ (Alpaca free IEX);
-P6's appetite for longer history rides the §4 revisit trigger.
+### P4 — Data-source layer (CompositeSource)
+P4 SHIPPED 2026-07-13 → `docs/PROJECT_STATE.md` (spec
+`docs/superpowers/specs/2026-07-13-p4-composite-source-design.md`; CompositeSource per-capability
+composition — P5's substrate; second vendor + fallback decorator in the §4 deferred ledger by user
+decision). Carry-forward: conditional `DataConfig` object only if per-source ctor params proliferate
+(reconcile with A1's frozen Settings first) — deferred until that pressure appears.
 
 ### P5 — Real feeds (consume-paths wired; ingestion missing)
 **Goal.** Flip the offline placeholders live, each as a CompositeSource backend (P4):
-- **Earnings calendar + actual/estimate EPS & revenue** (promoted to FIRST feed by the 2026-07-12
-  pivot — the growth doctrine's only hard data gap: `earnings_gap_discipline.rule` and thesis-card
-  verification nodes are manual until it lands; candidates: EDGAR company facts (free, filing-date
-  PIT key), vendor calendars).
+- **Earnings calendar + actual/estimate EPS & revenue** — **P5a INGESTION SHIPPED 2026-07-13**
+  (spec `docs/superpowers/specs/2026-07-13-p5a-earnings-feed-design.md`; PROJECT_STATE): EarningsFact
+  (filing_date PIT key) + EarningsCalendarEntry (known_asof), Protocol `earnings` capability,
+  EdgarSource (data.sec.gov XBRL, mockable seam) + offline PITStore backend, feature helpers
+  (days_to_earnings / has_upcoming_earnings(T-3)). **CONSUME-PATH ACTIVATION STILL PENDING** (the
+  next step): wire `earnings_gap_discipline.rule` (§4.5 T-3 gate) into the guard/doctrine decide
+  path; thread days_to_earnings into the per-candidate state; capture_window earnings + CHECKSUMS;
+  the vendor consensus/estimate backend (EDGAR has no consensus → estimate legs are None). This
+  activation is queued in P5b.
 - **FINRA short interest** (`short_interest`/`days_to_cover`; activates `short_squeeze` via `depends_on`).
 - **EDGAR/SEC offerings** for dilution + the **withdrawal/expiry lifecycle** — today any announced
   ATM/shelf/offering vetoes forever. Design input (kairos-mining §3): `updates_since`-shaped typed
@@ -95,14 +95,16 @@ P6's appetite for longer history rides the §4 revisit trigger.
 `depends_on` skills activate only when the feed is present.
 **Sources.** ROADMAP §3 (absorbed); PROJECT_STATE US-3c/d/f; kairos-mining §3.
 
-### P6 — Eval methodology (gate-non-blocking, spec §10)
-**Goal.** (a) **Purged & embargoed cross-validation** — native in `walk_forward.py` + `compare.py`:
-embargo the horizon-h overlap at window edges in `multi_window`; optionally reserve held-out windows
-never used while iterating on refiner prompts/config (the real residual Goodhart surface is human
-meta-iteration). (b) **Regime-stratified eval.** (c) **Hcredit (C4) ablation arm.**
-**Acceptance gate.** Both arms see identical holdout windows (verdict symmetry preserved); borrow
-only the per-metric tolerance-with-reasons reporting shape for `StatVerdict`.
-**Sources.** ROADMAP §4 (absorbed); kairos-mining §2.8.
+### P6 — Eval methodology
+P6 SHIPPED 2026-07-13 → `docs/PROJECT_STATE.md` (spec
+`docs/superpowers/specs/2026-07-13-p6-eval-methodology-design.md`): purged/embargoed CV
+(`embargo_trajectory` shared by walk_forward + compare; reporting-layer fence, no live-decision
+change), regime-stratified eval (`stratified_verdicts` — THE tool that calibrates the growth-clock
+thresholds + §5 dead-band per market state, resolving the P2 carry-forward), Hcredit ablation arm.
+Carry-forwards (deliberately-not-done): pooled cross-window significance test; auto-selecting
+embargo from measured return autocorrelation; running the stratified readings into new growth-clock
+constants (a calibration RUN over captured PIT windows — the tool exists, the constants stay
+待verdict校准).
 
 ### P7 — Episodic refinements (each its own small spec)
 **Goal.** Deepen the shipped v1 memory capabilities: **recall** — soft blended score;
