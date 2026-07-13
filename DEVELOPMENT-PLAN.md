@@ -20,15 +20,15 @@ delete it here and record it there.
 Two tracks interleave — §1 PRODUCT (the co-pilot trades better) and §2 ARCHITECTURE (the organism
 gets safer/more governable). Neither blocks the other. Start order (user-approved): **A1 first**
 (shipped 2026-07-11), then **P1+P2**; **amended 2026-07-12 (pivot): P0 precedes P1+P2**;
-P0 + P1 shipped 2026-07-13 → next is **P2**. Cadence and gates: §5.
+P0 + P1 + P2 shipped 2026-07-13 → product track resumes at **P3**. Cadence and gates: §5.
 
 ## Activation ledger (capability = done only when live)
 | Capability | Built | Live in prod | Path to ON |
 |---|---|---|---|
 | P-B/P-C operational-K coupling | ✓ (882-test arc, dark) | ✗ | `docs/superpowers/runbooks/p-b-p-c-activation.md` (A2 builds the missing steps) |
 | Daily production loop | producers only (`save_decisions` / `run_verdict --json` / `save_evolution`) | ✗ | P9 |
-| Growth-doctrine H (seeds v2) | ✓ (P0 shipped; offline-produce-capable, e2e gate green) | ✗ | P2 (regime) + P9 (daily loop); trend_template screen blocked on P5 split cross-check |
-| Panic-state L4 veto | ✓ (P1, latched detector, dormant) | ✗ | P2 threads market-context history into both verdict arms |
+| Growth-doctrine H (seeds v2) | ✓ (P0+P2: offline-produce-capable, growth regime read live in drivers) | ✗ | P9 (daily loop); trend_template screen blocked on P5 split cross-check |
+| Panic-state L4 veto | ✓ (P1+P2: live on history-threaded decide/verdict paths, both vocabularies) | ✗ (scheduled prod = P9) | P9 |
 
 ---
 
@@ -47,33 +47,16 @@ P1 SHIPPED 2026-07-13 → `docs/PROJECT_STATE.md` (spec `2026-07-13-p1-trap-day-
 battery + latched panic-state L4 veto, DORMANT — P2 activates by threading real market-context
 history into both verdict arms symmetrically; all detector thresholds 待P2校准).
 
-### P2 — GCycle US recalibration (frontside / follow-through)
-**Goal.** GCycle's `follow_through_rate ≥ 0.4` frontside test is the A-share 连板 signature,
-structurally rare in the US: ~35/59 verdict days read backside, the immutable `no_chase_risk_off`
-veto suppresses ~all new longs, and the production-posture verdict is thin-by-construction.
-Recalibrate phase thresholds / the frontside definition against US data. A **manual US prior is the
-first step**; Refiner calibration was the US-2 intent.
-**Why this order.** After P1 (the guardrail); uses A1's assembled-prompt audit record as the
-diagnostic proving what the suppressed agent was actually shown.
-**Conditional sub-item** — only if the Refiner-calibration path (vs the manual prior) is wanted:
-`classifier.py`'s thresholds are hardcoded literals no edit path can touch despite its docstring's
-claim; move them into a declared params object inside `H`, edited via a new metatool through
-`try_apply_op`, RISK_OFF veto floor pinned OUTSIDE the tunable surface. Otherwise fix the docstring
-(kairos-mining §4.5, verified drift).
-**Acceptance gate.** A real US window classifies frontside days at a plausible base rate; the
-production-posture verdict is no longer thin-by-construction; P1 battery still green.
-**Sources.** `docs/findings/2026-06-22-us-hch-vs-hexpert-verdict.md` §4; kairos-mining §4.5.
-**2026-07-12 pivot note.** The user redirected doctrine from small-cap momo speculation to
-hot-sector growth investing (weeks–months horizon), keeping the sentiment-cycle and leader ideas
-at the concept level only. Recalibration should target that frame, not the current day-scale one —
-see `docs/research/2026-07-11-us-growth-unknown-unknowns.html` (adversarially verified research:
-three-layer regime proposal — market three-state × risk layer [momentum-crash panic state / rates /
-liquidity] × theme lifecycle; Trend Template universe filter; earnings calendar = first data gap).
-**2026-07-12 update:** the doctrine manuscript v0.1 now exists
-(`docs/doctrine/2026-07-12-us-growth-doctrine-draft.md`, Claude-drafted, user-accepted; Sonia
-iterations expected). P2's recalibration target is therefore the manuscript's three-clock regime
-(§1), and GCycle's successor reads market three-state + the panic flag; blocked by P0.1's
-vocabulary decision.
+### P2 — GCycle US recalibration → growth market clock
+P2 SHIPPED 2026-07-13 → `docs/PROJECT_STATE.md` (spec
+`docs/superpowers/specs/2026-07-13-p2-growth-market-clock-design.md`; acceptance gate met on the
+fixed machine: verdict_pit_broad 90-day replay = 75/10/5 confirmed/pressure/correction, stability
+10 state-changes / 3 islands / 2 ABAB — vs the momo read's 35/59-backside thin-by-construction;
+reproducible via `python scripts/calibrate_growth_clock.py verdict_pit_broad`). Carry-forwards:
+all clock thresholds + the §5 dead-band limit (0.41–0.59 no-op band inflates confirmed) are
+待verdict校准 (P6-adjacent); growth skill phase-ordering (`phase_from_read` → retrieval, touches
+TCB `retrieval.py`) and the growth console instrument (three-state ring) live in §3 SMALL POOL;
+trend_template screen activation still blocked on the P5 split cross-check.
 
 ### P3 — Corp-actions tri-state guard-blind fix (verified hole)
 **Goal.** Absent `corp_actions.parquet` → empty frame → dilution/reverse-split (and
@@ -345,6 +328,11 @@ A3/A6, atop whole-H coherence) stays visible.
 ---
 
 ## §3 SMALL POOL (unordered; polish and one-liners)
+- **Growth skill phase-ordering** — thread the growth market-clock read into skill selection
+  ordering (`phase_from_read` → retrieval; touches TCB `alpha/agent/retrieval.py` — minimal seam
+  + regen ritual). Until then growth skills order by phase_prior only (P2 carry-forward).
+- **Growth console instrument** — a three-state market-clock ring/legend for growth packages
+  (today: graceful degradation to raw tokens, no 500s; P2 carry-forward, own design round).
 - **Sonia small fixes ×4** (ROADMAP §6 absorbed): widen `/chat`'s `try` to include the brain load
   (`sonia/app.py:144`); `edit_action` under `_MUTATION_LOCK`; file-count/aggregate-size cap in
   `ingest_attachments` (rides A9's non-localhost precondition); split "Sonia 404" from "Sonia
@@ -416,7 +404,7 @@ Consciously not queued; each row carries its recorded revisit trigger.
 ## §5 CADENCE & GATES
 - **Interleave.** The two tracks run interleaved; neither blocks the other. Start order
   (user-approved): **A1 first** (small, urgent — the verified secret leak; shipped 2026-07-11),
-  then **P1+P2**; amended 2026-07-12: **P0 (pivot program) precedes P1+P2**; P0+P1 shipped 2026-07-13 — next **P2**.
+  then **P1+P2**; amended 2026-07-12: **P0 (pivot program) precedes P1+P2**; P0+P1+P2 shipped 2026-07-13 — next **P3** (or A-track interleave).
 - **Discipline.** Every arc runs the repo's established loop: brainstorm/spec → plan →
   subagent-driven build → adversarial multi-lens review, offline tests throughout.
 - **Sync rule.** An arc is not done until all three are updated: Backend-Design.md (its gap-ledger
