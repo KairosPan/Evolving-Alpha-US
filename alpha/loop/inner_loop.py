@@ -24,7 +24,8 @@ from alpha.loop.floor_breaker import _fallback_trip, _shadow_eps_abs, _shadow_tr
 from alpha.guard.screen import GuardedPolicy
 from alpha.sizing.policy import SizingPolicy
 from alpha.state.builder import build_market_state
-from alpha.universe.universe import build_universe
+from alpha.state.market import MarketState
+from alpha.universe.universe import build_universe, tape_breadth
 
 
 class LoopConfig(BaseModel):
@@ -107,6 +108,11 @@ class InnerLoop:
         self._recall_store = recall_store     # READ-only: recall + taboo into the policy stack (NOT the
         #   apply_credit WRITE handle above) — lets the verdict feed both arms a fixed pool, no self-write
         self._conflict_queue = conflict_queue
+        # P2: the forward-only growing window of strictly-prior daily MarketStates threaded into the
+        # GuardedPolicy (panic veto + growth market-clock). Persistent by design — a breaker rollback
+        # rebuilds the policy via _rebind but the SAME list rides through (the regime context is an
+        # s_t-side input, not part of H, so it is NOT rewound; mirrors the sentiment `history` note above).
+        self._market_history: list[MarketState] = []
         self._rebind()
 
     def _rebind(self) -> None:
@@ -115,7 +121,11 @@ class InnerLoop:
         h = self._mgr.harness
         base = self._agent_factory(h) if self._agent_factory is not None \
             else LLMAgentPolicy(h, self._agent_llm, episode_store=self._recall_store)
-        policy = GuardedPolicy(base, self._source, episode_store=self._recall_store) if self._cfg.screen else base
+        # P2: vocabulary rides WITH the H (h.vocabulary), never the env — so a growth H reads the growth
+        # market clock and a momo H reads GCycle. track_history=True accumulates market_history in place.
+        policy = GuardedPolicy(base, self._source, episode_store=self._recall_store,
+                               vocabulary=h.vocabulary, state_history=self._market_history,
+                               track_history=True) if self._cfg.screen else base
         self._agent = SizingPolicy(policy) if self._cfg.size else policy   # size OUTSIDE guard (post-veto)
         self._refiner = Refiner(h, self._refiner_llm, self._mgr.tools, self._refiner_cfg,
                                 conflict_queue=self._conflict_queue)
@@ -145,12 +155,14 @@ class InnerLoop:
         for i, cursor in enumerate(days):
             guarded = GuardedSource(self._source, AsOfGuard(cursor))
             universe = build_universe(guarded, cursor)
+            snap = guarded.daily_snapshot(cursor)
             state = build_market_state(universe, cursor,
                                        as_of=DateTime(cursor.year, cursor.month, cursor.day, 16, 0),
-                                       history=history, prev_gainers=prev_gainers)
+                                       history=history, prev_gainers=prev_gainers,
+                                       market_counts=tape_breadth(snap))   # P2: full-tape breadth (screen-independent)
             history.append(state.sentiment_raw)    # forward-only: feeds next day's sentiment_norm percentile
             prev_gainers = frozenset(s.symbol for s in universe.by_status("gainer"))
-            record.record(cursor, classify_day(guarded.daily_snapshot(cursor)))
+            record.record(cursor, classify_day(snap))
             decision = self._agent.decide(state, universe)
             # SCORING FENCE (P0.6 spec §6 / P0.5 spec §8): these entries feed forward-return LONG scoring.
             # Today every Candidate.action is "enter" (no producer emits trim/exit), so building an entry

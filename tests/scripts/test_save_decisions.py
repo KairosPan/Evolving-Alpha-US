@@ -95,6 +95,21 @@ def test_produce_decisions_taboo_drops_candidate():
     assert any("RUN" in [c.symbol for c in p.candidates] for p in pkgs_off)   # off -> not dropped
 
 
+def test_growth_pack_regime_read_speaks_the_market_clock():
+    """P2 fix #3: a growth-pack live run is screened by the growth MARKET clock (vocabulary rides with the
+    loaded H), so the persisted regime read is a `market:<state>` token — NOT the momo GCycle. The momo
+    default stays byte-identical (a canonical phase, no scale prefix)."""
+    from alpha.harness.loader import load_pack
+    src, start, end = _fake()
+    growth = list(sd.produce_decisions(src, start, end, agent_llm_factory=_AGENT, harness=load_pack("growth")))
+    reads = [p.regime for p in growth if p.regime is not None]
+    assert reads and all(r.phase.startswith("market:") for r in reads)
+    assert any(r.phase == "market:confirmed_uptrend" for r in reads)   # the +15%/day bull tape confirms
+    momo = list(sd.produce_decisions(src, start, end, agent_llm_factory=_AGENT))
+    momo_reads = [p.regime for p in momo if p.regime is not None]
+    assert momo_reads and all(":" not in r.phase for r in momo_reads)  # momo canonical phase, unchanged
+
+
 def test_screen_off_skips_the_guard():
     src, start, end = _fake()
     pkgs = list(sd.produce_decisions(src, start, end, agent_llm_factory=_AGENT, screen=False, size=False))

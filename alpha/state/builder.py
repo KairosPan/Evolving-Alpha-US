@@ -16,7 +16,8 @@ def build_market_state(universe: CandidateUniverse, day: Date, *, as_of: DateTim
                        history: Sequence[float] = (),
                        prev_gainers: frozenset[str] = frozenset(),
                        min_samples: int = DEFAULT_MIN_SAMPLES,
-                       breadth: BreadthReading | None = None) -> MarketState:
+                       breadth: BreadthReading | None = None,
+                       market_counts: tuple[int, int] | None = None) -> MarketState:
     """The L1 perception build from the day's (prebuilt) universe: breadth counts + runner echelon +
     follow-through + sentiment composite. The driver threads `history` (prior-day sentiment_raw, <= day)
     and `prev_gainers` (the previous day's gainer symbols); with the empty defaults this reproduces the
@@ -33,6 +34,15 @@ def build_market_state(universe: CandidateUniverse, day: Date, *, as_of: DateTim
     re-fetch. Breadth is computed the same trailing-only way and threaded in via `breadth` (like
     history/prev_gainers): default None leaves the four breadth fields None ("not computed") so every
     current caller's MarketState is byte-identical to the pre-P0.4 build.
+
+    `market_counts` (P2, gainer/loser over the FULL tape via `universe.tape_breadth`) decouples the
+    MARKET-breadth fields (`gainer_count`/`loser_count`/`breadth_raw` — the growth market clock + panic
+    inputs) from the candidate universe screen. Under the "gainer" screen it equals `counts(universe)`
+    (byte-identical); under "trend_template" the candidate universe carries no gainer/loser counts, so
+    without this the clock + panic would starve. Default None -> the candidate counts (byte-identical).
+    The momo-oriented features (sentiment / echelon / follow-through / failed-breakout) stay derived from
+    the candidate `universe` — the momo GCycle that reads them only runs under the gainer screen, where
+    the two coincide; the growth clock reads only the decoupled gainer/loser counts.
     """
     g, gu, lo = counts(universe)
     ft = follow_through_rate(universe, prev_gainers)
@@ -41,9 +51,10 @@ def build_market_state(universe: CandidateUniverse, day: Date, *, as_of: DateTim
     max_tier = echelon[0].tier if echelon else 0
     raw = raw_sentiment(gainer_count=g, max_runner_tier=max_tier, follow_through=(ft or 0.0),
                         failed_breakout_rate=(fb / g if g else 0.0), loser_count=lo)
+    mg, mlo = market_counts if market_counts is not None else (g, lo)   # market breadth (clock/panic input)
     return MarketState(
-        date=day, gainer_count=g, gap_up_count=gu, loser_count=lo, failed_breakout_count=fb,
-        max_runner_tier=max_tier, echelon=echelon, breadth_raw=float(g - lo), sentiment_raw=raw,
+        date=day, gainer_count=mg, gap_up_count=gu, loser_count=mlo, failed_breakout_count=fb,
+        max_runner_tier=max_tier, echelon=echelon, breadth_raw=float(mg - mlo), sentiment_raw=raw,
         sentiment_norm=normalize_sentiment(raw, list(history), min_samples),
         follow_through_rate=ft, gap_and_go_count=gap_and_go_count(universe),
         pct_above_200dma=(breadth.pct_above_200dma if breadth else None),

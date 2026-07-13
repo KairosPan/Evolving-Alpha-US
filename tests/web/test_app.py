@@ -90,6 +90,38 @@ def test_decisions_handles_no_trade_package(client, tmp_path, monkeypatch):
     assert "Sample package" not in r.text
 
 
+def test_decisions_renders_growth_market_clock_regime(client, tmp_path, monkeypatch):
+    """P2: a growth-pack DecisionPackage carries a non-canonical market-clock phase
+    ("market:confirmed_uptrend"), which is NOT in the six-phase PHASE_BY_KEY. The console must render
+    it (the growth token as the pill label), not 500 on the unmapped phase_by_key lookup."""
+    from datetime import date
+    from alpha.eval.decision import Candidate, DecisionPackage
+    from alpha.regime.classifier import RegimeRead
+    pkg = DecisionPackage(date=date(2026, 1, 5), candidates=[Candidate(symbol="NVDA")],
+                          regime=RegimeRead(phase="market:confirmed_uptrend", confidence=0.6,
+                                            frontside=True, risk_gate=0.6))
+    f = tmp_path / "decision.json"
+    f.write_text(pkg.model_dump_json(), encoding="utf-8")
+    monkeypatch.setenv("ALPHA_WEB_DECISION", str(f))
+    r = client.get("/decisions")
+    assert r.status_code == 200
+    assert "market:confirmed_uptrend" in r.text and "frontside" in r.text
+
+
+def test_deck_dashboard_renders_growth_market_clock_phase(client, monkeypatch):
+    """P2 fix #5: the /deck ring + tagline lookups must degrade for a non-canonical market-clock phase
+    (defensive — the ring is momo-shaped; a growth instrument is deferred). Inject a growth regime and
+    assert 200 (the ring/tagline guards render the raw token rather than 500 on phase_by_key)."""
+    from alpha.regime.classifier import RegimeRead
+    from alpha_web import sample
+    monkeypatch.setattr(sample, "sample_regime",
+                        lambda: RegimeRead(phase="market:confirmed_uptrend", confidence=0.6,
+                                           frontside=True, risk_gate=0.6))
+    r = client.get("/deck")
+    assert r.status_code == 200
+    assert "market:confirmed_uptrend" in r.text
+
+
 def test_real_decision_artifact_renders_without_sample_badge(client, tmp_path, monkeypatch):
     from alpha_web import sample
     f = tmp_path / "decision.json"

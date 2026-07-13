@@ -21,7 +21,8 @@
     <div class="panel-pad">
       {{ phase_ring(regime.phase) }}
       <p class="muted" style="text-align:center; margin:14px auto 18px; max-width:46ch;">
-        {{ phase_by_key[regime.phase].tagline }}
+        {# P2: guard the lookup — a growth market-clock phase isn't in the six-phase PHASE_BY_KEY #}
+        {{ phase_by_key[regime.phase].tagline if regime.phase in phase_by_key else "" }}
       </p>
       <div class="gate">
         <div class="kv"><span class="k">Risk appetite (gate)</span><span class="v">{{ "%.2f"|format(regime.risk_gate) }}</span></div>

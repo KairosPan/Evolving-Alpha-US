@@ -12,7 +12,7 @@ from alpha.eval.return_oracle import ReturnOracle
 from alpha.eval.scorer import PoolScorer
 from alpha.eval.trajectory import Trajectory, TrajectoryStep, report_from_trajectory
 from alpha.state.builder import build_market_state
-from alpha.universe.universe import build_universe
+from alpha.universe.universe import build_universe, tape_breadth
 
 
 class WalkForwardEval:
@@ -50,12 +50,14 @@ class WalkForwardEval:
         for i, cursor in enumerate(days):
             guarded = GuardedSource(self._source, AsOfGuard(cursor))
             universe = build_universe(guarded, cursor)
+            snap = guarded.daily_snapshot(cursor)
             state = build_market_state(universe, cursor,
                                        as_of=DateTime(cursor.year, cursor.month, cursor.day, 16, 0),
-                                       history=history, prev_gainers=prev_gainers)
+                                       history=history, prev_gainers=prev_gainers,
+                                       market_counts=tape_breadth(snap))   # P2: full-tape breadth (screen-independent)
             history.append(state.sentiment_raw)   # forward-only: feeds next day's sentiment_norm percentile
             prev_gainers = frozenset(s.symbol for s in universe.by_status("gainer"))
-            record.record(cursor, classify_day(guarded.daily_snapshot(cursor)))
+            record.record(cursor, classify_day(snap))
             decision = policy.decide(state, universe)
             decisions.append(decision); markets.append(state); universes.append(universe)
             j = i - self._horizon

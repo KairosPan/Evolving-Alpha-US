@@ -168,6 +168,29 @@ def build_universe(source, day: Date, *, gainer_pct: float = 10.0,
     return CandidateUniverse(stocks)
 
 
+def tape_breadth(snap, *, gainer_pct: float = 10.0, gap_pct: float = 5.0) -> tuple[int, int]:
+    """Market-wide breadth `(gainers, losers)` over the WHOLE daily snapshot under the same ±gainer_pct /
+    gap screen `build_universe` uses — the market TAPE, independent of whatever screen selects candidates.
+
+    This decouples the market-clock / panic breadth from the candidate universe: under the "gainer" screen
+    it equals `counts(build_universe(...))` gainers/losers exactly (byte-identical, mirroring the gainer /
+    gap_up / loser if-elif order), and under "trend_template" (which classifies every name "trend_template",
+    zeroing the gainer/loser counts) the clock + panic still read the real tape instead of starving. `snap`
+    is a daily-snapshot DataFrame (or None -> (0, 0))."""
+    g = lo = 0
+    for rec in (snap.to_dict("records") if snap is not None and not getattr(snap, "empty", True) else []):
+        close, prev, open_ = rec.get("close"), rec.get("prev_close"), rec.get("open")
+        pct = ((close - prev) / prev * 100.0) if (close is not None and prev) else None
+        gap = ((open_ - prev) / prev * 100.0) if (open_ is not None and prev) else None
+        if pct is not None and pct >= gainer_pct:
+            g += 1
+        elif gap is not None and gap >= gap_pct:
+            continue                              # gap_up: neither gainer nor loser (mirror build_universe)
+        elif pct is not None and pct <= -gainer_pct:
+            lo += 1
+    return g, lo
+
+
 def build_trend_template_universe(source, day: Date, *,
                                   lookback: int = TREND_TEMPLATE_LOOKBACK) -> CandidateUniverse:
     """Growth-doctrine universe (P0.4): the day's cross-section filtered to names that pass ALL EIGHT

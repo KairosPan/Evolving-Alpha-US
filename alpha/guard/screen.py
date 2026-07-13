@@ -15,6 +15,7 @@ from alpha.guard.panic import detect_panic_state
 from alpha.guard.veto import CandidateContext, veto
 from alpha.memory.aggregate import is_episode_taboo, summarize
 from alpha.regime.classifier import GCycle
+from alpha.regime.growth_clock import GrowthMarketClock
 from alpha.sizing.action import candidate_action     # shared action vocabulary (leaf; no cycle)
 from alpha.state.market import MarketState
 
@@ -74,16 +75,23 @@ def ssr_active(source, symbol: str, as_of: Date) -> bool:
 
 
 def screen_decision(decision: DecisionPackage, *, source, state: MarketState, episode_store=None,
-                    history: Sequence[MarketState] | None = None) -> DecisionPackage:
+                    history: Sequence[MarketState] | None = None,
+                    vocabulary: str = "momo") -> DecisionPackage:
     """Apply the L4 hard veto to a freshly-produced DecisionPackage: DROP candidates the immutable-core
     guard blocks (SSR / reverse-split-pending / risk-off / backside regime) — plus, when an `episode_store`
     is wired, an §6 episode-taboo (a symbol with a strong PIT-masked nuke history). Record dropped reasons
     in key_risks, and populate the structured regime. Frozen models -> rebuilt via model_copy.
 
-    `history` (P1): the strictly-prior daily `MarketState`s. When threaded, a panic-state read (bear +
+    `vocabulary` (P2) selects the regime reader — the pack rides WITH the H being run (`h.vocabulary`),
+    never the process env. "growth" reads the three-state MARKET clock (`GrowthMarketClock`: FTD /
+    distribution-day counting over `history`, expressed through the SAME frontside/risk_gate veto surface,
+    so the immutable veto is unchanged); anything else reads the momo `GCycle` (byte-identical).
+
+    `history` (P1/P2): the strictly-prior daily `MarketState`s. When threaded, a panic-state read (bear +
     high-vol backdrop + sharp rebound — the momentum-crash window a single-day GCycle reads as frontside
-    `trend`) vetoes every new entry. Default None -> the detector never runs -> byte-identical to every
-    pre-P1 caller (P2's three-clock regime reader owns the live-history wiring).
+    `trend`) vetoes every new entry, AND the growth clock counts its FTD/distribution window over it.
+    Default None -> the panic detector never runs and the growth clock is warm-up (byte-identical to every
+    pre-P1 caller under the momo default).
 
     The new-entry veto applies to `enter` candidates only (P0.6): a `trim`/`exit` recommendation is a
     derisk on a HELD name, not a new chase, so it passes through unvetoed. `Candidate.action` exists
@@ -96,7 +104,8 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
     kept-but-failed candidate would still be scored as an entry by the drivers, defeating the hard veto."""
     as_of = state.date
     guarded = GuardedSource(source, AsOfGuard(as_of))
-    regime = GCycle().read(state)
+    regime = (GrowthMarketClock().read(history or (), state) if vocabulary == "growth"
+              else GCycle().read(state))
     corp = guarded.corporate_actions_known(as_of)
     snap = guarded.daily_snapshot(as_of)               # day's OHLC for the halt-then-dump proxy (guard-safe)
     rows = ({str(r["symbol"]): r for r in snap.to_dict("records")}
@@ -132,14 +141,22 @@ class GuardedPolicy:
     immutable-core hard veto overrides the agent. Works in any driver that calls policy.decide()."""
 
     def __init__(self, inner, source, *, episode_store=None,
-                 state_history: Sequence[MarketState] | None = None) -> None:
+                 state_history: Sequence[MarketState] | None = None,
+                 vocabulary: str = "momo", track_history: bool = False) -> None:
         self._inner = inner
         self._source = source
         self._episode_store = episode_store
-        # P1: the driver's growing list of strictly-prior daily MarketStates (mirrors episode_store) —
-        # the panic-state veto's backdrop context. Default None -> byte-identical (no panic detection);
-        # P2's three-clock reader threads real live history here to flip it on symmetrically.
-        self._state_history = state_history
+        self._vocabulary = vocabulary               # P2: pick the regime reader (rides with the H)
+        self._track_history = track_history
+        # The strictly-prior daily MarketStates: the panic veto's backdrop AND the growth clock's
+        # FTD/distribution window. P2 activates both by ACCUMULATING them across decide() calls
+        # (track_history=True). A passed list is grown IN PLACE — InnerLoop's persistent history survives
+        # a rollback-rebuild; otherwise each policy owns a fresh accumulator, so both verdict arms build
+        # their own identical history from the same source (symmetric, like the screen flag / recall).
+        # track_history=False keeps the P1 semantics: `state_history` is a FIXED prior context (or None =
+        # detectors off -> byte-identical to every pre-P1/P2 caller).
+        self._state_history = (state_history if state_history is not None else []) \
+            if track_history else state_history
 
     def decide(self, state: MarketState, universe, *,
               collect: Callable[[dict], None] | None = None) -> DecisionPackage:
@@ -147,5 +164,9 @@ class GuardedPolicy:
         # inner policy only when set, so stub/baseline inners without a `collect` kwarg are unaffected.
         kw = {} if collect is None else {"collect": collect}
         decision = self._inner.decide(state, universe, **kw)
-        return screen_decision(decision, source=self._source, state=state,
-                               episode_store=self._episode_store, history=self._state_history)
+        out = screen_decision(decision, source=self._source, state=state,
+                              episode_store=self._episode_store, history=self._state_history,
+                              vocabulary=self._vocabulary)
+        if self._track_history:
+            self._state_history.append(state)       # grow AFTER using as the strictly-prior context
+        return out

@@ -1,8 +1,10 @@
 {# Reusable instrument parts. #}
 
 {% macro phase_pill(key) -%}
-  {%- set p = phase_by_key[key] -%}
-  <span class="pill phase-pill ph--{{ key }}"><span class="dot"></span>{{ p.label }}</span>
+  {# P2: degrade gracefully for a non-canonical phase token (growth market/theme/stock tokens, e.g.
+     "market:confirmed_uptrend") — render the raw key rather than 500 on an unmapped phase_by_key lookup. #}
+  {%- set p = phase_by_key.get(key) -%}
+  <span class="pill phase-pill ph--{{ p.key if p else 'unknown' }}"><span class="dot"></span>{{ p.label if p else key }}</span>
 {%- endmacro %}
 
 {% macro status_dot(status) -%}
@@ -32,7 +34,7 @@
   <div class="ringwrap">
     <div style="position: relative; width: 168px; height: 168px;">
       <svg class="ring" viewBox="0 0 120 120" width="168" height="168" role="img"
-           aria-label="Regime cycle, current phase {{ phase_by_key[active].label }}">
+           aria-label="Regime cycle, current phase {{ phase_by_key[active].label if active in phase_by_key else active }}">
         {% for s in ring.segments %}
         <circle class="seg ph--{{ s.phase.key }}{% if s.phase.key == active %} on{% endif %}"
                 cx="{{ ring.cx }}" cy="{{ ring.cy }}" r="{{ ring.r }}" style="stroke: var(--c);"
@@ -44,7 +46,7 @@
         {% endfor %}
       </svg>
       <div class="ring-core" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-        <div class="ph ph--{{ active }}" style="color: var(--c);">{{ phase_by_key[active].label }}</div>
+        <div class="ph ph--{{ active }}" style="color: var(--c);">{{ phase_by_key[active].label if active in phase_by_key else active }}</div>
       </div>
     </div>
     <div class="ring-legend">

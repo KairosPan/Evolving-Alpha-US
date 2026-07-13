@@ -86,16 +86,30 @@ def compare_harnesses(harness_factory: Callable[[], HarnessState], source, start
     # recall_store is READ-only for EVERY arm: GuardedPolicy taboo + Hexpert recall (episode_store=), HCH via
     # the loop's recall_store= (NOT episode_store= — the verdict must not self-write mid-run). Default None ->
     # byte-identical to the no-memory verdict. The §6 read is applied SYMMETRICALLY (like the screen flag).
+    # P2: vocabulary rides WITH the seed H under test (never the env); a growth H reads the growth market
+    # clock, a momo H reads GCycle. track_history=True gives EVERY arm its own accumulator, so HCH and
+    # Hexpert (fed the same source/window) build IDENTICAL strictly-prior histories -> the panic veto +
+    # growth clock see the same backdrop symmetrically (the screen-flag / recall_store symmetry pattern).
+    # vocab is read off a seed H the run ALREADY builds (the shadow pre-run's / mgr's), never an extra
+    # harness_factory() call, so factory-isolation is unchanged.
+    vocab = "momo"
+
     def _wrap(policy):
-        p = GuardedPolicy(policy, source, episode_store=recall_store) if cfg.screen else policy
+        p = GuardedPolicy(policy, source, episode_store=recall_store, vocabulary=vocab,
+                          track_history=True) if cfg.screen else policy
         return SizingPolicy(p) if cfg.size else p
 
     # Hexpert FIRST when shadow (its series seeds HCH); frozen H = bare agent walk, no Refiner/manager.
-    hexpert_traj = wf.walk(_wrap(LLMAgentPolicy(harness_factory(), agent_llm_factory(),
-                                                episode_store=recall_store))) if shadow else None
+    hexpert_traj = None
+    if shadow:
+        hexpert_h = harness_factory()
+        vocab = hexpert_h.vocabulary
+        hexpert_traj = wf.walk(_wrap(LLMAgentPolicy(hexpert_h, agent_llm_factory(),
+                                                    episode_store=recall_store)))
 
     # HCH = self-refining InnerLoop (optionally shadow-gated against the Hexpert reference series)
     mgr = HarnessManager(harness_factory(), store_factory())
+    vocab = mgr.harness.vocabulary          # non-shadow: set before the first _wrap call below
     loop = InnerLoop(mgr, source, start, end, agent_llm_factory(), refiner_llm_factory(),
                      config=cfg, refiner_config=refiner_config, scorer=scorer_factory(),
                      shadow_daily=(daily_advantage(hexpert_traj) if shadow else None),

@@ -43,7 +43,7 @@ from alpha.redact import collect_secrets, redact
 from alpha.settings import Settings
 from alpha.sizing.policy import SizingPolicy
 from alpha.state.builder import build_market_state
-from alpha.universe.universe import build_universe, resolve_universe_screen
+from alpha.universe.universe import build_universe, resolve_universe_screen, tape_breadth
 
 SEEDS_DIR = Path(__file__).resolve().parents[1] / "seeds"
 
@@ -72,7 +72,11 @@ def produce_decisions(source, start: Date, end: Date, *, seeds_dir: Path | None 
     h_digest = harness_digest(h)
     policy = LLMAgentPolicy(h, agent_llm_factory(), episode_store=episode_store)   # §6 recall (read-only)
     if screen:
-        policy = GuardedPolicy(policy, source, episode_store=episode_store)   # L4 veto (+ §6 taboo)
+        # P2: vocabulary rides WITH the loaded H (h.vocabulary) so a growth H is screened by the growth
+        # market clock (not momo GCycle); track_history activates the panic veto on the live path exactly
+        # as InnerLoop/compare do (mirrors the verdict symmetry). Momo H default -> byte-identical.
+        policy = GuardedPolicy(policy, source, episode_store=episode_store,
+                               vocabulary=h.vocabulary, track_history=True)   # L4 veto (+ §6 taboo)
     if size:
         policy = SizingPolicy(policy)                   # L3 sizing (outer; sizes post-veto survivors)
     decide_kw = {} if collect is None else {"collect": collect}
@@ -84,7 +88,8 @@ def produce_decisions(source, start: Date, end: Date, *, seeds_dir: Path | None 
         universe = build_universe(guarded, cursor)
         state = build_market_state(universe, cursor,
                                    as_of=DateTime(cursor.year, cursor.month, cursor.day, 16, 0),
-                                   history=history, prev_gainers=prev_gainers)
+                                   history=history, prev_gainers=prev_gainers,
+                                   market_counts=tape_breadth(guarded.daily_snapshot(cursor)))  # P2: full-tape breadth
         history.append(state.sentiment_raw)
         prev_gainers = frozenset(s.symbol for s in universe.by_status("gainer"))
         pkg = policy.decide(state, universe, **decide_kw)

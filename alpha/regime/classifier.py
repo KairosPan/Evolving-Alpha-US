@@ -21,8 +21,14 @@ class GCycle:
     """Read-only regime classifier (the G_cycle sub-agent). Deterministic, oracle-auditable rules.
 
     SSOT: read() returns a RegimeRead; this class has NO method that writes a phase into a harness.
-    The LLM Refiner calibrates these thresholds against the realized-future oracle in US-2; per-
-    narrative-line phases are US-3 (need theme tagging). Here it reads the GLOBAL mother-state.
+
+    The phase thresholds below are FIXED literals: no edit path (metatool / try_apply_op) touches them,
+    so the Refiner cannot calibrate them in place. Threading them through a declared H-params object was
+    the US-2 intent and is the P2 conditional sub-item — DEFERRED (kairos-mining §4.5, verified drift:
+    the earlier docstring claimed a Refiner-editable surface that does not exist). Growth-pack runs read
+    the three-state successor `alpha/regime/growth_clock.py::GrowthMarketClock` instead (P2); its
+    thresholds are likewise fixed named constants 待verdict校准. Per-narrative-line phases need theme
+    tagging (P5). Here GCycle reads the GLOBAL mother-state for the momo pack.
     """
 
     def read(self, state: MarketState) -> RegimeRead:
