@@ -307,8 +307,12 @@ A3/A6, atop whole-H coherence) stays visible.
 
 ## §3 SMALL POOL (unordered; polish and one-liners)
 - **Growth skill phase-ordering** — thread the growth market-clock read into skill selection
-  ordering (`phase_from_read` → retrieval; touches TCB `alpha/agent/retrieval.py` — minimal seam
-  + regen ritual). Until then growth skills order by phase_prior only (P2 carry-forward).
+  ordering (`phase_from_read` → retrieval; touches TCB `alpha/agent/retrieval.py`). Until then
+  growth skills order by phase_prior only (P2 carry-forward). **NOT a "minimal seam" (investigated
+  2026-07-13):** the momo regime helpers (`CANONICAL_PHASES` = the 6 momo tokens) don't recognize
+  the growth clock's `market:x` scale-typed tokens, and growth skill seeds don't carry `market:x`
+  phases — so threading the growth read needs the Option-B vocab bridge, not a one-liner. **FOLDED
+  into the three-clock activation arc (§1 PX)** — it's the market-clock's skill-selection consume leg.
 - ~~**Growth console instrument**~~ SHIPPED 2026-07-13 (three-state market-clock dial + panic badge,
   momo ring byte-identical; spec `2026-07-13-growth-console-instrument-design.md`) → PROJECT_STATE.
 - ~~**Sonia small fixes**~~ ALL 4 SHIPPED 2026-07-13: `/chat` brain-load inside the error boundary;
@@ -324,19 +328,28 @@ A3/A6, atop whole-H coherence) stays visible.
 - **`tweak` action** — manual inline arg-editing of a proposed edit (no LLM; cockpit spec §8 route
   table) — merged with teach-crystallize §10's "re-preview when `ProposedEdit.args` is edited
   between propose and apply"; they ship together.
-- **Post-apply red-line lint + mandatory-taboo gate step** — step 1 (cheap): gate-side check in
+- **Post-apply red-line lint + mandatory-taboo gate step** — step 1: gate-side check in
   `try_apply_op`'s `write_skill` branch that a new `type='pattern', domain='trading'` skill carries
-  ≥1 taboo entry, + wire-or-fix the unconsumed `GateSpec` (its docstring names a nonexistent
-  consumer); step 2: safety-only-tightens monotonic check (needs a typed safety surface);
-  the semantic contradiction check itself needs its own design. (kairos-mining §1.4/§2.4/§4.4.)
+  ≥1 taboo entry, + wire-or-fix the unconsumed `GateSpec` (confirmed 2026-07-13: `.gate` has ZERO
+  production consumers — the docstring's `eval/rule_policy` consumer does not exist); step 2:
+  safety-only-tightens monotonic check (needs a typed safety surface); the semantic contradiction
+  check needs its own design. (kairos-mining §1.4/§2.4/§4.4.)
+  > **HELD FOR USER (investigated 2026-07-13, NOT a "cheap" step):** (1) it encodes a DOCTRINE POLICY —
+  > "every trading pattern skill MUST carry a red-line taboo" is the user's 魂骨宪法 to ratify (the 6
+  > seed pattern/trading skills all carry one = convention; enforcing it AT THE WAIST is a new rejection
+  > path). (2) It breaks ~6 existing tests that create taboo-less pattern skills for UNRELATED reasons
+  > (`tests/refine/test_apply_growth_vocab.py::_write_skill_op` tests phase-vocab, no taboo). RECOMMEND
+  > enforcing (matches doctrine + seeds; cost = add a taboo to those ~6 test ops) — but it changes
+  > write-waist gate semantics, so it wants a user OK before shipping.
 - **Delete-× while Sonia is DOWN** swaps the unavailable banner into the `<li>` — cosmetic.
 - **Agent-modification drawer polish** — post-apply diff overlay, cross-session PENDING
   aggregation, drawer on other pages, optional Playwright resize test (drawer spec §7).
 - ~~**`docs/blueprint.md` demotion**~~ SHIPPED 2026-07-13 (14ac8ba) — formal-demotion banner: both
   doctrinally superseded (growth pivot) + structurally pre-build-out; points to the growth doctrine
   draft + CLAUDE.md + PROJECT_STATE + DEVELOPMENT-PLAN as authoritative; CLAUDE.md pointer synced.
-- **EpisodeStore WAL / busy-timeout** — concurrent-writer exposure on `brain.db`; small SQLite
-  pragma change (charter-conformance §5.12 "noted, not done").
+- ~~**EpisodeStore WAL / busy-timeout**~~ SHIPPED 2026-07-13 (7be0431): `journal_mode=WAL` +
+  `busy_timeout=5000` in `EpisodeStore.__init__` (WAL a no-op on `:memory:` → in-memory path
+  byte-identical; +2 tests; store.py is TCB → tcb.lock regen'd). Closes charter-conformance §5.12.
 - **Console/UI trigger for forge + refine_live** — both self-study producers are operator scripts;
   post-charter the trigger drives the fork+packet propose flow (shared deferred item, two specs).
 - **Conflict re-surface dedup** — repeated refine-live runs re-surface the same held conflict until
@@ -355,7 +368,11 @@ A3/A6, atop whole-H coherence) stays visible.
   streaming item above (one home each): SSE + async streaming `chat()` + incremental console
   render, and voice input (sonia-standalone spec §13; multimodal-cockpit spec §11).
 - **Keep-last-K snapshot pruning** — SnapshotStore grows unboundedly; prune only leaf lineages;
-  pairs with branchable brains (§2 tail).
+  pairs with branchable brains (§2 tail). **DEFER confirmed 2026-07-13:** SnapshotStore is LINEAR
+  today (snap_NNNN, version=latest+1) — there is no branch/lineage tree, so "prune only leaf
+  lineages" has no structure to key off; a naive linear keep-last-K would silently DELETE rollback
+  targets (`POST /snapshots/{name}/restore`), a destructive behaviour change. Correctly coupled to
+  branchable brains (§2 tail, deferred); do NOT build a naive pruner that loses restore history.
 - **Web-console residue** — HTMX-swap the date/run pickers; auth + non-localhost serving if it ever
   leaves the desk (trips A9's SSRF blocking precondition).
 
