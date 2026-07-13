@@ -119,7 +119,21 @@ decision). Carry-forward: conditional `DataConfig` object only if per-source cto
 **Sources.** ROADMAP §3 (absorbed); PROJECT_STATE US-3c/d/f; kairos-mining §3; the 2026-07-13 P5
 feed specs.
 
-### PX — Three-clock activation (clock_cadence orchestration) — THE next coherent product arc
+### PX — Three-clock activation — CORE SHIPPED 2026-07-13 (`007c4e9`, default-OFF)
+**Core built + reviewed** (spec `2026-07-13-three-clock-activation-design.md`; PROJECT_STATE): the §1.4
+downward-veto cascade (market→theme→stock) composes into the live growth decide path behind a
+`clock_authority` flag, default-OFF (byte-identical). Independent review caught + fixed a vacuous
+verdict-symmetry test (structural pin added). **FLIP-ON PRECONDITIONS (all remaining):** (1) the
+market-clock ~3.4% ABAB tune (stronger confirmed↔under_pressure hysteresis — it is the top authority);
+(2) a richer GICS/IBD sector map for the theme leg (bootstrap = 3-19 members/group, thin-N flicker);
+(3) `ALPHA_UNIVERSE_SCREEN=trend_template` (else gainer screen → rs None → all-base → all vetoed).
+**DEFERRED follow-ups:** narrative clustering (theme dynamic half, sector-map-limited); event_reread
+cadence orchestration (`detect_stock_reread_events` exists, no live three-clock cadence driver yet);
+retaining the per-day cross-section so historical rs unlocks stock top/decline persistence (today it
+collapses to base-vs-advance on TODAY, stricter-never-looser); agent-prompt wiring of the attached
+stock_stage/theme_phase reads. Original arc notes retained below for context.
+
+#### (original) THE next coherent product arc
 The doctrine (§1) fractals the sentiment cycle into THREE scale-typed clocks. **All three LEAVES are
 now built as pure `s_t`-side READS (never written into H), each with state-machine hysteresis:**
 - **market** (§1.1) — `GrowthMarketClock` (P2, `market:confirmed_uptrend`/`under_pressure`/`correction`).
