@@ -6,6 +6,7 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from alpha.regime.classifier import RegimeRead
+from alpha.sizing.action import RecommendationAction
 from alpha.sizing.position import SizeTier
 from alpha.state.market import MarketState
 from alpha.universe.universe import CandidateUniverse
@@ -39,6 +40,15 @@ class Candidate(BaseModel):
     narrative: str = ""                               # sympathy/theme key for L3 correlation netting
                                                       #   (e.g. "ai-compute"); "" = the name stands alone.
                                                       #   Finer than family; the agent sets it (US-5).
+    action: RecommendationAction = "enter"            # P0.6 recommendation vocabulary: enter (a NEW bet,
+                                                      #   today's only shape) / trim / exit (derisk a HELD
+                                                      #   name). Default "enter" keeps construction byte-
+                                                      #   identical; the L4/L3 getattr seams (guard skips
+                                                      #   the new-entry veto for trim/exit; sizing maps the
+                                                      #   tier via derisk_tier) go live the moment a producer
+                                                      #   sets it. SCORING FENCE (P0.5 spec §8): a trim/exit
+                                                      #   is NOT a forward-return LONG — the producer that
+                                                      #   first emits one must fence trim/exit out of eval scoring.
     entry: str = ""
     exit_stop: str = ""
     size_tier: SizeTier | None = None                # from L3 sizing

@@ -59,6 +59,11 @@ class ReturnScorer:
             raise ValueError("ReturnScorer requires a ReturnOracle")
         base = self._baseline(decision_mem, entry_day, exit_day, oracle)
         out: dict[str, ScoredCandidate] = {}
+        # SCORING FENCE (P0.6 spec §6 / P0.5 spec §8): every candidate here is scored as a forward-return
+        # LONG from entry_day to exit_day. Today `Candidate.action` is always "enter", so scoring every
+        # candidate is correct. The producer that FIRST emits a trim/exit candidate (a derisk on a HELD
+        # name, not a new long) must fence those out of scoring — mirror the verdict `for_asof(kind="trade")`
+        # fence: score action=="enter" only. Inert today (no producer emits trim/exit); pin, do not skip.
         for c in decision.candidates:
             if c.symbol in out:
                 continue

@@ -66,6 +66,10 @@ class WalkForwardEval:
         steps: list[TrajectoryStep] = []
         for i, cursor in enumerate(days):
             uni = universes[i]
+            # SCORING FENCE (P0.6 spec §6 / P0.5 spec §8): these entries feed forward-return LONG scoring.
+            # Every Candidate.action is "enter" today; the producer that FIRST emits a trim/exit (a derisk
+            # on a HELD name, not a new long) MUST fence them out here — `... for c in decisions[i].candidates
+            # if c.action == "enter"` — mirroring the verdict `for_asof(kind="trade")` fence. Pin only.
             entries = {c.symbol: snap for c in decisions[i].candidates
                        if (snap := uni.get(c.symbol)) is not None}
             steps.append(TrajectoryStep(date=cursor, market=markets[i], decision=decisions[i],

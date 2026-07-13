@@ -25,6 +25,32 @@ def test_size_tier_must_be_valid():
         Candidate(symbol="RUN", size_tier="enormous")     # not a SizeTier literal
 
 
+# ── P0.6 recommendation-action vocabulary on the shared Candidate model (P0.5 spec §7) ───────────
+
+def test_candidate_action_defaults_to_enter():
+    """A minimal Candidate carries action='enter' — construction stays byte-identical to pre-P0.6."""
+    assert Candidate(symbol="RUN", pattern="gap_and_go").action == "enter"
+
+
+def test_candidate_action_accepts_trim_and_exit_and_round_trips():
+    for a in ("enter", "trim", "exit"):
+        c = Candidate(symbol="HELD", action=a)
+        assert c.action == a
+        assert Candidate.model_validate(c.model_dump()).action == a
+
+
+def test_candidate_action_rejects_unknown_value():
+    with pytest.raises(Exception):
+        Candidate(symbol="HELD", action="hold")           # not a RecommendationAction literal
+
+
+def test_candidate_action_feeds_the_p06_derisk_seam():
+    """The field the L4/L3 seams read (candidate_action) now resolves off a real Candidate."""
+    from alpha.sizing.action import candidate_action
+    assert candidate_action(Candidate(symbol="X")) == "enter"
+    assert candidate_action(Candidate(symbol="X", action="trim")) == "trim"
+
+
 def test_minimal_decision_package_backward_compat():
     d = DecisionPackage(date=date(2026, 6, 12))            # US-1d-style
     assert d.key_risks == [] and d.portfolio is None and d.human_confirm is None

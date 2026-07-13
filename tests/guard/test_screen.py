@@ -142,3 +142,30 @@ def test_screen_drops_halt_then_dump_candidate_and_records_reason():
     src = FakeSource(calendar=cal, bars={}, snapshots={date(2026, 6, 12): snap})
     out = screen_decision(_pkg("SPIKE"), source=src, state=_state())
     assert out.candidates == [] and any("SPIKE" in r and "halt-then-dump" in r for r in out.key_risks)
+
+
+# ── P0.6 trim-derisk action vocabulary (spec 2026-07-13-p06) ────────────────────────────────────
+# Candidate now carries `action` directly (spec 2026-07-13-p05 §7), so these construct it inline.
+
+def _apkg(*cands):
+    return DecisionPackage(date=date(2026, 6, 12), candidates=list(cands))
+
+
+def test_screen_does_not_veto_derisk_actions_in_risk_off():
+    # a `trim`/`exit` is a derisk on a HELD name, not a new chase -> the L4 new-entry veto skips it,
+    # even in a risk-off tape where an `enter` on the same name would be dropped.
+    src = _src({"HELD": [10.0, 11.0, 12.0]})
+    out = screen_decision(_apkg(Candidate(symbol="HELD", confidence=0.9, action="trim"),
+                                Candidate(symbol="ALSO", confidence=0.9, action="exit")),
+                          source=src, state=_state(sn=0.1))            # risk-off
+    assert {c.symbol for c in out.candidates} == {"HELD", "ALSO"}      # neither dropped
+    assert out.key_risks == []
+
+
+def test_screen_still_vetoes_enter_in_risk_off_alongside_derisk():
+    src = _src({"HELD": [10.0, 11.0, 12.0], "NEW": [10.0, 11.0, 12.0]})
+    out = screen_decision(_apkg(Candidate(symbol="HELD", confidence=0.9, action="trim"),
+                                Candidate(symbol="NEW", confidence=0.9, action="enter")),
+                          source=src, state=_state(sn=0.1))            # risk-off -> NEW (enter) vetoed
+    assert [c.symbol for c in out.candidates] == ["HELD"]              # trim kept, enter dropped
+    assert any("NEW" in r and "risk-off" in r for r in out.key_risks)

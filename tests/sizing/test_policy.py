@@ -68,3 +68,57 @@ def test_sizing_policy_sizes_inner_decision():
                         regime=RegimeRead(phase="trend", confidence=0.7, frontside=True, risk_gate=0.9))
     out = SizingPolicy(_Stub()).decide(_state(), CandidateUniverse.from_stocks([]))
     assert out.candidates[0].size_tier == "heavy"                    # 0.9 x 0.9 = 0.81 -> heavy
+
+
+# ── P0.6 trim-derisk action vocabulary (spec 2026-07-13-p06) ────────────────────────────────────
+# Candidate now carries `action` directly (spec 2026-07-13-p05 §7), so these construct it inline.
+
+def test_size_decision_trim_caps_tier_at_core_and_excludes_from_exposure():
+    regime = RegimeRead(phase="trend", confidence=0.7, frontside=True, risk_gate=0.9)
+    out = size_decision(_pkg(
+        Candidate(symbol="HELD", confidence=0.9, action="trim"),   # would size heavy -> capped core
+        Candidate(symbol="NEW", confidence=0.9, action="enter"),   # a real new bet
+        regime=regime), state=_state())
+    tiers = {c.symbol: c.size_tier for c in out.candidates}
+    assert tiers == {"HELD": "core", "NEW": "heavy"}
+    # only the `enter` name is a new bet -> exposure counts NEW alone (1.0), not the trimmed HELD
+    assert out.portfolio.total_exposure == 1.0
+
+
+def test_size_decision_exit_goes_flat_and_adds_no_exposure():
+    regime = RegimeRead(phase="trend", confidence=0.7, frontside=True, risk_gate=0.9)
+    out = size_decision(_pkg(Candidate(symbol="GONE", confidence=0.9, action="exit"),
+                             regime=regime), state=_state())
+    assert out.candidates[0].size_tier == "flat"
+    assert out.portfolio.total_exposure == 0.0                        # nothing entered
+
+
+def test_size_decision_byte_identical_when_all_enter():
+    # explicit annotation present but action=enter everywhere -> same as a plain Candidate package
+    regime = RegimeRead(phase="trend", confidence=0.7, frontside=True, risk_gate=0.8)
+    plain = size_decision(_pkg(Candidate(symbol="RUN", confidence=0.9),
+                               Candidate(symbol="LAG", confidence=0.4), regime=regime), state=_state())
+    annotated = size_decision(_pkg(Candidate(symbol="RUN", confidence=0.9, action="enter"),
+                                   Candidate(symbol="LAG", confidence=0.4, action="enter"),
+                                   regime=regime), state=_state())
+    assert {c.symbol: c.size_tier for c in plain.candidates} == {c.symbol: c.size_tier for c in annotated.candidates}
+    assert plain.portfolio == annotated.portfolio
+
+
+def test_sizing_annotations_are_verdict_neutral():
+    # scoring reads only symbol/pattern + forward returns; size_tier/action never enter the score
+    from alpha.eval.scorer import PoolScorer
+    from alpha.eval.oracle import DayMembership
+    from datetime import date as _date
+    regime = RegimeRead(phase="trend", confidence=0.7, frontside=True, risk_gate=0.9)
+    plain = size_decision(_pkg(Candidate(symbol="RUN", confidence=0.9),
+                               Candidate(symbol="LAG", confidence=0.6), regime=regime), state=_state())
+    annotated = size_decision(_pkg(Candidate(symbol="RUN", confidence=0.9, action="trim"),
+                                   Candidate(symbol="LAG", confidence=0.6, action="exit"),
+                                   regime=regime), state=_state())
+    dmem = DayMembership(gainers=frozenset({"RUN"}), losers=frozenset())
+    emem = DayMembership(gainers=frozenset({"RUN"}), losers=frozenset({"LAG"}))
+    kw = dict(decision_mem=dmem, exit_mem=emem, entry_day=CUR, exit_day=_date(2026, 6, 16), oracle=None)
+    sp = PoolScorer()
+    assert ({s: c.score for s, c in sp.score_step(plain, **kw).items()}
+            == {s: c.score for s, c in sp.score_step(annotated, **kw).items()})

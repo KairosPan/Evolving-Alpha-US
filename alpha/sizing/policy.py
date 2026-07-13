@@ -4,6 +4,7 @@ from typing import Callable
 
 from alpha.eval.decision import DecisionPackage, Portfolio
 from alpha.regime.classifier import GCycle
+from alpha.sizing.action import candidate_action, derisk_tier
 from alpha.sizing.correlation import Pick
 from alpha.sizing.portfolio import plan_portfolio
 from alpha.sizing.position import SizingConfig, size_tier
@@ -25,12 +26,18 @@ def size_decision(decision: DecisionPackage, *, state: MarketState,
     ("") names stand alone. DEFERRED: fill_feasibility (needs the intraday inference path — no eval/fill
     module), per-candidate taboo_check (the L4 guard drops vetoed candidates rather than soft-annotating),
     and a per-narrative-line regime read (needs theme-level market breadth we don't have offline).
+
+    P0.6 (spec 2026-07-13-p06): each candidate's tier is mapped through `derisk_tier(action, tier)` so a
+    trim/exit recommendation reduces to core / flat ('持仓降至核心仓位'). Holdings aren't modelled yet,
+    so `candidate_action` defaults to `enter` (byte-identical). The Portfolio exposure plan counts only
+    `enter` names — a derisk on a held name adds no NEW exposure.
     """
     regime = decision.regime or GCycle().read(state)
     rg = regime.risk_gate
-    sized = [c.model_copy(update={"size_tier": size_tier(c.confidence, rg)}) for c in decision.candidates]
+    sized = [c.model_copy(update={"size_tier": derisk_tier(candidate_action(c), size_tier(c.confidence, rg))})
+             for c in decision.candidates]
     plan = plan_portfolio([Pick(symbol=c.symbol, narrative=c.narrative, confidence=c.confidence)
-                           for c in sized], rg, config)
+                           for c in sized if candidate_action(c) == "enter"], rg, config)
     portfolio = Portfolio(total_exposure_budget=plan.total_exposure_budget,
                           correlated_groups=plan.correlated_groups,
                           total_exposure=plan.total_exposure, capped=plan.capped)

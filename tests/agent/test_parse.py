@@ -49,3 +49,18 @@ def test_prose_wrapped_json_extracted():
     raw = 'Here is my call:\n```json\n{"candidates": [{"symbol": "RUN", "pattern": "p"}]}\n```'
     pkg = parse_decision(raw, date(2026, 6, 12), _uni())
     assert [c.symbol for c in pkg.candidates] == ["RUN"]
+
+
+def test_parse_ignores_llm_supplied_action_and_size_tier():
+    """LOAD-BEARING (P0.6): parse_decision builds Candidate from a FIXED field allowlist
+    (symbol/name/pattern/reason/confidence/narrative). That allowlist is the ONLY thing keeping LLM
+    output from reaching the L4/L3 action seams — a model that emits "action":"trim" must NOT flip a
+    candidate to trim and thereby skip the L4 new-entry veto (nor set its own size_tier). The parser
+    drops both fields on the floor, so the produced Candidate stays action=="enter" / size_tier None.
+    If a future edit widens the allowlist to pass action through, this pin fails on purpose."""
+    raw = ('{"candidates": [{"symbol": "RUN", "pattern": "gap_and_go", "confidence": 0.8, '
+           '"action": "trim", "size_tier": "heavy"}]}')
+    pkg = parse_decision(raw, date(2026, 6, 12), _uni())
+    assert [c.symbol for c in pkg.candidates] == ["RUN"]
+    assert pkg.candidates[0].action == "enter"           # LLM "trim" ignored -> defaults enter
+    assert pkg.candidates[0].size_tier is None            # LLM "heavy" ignored -> unset (L3 assigns it)

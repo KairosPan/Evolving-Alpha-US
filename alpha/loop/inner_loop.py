@@ -152,6 +152,11 @@ class InnerLoop:
             prev_gainers = frozenset(s.symbol for s in universe.by_status("gainer"))
             record.record(cursor, classify_day(guarded.daily_snapshot(cursor)))
             decision = self._agent.decide(state, universe)
+            # SCORING FENCE (P0.6 spec §6 / P0.5 spec §8): these entries feed forward-return LONG scoring.
+            # Today every Candidate.action is "enter" (no producer emits trim/exit), so building an entry
+            # per candidate is correct. When a producer FIRST emits a trim/exit (a derisk on a HELD name,
+            # not a new long) it MUST fence them out here — `... for c in decision.candidates if c.action
+            # == "enter"` — mirroring the verdict `for_asof(kind="trade")` fence. Pin only; do not implement.
             entries = {c.symbol: snap for c in decision.candidates
                        if (snap := universe.get(c.symbol)) is not None}
             drafts.append({"date": cursor, "market": state, "decision": decision,

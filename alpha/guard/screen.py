@@ -13,6 +13,7 @@ from alpha.eval.decision import DecisionPackage
 from alpha.guard.veto import CandidateContext, veto
 from alpha.memory.aggregate import is_episode_taboo, summarize
 from alpha.regime.classifier import GCycle
+from alpha.sizing.action import candidate_action     # shared action vocabulary (leaf; no cycle)
 from alpha.state.market import MarketState
 
 SSR_DROP_PCT = -10.0   # Reg SHO Rule 201: a >=10% prior-day decline restricts short sales the next session
@@ -76,6 +77,11 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
     is wired, an §6 episode-taboo (a symbol with a strong PIT-masked nuke history). Record dropped reasons
     in key_risks, and populate the structured regime. Frozen models -> rebuilt via model_copy.
 
+    The new-entry veto applies to `enter` candidates only (P0.6): a `trim`/`exit` recommendation is a
+    derisk on a HELD name, not a new chase, so it passes through unvetoed. `Candidate.action` exists
+    (default "enter"); no producer emits trim/exit yet (holdings aren't modeled), so this is inert /
+    byte-identical today and activates the moment a producer sets the field (spec 2026-07-13-p06 §3.3).
+
     PIT-safe: all data reads go through a fresh GuardedSource(AsOfGuard(state.date)); SSR reads only
     prior-day bars (< as_of) and corp actions are announce-keyed (<= as_of); episode recall is masked at
     `for_asof(state.date)`. Vetoed candidates are dropped (never entered/scored) rather than annotated — a
@@ -91,6 +97,9 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
                    if episode_store is not None else {})   # limit=None: full PIT history (past the 50-cap)
     kept, notes = [], []
     for c in decision.candidates:
+        if candidate_action(c) != "enter":     # P0.6: a trim/exit is a derisk on a HELD name, not a
+            kept.append(c)                     #   new chase -> the L4 new-entry veto doesn't apply.
+            continue                           #   Inert today (no producer emits trim/exit yet).
         ctx = CandidateContext(symbol=c.symbol, regime=regime,
                                ssr=ssr_active(guarded, c.symbol, as_of),
                                reverse_split_pending=has_reverse_split_pending(corp, c.symbol, as_of),
