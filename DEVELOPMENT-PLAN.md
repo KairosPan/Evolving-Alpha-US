@@ -1,6 +1,7 @@
 # DEVELOPMENT-PLAN.md — Sonia-Kairos-US-Stock
 
-Status: drafted 2026-07-10 (backend-design round).
+Status: drafted 2026-07-10 (backend-design round); amended 2026-07-12 (growth-doctrine pivot —
+P0 program inserted, P1 enriched, P2 retargeted, P5 earnings feed promoted).
 
 Authority: charter (Evolving-Agent-Design-SoniaKairos.md) > Backend-Design.md > DEVELOPMENT-PLAN.md
 > code — a downstream doc never leads an upstream one; on conflict, amend upstream first, then sync
@@ -18,23 +19,83 @@ delete it here and record it there.
 
 Two tracks interleave — §1 PRODUCT (the co-pilot trades better) and §2 ARCHITECTURE (the organism
 gets safer/more governable). Neither blocks the other. Start order (user-approved): **A1 first**
-(small, urgent — a verified secret leak), then **P1+P2**. Cadence and gates: §5.
+(shipped 2026-07-11), then **P1+P2**; **amended 2026-07-12 (pivot): P0 precedes P1+P2** —
+P0.1–P0.3 are the enablers that make the growth doctrine real and Sonia big-edits possible.
+Cadence and gates: §5.
 
 ## Activation ledger (capability = done only when live)
 | Capability | Built | Live in prod | Path to ON |
 |---|---|---|---|
 | P-B/P-C operational-K coupling | ✓ (882-test arc, dark) | ✗ | `docs/superpowers/runbooks/p-b-p-c-activation.md` (A2 builds the missing steps) |
 | Daily production loop | producers only (`save_decisions` / `run_verdict --json` / `save_evolution`) | ✗ | P9 |
+| Growth-doctrine H (seeds v2) | manuscript v0.1 committed (`docs/doctrine/2026-07-12-us-growth-doctrine-draft.md`) | ✗ | P0 |
 
 ---
 
-## §1 PRODUCT TRACK — P1..P9
+## §1 PRODUCT TRACK — P0..P9
+### P0 — Growth-doctrine pivot program (added 2026-07-12)
+**Context.** The 2026-07-11/12 strategy pivot: doctrine moves from small-cap momo speculation to
+hot-sector growth investing (weeks–months horizon, earnings/industry-cycle driven). Source
+manuscript: `docs/doctrine/2026-07-12-us-growth-doctrine-draft.md` (v0.1 — user-accepted as the
+initial harness source; large Sonia-driven revisions expected). Research base:
+`docs/research/2026-07-11-us-growth-unknown-unknowns.html`. Manuscript §0.7 states the
+prerequisite set from the doctrine side: five of its six map onto P0.1–P0.3 / P0.5 / P0.6; the
+sixth (earnings feed, §0.7-6) is ordered in P5 as its first feed; P0.4 is a pivot addition beyond
+§0.7. THIS section is the ordering authority (§0.7's blanket "阻塞蒸馏" wording refined
+2026-07-12 to per-item blocking semantics, same landing).
+**P0.1 — Phase-vocabulary decision + `normalize_phases` warning.** Decide how the three-clock
+enums (market `confirmed_uptrend/under_pressure/correction` + `panic_state` flag; theme
+`emerging/institutional/public_laggard/exhaustion`; stock `base/advance/top/decline`) relate to
+`CANONICAL_PHASES`' six momo phases — extend / parallel vocabularies / explicit mapping, one
+decision memo before any phases-tagged distillation. Fix `normalize_phases`' silent unknown-token
+drop → loud warning (today's worst failure shape: no crash, just wrong). Blocks P0.3, P0.5, P2.
+**P0.2 — Manuscript/seeds lint trio.** Pre-commit script: entry-ID existence/uniqueness, 道/术
+`.rule` pairing (no orphans/broken links), controlled-enum legality, Appendix-B
+distillation-ledger coverage. The safety net for Sonia-driven manuscript edits — the manuscript's
+§0.1/§0.4 contracts have no enforcer without it (§0.5's ritual protections land as P0.3's presets).
+**P0.3 — seeds v2 pack + re-init path.** Distill the manuscript (§1–§4 entries per its Appendix B
+routing) into a fresh growth seed pack (doctrine/skills/memory) and init a new H; the momo H stays
+untouched — co-residence is barred (momo immutable red lines have no delete op; mixing yields
+contradictory prompt doctrine). Preset two protections: a `scale_disambiguation` doctrine entry
+(Sonia must confirm the scale — market/theme/stock — whenever the user speaks 轮回 cycle words)
+and the extract_ops rule "target section/skill not found → no_edit + reason, never
+nearest-neighbor rewrite". Deferred numbers (liquidity floor, single-name cap) get re-confirmed
+with the user at distillation time. Pack-selection env: `ALPHA_SEED_PACK` (default momo;
+production load_seeds callers deliberately unrewired until P0.5).
+**P0.4 — Growth perception features (computable from existing bars).** RS percentile ranking,
+breadth family (% above 200DMA, net new highs, advance/decline), Trend Template 8-criteria filter;
+a switchable universe entry (Trend Template screen vs today's daily-gainer screen), default OFF,
+byte-identical when off. Switch env: `ALPHA_UNIVERSE_SCREEN` (default gainer; empty = unset).
+**Activation precondition (2026-07-12 review):** raw/unadjusted-price RS and SMA windows are
+split-distorted (a reverse split fabricates RS ~100) — corp-action cross-check (P5) or explicit
+user acceptance required before flipping the screen live.
+**P0.5 — `prompt.py` isomorphism.** Persona (momo → sector-growth co-pilot), injection order
+(thesis material before the quantitative panel; guard state as tail constraints only),
+output-contract phase enum per P0.1. Without this the manuscript's "structure = reasoning order"
+promise is paper (adversarial-review finding; recorded in manuscript §0.7-3).
+**P0.6 — Guard/sizing trim-derisk action vocabulary.** L4/L3 today can only veto new entries;
+`derisk_on_breakdown.rule` (reduce to core position) has no execution surface — extend the action
+vocabulary, or the rule stays explicitly prose-level (it is so marked in the manuscript).
+**Ordering.** P0.1 → P0.2 → (P0.3 ∥ P0.4) → P0.5 → P0.6. P0.3's full distillation waits for a
+stable-enough manuscript; its pack skeleton doesn't.
+**Status 2026-07-12.** P0.1–P0.4 BUILT (4 parallel opus agents) + adversarially reviewed (5-lens
+workflow, 9 confirmed findings all folded, 0 refuted); Option B ratified by user. P0.5/P0.6 remain;
+the program-level acceptance gate (one growth DecisionPackage offline) opens after P0.5.
+**Acceptance gate.** Kairos produces one growth-doctrine `DecisionPackage` offline from the new H
+(paper, keyless); momo path byte-identical throughout; P0.2 lint green on the manuscript.
+**Sources.** Manuscript §0.7; the 2026-07-12 structure-synthesis adversarial review — its three
+pipeline breaks (doctrine-no-create-op, manuscript-out-of-loop, momo/growth co-residence) are
+recorded in manuscript §0.4–§0.5; research report §5.
+
 ### P1 — Adversarial trap-day battery
 **Goal.** A `tests/` battery in the PIT-firewall-quartet style: synthetic `FakeSource` blowoff-top /
 backside days where any new long = fail, run through the full `SizingPolicy(GuardedPolicy(…))` stack.
-Trap days stay OUT of live eval/verdict scoring.
+Trap days stay OUT of live eval/verdict scoring. **Pivot addition (2026-07-12):** a panic-state
+trap-day class — bear market + high volatility + sharp index rebound, where any new LEADER long =
+fail (the momentum-crash window; manuscript `panic_state_ban.rule`).
 **Why first.** The stated safety guardrail ordered BEFORE P2's threshold loosening — the battery
-must exist so recalibrating GCycle cannot silently re-open chase-risk entries.
+must exist so recalibrating GCycle cannot silently re-open chase-risk entries (post-pivot reading:
+so the three-clock successor cannot silently re-open buying into blowoffs or panic rebounds).
 **Acceptance gate.** Battery fails if zero trap days load (no vacuous pass); zero new longs on every
 trap day through the full decorator stack; suite stays offline.
 **Sources.** `docs/findings/2026-07-01-kairos-design-mining.md` §2.5, §6 order-4.
@@ -61,7 +122,11 @@ at the concept level only. Recalibration should target that frame, not the curre
 see `docs/research/2026-07-11-us-growth-unknown-unknowns.html` (adversarially verified research:
 three-layer regime proposal — market three-state × risk layer [momentum-crash panic state / rates /
 liquidity] × theme lifecycle; Trend Template universe filter; earnings calendar = first data gap).
-The user will write the new strategies into H (harness + memory) themselves.
+**2026-07-12 update:** the doctrine manuscript v0.1 now exists
+(`docs/doctrine/2026-07-12-us-growth-doctrine-draft.md`, Claude-drafted, user-accepted; Sonia
+iterations expected). P2's recalibration target is therefore the manuscript's three-clock regime
+(§1), and GCycle's successor reads market three-state + the panic flag; blocked by P0.1's
+vocabulary decision.
 
 ### P3 — Corp-actions tri-state guard-blind fix (verified hole)
 **Goal.** Absent `corp_actions.parquet` → empty frame → dilution/reverse-split (and
@@ -88,6 +153,10 @@ still returns RAW; `capture_window` works against the new vendor; PIT firewall t
 
 ### P5 — Real feeds (consume-paths wired; ingestion missing)
 **Goal.** Flip the offline placeholders live, each as a CompositeSource backend (P4):
+- **Earnings calendar + actual/estimate EPS & revenue** (promoted to FIRST feed by the 2026-07-12
+  pivot — the growth doctrine's only hard data gap: `earnings_gap_discipline.rule` and thesis-card
+  verification nodes are manual until it lands; candidates: EDGAR company facts (free, filing-date
+  PIT key), vendor calendars).
 - **FINRA short interest** (`short_interest`/`days_to_cover`; activates `short_squeeze` via `depends_on`).
 - **EDGAR/SEC offerings** for dilution + the **withdrawal/expiry lifecycle** — today any announced
   ATM/shelf/offering vetoes forever. Design input (kairos-mining §3): `updates_since`-shaped typed
@@ -399,7 +468,8 @@ Consciously not queued; each row carries its recorded revisit trigger.
 
 ## §5 CADENCE & GATES
 - **Interleave.** The two tracks run interleaved; neither blocks the other. Start order
-  (user-approved): **A1 first** (small, urgent — the verified secret leak), then **P1+P2**.
+  (user-approved): **A1 first** (small, urgent — the verified secret leak; shipped 2026-07-11),
+  then **P1+P2**; amended 2026-07-12: **P0 (pivot program) precedes P1+P2**.
 - **Discipline.** Every arc runs the repo's established loop: brainstorm/spec → plan →
   subagent-driven build → adversarial multi-lens review, offline tests throughout.
 - **Sync rule.** An arc is not done until all three are updated: Backend-Design.md (its gap-ledger
