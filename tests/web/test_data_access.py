@@ -16,6 +16,55 @@ def test_phases_are_the_canonical_six_cycle_in_order():
     assert all(p.label and p.tagline for p in da.PHASES)
 
 
+def test_growth_states_are_the_three_market_clock_states_stop_to_go():
+    # left→right (pos 0..2) = rising risk appetite = stop | caution | go
+    assert [s.key for s in da.GROWTH_STATES] == ["correction", "under_pressure", "confirmed_uptrend"]
+    assert [s.tone for s in da.GROWTH_STATES] == ["stop", "caution", "go"]
+    assert [s.pos for s in da.GROWTH_STATES] == [0, 1, 2]
+    # only confirmed_uptrend is frontside (matches growth_clock._MAP)
+    assert {s.key for s in da.GROWTH_STATES if s.frontside} == {"confirmed_uptrend"}
+    # each state carries the full "market:<state>" token + display copy
+    assert all(s.token == f"market:{s.key}" and s.label and s.tagline for s in da.GROWTH_STATES)
+
+
+def test_is_growth_phase_routes_on_the_market_prefix():
+    # growth tokens carry the "market:" prefix; momo tokens never do (disjoint vocabularies)
+    assert da.is_growth_phase("market:confirmed_uptrend") is True
+    assert da.is_growth_phase("market:panic_state") is True
+    assert da.is_growth_phase("trend") is False
+    assert da.is_growth_phase("washout") is False
+    assert da.is_growth_phase(None) is False
+
+
+def test_growth_state_key_strips_the_scale_prefix():
+    assert da.growth_state_key("market:under_pressure") == "under_pressure"
+    assert da.growth_state_key("trend") is None
+    # a legal-but-non-dial market token (panic) yields a key not in the three-state table
+    assert da.growth_state_key("market:panic_state") == "panic_state"
+    assert "panic_state" not in da.GROWTH_STATE_BY_KEY
+
+
+def test_detect_panic_fires_on_the_token_or_a_key_risk():
+    assert da.detect_panic("market:panic_state") is True
+    assert da.detect_panic("market:correction", ["panic-state rebound: leaders underperform"]) is True
+    assert da.detect_panic("market:confirmed_uptrend", ["binary PDUFA inside the horizon"]) is False
+    assert da.detect_panic("trend", []) is False
+    assert da.detect_panic(None, None) is False
+
+
+def test_growth_dial_arcs_are_three_60deg_arcs_across_the_top_semicircle():
+    dial = da.growth_dial_arcs()
+    assert len(dial["segments"]) == 3
+    # each arc rotates into the 180°→360° top semicircle (west→top→east), 60° apart
+    rotates = [s["rotate"] for s in dial["segments"]]
+    assert rotates == [183.0, 243.0, 303.0]
+    # markers sit on the ring (r=46) at the centre of each slot — mid arc peaks at the top (my minimal)
+    assert dial["segments"][1]["mx"] == da.RING_CX          # centre arc marker centred horizontally
+    assert min(s["my"] for s in dial["segments"]) == dial["segments"][1]["my"]
+    # geometry carries the state so the template can tone/label each arc
+    assert [s["state"].tone for s in dial["segments"]] == ["stop", "caution", "go"]
+
+
 def test_load_brain_reads_the_real_seeds():
     state = da.load_brain()
     assert isinstance(state, HarnessState)

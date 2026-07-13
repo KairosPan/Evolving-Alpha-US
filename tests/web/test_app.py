@@ -90,28 +90,70 @@ def test_decisions_handles_no_trade_package(client, tmp_path, monkeypatch):
     assert "Sample package" not in r.text
 
 
-def test_decisions_renders_growth_market_clock_regime(client, tmp_path, monkeypatch):
-    """P2: a growth-pack DecisionPackage carries a non-canonical market-clock phase
-    ("market:confirmed_uptrend"), which is NOT in the six-phase PHASE_BY_KEY. The console must render
-    it (the growth token as the pill label), not 500 on the unmapped phase_by_key lookup."""
+def _growth_pkg(phase="market:confirmed_uptrend", frontside=True, risk_gate=0.6, key_risks=None):
     from datetime import date
     from alpha.eval.decision import Candidate, DecisionPackage
     from alpha.regime.classifier import RegimeRead
-    pkg = DecisionPackage(date=date(2026, 1, 5), candidates=[Candidate(symbol="NVDA")],
-                          regime=RegimeRead(phase="market:confirmed_uptrend", confidence=0.6,
-                                            frontside=True, risk_gate=0.6))
+    return DecisionPackage(date=date(2026, 1, 5), candidates=[Candidate(symbol="NVDA")],
+                           regime=RegimeRead(phase=phase, confidence=0.6, frontside=frontside,
+                                             risk_gate=risk_gate),
+                           key_risks=key_risks or [])
+
+
+def test_decisions_renders_the_growth_market_clock_dial(client, tmp_path, monkeypatch):
+    """P2 → instrument: a growth-pack DecisionPackage carries a market-clock phase
+    ("market:confirmed_uptrend", NOT in the six-phase PHASE_BY_KEY). The console renders the real
+    three-state dial (legible state label + tagline), never the raw token, and stays 200."""
+    f = tmp_path / "decision.json"
+    f.write_text(_growth_pkg().model_dump_json(), encoding="utf-8")
+    monkeypatch.setenv("ALPHA_WEB_DECISION", str(f))
+    r = client.get("/decisions")
+    assert r.status_code == 200
+    assert "gdialwrap" in r.text                                      # the three-state dial rendered
+    assert "Confirmed uptrend" in r.text                             # legible state label, not a raw token
+    assert "A follow-through day confirmed the uptrend" in r.text    # the state tagline
+    assert "market:confirmed_uptrend" not in r.text                 # the raw token no longer leaks
+    assert 'aria-label="Growth market clock' in r.text              # accessible (not colour-only)
+
+
+def test_decisions_growth_state_tagline_tracks_the_active_state(client, tmp_path, monkeypatch):
+    """The active state drives the readout: under_pressure lights the caution arc + its own tagline."""
+    f = tmp_path / "decision.json"
+    f.write_text(_growth_pkg(phase="market:under_pressure", frontside=False,
+                             risk_gate=0.35).model_dump_json(), encoding="utf-8")
+    monkeypatch.setenv("ALPHA_WEB_DECISION", str(f))
+    r = client.get("/decisions")
+    assert r.status_code == 200
+    assert "Under pressure" in r.text and "garc tone--caution on" in r.text
+    assert "No new positions; halve adds" in r.text
+
+
+def test_decisions_surfaces_the_panic_badge_when_flagged(client, tmp_path, monkeypatch):
+    """Panic is an orthogonal cross-cut flag (guard veto reason in key_risks). It surfaces as a badge
+    alongside — not instead of — the three-state read, and the page stays 200."""
+    pkg = _growth_pkg(phase="market:under_pressure", frontside=False, risk_gate=0.35,
+                      key_risks=["panic-state rebound: leaders systematically underperform — a crash window."])
     f = tmp_path / "decision.json"
     f.write_text(pkg.model_dump_json(), encoding="utf-8")
     monkeypatch.setenv("ALPHA_WEB_DECISION", str(f))
     r = client.get("/decisions")
     assert r.status_code == 200
-    assert "market:confirmed_uptrend" in r.text and "frontside" in r.text
+    assert "panic-badge" in r.text and "panic-state" in r.text
+    assert "leaders systematically underperform" in r.text
+    assert "gdialwrap" in r.text                                      # the dial is still there too
 
 
-def test_deck_dashboard_renders_growth_market_clock_phase(client, monkeypatch):
-    """P2 fix #5: the /deck ring + tagline lookups must degrade for a non-canonical market-clock phase
-    (defensive — the ring is momo-shaped; a growth instrument is deferred). Inject a growth regime and
-    assert 200 (the ring/tagline guards render the raw token rather than 500 on phase_by_key)."""
+def test_decisions_no_panic_badge_when_unflagged(client, tmp_path, monkeypatch):
+    f = tmp_path / "decision.json"
+    f.write_text(_growth_pkg(key_risks=["binary PDUFA inside the 2-day horizon"]).model_dump_json(),
+                 encoding="utf-8")
+    monkeypatch.setenv("ALPHA_WEB_DECISION", str(f))
+    r = client.get("/decisions")
+    assert r.status_code == 200 and "panic-badge" not in r.text
+
+
+def test_deck_renders_the_growth_dial_not_the_six_phase_ring(client, monkeypatch):
+    """/deck: a growth regime routes to the three-state dial; the momo six-phase ring is absent."""
     from alpha.regime.classifier import RegimeRead
     from alpha_web import sample
     monkeypatch.setattr(sample, "sample_regime",
@@ -119,7 +161,30 @@ def test_deck_dashboard_renders_growth_market_clock_phase(client, monkeypatch):
                                            frontside=True, risk_gate=0.6))
     r = client.get("/deck")
     assert r.status_code == 200
-    assert "market:confirmed_uptrend" in r.text
+    assert "gdialwrap" in r.text and 'class="ring"' not in r.text     # dial, not the six-phase ring
+    assert "Confirmed uptrend" in r.text and "market:confirmed_uptrend" not in r.text
+
+
+def test_deck_growth_panic_phase_stays_200(client, monkeypatch):
+    """Defensive: a bare market:panic_state as the phase (legal token, not one of the three states)
+    renders the panic badge and does not 500 (no active dial arc, no crash)."""
+    from alpha.regime.classifier import RegimeRead
+    from alpha_web import sample
+    monkeypatch.setattr(sample, "sample_regime",
+                        lambda: RegimeRead(phase="market:panic_state", confidence=0.5,
+                                           frontside=False, risk_gate=0.15))
+    r = client.get("/deck")
+    assert r.status_code == 200 and "panic-badge" in r.text
+
+
+def test_momo_deck_and_decisions_keep_the_six_phase_ring_and_no_growth_instrument(client):
+    """Byte-identity guard: the default momo packages stay on the six-phase ring / pill — the growth
+    dial and panic badge never appear on a momo render (the momo path is unchanged)."""
+    deck = client.get("/deck").text
+    dec = client.get("/decisions").text
+    assert 'class="ring"' in deck and "Washout" in deck              # the six-phase ring + a momo phase
+    for growth_marker in ("gdialwrap", "panic-badge", "Confirmed uptrend", "Under pressure"):
+        assert growth_marker not in deck and growth_marker not in dec
 
 
 def test_real_decision_artifact_renders_without_sample_badge(client, tmp_path, monkeypatch):
