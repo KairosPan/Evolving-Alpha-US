@@ -1,4 +1,5 @@
 from __future__ import annotations
+from datetime import date as Date, timedelta
 from typing import Callable
 from pydantic import BaseModel, ConfigDict
 from alpha.memory.episodes import Episode
@@ -42,6 +43,55 @@ def summarize(episodes: list[Episode], *, key: Callable[[Episode], str]) -> dict
 def is_episode_taboo(stats: EpisodeStats | None, *, min_samples: int = 3, nuke_rate: float = 0.5) -> bool:
     """A symbol/skill is taboo when it has enough history (>= min_samples) that mostly nukes (>= nuke_rate)."""
     return stats is not None and stats.n >= min_samples and stats.nuke_rate >= nuke_rate
+
+
+# ---------------------------------------------------------------------------
+# Taboo scoping refinements (P7 #2): phase-scoped + recency-windowed.
+# Both are ADDITIVE, default-off pure filters over the episode list. The v1 taboo path
+# (screen.py: summarize(for_asof(...)) -> is_episode_taboo) is UNCHANGED; a future guard wiring
+# swaps its is_episode_taboo(...) call for is_episode_taboo_scoped(..., phase=, window_days=, asof=).
+# ---------------------------------------------------------------------------
+
+def _identity(p: str) -> str:
+    return p
+
+
+def within_recency_window(episodes: list[Episode], *, asof: Date, window_days: int) -> list[Episode]:
+    """Keep episodes whose outcome became knowable within the last `window_days` of `asof`:
+    (asof - window_days) <= learned_asof <= asof. Enforces BOTH bounds, so it is PIT-safe even on an
+    un-masked list — an old blowup ages out of the window (stops tabooing a name forever)."""
+    lo = asof - timedelta(days=window_days)
+    return [e for e in episodes if lo <= (e.learned_asof or e.exit_date) <= asof]
+
+
+def matching_phase(episodes: list[Episode], *, phase: str,
+                   phase_of: Callable[[str], str | None] = _identity) -> list[Episode]:
+    """Keep episodes whose canonicalized phase equals `phase_of(phase)`. `phase_of` defaults to
+    identity (callers pass canonical tokens); a guard wiring passes phase_from_read for RAW-prose
+    episode phases (episodes store the raw regime_read in `.phase`)."""
+    target = phase_of(phase)
+    return [e for e in episodes if phase_of(e.phase or "") == target]
+
+
+def is_episode_taboo_scoped(episodes: list[Episode], symbol: str, *,
+                            phase: str | None = None,
+                            phase_of: Callable[[str], str | None] = _identity,
+                            window_days: int | None = None, asof: Date | None = None,
+                            min_samples: int = 3, nuke_rate: float = 0.5) -> bool:
+    """Phase-scoped and/or recency-windowed taboo test for one symbol (pure, default-off).
+
+    With no `phase` and no `window_days` this reduces EXACTLY to the v1 semantics
+    `is_episode_taboo(summarize(episodes, key=symbol).get(symbol))`. Pass `phase` to veto only when
+    the name nukes in the CURRENT regime; pass `window_days` (+`asof`) to ignore blowups older than
+    the window. Both compose. `window_days` requires `asof` (raises ValueError — fail loud)."""
+    if window_days is not None:
+        if asof is None:
+            raise ValueError("window_days requires asof")
+        episodes = within_recency_window(episodes, asof=asof, window_days=window_days)
+    if phase is not None:
+        episodes = matching_phase(episodes, phase=phase, phase_of=phase_of)
+    stats = summarize(episodes, key=lambda e: e.symbol).get(symbol)
+    return is_episode_taboo(stats, min_samples=min_samples, nuke_rate=nuke_rate)
 
 
 # ---------------------------------------------------------------------------
