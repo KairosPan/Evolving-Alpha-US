@@ -39,6 +39,7 @@ from alpha.loop.compare import ComparisonReport, MultiWindowReport, compare_harn
 from alpha.loop.inner_loop import LoopConfig
 from alpha.llm.config import make_client
 from alpha.memory.store import EpisodeStore
+from alpha.universe import resolve_universe_screen
 
 SEEDS_DIR = Path(__file__).resolve().parents[1] / "seeds"
 
@@ -129,10 +130,14 @@ def format_comparison(cr: ComparisonReport, *, header: str = "") -> str:
 
 
 def comparison_to_view(cr: ComparisonReport, *, start: Date, end: Date, horizon: int,
-                       screen: bool) -> dict:
+                       screen: bool, universe_screen: str = "gainer") -> dict:
     """Map a ComparisonReport to the flat UI dict the web console's verdict page consumes (the shape of
     `alpha_web.sample.sample_verdict()`, NOT ComparisonReport's own shape). Write this with `--json` and
-    point `ALPHA_WEB_VERDICT` (or drop several into `ALPHA_WEB_VERDICTS_DIR`) at it to browse a real run."""
+    point `ALPHA_WEB_VERDICT` (or drop several into `ALPHA_WEB_VERDICTS_DIR`) at it to browse a real run.
+
+    `universe_screen` is the RESOLVED candidate screen ("gainer"/"trend_template") — recorded under its
+    own unambiguous key, distinct from `screen` (the L4 guard flag), so the browsed run is unambiguous
+    about which universe entry produced it."""
     def arm(a) -> dict:
         r = a.report
         d = {"n_decisions": r.n_decisions, "n_candidates": r.n_candidates,
@@ -156,7 +161,7 @@ def comparison_to_view(cr: ComparisonReport, *, start: Date, end: Date, horizon:
 
     return {
         "window": {"start": start.isoformat(), "end": end.isoformat(), "horizon": horizon,
-                   "windows": 1, "screen": screen},
+                   "windows": 1, "screen": screen, "universe_screen": universe_screen},
         "arms": {name: arm(a) for name, a in cr.arms.items()},
         "headline": {"hch_minus_hexpert": cr.hch_minus_hexpert_mean_excess,
                      "hch_beats_hexpert": cr.hch_beats_hexpert},
@@ -194,16 +199,20 @@ def main() -> None:
     source = SnapshotSource(PITStore(pit_root))
     verify_checksums(pit_root, fail_closed=True)   # D6: fail closed — a verdict must run on pinned data
     screen = not args.no_screen
+    universe_screen = resolve_universe_screen()   # RESOLVED entry the build will use (env ALPHA_UNIVERSE_SCREEN)
     temp = os.environ.get("ALPHA_LLM_TEMPERATURE", "0")
     print("=== Sonia-Kairos-US-Stock verdict run ===")
     print(f"window: {args.start} .. {args.end}   horizon={args.horizon}  windows={args.windows}  "
-          f"screen={screen}  shadow={args.shadow}")
+          f"screen={screen}  universe_screen={universe_screen}  shadow={args.shadow}")
     for role in ("agent", "refiner"):
         prov = os.environ.get(f"ALPHA_{role.upper()}_PROVIDER", "(default)")
         model = os.environ.get(f"ALPHA_{role.upper()}_MODEL", "(default)")
         print(f"  {role:<8} provider={prov} model={model} temp={temp}")
     if temp != "0":
         print("  WARNING: ALPHA_LLM_TEMPERATURE != 0 — the verdict will not be deterministic.")
+    if universe_screen != "gainer":
+        print(f"  WARNING: ALPHA_UNIVERSE_SCREEN={universe_screen} — this verdict measures the "
+              f"{universe_screen} screen, NOT the default gainer universe.")
     print()
 
     recall_store = EpisodeStore.open(args.brain, create_if_missing=False) if args.brain else None
@@ -219,7 +228,8 @@ def main() -> None:
         print(format_comparison(result))
         if args.json:
             view = comparison_to_view(result, start=args.start, end=args.end,
-                                      horizon=args.horizon, screen=screen)
+                                      horizon=args.horizon, screen=screen,
+                                      universe_screen=universe_screen)
             Path(args.json).write_text(json.dumps(view, indent=2), encoding="utf-8")
             print(f"  wrote console JSON -> {args.json}  (ALPHA_WEB_VERDICT={args.json} python -m alpha_web)")
 

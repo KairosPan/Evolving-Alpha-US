@@ -74,6 +74,19 @@ def test_comparison_to_view_matches_console_shape():
     assert view["window"]["start"] == start.isoformat()
 
 
+def test_comparison_to_view_records_universe_screen():
+    # the resolved universe screen rides its OWN key in the console JSON, distinct from the L4 `screen`
+    # flag (which is a bool) — so a browsed run is unambiguous about which universe entry produced it.
+    src, start, end = _fake()
+    cr = rv.run_verdict(src, start, end, agent_llm_factory=_AGENT, refiner_llm_factory=_REFINER)
+    view = rv.comparison_to_view(cr, start=start, end=end, horizon=2, screen=True,
+                                 universe_screen="trend_template")
+    assert view["window"]["universe_screen"] == "trend_template"
+    assert view["window"]["screen"] is True                          # L4 flag not overloaded
+    default = rv.comparison_to_view(cr, start=start, end=end, horizon=2, screen=True)
+    assert default["window"]["universe_screen"] == "gainer"          # default momo entry
+
+
 def test_run_verdict_json_flag_writes_console_file(tmp_path, monkeypatch):
     # the CLI --json path: write a file the console can read back
     import json

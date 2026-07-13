@@ -1,6 +1,8 @@
 # alpha/universe/universe.py
 from __future__ import annotations
 
+import os
+
 from alpha.universe.stock import StockSnapshot, StockStatus
 
 
@@ -43,6 +45,25 @@ import pandas as pd
 from alpha.features.runner import consecutive_up_days
 
 RUNNER_LOOKBACK = 30   # max consecutive-up-days probed (a run of n up-days needs n+1 closes)
+TREND_TEMPLATE_LOOKBACK = 300   # trailing trading days fetched per symbol for the Trend Template screen
+                                # (comfortably covers the RS 12-month + SMA200-rising 1-month windows)
+
+UNIVERSE_SCREEN_ENV = "ALPHA_UNIVERSE_SCREEN"
+UNIVERSE_SCREENS = ("gainer", "trend_template")
+
+
+def resolve_universe_screen(screen: str | None = None) -> str:
+    """The single universe-screen resolution, shared by `build_universe` and the verdict/decisions
+    producers so the provenance a script prints matches the screen the build actually runs.
+
+    Order: explicit `screen` arg, then env `ALPHA_UNIVERSE_SCREEN`, then the "gainer" default. A
+    set-but-EMPTY env behaves like unset (the `or DEFAULT` idiom, mirroring
+    `alpha/harness/loader.py::active_pack_name`) — an empty string never crashes the screen dispatch.
+    An unknown value raises rather than silently falling back to the wrong screen."""
+    resolved = screen or os.environ.get(UNIVERSE_SCREEN_ENV) or "gainer"
+    if resolved not in UNIVERSE_SCREENS:
+        raise ValueError(f"unknown universe screen: {resolved!r} (want 'gainer' or 'trend_template')")
+    return resolved
 
 
 def _trailing_bars(source, symbol: str, day: Date, lookback: int):
@@ -94,8 +115,18 @@ def _trailing_rvol(source, symbol: str, day: Date, window: int, *, bars=None) ->
 
 
 def build_universe(source, day: Date, *, gainer_pct: float = 10.0,
-                   gap_pct: float = 5.0, rvol_window: int = 20) -> CandidateUniverse:
-    """Screen the daily cross-section for gainers / gap-ups / losers; attach trailing-only RVOL."""
+                   gap_pct: float = 5.0, rvol_window: int = 20,
+                   screen: str | None = None) -> CandidateUniverse:
+    """Screen the daily cross-section for gainers / gap-ups / losers; attach trailing-only RVOL.
+
+    Switchable screen (P0.4): `screen` selects the entry — "gainer" (the momo default, this body) or
+    "trend_template" (the growth-doctrine Minervini filter). Resolution (explicit arg / env
+    `ALPHA_UNIVERSE_SCREEN` / "gainer" default, empty env == unset) is shared with the producers via
+    `resolve_universe_screen`. Default is byte-identical to the pre-P0.4 behavior; an unknown value
+    raises rather than silently falling back to the wrong screen."""
+    resolved = resolve_universe_screen(screen)
+    if resolved == "trend_template":
+        return build_trend_template_universe(source, day)
     snap = source.daily_snapshot(day)
     stocks: dict[str, StockSnapshot] = {}
     if snap is None or snap.empty:
@@ -128,6 +159,47 @@ def build_universe(source, day: Date, *, gainer_pct: float = 10.0,
             pct_change=pct, gap_pct=gap,
             volume=(float(rec["volume"]) if rec.get("volume") is not None else None),
             rvol=rvol, consecutive_up_days=cud,
+            short_interest=_opt_float(rec.get("short_interest")),
+            days_to_cover=_opt_float(rec.get("days_to_cover")),
+            free_float=_opt_float(rec.get("free_float")),
+            options_flow=_opt_float(rec.get("options_flow")),
+            social_sentiment=_opt_float(rec.get("social_sentiment")),
+        )
+    return CandidateUniverse(stocks)
+
+
+def build_trend_template_universe(source, day: Date, *,
+                                  lookback: int = TREND_TEMPLATE_LOOKBACK) -> CandidateUniverse:
+    """Growth-doctrine universe (P0.4): the day's cross-section filtered to names that pass ALL EIGHT
+    Minervini Trend Template criteria (docs/doctrine §4.1 `trend_template.rule`). Each kept name carries
+    status "trend_template" and its cross-sectional `rs_percentile`.
+
+    RS is cross-sectional, so this is a two-pass screen: fetch each snapshot symbol's trailing bars
+    (one guard-safe end==day fetch per symbol), rank RS across the whole snapshot, then keep the
+    passers. Symbols without enough history fail explicitly inside `trend_template_screen` (never
+    silently pass). FIREWALL: bars are fetched with end==day (<=as_of); pass a GuardedSource."""
+    from alpha.features.trend_template import trend_template_screen
+
+    snap = source.daily_snapshot(day)
+    stocks: dict[str, StockSnapshot] = {}
+    if snap is None or snap.empty:
+        return CandidateUniverse(stocks)
+    records = {str(rec["symbol"]): rec for rec in snap.to_dict("records")}
+    bars_by_symbol = {sym: _trailing_bars(source, sym, day, lookback) for sym in records}
+    for symbol, res in trend_template_screen(bars_by_symbol, day).items():
+        if not res.passes:
+            continue
+        rec = records[symbol]
+        close, prev, open_ = rec.get("close"), rec.get("prev_close"), rec.get("open")
+        pct = ((close - prev) / prev * 100.0) if (close is not None and prev) else None
+        gap = ((open_ - prev) / prev * 100.0) if (open_ is not None and prev) else None
+        stocks[symbol] = StockSnapshot(
+            symbol=symbol, name=str(rec.get("name", "")), status="trend_template",
+            close=(float(close) if close is not None else None),
+            prev_close=(float(prev) if prev is not None else None),
+            pct_change=pct, gap_pct=gap,
+            volume=(float(rec["volume"]) if rec.get("volume") is not None else None),
+            rs_percentile=res.rs_percentile,
             short_interest=_opt_float(rec.get("short_interest")),
             days_to_cover=_opt_float(rec.get("days_to_cover")),
             free_float=_opt_float(rec.get("free_float")),

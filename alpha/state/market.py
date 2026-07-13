@@ -30,4 +30,10 @@ class MarketState(BaseModel):
     sentiment_raw: float = 0.0                    # raw composite (normalized into sentiment_norm)
     follow_through_rate: float | None = None      # fraction of prior-day gainers still gainers today
     gap_and_go_count: int = 0                     # gainers that gapped up and held
+    # ── growth-doctrine breadth family (P0.4) — default None ("not computed"), consumed by a future
+    #    (P2) three-clock regime reader; None until the caller threads a BreadthReading in ──
+    pct_above_200dma: float | None = None         # fraction of the market above its 200-day SMA
+    net_new_highs: int | None = None              # 52-week new highs minus new lows
+    advances: int | None = None                   # symbols up on the day
+    declines: int | None = None                   # symbols down on the day
     as_of: DateTime                              # snapshot timestamp (lookahead audit)

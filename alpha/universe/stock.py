@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-StockStatus = Literal["gainer", "gap_up", "loser", "runner"]
+StockStatus = Literal["gainer", "gap_up", "loser", "runner", "trend_template"]
 
 
 class StockSnapshot(BaseModel):
@@ -26,5 +26,7 @@ class StockSnapshot(BaseModel):
     free_float: float | None = None         # tradeable float (millions of shares); US-3d
     options_flow: float | None = None       # net near-the-money call-flow score (gamma fuel); US-3f
     social_sentiment: float | None = None   # social-sentiment score; US-3f
+    rs_percentile: float | None = None       # cross-sectional RS percentile [0-100]; P0.4 trend_template screen
     # consecutive_up_days populated by build_universe (US-3a); short_interest/days_to_cover (US-3c);
-    # free_float (US-3d); options_flow/social_sentiment (US-3f); intraday halts -> None until a tick feed
+    # free_float (US-3d); options_flow/social_sentiment (US-3f); rs_percentile (P0.4);
+    # intraday halts -> None until a tick feed
