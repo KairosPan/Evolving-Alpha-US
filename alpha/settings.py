@@ -36,8 +36,12 @@ class Settings(BaseModel):
     projects_db: str = "./state/projects/state.db"
     conflicts_dir: str = "./state/conflicts"
     proposals_dir: str = "./state/proposals"  # mirror only; alpha/meta/proposal_store.proposals_dir() is authoritative (TCB file, reads env itself)
+    neg_constraints_dir: str = "./state/neg_constraints"  # A3: rejected self-learning directions (negative constraints)
     workspace_dir: str = "./state/workspaces"
     episodes_db: str | None = None
+    # A3 context trio: message-count threshold past which the workbench compacts a session (offloading
+    # the elided middle). None (the default) -> no compactor -> byte-identical / DORMANT.
+    context_compact_threshold: int | None = None
     body_git: bool = False        # A5: opt-in git-backed Body Store (ALPHA_BODY_GIT); off = today, byte-identical
     sonia_url: str = "http://127.0.0.1:8810"
     workbench_url: str = "http://127.0.0.1:8820"
@@ -58,8 +62,10 @@ class Settings(BaseModel):
         "projects_db": "ALPHA_PROJECTS_DB",
         "conflicts_dir": "ALPHA_CONFLICTS_DIR",
         "proposals_dir": "ALPHA_PROPOSALS_DIR",
+        "neg_constraints_dir": "ALPHA_NEG_CONSTRAINTS_DIR",
         "workspace_dir": "ALPHA_WORKSPACE_DIR",
         "episodes_db": "ALPHA_EPISODES_DB",
+        "context_compact_threshold": "ALPHA_CONTEXT_COMPACT_THRESHOLD",
         "body_git": "ALPHA_BODY_GIT",
         "sonia_url": "ALPHA_SONIA_URL",
         "workbench_url": "ALPHA_WORKBENCH_URL",

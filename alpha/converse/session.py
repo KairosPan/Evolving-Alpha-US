@@ -35,6 +35,7 @@ def converse_project(
     write_mode: str = "stage",
     registry_factory=None,
     experience_writer=None,
+    compactor=None,
     asof: _Date | None = None,
 ) -> Project:
     """Load-or-create *project_id*, run one conversation turn, persist and return the project."""
@@ -70,6 +71,15 @@ def converse_project(
 
     # 4. Append the user message (principal-origin stamped from the user channel — A4).
     project.messages.append(ChatMessage(role="user", text=user_text, origin="user"))
+
+    # 4b. Context-management trio (A3): compact the session's message list past a threshold,
+    #     protecting the turn-0 task + last-N bookends and offloading the elided middle so it stays
+    #     recoverable (lose bytes not handles). Runs AFTER the new user turn is appended so that turn
+    #     sits in the protected tail. Injected (arena-owned; converse stays arena-free); default
+    #     None -> the call is never made -> byte-identical to today. The recall tool is registered
+    #     into the arena registry over the SAME offload store (see build_arena / the live wiring).
+    if compactor is not None:
+        project.messages = compactor(project.messages)
 
     # 5. Run the conversation loop.
     res = run_conversation(registry, chat_llm, system, project.messages,

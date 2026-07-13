@@ -69,6 +69,26 @@ def _task_capture():
     return make_experience_writer(EpisodeStore.open(db)), _Date.today()
 
 
+def _compaction(workspace_root):
+    """A3 opt-in context compaction, gated on ALPHA_CONTEXT_COMPACT_THRESHOLD.
+
+    Unset (the default) → (None, None) → fully dark: converse_project gets no compactor and the
+    arena gets no offload store, so message handling is byte-identical to today. Set → one
+    OffloadStore rooted inside the workspace shared by (a) the compactor threaded into
+    converse_project and (b) the T0 recall tool registered in the arena, so an elided span is
+    recoverable through the choke point. FakeSummarizer keeps this offline-safe; a live LLM
+    summarizer is the activation-time swap behind the same Summarizer seam."""
+    threshold = Settings.from_env().context_compact_threshold
+    if threshold is None:
+        return None, None
+    from functools import partial
+    from alpha.arena.context import FakeSummarizer, OffloadStore, compact_messages
+    store = OffloadStore(workspace_root)
+    compactor = partial(compact_messages, summarizer=FakeSummarizer(), offload_store=store,
+                        threshold=int(threshold))
+    return compactor, store
+
+
 def _assert_brain_outside_workspace() -> None:
     """Fail fast if the brain dir is inside the workspace — a live shell could then reach it."""
     ws_root = _Path(Settings.from_env().workspace_dir).resolve()
@@ -79,13 +99,16 @@ def _assert_brain_outside_workspace() -> None:
             "(LocalEnv is not a kernel boundary — the brain must sit outside the shell's workspace)")
 
 
-def _arena_factory(workspace_root):
+def _arena_factory(workspace_root, offload_store=None):
     """Return a converse_project registry_factory that builds the arena with a LocalEnv pointed
-    at *workspace_root* (full computer-use: decide/read/write/shell + the policy choke point)."""
+    at *workspace_root* (full computer-use: decide/read/write/shell + the policy choke point).
+    *offload_store* (A3, opt-in) registers the T0 recall tool over the same store the compactor
+    offloads to; None → no recall tool → byte-identical."""
     env = LocalEnv(workspace=workspace_root)
     def factory(h, agent_llm, source, *, read_only, write_mode):
         reg, pol = build_arena(h, agent_llm, source, workspace=workspace_root, env=env,
-                               write_mode=write_mode, read_only=read_only)
+                               write_mode=write_mode, read_only=read_only,
+                               offload_store=offload_store)
         return reg, pol.dispatch
     return factory
 
@@ -119,11 +142,12 @@ def create_app() -> FastAPI:
             writer, cap_asof = _task_capture()              # A2 opt-in flip (ALPHA_EPISODES_DB); dark by default
             try:
                 ws = _workspace()
+                compactor, offload = _compaction(ws.root)   # A3 opt-in (ALPHA_CONTEXT_COMPACT_THRESHOLD); dark by default
                 proj = converse_project(DEFAULT_PROJECT_ID, body.text, harness=h, store=_project_store(),
                                         agent_llm=_agent_llm(), chat_llm=_chat_llm(), source=_source(),
                                         workspace=ws, write_mode="stage",
-                                        registry_factory=_arena_factory(ws.root),
-                                        experience_writer=writer, asof=cap_asof)
+                                        registry_factory=_arena_factory(ws.root, offload_store=offload),
+                                        experience_writer=writer, compactor=compactor, asof=cap_asof)
             except Exception as e:                           # never 500 — keep the user turn
                 store = _project_store(); proj = store.get(DEFAULT_PROJECT_ID)
                 from alpha.converse.project import new_project, new_turn

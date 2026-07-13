@@ -51,3 +51,6 @@ def brain_session_isolation(tmp_path, monkeypatch):
     monkeypatch.setenv("ALPHA_PROJECTS_DB", str(tmp_path / "projects" / "state.db"))
     monkeypatch.setenv("ALPHA_CONFLICTS_DIR", str(tmp_path / "conflicts"))
     monkeypatch.setenv("ALPHA_PROPOSALS_DIR", str(tmp_path / "proposals"))
+    # A3: the Sonia discard hook writes rejected self-learning directions here; isolate it too so a
+    # face test never touches the operator's real ./state (not reconcile-swept — signatures, not seqs).
+    monkeypatch.setenv("ALPHA_NEG_CONSTRAINTS_DIR", str(tmp_path / "neg_constraints"))

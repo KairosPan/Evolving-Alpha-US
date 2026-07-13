@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from alpha.meta.models import Attachment, Message, Session, new_message_id, new_
 from alpha.meta.sonia_agent import SoniaAgent, turn_text
 from alpha.meta.conflict_store import ConflictQueue
 from alpha.meta.evolution import adopt_proposal
+from alpha.meta.negative_constraint import NegativeConstraintStore
 from alpha.meta.proposal_store import ProposalQueue, brain_hash, proposals_dir
 from alpha.meta.body_git import make_brain_store
 from alpha.meta.reconcile import reconcile_session, reconcile_staged_edits
@@ -27,6 +29,7 @@ from alpha.meta.store import LiveBrainStore, SessionStore
 from alpha.settings import Settings
 
 _MUTATION_LOCK = threading.Lock()
+_log = logging.getLogger("alpha.sonia")
 
 _CHAIN_FIELDS = ("prev_chain_hash", "chain_hash")
 
@@ -54,6 +57,10 @@ def _conflict_store() -> ConflictQueue:
 
 def _proposal_store() -> ProposalQueue:
     return ProposalQueue(proposals_dir())
+
+
+def _neg_constraint_store() -> NegativeConstraintStore:
+    return NegativeConstraintStore(Settings.from_env().neg_constraints_dir)
 
 
 def _reconcile_all(live_len: int, sstore: SessionStore, current: "Session | None" = None) -> str:
@@ -303,8 +310,20 @@ def create_app() -> FastAPI:
                     return JSONResponse({"adopted": False, "reason": reason}, status_code=409)
                 q.resolve(pid)
                 return {"resolved": pid, "decision": "adopt", "landed_records": len(prop.records)}
+            # A3 human-rejection mining: a DISCARDED self-learning (kind="reflect") proposal turns
+            # each direction it carried into a negative constraint, so the detector never re-proposes
+            # it. Scoped to reflect packets (a discarded refine/forge packet creates no constraint);
+            # never breaks the discard on a store error (best-effort, like the reconcile sweeps).
+            mined = 0
+            if prop.kind == "reflect":
+                try:
+                    from alpha.refine.reflect import record_directions_from_proposal
+                    mined = record_directions_from_proposal(_neg_constraint_store(), prop)
+                except Exception:                       # a store failure must not block the discard
+                    _log.exception("negative-constraint mining failed for discarded proposal %s", pid)
+                    mined = 0
             q.resolve(pid)
-            return {"resolved": pid, "decision": "discard"}
+            return {"resolved": pid, "decision": "discard", "constraints_recorded": mined}
 
     def _history_dir() -> Path:
         return Path(Settings.from_env().live_brain_dir) / "history"

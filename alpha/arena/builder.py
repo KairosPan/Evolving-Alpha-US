@@ -13,7 +13,7 @@ from alpha.converse.agent import build_converse_registry
 def build_arena(harness, agent_llm, source, *, workspace: Path | None = None,
                 env: ToolEnvironment | None = None, write_mode: str = "stage",
                 read_only: bool = False, conflict_queue=None, provenance=None,
-                confirm=None) -> tuple["ToolRegistry", ActivityPolicy]:
+                confirm=None, offload_store=None) -> tuple["ToolRegistry", ActivityPolicy]:
     reg = build_converse_registry(harness, agent_llm, source, read_only=read_only,
                                   write_mode=write_mode, conflict_queue=conflict_queue,
                                   provenance=provenance)   # raises on retired "apply" (fail-closed)
@@ -28,6 +28,12 @@ def build_arena(harness, agent_llm, source, *, workspace: Path | None = None,
             reg.register("write_file", ws, wfn); tiers["write_file"] = wtier
             ss, sfn, stier = make_shell_tool(env if env is not None else InProcessEnv())
             reg.register("shell", ss, sfn); tiers["shell"] = stier
+    # A3 context trio: the T0 recall tool fetches an offloaded (elided) span back by hash. None
+    # (the default) -> no tool -> byte-identical. Registered here so it flows through the choke point.
+    if offload_store is not None:
+        from alpha.arena.context import make_recall_tool
+        cs, cfn, ctier = make_recall_tool(offload_store)
+        reg.register("recall", cs, cfn); tiers["recall"] = ctier
     # LIVE-WIRING NOTE: callers MUST drive the loop via run_conversation(dispatch=policy.dispatch).
     # Passing the bare registry to run_conversation skips the tier/membrane enforcement (the choke point).
     return reg, ActivityPolicy(reg, tiers, confirm=confirm)
