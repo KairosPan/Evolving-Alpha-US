@@ -133,10 +133,16 @@ byte-unchanged after run), adopt (clean + stale + discard), forge propose mode.
 3. **`--autonomous` (MAJOR):** additionally gated behind `ALPHA_UNSAFE_AUTONOMOUS=1`; named a
    recorded non-conformance (pre-pivot in-place evolution incl. live machine-revert), not
    claimed as conformant. §4's claim is scoped to default paths.
-4. **§0 rule 2 honest scope (MAJOR):** the charter's actual rule is stronger — *Kairos does not
-   propose at all*. This arc kills self-LANDING only; the worker still proposes staged edits.
-   Full conformance needs a Sonia-side proposer over worker traces — out of scope, recorded in
-   CLAUDE.md §1 as a named deviation.
+4. **§0 rule 2 honest scope (MAJOR) — G7. CLOSED by A7 (2026-07-13).** the charter's actual rule is
+   stronger — *Kairos does not propose at all*. This 2026-07-09 arc killed self-LANDING only; the
+   worker still proposed staged edits. **A7 closed the gap** (spec
+   `2026-07-13-a7-sonia-proposer-design.md`): the worker's propose ORIGINATION is retired (no
+   `propose_memory_edit` tool; `teach_surface` kairos leg removed) and the two-hands invariant is
+   enforced at the gate — `try_apply_op` refuses `proposer∈{kairos,hermes}`, so no worker-originated
+   edit reaches the waist. The Sonia-side proposer over worker traces is A3's reflect channel
+   (`alpha/refine/reflect.py` → `scripts/reflect_from_tasks.py` → `/proposals`). Only two hands now
+   land: a Sonia proposal (sonia / self-study forge|refiner via /proposals+adopt) or the User's
+   direct edit (user_direct).
 5. **Unauthenticated loopback approvals (MAJOR, accepted risk):** `human_approver="user"` is
    minted from bare localhost POSTs (no Origin/CSRF checks). Accepted for the single-operator
    localhost posture; the ROADMAP SSRF/non-localhost item remains the BLOCKING precondition

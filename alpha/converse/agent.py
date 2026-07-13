@@ -7,27 +7,28 @@ from alpha.llm.config import make_client
 from alpha.data.registry import make_source
 from alpha.converse.registry import ToolRegistry
 from alpha.converse.loop import run_conversation, ConversationResult
-from alpha.converse.tools import make_decide_for_date_tool, make_propose_edit_tool
+from alpha.converse.tools import make_decide_for_date_tool
 from alpha.agent.retrieval import select_for_prompt
 
 
 def build_converse_registry(harness: HarnessState, agent_llm, source,
                             *, read_only: bool = False, write_mode: str = "stage",
                             conflict_queue=None, provenance=None) -> ToolRegistry:
-    """write_mode: "stage" (worker proposals staged for user approval) or "none". "apply" was
-    RETIRED 2026-07-09 (charter conformance: the worker never lands its own edit) — raise, never
-    silently downgrade. conflict_queue/provenance are accepted for signature stability but the
-    stage path defers gate enforcement (incl. conflicts + final provenance) to approve time."""
+    """The worker face registers no H-mutation tool (charter First Founding Principle: "Kairos does
+    not propose at all"). make_gated_write_tool (live landing) was retired 2026-07-09; the STAGING
+    tool (propose_memory_edit) was retired by A7 2026-07-13 — H evolves over worker TRACES via the
+    Sonia-side proposer (reflect.py → /proposals), not by the worker proposing.
+
+    write_mode is kept for signature stability: "apply" still RAISES (never silently downgrade); any
+    other value ("stage"/"none") registers no brain-edit tool. conflict_queue/provenance are accepted
+    for signature stability (they no longer route a worker propose path)."""
     reg = ToolRegistry()
     decide_schema, decide_fn = make_decide_for_date_tool(harness, agent_llm, source)
     reg.register("decide", decide_schema, decide_fn)
     mode = "none" if read_only else write_mode
     if mode == "apply":
         raise ValueError("write_mode='apply' was retired (charter conformance 2026-07-09): "
-                         "the worker face may only stage edits for user approval")
-    if mode == "stage":
-        write_schema, write_fn = make_propose_edit_tool(harness)
-        reg.register("propose_memory_edit", write_schema, write_fn)
+                         "the worker face never lands its own edit — and A7 retired staging too")
     return reg
 
 
@@ -35,10 +36,9 @@ def _render_tool_spec(spec: dict) -> str:
     """Render one tool as `name(arg[?]: type one of {...} — desc, ...): description`.
 
     The conversation loop is a TEXT protocol — the model can only call a tool whose argument names it
-    can see. Rendering just name+description (the old behaviour) left tools with non-obvious args, like
-    propose_memory_edit's nested {tool, args, rationale}, uninvokable: a real LLM just guesses arg names
-    and every call 500s on a TypeError. So advertise the parameters: names, required-ness, types, enums
-    (the valid meta-tool values) and any per-arg description."""
+    can see. Rendering just name+description (the old behaviour) left tools with non-obvious args (e.g.
+    decide's required `date`) uninvokable: a real LLM just guesses arg names and every call 500s on a
+    TypeError. So advertise the parameters: names, required-ness, types, enums and any per-arg description."""
     params = spec.get("parameters") or {}
     props = params.get("properties") or {}
     required = set(params.get("required") or [])

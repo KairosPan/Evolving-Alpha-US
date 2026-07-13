@@ -10,7 +10,6 @@ from alpha.harness.doctrine import Doctrine
 from alpha.harness.edit_log import EditLog, EditProvenance
 from alpha.harness.metatools import MetaTools
 from alpha.harness.registry import MemoryStore, SkillRegistry
-from alpha.harness.skill import Skill, SkillStats
 from alpha.harness.state import HarnessState
 from alpha.llm.client import MockLLMClient
 from alpha.refine.ops import RefineOp, PASS_TOOLS
@@ -52,39 +51,32 @@ def test_refiner_applied_edit_has_self_study_provenance():
 
 
 # ---------------------------------------------------------------------------
-# Converse write-tool proposer — expects path="teaching", proposer="kairos"
-# (charter conformance 2026-07-09: the live-landing tool was retired; the stage
-# tool dry-runs on a scratch copy, stamping the worker's own name)
+# Worker proposer — RETIRED by A7 (charter First Founding Principle: "Kairos does not propose at
+# all"). The stage tool is gone AND a kairos-stamped op is refused at the gate (the two-hands seam).
 # ---------------------------------------------------------------------------
 
-def test_converse_stage_tool_dry_run_has_kairos_provenance():
-    """The staged dry-run must thread teaching/kairos provenance through the gate."""
+def test_worker_stage_tool_is_retired():
+    """A7: the worker face no longer exposes a memory-edit staging tool."""
     import alpha.converse.tools as _ct
-    from alpha.refine.apply import try_apply_op as _real_tap
+    assert not hasattr(_ct, "make_propose_edit_tool")
+
+
+def test_gate_refuses_kairos_stamped_op():
+    """A7 two-hands seam: even if a kairos-stamped op is assembled, try_apply_op refuses it before
+    any content check — the worker (Kairos) may never send to the gate."""
+    from alpha.harness.edit_log import EditLog
+    from alpha.refine.apply import try_apply_op
+    from alpha.refine.ops import PASS_TOOLS
 
     h = _bare_h()
-    calls: list[dict] = []
-
-    # Intercept try_apply_op to capture the provenance kwarg actually passed
-    def _spy_tap(meta, harness, op, **kw):
-        calls.append({"provenance": kw.get("provenance")})
-        return _real_tap(meta, harness, op, **kw)
-
-    original = _ct.try_apply_op
-    _ct.try_apply_op = _spy_tap
-    try:
-        _schema, propose = _ct.make_propose_edit_tool(h)
-        out = propose(tool="process_memory",
-                      args={"lesson_id": "h-mem-1", "phases": ["trend"],
-                            "outcome": "win", "lesson": "kairos staged this"},
-                      rationale="teaching provenance test")
-    finally:
-        _ct.try_apply_op = original
-
-    assert out["staged"] is True and out["valid"] is True, f"expected valid staging; got: {out}"
-    assert len(calls) == 1, "spy not called"
-    prov = calls[0]["provenance"]
-    assert prov is not None, "provenance was None"
-    assert prov.path == "teaching"
-    assert prov.proposer == "kairos"
+    log = EditLog()
+    op = RefineOp(tool="process_memory",
+                  args={"lesson_id": "h-mem-1", "phases": ["trend"],
+                        "outcome": "win", "lesson": "kairos tried to propose"},
+                  rationale="worker proposal attempt")
+    rec, reason = try_apply_op(MetaTools(h, log), h, op, allowed=PASS_TOOLS["M"],
+                               min_retire_samples=5, min_promote_samples=3,
+                               provenance=EditProvenance(path="teaching", proposer="kairos",
+                                                         human_approver="user"))
+    assert rec is None and "Kairos does not propose" in (reason or "")
     assert not any(l.lesson_id == "h-mem-1" for l in h.memory.all()), "live H must be untouched"

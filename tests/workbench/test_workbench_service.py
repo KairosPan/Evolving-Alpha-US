@@ -24,7 +24,7 @@ def _client(tmp_path, monkeypatch):
     set_llms(chat=MockLLMClient([
         '{"tool": "propose_memory_edit", "args": {"tool": "process_memory", "args": '
         '{"lesson_id": "m1", "phases": ["trend"], "outcome": "win", "lesson": "x"}, "rationale": "learned"}}',
-        "Staged an edit for your review."]),
+        "I cannot stage that."]),
         agent=MockLLMClient("{}"),
         source=_fake_source())
     return TestClient(create_app())
@@ -34,10 +34,12 @@ def test_healthz(tmp_path, monkeypatch):
     assert _client(tmp_path, monkeypatch).get("/healthz").json()["ok"] is True
 
 
-def test_converse_stages_proposal(tmp_path, monkeypatch):
+def test_converse_stages_nothing(tmp_path, monkeypatch):
+    # A7 (charter First Founding Principle: "Kairos does not propose at all"): the propose tool is
+    # retired, so a model call to propose_memory_edit stages nothing — the turn still completes.
     c = _client(tmp_path, monkeypatch)
     r = c.post("/converse", json={"text": "remember this"}).json()
-    assert r["assistant_text"] == "Staged an edit for your review."
-    assert len(r["staged_edits"]) == 1 and r["staged_edits"][0]["status"] == "pending"
+    assert r["assistant_text"] == "I cannot stage that."
+    assert r["staged_edits"] == []
     proj = c.get("/project").json()
-    assert proj["project_id"] == "default" and len(proj["staged_edits"]) == 1
+    assert proj["project_id"] == "default" and proj["staged_edits"] == []

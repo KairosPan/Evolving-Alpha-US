@@ -17,9 +17,10 @@ def build_arena(harness, agent_llm, source, *, workspace: Path | None = None,
     reg = build_converse_registry(harness, agent_llm, source, read_only=read_only,
                                   write_mode=write_mode, conflict_queue=conflict_queue,
                                   provenance=provenance)   # raises on retired "apply" (fail-closed)
+    # A7 (2026-07-13): the worker has no H-mutation (propose) tool — "Kairos does not propose".
+    # Only compute-use tiers below. write_mode is still forwarded to build_converse_registry (which
+    # raises on the retired "apply"); it no longer registers a T3 brain-edit tool.
     tiers: dict[str, CapabilityTier] = {"decide": CapabilityTier.T0_OBSERVE}
-    if not read_only and write_mode == "stage":
-        tiers["propose_memory_edit"] = CapabilityTier.T3_BRAIN_EDIT
     if workspace is not None:
         rs, rfn, rtier = make_read_file_tool(workspace)
         reg.register("read_file", rs, rfn); tiers["read_file"] = rtier

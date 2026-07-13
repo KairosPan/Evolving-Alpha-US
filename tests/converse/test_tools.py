@@ -11,7 +11,7 @@ from alpha.universe.universe import CandidateUniverse
 from alpha.llm.client import MockLLMClient
 from alpha.eval.decision import DecisionPackage
 from alpha.data.source import FakeSource
-from alpha.converse.tools import make_decide_tool, make_propose_edit_tool, make_decide_for_date_tool
+from alpha.converse.tools import make_decide_tool, make_decide_for_date_tool
 
 def _h():
     skills = SkillRegistry.from_skills([
@@ -33,26 +33,11 @@ def _bare_h():
                         memory=MemoryStore.from_lessons([]))
 
 
-def test_staged_write_never_touches_live_harness():
-    """Charter conformance: the worker's write tool STAGES on a scratch copy — the live H is
-    byte-untouched no matter how valid the op is."""
-    h = _bare_h()
-    _schema, propose = make_propose_edit_tool(h)
-    out = propose(tool="process_memory",
-                  args={"lesson_id": "c-mem-1", "phases": ["trend"],
-                        "outcome": "win", "lesson": "converse: gate routing works"},
-                  rationale="prove the staged write path")
-    assert out["staged"] is True and out["valid"] is True
-    assert not any(l.lesson_id == "c-mem-1" for l in h.memory.all())
-
-
-def test_staged_write_rejects_non_whitelisted_op():
-    h = _bare_h()
-    _schema, propose = make_propose_edit_tool(h)
-    out = propose(tool="rewrite_doctrine", args={"section": "x", "new_guidance": "y"},
-                  rationale="not in the M whitelist")
-    assert out["valid"] is False
-    assert out["reason"]
+def test_worker_has_no_propose_tool():
+    """A7 (charter First Founding Principle: "Kairos does not propose at all"): the worker face's
+    H-mutation staging tool was retired — the module no longer exposes it."""
+    import alpha.converse.tools as _ct
+    assert not hasattr(_ct, "make_propose_edit_tool")
 
 
 def test_decide_tool_returns_typed_package():

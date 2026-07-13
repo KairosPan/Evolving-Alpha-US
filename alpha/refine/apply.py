@@ -180,6 +180,15 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
         from alpha.harness.loader import normalizer_for   # edited (h.vocabulary), NOT the process env
         normalize = normalizer_for(harness.vocabulary)
     tid = _target_id(op.tool, op.args)
+    # Two-hands invariant (A7; charter First Founding Principle — "only two hands may send it
+    # there"): the worker (Kairos, pre-rename hermes) does NOT propose. An op stamped
+    # proposer="kairos"|"hermes" is refused at the waist, before any content check — only a Sonia
+    # proposal (sonia / self-study forge|refiner surfaced through /proposals) or the User's direct
+    # edit (user) may reach the gate. The names stay in the EditProvenance Literal for read-compat
+    # (persisted brains still deserialize); this is a WRITE-origin gate, not a vocabulary removal.
+    if provenance is not None and provenance.proposer in ("kairos", "hermes"):
+        return None, ("worker proposals retired (charter A7): Kairos does not propose; only a Sonia "
+                      "proposal or the User's direct edit may send to the gate")
     # Stamp coherence (charter drill roster, extended 2026-07-08): a direct edit not carrying
     # the user-authored stamp is refused at the waist, before any content check.
     if provenance is not None and provenance.path == "user_direct" and (

@@ -34,31 +34,27 @@ def _agent_llm():
                          '[{"symbol": "RUN", "pattern": "gap_and_go", "confidence": 0.7}]}')
 
 
-def test_registry_has_both_tools():
+def test_registry_is_decide_only():
+    # A7: the worker registers no H-mutation (propose) tool — only compute-use (here, decide).
     reg = build_converse_registry(_h(), _agent_llm(), _fake_source())
-    assert {s["name"] for s in reg.specs()} == {"decide", "propose_memory_edit"}
+    assert {s["name"] for s in reg.specs()} == {"decide"}
 
 
 def test_system_prompt_lists_tools_and_convention():
     reg = build_converse_registry(_h(), _agent_llm(), _fake_source())
     sys = build_system_prompt(_h(), reg)
-    assert "decide" in sys and "propose_memory_edit" in sys
+    assert "decide" in sys
+    assert "propose_memory_edit" not in sys        # A7: no propose tool to advertise
     assert '"tool"' in sys
 
 
 def test_system_prompt_advertises_tool_parameters():
-    """The text protocol only shows the model what the prompt renders. propose_memory_edit takes a
-    nested meta-tool call {tool, args, rationale} where tool is one of a fixed set — none of which a
-    model can guess from the name+description alone. The prompt MUST advertise the parameter names and
-    the valid meta-tool values, or the tool is uninvokable by a real LLM (it just guesses arg names)."""
+    """The text protocol only shows the model what the prompt renders — a tool whose args aren't
+    advertised is uninvokable (a real LLM just guesses arg names). decide's `date` arg must be
+    discoverable in the rendered prompt."""
     reg = build_converse_registry(_h(), _agent_llm(), _fake_source())
     sys = build_system_prompt(_h(), reg)
-    # decide's date arg must be discoverable
     assert "date" in sys
-    # propose_memory_edit's own keys + the valid meta-tool names it dispatches to
-    assert "rationale" in sys
-    for metatool in ("process_memory", "update_memory", "demote_memory"):
-        assert metatool in sys, f"valid meta-tool {metatool!r} not advertised in system prompt"
 
 
 def test_converse_calls_decide_for_date_then_finalizes():
@@ -73,16 +69,16 @@ def test_converse_calls_decide_for_date_then_finalizes():
 
 
 def test_write_mode_none_registry_is_decide_only():
-    """The bare converse() helper uses write_mode="none": it persists nothing and has no approval
-    surface, so offering a stage tool would silently drop stagings at turn end."""
+    """The bare converse() helper uses write_mode="none"; after A7 no mode registers a propose tool,
+    so the registry is decide-only either way."""
     reg = build_converse_registry(_h(), _agent_llm(), _fake_source(), write_mode="none")
     assert {s["name"] for s in reg.specs()} == {"decide"}
 
 
 def test_bare_converse_passes_write_mode_none(monkeypatch):
-    """Pin the WIRING, not just the builder (final review): converse() must explicitly pass
-    write_mode="none" — the builder default is now "stage", so dropping the argument silently
-    re-adds a stage-and-drop tool."""
+    """Pin the WIRING, not just the builder: converse() explicitly passes write_mode="none". After
+    A7 this no longer changes the tool set (no propose tool in any mode), but the explicit choice is
+    preserved so the bare helper never depends on the retirement to stay decide-only."""
     import alpha.converse.agent as agent_mod
     captured = {}
     real = agent_mod.build_converse_registry

@@ -224,8 +224,10 @@ def test_trading_skill_rejected_proposer_sonia():
 
 
 def test_trading_skill_rejected_all_valid_proposers():
-    """BONUS: task-evidenced op targeting domain='trading' → rejected for ALL valid proposers.
-    The gate is the sole enforcement point; no proposer field value can bypass the separation wall."""
+    """BONUS: task-evidenced op targeting domain='trading' → rejected for ALL proposers. The gate is
+    the sole enforcement point; no proposer field value can bypass the separation wall. A7: the
+    worker origins (kairos/hermes) are refused EARLIER by the two-hands gate (an even stronger
+    refusal), so their rejection reason names that, not separation — still rejected either way."""
     sk = _skill("tr_i", domain="trading", n=10, expectancy=0.5)
     for proposer in ("refiner", "forge", "sonia", "hermes", "kairos", "user"):
         h2 = _h([sk]); log2 = EditLog(); meta2 = MetaTools(h2, log2)
@@ -235,7 +237,8 @@ def test_trading_skill_rejected_all_valid_proposers():
                                                              evidence_kind="task"),
                                    task_stats=_passing_stats())
         assert rec is None, f"trading skill must be rejected for proposer={proposer!r}"
-        assert reason is not None and "separation:" in reason, (
+        expected = "Kairos does not propose" if proposer in ("kairos", "hermes") else "separation:"
+        assert reason is not None and expected in reason, (
             f"wrong rejection reason for proposer={proposer!r}: {reason!r}")
 
 

@@ -20,17 +20,19 @@ def _src():
     bars = {"RUN": pd.DataFrame({"date": cal, "open": [1.0], "high": [1.0], "low": [1.0], "close": [1.0], "volume": [1]})}
     return FakeSource(calendar=cal, bars=bars, snapshots=snaps)
 
-def test_stage_mode_stages_proposal_without_live_write(tmp_path):
+def test_worker_cannot_stage_a_proposal(tmp_path):
+    """A7 (charter First Founding Principle: "Kairos does not propose at all"): the propose tool is
+    retired, so a model call to propose_memory_edit stages NOTHING — the turn completes with an
+    'unknown tool' result and the live brain is byte-untouched."""
     h = _h(); before = copy.deepcopy(h.to_dict())
     store = SqliteProjectStore.open(str(tmp_path / "state.db"))
     chat = MockLLMClient([
         '{"tool": "propose_memory_edit", "args": {"tool": "process_memory", "args": '
         '{"lesson_id": "m1", "phases": ["trend"], "outcome": "win", "lesson": "x"}, "rationale": "learned"}}',
-        "Proposed an edit for your review.",
+        "I cannot stage that.",
     ])
     proj = converse_project("default", "remember this", harness=h, store=store,
                             agent_llm=MockLLMClient("{}"), chat_llm=chat, source=_src(), write_mode="stage")
-    assert len(proj.staged_edits) == 1 and proj.staged_edits[0].status == "pending"
-    assert proj.staged_edits[0].op["tool"] == "process_memory" and proj.staged_edits[0].valid is True
-    assert h.to_dict() == before                                   # live brain untouched
-    assert store.get("default").staged_edits[0].edit_id == proj.staged_edits[0].edit_id   # persisted
+    assert proj.staged_edits == []                                 # nothing staged (no propose tool)
+    assert h.to_dict() == before                                  # live brain untouched
+    assert store.get("default").staged_edits == []                # persisted state also empty

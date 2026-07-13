@@ -11,11 +11,6 @@ from alpha.meta.body_git import make_brain_store
 from alpha.converse.sqlite_store import SqliteProjectStore
 from alpha.converse.workspace import Workspace
 from alpha.converse.session import converse_project
-from alpha.harness.metatools import MetaTools
-from alpha.refine.apply import try_apply_op, ALL_TOOLS
-from alpha.refine.ops import RefineOp
-from alpha.meta.teach_surface import teach_provenance, teach_scope
-from alpha.converse.approve import assert_approvable, StagedEditNotApproved
 from alpha.meta.reconcile import reconcile_session, reconcile_staged_edits
 from alpha.meta.store import SessionStore
 from alpha.arena.builder import build_arena
@@ -173,40 +168,13 @@ def create_app() -> FastAPI:
 
     @app.post("/edits/{eid}/approve")
     def approve_edit(eid: str):
-        with _MUTATION_LOCK:
-            pstore = _project_store(); proj = pstore.get(DEFAULT_PROJECT_ID)
-            se = _find(proj, eid) if proj else None
-            if se is None:
-                return JSONResponse({"error": "not found"}, status_code=404)
-            bstore = _brain_store()
-            with bstore.lock():
-                h, log = bstore.load()
-                if not bstore.is_live():
-                    bstore.save(h, log)
-                se.status = "approved"
-                try:
-                    assert_approvable(se)
-                except StagedEditNotApproved as exc:
-                    se.status, se.reason = "rejected", str(exc)
-                    pstore.put(proj)
-                    return JSONResponse({"error": str(exc), "edit_id": eid, "status": "rejected"}, status_code=422)
-                snap = bstore.snapshot(f"approve-{eid}")
-                op = RefineOp(tool=se.op["tool"], args=dict(se.op["args"]), rationale=se.op.get("rationale", ""))
-                # A8: the worker's REAL landing routes through the ONE write-scope authority
-                # (teach_surface), not a hard-coded scope/provenance — resolves byte-identically today
-                # (teach_scope("kairos")==PASS_TOOLS["M"]) but a future A7 narrowing lands in one place.
-                rec, reason = try_apply_op(MetaTools(h, log), h, op, allowed=teach_scope("kairos"),
-                                           min_retire_samples=5, min_promote_samples=3,
-                                           provenance=teach_provenance("kairos", human_approver="user"))
-                if rec is not None:
-                    bstore.save(h, log)
-                    se.applied_seq, se.snapshot_before, se.reason = rec.seq, snap, None
-                else:
-                    se.status, se.reason = "rejected", reason
-                # persist the derived record INSIDE the flock so it can never lag the brain
-                # across processes (a concurrent restore's sweep reads both under the same lock)
-                pstore.put(proj)
-            return {"edit_id": eid, "status": se.status, "reason": se.reason}
+        # A7 (charter First Founding Principle — "only two hands may send it there"): the worker
+        # (Kairos) does not propose, so there is no worker-staged edit to approve into H. The staging
+        # tool is retired (no propose_memory_edit) and the gate refuses proposer="kairos"; a memory
+        # edit lands only through Sonia (a proposal in /proposals, or the User's direct /edit).
+        return JSONResponse(
+            {"error": "worker proposals retired (charter A7): Kairos does not propose",
+             "edit_id": eid, "status": "retired"}, status_code=410)
 
     @app.post("/edits/{eid}/reject")
     def reject_edit(eid: str):

@@ -1,6 +1,7 @@
-"""Charter conformance (2026-07-09): the worker face is stage-only. write_mode="apply" (the
-agent landing its own edit live) is retired — it must raise, never silently downgrade — and the
-default mode stages proposals for the user's approval."""
+"""A7 (charter First Founding Principle: "Kairos does not propose at all"): the worker face
+registers NO H-mutation tool — the staging tool was retired (as live-landing was in 2026-07-09).
+write_mode="apply" still raises (never silently downgrade); any other mode registers only compute
+tools."""
 import pytest
 
 import alpha.converse.agent as agent_mod
@@ -12,16 +13,12 @@ def test_apply_mode_is_retired_and_raises():
         agent_mod.build_converse_registry(load_seeds("seeds"), None, None, write_mode="apply")
 
 
-def test_default_mode_is_stage_and_registers_propose_tool():
+def test_default_mode_registers_no_propose_tool():
+    # A7: "stage" no longer registers a brain-edit tool — the worker only decides.
     reg = agent_mod.build_converse_registry(load_seeds("seeds"), None, None)
-    assert {s["name"] for s in reg.specs()} == {"decide", "propose_memory_edit"}
-    # the staged tool never touches the live harness: its result is a staged preview, not "applied"
-    out = reg.call("propose_memory_edit", tool="process_memory",
-                   args={"lesson_id": "prov-1", "phases": ["trend"], "outcome": "win", "lesson": "x"},
-                   rationale="stage default")
-    assert out.get("staged") is True and "status" not in out
+    assert {s["name"] for s in reg.specs()} == {"decide"}
 
 
-def test_read_only_drops_propose_tool():
+def test_read_only_registers_only_decide():
     reg = agent_mod.build_converse_registry(load_seeds("seeds"), None, None, read_only=True)
     assert {s["name"] for s in reg.specs()} == {"decide"}

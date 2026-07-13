@@ -21,18 +21,23 @@ def _wb_tc(tmp_path, monkeypatch):
     source = FakeSource(calendar=cal, bars=bars, snapshots=snaps)
     set_llms(chat=MockLLMClient([
         '{"tool": "propose_memory_edit", "args": {"tool": "process_memory", "args": '
-        '{"lesson_id": "m1", "outcome": "win", "lesson": "x"}, "rationale": "learned"}}', "Staged."]),
+        '{"lesson_id": "m1", "outcome": "win", "lesson": "x"}, "rationale": "learned"}}',
+        "I cannot stage that."]),
         agent=MockLLMClient("{}"),
         source=source)
     return TestClient(create_app())
 
 
-def test_workbench_client_converse_and_approve(tmp_path, monkeypatch):
+def test_workbench_client_converse_stages_nothing(tmp_path, monkeypatch):
+    # A7 (charter First Founding Principle: "Kairos does not propose at all"): converse stages no
+    # H edit, and the approve endpoint is retired (410 → the sync client raises).
+    import httpx
     wc = WorkbenchClient(client=_wb_tc(tmp_path, monkeypatch))
     r = wc.converse("remember")
-    eid = r["staged_edits"][0]["edit_id"]
-    assert wc.approve_edit(eid)["status"] == "approved"
+    assert r["staged_edits"] == []
     assert wc.get_project()["project_id"] == "default"
+    with pytest.raises(httpx.HTTPStatusError):
+        wc.approve_edit("any-id")                                     # retired → 410
 
 
 def _web_client(tmp_path, monkeypatch):
@@ -41,21 +46,22 @@ def _web_client(tmp_path, monkeypatch):
     return TestClient(app)
 
 
-def test_workbench_page_renders(tmp_path, monkeypatch):
+def test_workbench_page_renders_with_no_proposals(tmp_path, monkeypatch):
     tc = _web_client(tmp_path, monkeypatch)
-    tc.post("/workbench/say", data={"text": "remember"})              # stage a proposal
+    tc.post("/workbench/say", data={"text": "remember"})              # A7: stages nothing
     r = tc.get("/workbench")
-    assert r.status_code == 200 and "Workbench" in r.text and "process_memory" in r.text
+    assert r.status_code == 200 and "Workbench" in r.text
+    assert "No pending proposals" in r.text                           # the empty-state copy
+    assert "process_memory" not in r.text                             # no staged edit rendered
 
 
-def test_workbench_approve_empty_200(tmp_path, monkeypatch):
+def test_workbench_approve_proxy_never_500s(tmp_path, monkeypatch):
+    # The worker cannot stage, so the approve endpoint is retired (410). The alpha_web proxy must
+    # still return 200 (an "unavailable" banner), never a 500 — HTMX degrades gracefully.
     tc = _web_client(tmp_path, monkeypatch)
     tc.post("/workbench/say", data={"text": "remember"})
-    # fetch the edit id via the workbench project directly for robustness:
-    from alpha_web.app import _workbench
-    pid = _workbench().get_project()["staged_edits"][0]["edit_id"]
-    r = tc.post(f"/workbench/edits/{pid}/approve")
-    assert r.status_code == 200 and r.text == ""                      # empty-200 row removal
+    r = tc.post("/workbench/edits/any-id/approve")
+    assert r.status_code == 200 and "could not approve" in r.text
 
 
 def test_approve_error_banner_escapes_eid_xss(monkeypatch):

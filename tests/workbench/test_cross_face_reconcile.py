@@ -1,23 +1,15 @@
-"""Cross-face revert reconcile (2026-07-09 review major): both faces share ONE brain, so a
-restore issued through the SONIA service must also heal WORKBENCH staged edits (and the sonia
-/snapshots restore lever must exist for landings with no session message, e.g. user-direct)."""
+"""Cross-face revert reconcile (2026-07-09 review major): both faces share ONE brain, so a restore
+must heal derived state (sonia sessions' applied_seqs, else /propose 409s forever).
+
+A7 (2026-07-13): the WORKER-staged leg of this flow is retired (the worker no longer proposes, so
+there are no workbench staged edits to heal). The surviving live path — a legitimate landing
+(user_direct via sonia /edit, or a Sonia teaching landing) recorded in a sonia session, then
+reverted through the sonia /snapshots lever — still reconciles, and is what these tests now pin. The
+pure reconcile helpers are unit-covered in tests/meta/test_reconcile.py."""
 import pytest
 pytest.importorskip("fastapi")
-from datetime import date
 
-import pandas as pd
 from fastapi.testclient import TestClient
-
-from alpha.data.source import FakeSource
-
-
-def _fake_source():
-    cal = [date(2026, 6, 10)]
-    snaps = {cal[0]: pd.DataFrame({"symbol": ["RUN"], "name": ["RUN"], "open": [1.0], "high": [1.0],
-                                   "low": [1.0], "close": [1.0], "volume": [1], "prev_close": [1.0]})}
-    bars = {"RUN": pd.DataFrame({"date": cal, "open": [1.0], "high": [1.0], "low": [1.0],
-                                 "close": [1.0], "volume": [1]})}
-    return FakeSource(calendar=cal, bars=bars, snapshots=snaps)
 
 
 def _env(tmp_path, monkeypatch):
@@ -29,67 +21,34 @@ def _env(tmp_path, monkeypatch):
     monkeypatch.setenv("ALPHA_MOCK_RESPONSE", "prose")
 
 
-def _workbench_client():
-    from workbench.app import create_app, set_llms
-    from alpha.llm.client import MockLLMClient
-    set_llms(chat=MockLLMClient([
-        '{"tool": "propose_memory_edit", "args": {"tool": "process_memory", "args": '
-        '{"lesson_id": "m1", "phases": ["trend"], "outcome": "win", "lesson": "x"}, "rationale": "learned"}}',
-        "Staged."]), agent=MockLLMClient("{}"), source=_fake_source())
-    return TestClient(create_app())
-
-
-def test_sonia_snapshot_restore_heals_workbench_staged_edit(tmp_path, monkeypatch):
+def test_sonia_restore_heals_sonia_session(tmp_path, monkeypatch):
     _env(tmp_path, monkeypatch)
-    wb = _workbench_client()
-
-    # stage + approve through the workbench: the live brain gains the edit
-    wb.post("/converse", json={"text": "remember"})
-    eid = wb.get("/project").json()["staged_edits"][0]["edit_id"]
-    wb.post(f"/edits/{eid}/approve")
-    assert wb.get("/healthz").json()["edit_count"] == 1
-
-    # revert through SONIA's snapshot lever (the approve snapshot lives in the shared history)
     from sonia.app import create_app as sonia_app
     sonia = TestClient(sonia_app())
-    snaps = sonia.get("/snapshots").json()
-    assert f"approve-{eid}" in snaps
-    r = sonia.post(f"/snapshots/approve-{eid}/restore")
-    assert r.status_code == 200 and r.json()["ok"] is True
-    assert wb.get("/healthz").json()["edit_count"] == 0
 
-    # the WORKBENCH staged edit was healed by the sonia-side sweep (cross-face reconcile)
-    se = wb.get("/project").json()["staged_edits"][0]
-    assert se["status"] == "pending" and se["applied_seq"] is None
-    assert se["reason"] == "rolled back"
+    # land a legitimate user_direct edit (the User's own hand) → live seq 0 + a snapshot
+    r = sonia.post("/edit", json={"tool": "process_memory",
+                                  "args": {"lesson_id": "u1", "phases": ["trend"],
+                                           "outcome": "win", "lesson": "user landed this"},
+                                  "rationale": "direct edit"})
+    assert r.status_code == 200 and r.json()["applied"] is True
+    assert sonia.get("/healthz").json()["edit_count"] == 1
+    snap = sonia.get("/snapshots").json()[0]            # the bare snapshot name (restore route wants it)
 
-
-def test_workbench_rollback_heals_sonia_session(tmp_path, monkeypatch):
-    """The MIRROR direction (final review): a rollback issued from the WORKBENCH face must also
-    clear sonia session records asserting the reverted seqs (else the /propose 409 dead-end
-    silently returns whenever the revert comes from the other face)."""
-    import os
-    _env(tmp_path, monkeypatch)
-    wb = _workbench_client()
-
-    # stage + approve a workbench edit → live brain seq 0
-    wb.post("/converse", json={"text": "remember"})
-    eid = wb.get("/project").json()["staged_edits"][0]["edit_id"]
-    wb.post(f"/edits/{eid}/approve")
-    assert wb.get("/healthz").json()["edit_count"] == 1
-
-    # seed a SONIA session that asserts that same seq was applied through it
+    # seed a sonia session asserting that same seq was applied through it
     from alpha.meta.models import Message, Session, new_message_id, new_session_id, now_iso
     from alpha.meta.store import SessionStore
-    sstore = SessionStore(os.environ["ALPHA_SESSIONS_DIR"])
+    sstore = SessionStore(str(tmp_path / "sessions"))
     msg = Message(message_id=new_message_id(), role="assistant", created_at=now_iso(),
                   applied_seqs=[0])
     sess = Session(session_id=new_session_id(), created_at=now_iso(), messages=[msg])
     sstore.put(sess)
 
-    assert wb.post("/rollback").json()["ok"] is True
-    healed = sstore.get(sess.session_id)
-    assert healed.messages[0].applied_seqs == []           # cross-face heal, workbench → sonia
+    # revert through the sonia /snapshots lever → the sweep heals the session's applied_seqs
+    rr = sonia.post(f"/snapshots/{snap}/restore")
+    assert rr.status_code == 200 and rr.json()["ok"] is True
+    assert sonia.get("/healthz").json()["edit_count"] == 0
+    assert sstore.get(sess.session_id).messages[0].applied_seqs == []   # cross-face heal
 
 
 def test_snapshot_restore_rejects_traversal_names(tmp_path, monkeypatch):

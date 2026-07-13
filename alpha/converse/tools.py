@@ -1,6 +1,5 @@
 # alpha/converse/tools.py
 from __future__ import annotations
-import copy as _copy
 from datetime import date as _Date, datetime as _DateTime
 from alpha.agent.agent import LLMAgentPolicy
 from alpha.state.market import MarketState
@@ -11,59 +10,12 @@ from alpha.data.source import GuardedSource
 from alpha.universe.universe import build_universe
 from alpha.state.builder import build_market_state
 
-from alpha.harness.metatools import MetaTools
-from alpha.harness.edit_log import EditLog
-from alpha.refine.apply import try_apply_op
-from alpha.refine.ops import RefineOp
-from alpha.meta.teach_surface import teach_provenance, teach_scope
-from alpha.meta.models import new_edit_id
-
-# propose_memory_edit is a nested meta-tool DISPATCHER: it forwards to one of the M-pass memory
-# meta-tools. The model can't guess the valid `tool` values or the `args` shape from the name alone,
-# so they're spelled out here (mirrors PASS_TOOLS["M"]) and rendered into the system prompt by
-# build_system_prompt. Keep the enum in sync with refine.ops.PASS_TOOLS["M"].
-_MEMORY_EDIT_PARAMS = {
-    "type": "object",
-    "properties": {
-        "tool": {"type": "string", "enum": ["process_memory", "update_memory", "demote_memory"],
-                 "description": "which memory meta-tool to run"},
-        "args": {"type": "object",
-                 "description": ('that meta-tool\'s arguments (flat fields, not nested). process_memory '
-                                 '(add a lesson) needs {"lesson_id": "<id>", "outcome": '
-                                 '"win"|"loss"|"principle", "lesson": "<text>"}; '
-                                 'update_memory needs {"lesson_id": "<id>", ...fields to change}; '
-                                 'demote_memory needs {"lesson_id": "<id>", "factor": <float 0-1>}')},
-        "rationale": {"type": "string", "description": "why this edit is warranted"},
-    },
-    "required": ["tool", "args", "rationale"],
-}
-
-
-# make_gated_write_tool (the worker's live-landing write tool) was RETIRED 2026-07-09 (charter
-# conformance): no code path may let the conversational agent's own edit reach the live brain
-# without a human step. The worker face stages via make_propose_edit_tool; the user approves.
-
-
-def make_propose_edit_tool(harness, *, min_retire_samples: int = 5, min_promote_samples: int = 3):
-    """Preview/approve variant of the write tool: DRY-RUN the op on a deepcopy via the gate, STAGE the
-    result for the user's approval. Never mutates the live harness (no live write during conversation)."""
-    def propose_memory_edit(tool: str, args: dict, rationale: str) -> dict:
-        op = RefineOp(tool=tool, args=args, rationale=rationale)
-        scratch = _copy.deepcopy(harness)
-        rec, reason = try_apply_op(MetaTools(scratch, EditLog()), scratch, op,
-                                   allowed=teach_scope("kairos"),
-                                   min_retire_samples=min_retire_samples,
-                                   min_promote_samples=min_promote_samples,
-                                   provenance=teach_provenance("kairos"))
-        return {"staged": True, "edit_id": new_edit_id(), "tool": tool,
-                "op": {"tool": tool, "args": dict(args), "rationale": rationale},
-                "summary": rec.summary if rec is not None else "",
-                "valid": rec is not None, "reason": reason,
-                "preview": rec.model_dump() if rec is not None else {}}
-    schema = {"name": "propose_memory_edit",
-              "description": "Propose a memory edit for the user's approval (staged, not applied).",
-              "parameters": _MEMORY_EDIT_PARAMS}
-    return schema, propose_memory_edit
+# The worker face has NO H-mutation tool. make_gated_write_tool (live landing) was retired
+# 2026-07-09 (charter: no code path lets the worker's own edit reach the live brain without a human
+# step); make_propose_edit_tool (STAGING for user approval) was retired by A7 2026-07-13 (charter
+# First Founding Principle: "Kairos does not propose at all" — only a Sonia proposal or the User's
+# direct edit may send to the gate). The worker keeps compute-use only (decide/read/write/shell);
+# H evolves over worker TRACES via the Sonia-side proposer (alpha/refine/reflect.py → /proposals).
 
 
 def make_decide_tool(harness, agent_llm):
