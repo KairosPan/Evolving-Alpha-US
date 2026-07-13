@@ -70,6 +70,28 @@ def test_composite_routes_earnings_to_edgar(apca, monkeypatch):
     assert comp.earnings_available() is True                         # routed to the (live) EDGAR backend
 
 
+def test_finra_and_edgar_offerings_are_registered(monkeypatch):
+    from alpha.data.edgar import EdgarOfferingsSource
+    from alpha.data.finra import FinraSource
+    monkeypatch.delenv("ALPHA_DATA_SOURCE", raising=False)
+    assert "finra" in _SOURCES and "edgar_offerings" in _SOURCES
+    assert isinstance(make_source("finra"), FinraSource)                 # keyless construction (no network)
+    assert isinstance(make_source("edgar_offerings"), EdgarOfferingsSource)
+
+
+def test_composite_routes_p5b_feeds(apca, monkeypatch):
+    # end-to-end env wiring: base=alpaca (bars/snapshot), short_interest -> finra, offerings -> edgar_offerings.
+    from alpha.data.composite import CompositeSource
+    from alpha.data.edgar import EdgarOfferingsSource
+    from alpha.data.finra import FinraSource
+    monkeypatch.setenv("ALPHA_DATA_COMPOSITE", "short_interest=finra,offerings=edgar_offerings")
+    comp = make_source("composite")
+    assert isinstance(comp, CompositeSource)
+    assert isinstance(comp._route("short_interest"), FinraSource)
+    assert isinstance(comp._route("offerings"), EdgarOfferingsSource)
+    assert comp.short_interest_available() is True and comp.offerings_available() is True   # live backends
+
+
 @pytest.mark.parametrize("name", sorted(_SOURCES))
 def test_every_registered_source_implements_corp_actions_available(name, apca, monkeypatch, tmp_path):
     """P3 conformance: corp_actions_available is the MarketDataSource Protocol's ONLY fail-open method —

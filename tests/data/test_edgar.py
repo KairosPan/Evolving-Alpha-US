@@ -193,3 +193,101 @@ def test_get_json_403_hints_user_agent(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", boom)
     with pytest.raises(RuntimeError, match="User-Agent"):
         src._get_json("https://data.sec.gov/whatever.json")
+
+
+# ── EdgarOfferingsSource — the `offerings` lifecycle backend (P5b) ──────────────────────────────────
+
+from alpha.data.edgar import EdgarOfferingsSource  # noqa: E402
+from alpha.data.offerings import is_dilution_overhang  # noqa: E402
+
+# A submissions-shaped payload (columnar `recent` arrays): a shelf S-3 (file 333-1) announced 2024-06-09,
+# then WITHDRAWN via an RW on 2025-01-15 (same file number -> one offering); plus an unrelated 8-K (ignored).
+_SUBMISSIONS = {"filings": {"recent": {
+    "form": ["8-K", "S-3", "RW"],
+    "filingDate": ["2024-05-01", "2024-06-09", "2025-01-15"],
+    "fileNumber": ["001-9", "333-1", "333-1"],
+    "accessionNumber": ["a0", "a1", "a2"],
+}}}
+
+
+def _off_src(monkeypatch, payload=_SUBMISSIONS):
+    src = EdgarOfferingsSource(cik_map={"ACME": 111})
+    monkeypatch.setattr(src, "_get_json", lambda url: payload)
+    return src
+
+
+def test_offerings_maps_forms_to_lifecycle_events(monkeypatch):
+    src = _off_src(monkeypatch)
+    # as_of past the 3y expiry so all three events are knowable (the 8-K is ignored, not an offering form).
+    events = src.offering_events_known("ACME", date(2027, 12, 31))
+    by_event = {e.event: e for e in events}
+    assert by_event["announce"].process_date == date(2024, 6, 9) and by_event["announce"].kind == "shelf"
+    assert by_event["withdrawn"].process_date == date(2025, 1, 15)
+    assert by_event["announce"].offering_id == by_event["withdrawn"].offering_id == "333-1"
+    assert by_event["expired"].process_date == date(2027, 6, 9)     # Rule-415 lapse: announce + 3 years
+    # the expiry is a FUTURE scheduled event — invisible until it passes (PIT on process_date)
+    assert all(e.event != "expired" for e in src.offering_events_known("ACME", date(2026, 12, 31)))
+
+
+def test_offerings_withdrawal_flips_overhang_off_as_of_rw_date(monkeypatch):
+    src = _off_src(monkeypatch)
+    # announced 6/9/24 -> overhang; withdrawn 1/15/25 -> lifts as of the RW filing date, not before.
+    assert is_dilution_overhang(src.offering_events_known("ACME", date(2025, 1, 14)), "ACME",
+                                date(2025, 1, 14)) is True
+    assert is_dilution_overhang(src.offering_events_known("ACME", date(2025, 1, 15)), "ACME",
+                                date(2025, 1, 15)) is False
+
+
+def test_offerings_expiry_lifts_overhang_when_no_withdrawal(monkeypatch):
+    # An automatic/WKSI shelf effective on filing (no EFFECT filing): the Rule-415 expiry falls back to
+    # filing+3y and closes it.
+    payload = {"filings": {"recent": {"form": ["S-3"], "filingDate": ["2024-06-09"],
+                                      "fileNumber": ["333-2"], "accessionNumber": ["a1"]}}}
+    src = _off_src(monkeypatch, payload)
+    assert is_dilution_overhang(src.offering_events_known("ACME", date(2027, 6, 8)), "ACME",
+                                date(2027, 6, 8)) is True            # day before the filing+3y expiry
+    assert is_dilution_overhang(src.offering_events_known("ACME", date(2027, 6, 9)), "ACME",
+                                date(2027, 6, 9)) is False           # as of the expiry
+
+
+def test_offerings_expiry_anchored_to_effective_date_not_filing(monkeypatch):
+    # Rule 415(a)(5): the 3-year shelf window runs from the INITIAL EFFECTIVE date. A non-automatic S-3
+    # filed 6/9/24 but declared EFFECT on 8/15/24 -> expiry = effective+3y (2027-08-15), NOT filing+3y
+    # (2027-06-09). Anchoring on the filing would lift the dilution veto ~2 months early (safety-loosening).
+    payload = {"filings": {"recent": {
+        "form": ["S-3", "EFFECT"], "filingDate": ["2024-06-09", "2024-08-15"],
+        "fileNumber": ["333-4", "333-4"], "accessionNumber": ["a1", "a2"]}}}
+    src = _off_src(monkeypatch, payload)
+    events = src.offering_events_known("ACME", date(2027, 12, 31))
+    expired = next(e for e in events if e.event == "expired")
+    assert expired.process_date == date(2027, 8, 15)                 # effective+3y, not filing+3y (6/9)
+    assert next(e for e in events if e.event == "effective").process_date == date(2024, 8, 15)
+    # the veto survives past the filing+3y date because the true expiry is anchored on effectiveness
+    assert is_dilution_overhang(src.offering_events_known("ACME", date(2027, 6, 9)), "ACME",
+                                date(2027, 6, 9)) is True            # filing+3y — still an overhang
+    assert is_dilution_overhang(src.offering_events_known("ACME", date(2027, 8, 15)), "ACME",
+                                date(2027, 8, 15)) is False          # as of effective+3y -> lifts
+
+
+def test_offerings_pit_filing_after_as_of_invisible(monkeypatch):
+    src = _off_src(monkeypatch)
+    # as_of 2024-06-08: before the S-3 filing -> no events at all (the announce is not yet knowable).
+    assert src.offering_events_known("ACME", date(2024, 6, 8)) == []
+
+
+def test_offerings_unknown_ticker_empty(monkeypatch):
+    src = _off_src(monkeypatch)
+    assert src.offering_events_known("ZZZZ", date(2026, 12, 31)) == []
+
+
+def test_offerings_available_and_non_offerings_methods_raise():
+    src = EdgarOfferingsSource(cik_map={"ACME": 111})
+    assert src.offerings_available() is True
+    assert callable(getattr(src, "corp_actions_available", None))   # P3 conformance (never called)
+    for call in (lambda: src.trading_calendar(),
+                 lambda: src.daily_snapshot(date(2026, 1, 1)),
+                 lambda: src.earnings_known("ACME", date(2026, 1, 1)),
+                 lambda: src.short_interest_known("ACME", date(2026, 1, 1)),
+                 lambda: src.corp_actions_available()):
+        with pytest.raises(NotImplementedError):
+            call()

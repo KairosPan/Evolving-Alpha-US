@@ -22,9 +22,11 @@ from alpha.data.earnings import (
     known_calendar,
     known_earnings,
 )
+from alpha.data.offerings import OfferingEvent, known_offering_events
 
 _FACTS_URL = "https://data.sec.gov/api/xbrl/companyconcept/CIK{cik:010d}/us-gaap/{concept}.json"
 _TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
+_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
 
 # Diluted preferred (fallback basic); revenue tag drifted across years, tried in order. First concept
 # that yields period rows wins.
@@ -203,3 +205,137 @@ class EdgarSource:
     corporate_actions = _only_earnings
     corporate_actions_known = _only_earnings
     corp_actions_available = _only_earnings
+    short_interest_known = _only_earnings
+    short_interest_available = _only_earnings
+    offering_events_known = _only_earnings
+    offerings_available = _only_earnings
+
+
+# ── EDGAR offerings-lifecycle backend (P5b; `offerings` capability) ─────────────────────────────────
+#
+# EdgarOfferingsSource maps EDGAR's `updates_since`-shaped submissions feed (recent filings: form + date +
+# file number) into typed OfferingEvents, each keyed on its own filing/expiry date (the PIT process_date).
+# Registration/prospectus forms -> `announce`; EFFECT -> `effective`; RW/AW -> `withdrawn`; a Rule-415
+# shelf (S-3/F-3) also emits an `expired` event 3 years after its INITIAL EFFECTIVE date (Rule 415(a)(5)
+# runs the window from effectiveness; fallback = the filing date for an automatic/WKSI shelf effective on
+# filing) — a deterministic scheduled event, knowable in advance but only LIFTING the veto once the date
+# passes, like a corp action's future ex_date.
+# The EDGAR form taxonomy below is a documented design surface; the mapping + PIT keying + the
+# withdrawal/expiry paths are the built + tested core. Offerings are grouped by EDGAR fileNumber so an
+# S-3's announce and its later RW withdrawal share one offering_id and reduce together.
+
+# form -> (event, dilution kind). Shelf registrations vs one-shot offerings vs prospectus draws.
+_ANNOUNCE_FORMS = {
+    "S-1": "offering", "F-1": "offering",
+    "424B1": "offering", "424B2": "offering", "424B3": "offering", "424B4": "offering",
+    "424B5": "offering", "424B7": "offering",
+    "S-3": "shelf", "S-3ASR": "shelf", "F-3": "shelf", "F-3ASR": "shelf", "S-11": "shelf",
+}
+_WITHDRAWN_FORMS = frozenset({"RW", "AW"})
+_EFFECT_FORMS = frozenset({"EFFECT"})
+_SHELF_EXPIRY_YEARS = 3                              # Rule 415: a shelf registration lapses after ~3 years
+
+
+def _plus_years(d: Date, years: int) -> Date:
+    try:
+        return d.replace(year=d.year + years)
+    except ValueError:                              # Feb 29 -> Feb 28 in a non-leap year
+        return d.replace(year=d.year + years, day=28)
+
+
+class EdgarOfferingsSource:
+    """SEC EDGAR offering-lifecycle backend (offerings capability only).
+
+    `cik_map` maps TICKER -> CIK int (injected in tests — no network); when omitted it is fetched lazily
+    from company_tickers.json via `_get_json`, like EdgarSource. `_get_json` is the one mockable seam.
+    """
+
+    def __init__(self, *, cik_map: dict[str, int] | None = None, user_agent: str | None = None) -> None:
+        self._cik_map = {k.upper(): int(v) for k, v in cik_map.items()} if cik_map else None
+        self._user_agent = (user_agent or os.environ.get("ALPHA_EDGAR_USER_AGENT")
+                            or "evolving-alpha research (set ALPHA_EDGAR_USER_AGENT to a contact email)")
+
+    # reuse EdgarSource's seam verbatim (fixed SEC host; typed HTTP/URL errors -> actionable RuntimeError)
+    _get_json = EdgarSource._get_json
+    _cik = EdgarSource._cik
+
+    def _symbol_events(self, symbol: str) -> list[OfferingEvent]:
+        cik = self._cik(symbol)
+        if cik is None:
+            return []                                   # unknown ticker -> empty, never crash
+        data = self._get_json(_SUBMISSIONS_URL.format(cik=cik))
+        recent = ((data.get("filings") or {}) if isinstance(data, dict) else {}).get("recent") or {}
+        forms = recent.get("form") or []
+        dates = recent.get("filingDate") or []
+        files = recent.get("fileNumber") or []
+        accns = recent.get("accessionNumber") or []
+
+        def _oid(i: int) -> str:
+            fn = files[i] if i < len(files) else None
+            if fn:
+                return str(fn)
+            return str(accns[i]) if i < len(accns) else f"{symbol.upper()}-{i}"
+
+        # First pass: per offering_id, the dilution kind (so a bare RW/EFFECT inherits its offering's kind
+        # — provenance only; the reducer groups by offering_id) and the INITIAL EFFECT date (the anchor for
+        # the Rule-415 expiry — 415(a)(5) runs the 3-year shelf window from the initial EFFECTIVE date, not
+        # the filing date; for a non-automatic S-3 whose EFFECT postdates the filing, anchoring on the
+        # filing would lift the veto weeks-to-months early).
+        kind_by_oid: dict[str, str] = {}
+        effective_by_oid: dict[str, Date] = {}
+        for i, form in enumerate(forms):
+            oid = _oid(i)
+            if form in _ANNOUNCE_FORMS:
+                kind_by_oid.setdefault(oid, _ANNOUNCE_FORMS[form])
+            elif form in _EFFECT_FORMS:
+                ed = _to_date(dates[i]) if i < len(dates) else None
+                if ed is not None and (oid not in effective_by_oid or ed < effective_by_oid[oid]):
+                    effective_by_oid[oid] = ed          # earliest EFFECT = the initial effective date
+
+        events: list[OfferingEvent] = []
+        for i, form in enumerate(forms):
+            d = _to_date(dates[i]) if i < len(dates) else None
+            if d is None:
+                continue
+            oid = _oid(i)
+            kind = kind_by_oid.get(oid, "shelf")        # default provenance for a bare close/effect event
+            if form in _ANNOUNCE_FORMS:
+                k = _ANNOUNCE_FORMS[form]
+                events.append(OfferingEvent(symbol=symbol.upper(), offering_id=oid, event="announce",
+                                            kind=k, process_date=d, form=form, source="edgar"))
+                if k == "shelf":                        # Rule-415 lapse: scheduled expiry 3y from EFFECT
+                    anchor = effective_by_oid.get(oid, d)   # fallback: filing date (automatic/WKSI shelf)
+                    events.append(OfferingEvent(
+                        symbol=symbol.upper(), offering_id=oid, event="expired", kind=k,
+                        process_date=_plus_years(anchor, _SHELF_EXPIRY_YEARS), form=form, source="edgar"))
+            elif form in _WITHDRAWN_FORMS:
+                events.append(OfferingEvent(symbol=symbol.upper(), offering_id=oid, event="withdrawn",
+                                            kind=kind, process_date=d, form=form, source="edgar"))
+            elif form in _EFFECT_FORMS:
+                events.append(OfferingEvent(symbol=symbol.upper(), offering_id=oid, event="effective",
+                                            kind=kind, process_date=d, form=form, source="edgar"))
+        return events
+
+    # ── offerings capability ─────────────────────────────────────────────────────────────────────────
+    def offering_events_known(self, symbol: str, as_of: Date) -> list[OfferingEvent]:
+        return known_offering_events(self._symbol_events(symbol), as_of)
+
+    def offerings_available(self) -> bool:
+        return True         # live feed always checkable (a fetch returns data or raises), like Alpaca corp
+
+    # ── pure-swap: serves ONLY offerings; everything else raises NotImplementedError ─────────────────
+    def _only_offerings(self, *_a, **_k):
+        raise NotImplementedError("EdgarOfferingsSource serves only the `offerings` capability; compose it "
+                                  "via CompositeSource(base, {'offerings': EdgarOfferingsSource(...)})")
+
+    trading_calendar = _only_offerings
+    daily_bars = _only_offerings
+    daily_snapshot = _only_offerings
+    corporate_actions = _only_offerings
+    corporate_actions_known = _only_offerings
+    corp_actions_available = _only_offerings
+    earnings_known = _only_offerings
+    earnings_calendar = _only_offerings
+    earnings_available = _only_offerings
+    short_interest_known = _only_offerings
+    short_interest_available = _only_offerings

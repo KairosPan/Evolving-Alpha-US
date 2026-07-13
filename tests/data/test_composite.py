@@ -224,3 +224,58 @@ def test_guarded_composite_blocks_future_earnings():
 def test_earnings_is_a_known_capability():
     from alpha.data.composite import _CAPABILITIES
     assert "earnings" in _CAPABILITIES
+
+
+# ── short_interest + offerings capability routing (P5b) ───────────────────────────────────────────────
+
+def _si_backend() -> FakeSource:
+    from alpha.data.short_interest import ShortInterest
+    si = [ShortInterest(symbol="SI", settlement_date=date(2026, 6, 14),
+                        publication_date=date(2026, 6, 25), shares_short=1.0e7, days_to_cover=5.0)]
+    return FakeSource(calendar=[], bars={}, snapshots={}, short_interest=si)
+
+
+def _offerings_backend() -> FakeSource:
+    from alpha.data.offerings import OfferingEvent
+    events = [OfferingEvent(symbol="OFR", offering_id="A", event="announce", kind="shelf",
+                            process_date=date(2026, 6, 9))]
+    return FakeSource(calendar=[], bars={}, snapshots={}, offering_events=events)
+
+
+def test_short_interest_and_offerings_route_to_their_backends():
+    comp = CompositeSource(_base_source(), {"short_interest": _si_backend(),
+                                            "offerings": _offerings_backend()})
+    assert [r.symbol for r in comp.short_interest_known("SI", date(2026, 6, 30))] == ["SI"]
+    assert comp.short_interest_available() is True
+    assert [e.symbol for e in comp.offering_events_known("OFR", date(2026, 6, 12))] == ["OFR"]
+    assert comp.offerings_available() is True
+    # bars still on base — a misroute to a backend with no bars would surface as an empty frame
+    assert not comp.daily_bars("RUN", date(2026, 6, 10), date(2026, 6, 12)).empty
+
+
+def test_unset_short_interest_and_offerings_fall_to_base_and_raise():
+    from alpha.data.alpaca import AlpacaSource
+
+    class _NoFeedsAlpaca(AlpacaSource):
+        def __init__(self):
+            pass                                                  # skip key check for the unit test
+    with pytest.raises(NotImplementedError):
+        CompositeSource(_NoFeedsAlpaca()).short_interest_known("X", date(2026, 6, 12))
+    with pytest.raises(NotImplementedError):
+        CompositeSource(_NoFeedsAlpaca()).offering_events_known("X", date(2026, 6, 12))
+
+
+def test_guarded_composite_blocks_future_short_interest_and_offerings():
+    comp = CompositeSource(_base_source(), {"short_interest": _si_backend(),
+                                            "offerings": _offerings_backend()})
+    gs = GuardedSource(comp, AsOfGuard(date(2026, 6, 25)))
+    assert [r.symbol for r in gs.short_interest_known("SI", date(2026, 6, 25))] == ["SI"]  # as_of == cursor
+    with pytest.raises(LookaheadError):
+        gs.short_interest_known("SI", date(2026, 6, 26))
+    with pytest.raises(LookaheadError):
+        gs.offering_events_known("OFR", date(2026, 6, 26))
+
+
+def test_short_interest_and_offerings_are_known_capabilities():
+    from alpha.data.composite import _CAPABILITIES
+    assert {"short_interest", "offerings"} <= _CAPABILITIES

@@ -12,15 +12,19 @@ from datetime import date as Date
 import pandas as pd
 
 from alpha.data.earnings import EarningsCalendarEntry, EarningsFact
+from alpha.data.offerings import OfferingEvent
+from alpha.data.short_interest import ShortInterest
 from alpha.data.source import MarketDataSource
 
 # The routable units. `corp_actions` groups the three coupled corp methods so a corp-backend override
 # moves corporate_actions + _known + _available together: corp_actions_available() reports whether THAT
 # backend can check reverse-split/dilution (the P3 tri-state fix), so routing the probe apart from the
 # corp data it describes would let the probe lie. `earnings` (P5a) groups its three coupled methods for
-# the same reason (earnings_available describes whichever backend serves the earnings data). P5 feeds add
+# the same reason (earnings_available describes whichever backend serves the earnings data). `short_interest`
+# + `offerings` (P5b) each group their `*_known` + `*_available` methods for the same reason. P5 feeds add
 # their own groups when their methods land.
-_CAPABILITIES = frozenset({"calendar", "bars", "snapshot", "corp_actions", "earnings"})
+_CAPABILITIES = frozenset({"calendar", "bars", "snapshot", "corp_actions", "earnings",
+                           "short_interest", "offerings"})
 
 
 class CompositeSource:
@@ -80,3 +84,18 @@ class CompositeSource:
 
     def earnings_available(self) -> bool:
         return self._route("earnings").earnings_available()
+
+    # ── short_interest group (P5b) — routes together to the short-interest backend; falls to base (and
+    #    base's NotImplementedError) when un-overridden, exactly like the earnings path ──
+    def short_interest_known(self, symbol: str, as_of: Date) -> list[ShortInterest]:
+        return self._route("short_interest").short_interest_known(symbol, as_of)
+
+    def short_interest_available(self) -> bool:
+        return self._route("short_interest").short_interest_available()
+
+    # ── offerings group (P5b) — the lifecycle typed-events feed ──
+    def offering_events_known(self, symbol: str, as_of: Date) -> list[OfferingEvent]:
+        return self._route("offerings").offering_events_known(symbol, as_of)
+
+    def offerings_available(self) -> bool:
+        return self._route("offerings").offerings_available()

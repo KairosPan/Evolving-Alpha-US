@@ -43,8 +43,12 @@ def has_dilution_filing(corp: pd.DataFrame, symbol: str, as_of: Date) -> bool:
     """True iff a dilution filing (ATM / shelf / secondary offering) for `symbol` is announced by as_of.
 
     Unlike a reverse split (a scheduled event gated on ex_date), an ATM/shelf is an open-ended dilution
-    overhang once filed, so this reports ANY announced dilution-kind filing (withdrawal/expiry lifecycle
-    is deferred to a real EDGAR feed). PIT-safe: keyed on announce_date <= as_of via known_corporate_actions."""
+    overhang once filed, so this reports ANY announced dilution-kind filing — i.e. it vetoes FOREVER once
+    announced. This is the explicit fail-closed **default** when the offerings lifecycle feed (P5b) is
+    ABSENT: with no withdrawal/expiry data we conservatively assume the overhang persists (no-connector =
+    conservative). When the lifecycle feed IS present, `alpha/data/offerings.is_dilution_overhang` is the
+    lifecycle-aware successor — it lets a withdrawn/expired shelf stop vetoing as of its own lifecycle date.
+    PIT-safe: keyed on announce_date <= as_of via known_corporate_actions."""
     known = known_corporate_actions(corp, as_of)
     if known.empty:
         return False

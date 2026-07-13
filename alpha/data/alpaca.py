@@ -267,3 +267,19 @@ class AlpacaSource:
 
     def earnings_available(self) -> bool:
         return False        # no earnings feed present (MISSING; fail-closed)
+
+    # ── short interest + offerings (P5b): Alpaca has neither. Pure-swap — compose FinraSource /
+    #    EdgarOfferingsSource for these capabilities; the data methods raise, availability is False. ──
+    def short_interest_known(self, symbol: str, as_of: Date):
+        raise NotImplementedError("Alpaca has no short-interest feed; compose a FinraSource for "
+                                  "`short_interest`")
+
+    def short_interest_available(self) -> bool:
+        return False
+
+    def offering_events_known(self, symbol: str, as_of: Date):
+        raise NotImplementedError("Alpaca has no offerings feed; compose an EdgarOfferingsSource for "
+                                  "`offerings`")
+
+    def offerings_available(self) -> bool:
+        return False

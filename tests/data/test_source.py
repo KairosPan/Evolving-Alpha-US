@@ -145,3 +145,62 @@ def test_snapshot_source_corporate_actions_known(tmp_path):
                                          "ratio": [0.1]}))
     known = SnapshotSource(store).corporate_actions_known(date(2026, 6, 12))
     assert has_reverse_split_pending(known, "RS", date(2026, 6, 12)) is True   # announced 6/9, ex 6/20 future
+
+
+# ── short interest + offerings capabilities (P5b) ─────────────────────────────────────────────────────
+
+def _si_off_fake():
+    from alpha.data.source import FakeSource
+    from alpha.data.short_interest import ShortInterest
+    from alpha.data.offerings import OfferingEvent
+    si = [ShortInterest(symbol="RUN", settlement_date=date(2026, 6, 14),
+                        publication_date=date(2026, 6, 25), shares_short=1.2e7, days_to_cover=6.0),
+          ShortInterest(symbol="FLOP", settlement_date=date(2026, 5, 30),
+                        publication_date=date(2026, 6, 10), shares_short=5.0e6, days_to_cover=2.0)]
+    events = [OfferingEvent(symbol="RUN", offering_id="A", event="announce", kind="shelf",
+                            process_date=date(2026, 6, 9)),
+              OfferingEvent(symbol="FLOP", offering_id="B", event="announce", kind="atm",
+                            process_date=date(2026, 6, 20))]
+    return FakeSource(calendar=[], bars={}, snapshots={}, short_interest=si, offering_events=events)
+
+
+def test_fake_source_short_interest_pit_and_symbol_filter():
+    src = _si_off_fake()
+    assert src.short_interest_known("RUN", date(2026, 6, 20)) == []       # published 6/25, invisible on 6/20
+    got = src.short_interest_known("RUN", date(2026, 6, 25))
+    assert [r.symbol for r in got] == ["RUN"]                             # RUN only, FLOP excluded by symbol
+
+
+def test_fake_source_offering_events_pit_and_symbol_filter():
+    src = _si_off_fake()
+    from alpha.data.offerings import is_dilution_overhang
+    got = src.offering_events_known("RUN", date(2026, 6, 12))
+    assert is_dilution_overhang(got, "RUN", date(2026, 6, 12)) is True    # RUN announced 6/9
+    assert src.offering_events_known("FLOP", date(2026, 6, 12)) == []     # FLOP's atm announced 6/20 (future)
+
+
+def test_fake_source_short_interest_and_offerings_available_flags():
+    from alpha.data.source import FakeSource
+    src = _si_off_fake()
+    assert src.short_interest_available() is True and src.offerings_available() is True
+    bare = FakeSource(calendar=[date(2026, 6, 12)], bars={}, snapshots={})
+    assert bare.short_interest_available() is False                      # none passed -> MISSING (fail-closed)
+    assert bare.offerings_available() is False
+
+
+def test_guarded_source_blocks_future_short_interest_and_offerings():
+    src = _si_off_fake()
+    gs = GuardedSource(src, AsOfGuard(date(2026, 6, 25)))
+    assert [r.symbol for r in gs.short_interest_known("RUN", date(2026, 6, 25))] == ["RUN"]   # as_of == cursor
+    with pytest.raises(LookaheadError):
+        gs.short_interest_known("RUN", date(2026, 6, 26))               # future as_of blocked
+    with pytest.raises(LookaheadError):
+        gs.offering_events_known("RUN", date(2026, 6, 26))
+
+
+def test_guarded_source_short_interest_offerings_available_default_false_when_absent():
+    # fail-closed: an inner predating the capabilities reports MISSING (False), like earnings (not corp).
+    class _Stub:
+        pass
+    gs = GuardedSource(_Stub(), AsOfGuard(date(2026, 6, 12)))
+    assert gs.short_interest_available() is False and gs.offerings_available() is False

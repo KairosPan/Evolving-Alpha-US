@@ -132,3 +132,50 @@ class PITStore:
             if c in df.columns:
                 df[c] = pd.to_datetime(df[c]).dt.date
         return df
+
+    # ── short interest (P5b) — records keyed on publication_date; has_short_interest() is the tri-state
+    #    MISSING seam (True even for an empty frame, False only when the artifact is absent). ──
+    def _short_interest_path(self) -> Path:
+        return self._root / "short_interest.parquet"
+
+    def has_short_interest(self) -> bool:
+        return self._short_interest_path().exists()
+
+    def put_short_interest(self, df: pd.DataFrame) -> None:
+        out = df.copy()
+        for c in ("settlement_date", "publication_date"):
+            if c in out.columns:
+                out[c] = out[c].map(lambda d: d.isoformat() if d is not None else None)
+        _atomic_to_parquet(out, self._short_interest_path())
+
+    def get_short_interest(self) -> pd.DataFrame | None:
+        p = self._short_interest_path()
+        if not p.exists():
+            return None
+        df = pd.read_parquet(p)
+        for c in ("settlement_date", "publication_date"):
+            if c in df.columns:
+                df[c] = pd.to_datetime(df[c]).dt.date
+        return df
+
+    # ── offerings lifecycle (P5b) — typed events keyed on process_date; has_offering_events() tri-state. ──
+    def _offering_events_path(self) -> Path:
+        return self._root / "offering_events.parquet"
+
+    def has_offering_events(self) -> bool:
+        return self._offering_events_path().exists()
+
+    def put_offering_events(self, df: pd.DataFrame) -> None:
+        out = df.copy()
+        if "process_date" in out.columns:
+            out["process_date"] = out["process_date"].map(lambda d: d.isoformat() if d is not None else None)
+        _atomic_to_parquet(out, self._offering_events_path())
+
+    def get_offering_events(self) -> pd.DataFrame | None:
+        p = self._offering_events_path()
+        if not p.exists():
+            return None
+        df = pd.read_parquet(p)
+        if "process_date" in df.columns:
+            df["process_date"] = pd.to_datetime(df["process_date"]).dt.date
+        return df

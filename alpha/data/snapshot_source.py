@@ -13,7 +13,9 @@ from alpha.data.earnings import (
     known_calendar,
     known_earnings,
 )
+from alpha.data.offerings import OfferingEvent, events_from_frame, known_offering_events
 from alpha.data.pit_store import PITStore
+from alpha.data.short_interest import ShortInterest, known_short_interest, si_from_frame
 
 _EMPTY_BARS = ["date", "open", "high", "low", "close", "volume"]
 
@@ -74,3 +76,18 @@ class SnapshotSource:
     def earnings_available(self) -> bool:
         """False iff the earnings artifact is absent (MISSING) — mirrors corp_actions_available."""
         return self._store.has_earnings()
+
+    # ── short interest + offerings (P5b) — served from PITStore fixtures, PIT-filtered on their keys ──
+    def short_interest_known(self, symbol: str, as_of: Date) -> list[ShortInterest]:
+        records = si_from_frame(self._store.get_short_interest())
+        return [r for r in known_short_interest(records, as_of) if r.symbol == symbol]
+
+    def short_interest_available(self) -> bool:
+        return self._store.has_short_interest()
+
+    def offering_events_known(self, symbol: str, as_of: Date) -> list[OfferingEvent]:
+        events = events_from_frame(self._store.get_offering_events())
+        return [e for e in known_offering_events(events, as_of) if e.symbol == symbol]
+
+    def offerings_available(self) -> bool:
+        return self._store.has_offering_events()

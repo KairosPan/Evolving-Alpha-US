@@ -94,3 +94,48 @@ def test_snapshot_earnings_available_reflects_artifact_presence(tmp_path):
     assert src.earnings_available() is False                         # no parquet -> MISSING (fail-closed)
     _seed_earnings(tmp_path)
     assert SnapshotSource(store).earnings_available() is True        # present -> checkable
+
+
+# ── short interest + offerings (P5b) ─────────────────────────────────────────────────────────────────
+
+def _seed_si_offerings(tmp_path):
+    from alpha.data.short_interest import ShortInterest, si_to_frame
+    from alpha.data.offerings import OfferingEvent, events_to_frame
+    store = PITStore(tmp_path)
+    si = [ShortInterest(symbol="RUN", settlement_date=date(2026, 6, 14),
+                        publication_date=date(2026, 6, 25), shares_short=1.2e7, days_to_cover=6.0),
+          ShortInterest(symbol="OTH", settlement_date=date(2026, 6, 14),
+                        publication_date=date(2026, 6, 25), shares_short=3.0e6, days_to_cover=1.5)]
+    events = [OfferingEvent(symbol="RUN", offering_id="A", event="announce", kind="shelf",
+                            process_date=date(2026, 6, 9)),
+              OfferingEvent(symbol="RUN", offering_id="A", event="withdrawn", kind="shelf",
+                            process_date=date(2026, 6, 20))]
+    store.put_short_interest(si_to_frame(si))
+    store.put_offering_events(events_to_frame(events))
+    return SnapshotSource(store), store
+
+
+def test_snapshot_short_interest_pit_and_symbol_filter(tmp_path):
+    src, _ = _seed_si_offerings(tmp_path)
+    assert src.short_interest_known("RUN", date(2026, 6, 20)) == []      # published 6/25, invisible on 6/20
+    got = src.short_interest_known("RUN", date(2026, 6, 25))
+    assert len(got) == 1 and got[0].symbol == "RUN" and got[0].days_to_cover == 6.0
+    assert src.short_interest_known("OTH", date(2026, 6, 25))[0].symbol == "OTH"   # symbol filter
+
+
+def test_snapshot_offering_events_lifecycle_pit(tmp_path):
+    from alpha.data.offerings import is_dilution_overhang
+    src, _ = _seed_si_offerings(tmp_path)
+    before = src.offering_events_known("RUN", date(2026, 6, 19))
+    assert is_dilution_overhang(before, "RUN", date(2026, 6, 19)) is True   # announced, not yet withdrawn
+    after = src.offering_events_known("RUN", date(2026, 6, 20))
+    assert is_dilution_overhang(after, "RUN", date(2026, 6, 20)) is False   # withdrawal now knowable -> lifts
+
+
+def test_snapshot_si_offerings_available_reflect_artifact_presence(tmp_path):
+    store = PITStore(tmp_path)
+    src = SnapshotSource(store)
+    assert src.short_interest_available() is False and src.offerings_available() is False   # MISSING
+    _seed_si_offerings(tmp_path)
+    fresh = SnapshotSource(store)
+    assert fresh.short_interest_available() is True and fresh.offerings_available() is True  # present
