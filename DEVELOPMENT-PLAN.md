@@ -140,10 +140,17 @@ not compose with the deferred market+theme activation). Scope:
    run the theme phase logic per-cluster. CAVEAT: small-N breadth — a narrative line is 3-5 names
    (§2.5 theme_portfolio), so per-cluster `pct_above_200dma` is statistically thin; may need a
    min-cluster-size floor or a design pass before it's meaningful.
-**Posture.** Build DORMANT/additive/default-off (thresholds are all 文献值待verdict校准 — activating
-uncalibrated clocks into guard/sizing before P6 calibration would degrade decisions; the plumbing +
-authority composition ship default-off, the flip-on waits on verdict calibration or a user call).
-Touches guard/sizing/state (+ likely TCB veto/retrieval). Own brainstorm→spec→plan→build→review round.
+**Posture / sequencing decision (HELD FOR USER).** The three clock LEAVES were safe to build dormant
+because they are pure READS (stable, zero decide-path integration). This arc is the INTEGRATION — how
+the three reads compose authority (market vetoes theme vetoes stock) and how each phase maps to
+`frontside`/`risk_gate`/appetite/guard/sizing. That integration SHAPE is exactly what P6's calibration
+(stratified verdicts over captured PIT windows — the tool exists, the constants stay 待verdict校准)
+should inform. **Engineering recommendation: CALIBRATE FIRST, then build the integration** — building
+the authority composition ahead of the calibration that should shape it is building ahead of
+validation. (The alternative — build it DORMANT/default-off now, flip on after calibration — matches
+the P2/theme/stock dormant pattern but risks reworking the integration once calibration lands.) Either
+way touches guard/sizing/state (+ likely TCB veto/retrieval) and wants its own
+brainstorm→spec→plan→build→review round. **User picks the sequencing.**
 
 ### P6 — Eval methodology
 P6 SHIPPED 2026-07-13 → `docs/PROJECT_STATE.md` (spec
