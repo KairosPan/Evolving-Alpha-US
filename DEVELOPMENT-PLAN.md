@@ -58,28 +58,23 @@ all clock thresholds + the §5 dead-band limit (0.41–0.59 no-op band inflates 
 TCB `retrieval.py`) and the growth console instrument (three-state ring) live in §3 SMALL POOL;
 trend_template screen activation still blocked on the P5 split cross-check.
 
-### P3 — Corp-actions tri-state guard-blind fix (verified hole)
-**Goal.** Absent `corp_actions.parquet` → empty frame → dilution/reverse-split (and
-`ssr_active`/`halt_then_dump`) flags compute False: "no data" is indistinguishable from "checked,
-nothing announced". Add a distinguishable unavailable state surfaced by `screen_decision` into
-`DecisionPackage.key_risks` ("guard ran blind") — warn-the-human, not a new veto.
-**Why this order.** Cheap, verified, and a precondition for trusting P9's unattended daily loop.
-**Acceptance gate.** Default-off, byte-identical when off; threaded symmetrically into both verdict
-arms; regression distinguishes missing-artifact from present-but-empty.
-**Sources.** kairos-mining §2.2 (CONFIRMED) + §4.2.
+### P3 — Corp-actions tri-state guard-blind fix
+P3 SHIPPED 2026-07-13 → `docs/PROJECT_STATE.md` (spec
+`docs/superpowers/specs/2026-07-13-p3-corp-actions-tristate-design.md`). Honest scope boundary
+recorded there: ssr/halt_then_dump missing-BARS blindness is a separate tape-data seam,
+deliberately not covered (revisit with P5 feeds or P9 trust review).
 
-### P4 — Data-source layer (mechanism shipped 2026-06-22; fill it in)
-**Goal.** (a) A **real second vendor** (Polygon / Tiingo) for 2016+ history — Alpaca's free IEX bars
-only reach ~2021; implement the `MarketDataSource` Protocol, register one line in
-`alpha/data/registry.py` (own spec). (b) **`CompositeSource`** — per-capability composition, the
-natural home for P5's enrichment feeds (own spec). (c) **Fallback/redundancy decorator** — primary +
-backup, auto-failover. (d) Conditional: a validated **`DataConfig`** object, only if per-source
-constructor params proliferate (overlaps A1's frozen Settings — reconcile there first).
-**Why this order.** Vendor first (unlocks pre-2021 eval windows for P6), CompositeSource next (P5
-depends on it), decorator once two sources exist.
+### P4 — Data-source layer (mechanism shipped 2026-06-22; narrowed 2026-07-13)
+**Goal (narrowed — user decision 2026-07-13: no second vendor for now; (a)+(c) moved to the §4
+deferred ledger).** (b) **`CompositeSource`** — per-capability composition, the natural home for
+P5's enrichment feeds (own spec) — this is now P4's whole substance, ordered as P5's prerequisite.
+(d) Conditional: a validated **`DataConfig`** object, only if per-source constructor params
+proliferate (overlaps A1's frozen Settings — reconcile there first).
 **Acceptance gate.** Pure-swap contract holds (full Protocol or NotImplementedError); `make_source`
-still returns RAW; `capture_window` works against the new vendor; PIT firewall tests untouched.
+still returns RAW; PIT firewall tests untouched.
 **Sources.** `docs/superpowers/specs/2026-06-22-multi-source-switching-design.md` (Future work).
+**Consequence accepted with the deferral:** eval windows stay bounded at ~2021+ (Alpaca free IEX);
+P6's appetite for longer history rides the §4 revisit trigger.
 
 ### P5 — Real feeds (consume-paths wired; ingestion missing)
 **Goal.** Flip the offline placeholders live, each as a CompositeSource backend (P4):
@@ -396,6 +391,7 @@ Consciously not queued; each row carries its recorded revisit trigger.
 | **Conflicts: accept records intent only** | Auto-applying a held self-study op on "accept" was deliberately rejected; held entries survive forks as pure adjudication signals. Recorded so a future plan doesn't "complete" adjudication by making accept apply. Any change = a charter-level machine-authority decision. |
 | **Session-local self-adaptation** | Charter deferral (*First Founding Principle*): Kairos editing its own prompt/skills/tools mid-session is shelved; accepted cost — Kairos cannot self-unblock and fails into Sonia's offline refinement. Trigger (charter-recorded): offline-only refinement shown too slow on Kairos's own real workload traces. |
 | **Model failover/caching (G14)** | Charter *v4 design: Model Layer*. No failover/caching policy in `make_client`; per-role env override is the whole story today. Trigger: live multi-provider operation or first provider outage that costs a run. |
+| **Second data vendor + fallback decorator (ex-P4 a/c)** | User decision 2026-07-13: no second vendor for now (Polygon/Tiingo 2016+ history + primary/backup auto-failover both deferred; `make_source` registry seam stays ready — one line to register when wanted). Accepted cost: eval windows bounded at ~2021+ (Alpaca free IEX). Trigger: P6 needs pre-2021 windows for statistical power, an Alpaca coverage/quality blocker, or a data outage that costs a run. |
 | **`refine_live` production-seam pin** | Library seam is test-pinned (`test_packages_from_returned_handles_not_the_passed_ones`); forcing an in-fork breaker trip at script level judged disproportionate (§5.17). Companion recorded limit: reconcile sweep's length-only check on abandoned-branch restores. Trigger: any refactor of the runner wiring. |
 | **Vision / image teach ingestion** | `deepseek-v4-pro` has no vision via the API (verified); Sonia rejects images with a friendly note. Trigger: a vision-capable model adopted for the Sonia role (+ image content blocks + composer upload re-enable). |
 
