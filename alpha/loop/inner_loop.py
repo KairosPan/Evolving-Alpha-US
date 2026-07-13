@@ -49,6 +49,10 @@ class LoopConfig(BaseModel):
     #   attach the portfolio plan (exposure budget + correlated groups). VERDICT-NEUTRAL: scoring is
     #   equal-weighted and never reads size, so this enriches the decision surface without changing the
     #   HCH-vs-Hexpert numbers. Set size=False to emit unsized decisions.
+    clock_authority: bool = False   # §1.4 three-clock authority cascade OFF by default (spec
+    #   2026-07-13-three-clock-activation): ON, under a growth H, composes the theme (§1.2) + stock (§1.3)
+    #   clock reads ONTO the market veto as a tighten-only downward cascade (高尺度否决低尺度). OFF ->
+    #   byte-identical; the flag threads to BOTH verdict arms symmetrically (like screen / recall_store).
     # shadow/paired breaker (US-2d): active only when an InnerLoop is given a shadow_daily reference series
     breaker_shadow_lambda: float = Field(default=1.0, ge=0.0)
     breaker_shadow_eps_c: float = Field(default=0.25, ge=0.0)
@@ -130,7 +134,8 @@ class InnerLoop:
         # market clock and a momo H reads GCycle. track_history=True accumulates market_history in place.
         policy = GuardedPolicy(base, self._source, episode_store=self._recall_store,
                                vocabulary=h.vocabulary, state_history=self._market_history,
-                               track_history=True) if self._cfg.screen else base
+                               track_history=True,
+                               clock_authority=self._cfg.clock_authority) if self._cfg.screen else base
         self._agent = SizingPolicy(policy) if self._cfg.size else policy   # size OUTSIDE guard (post-veto)
         self._refiner = Refiner(h, self._refiner_llm, self._mgr.tools, self._refiner_cfg,
                                 conflict_queue=self._conflict_queue)

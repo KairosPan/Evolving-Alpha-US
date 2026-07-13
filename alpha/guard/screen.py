@@ -13,13 +13,21 @@ from alpha.data.offerings import is_dilution_overhang
 from alpha.data.source import GuardedSource
 from alpha.eval.decision import DecisionPackage
 from alpha.features.earnings import days_to_earnings, has_upcoming_earnings
+from alpha.data.sector_map import make_sector_map
 from alpha.guard.panic import detect_panic_state
 from alpha.guard.veto import CandidateContext, veto
 from alpha.memory.aggregate import is_episode_taboo, summarize
 from alpha.regime.classifier import GCycle
+from alpha.regime.clock_authority import compose_downward_cascade
 from alpha.regime.growth_clock import GrowthMarketClock
+from alpha.regime.stock_clock import MIN_HISTORY as STOCK_MIN_HISTORY, classify_stock_stage
+from alpha.regime.theme_clock import GrowthThemeClock
 from alpha.sizing.action import candidate_action     # shared action vocabulary (leaf; no cycle)
 from alpha.state.market import MarketState
+from alpha.universe.stock import StockSnapshot
+
+STOCK_HISTORY_FETCH = STOCK_MIN_HISTORY + 20   # trailing bars fetched for the §1.4 stock-clock read
+                                               #   (a margin over the 60-day rising-SMA warm-up)
 
 SSR_DROP_PCT = -10.0   # Reg SHO Rule 201: a >=10% prior-day decline restricts short sales the next session
 HALT_SPIKE_PCT = 0.15   # an intraday high >=15% above prior close ~ a LULD halt-up (Tier-1 band) event
@@ -93,9 +101,61 @@ def ssr_active(source, symbol: str, as_of: Date) -> bool:
     return pct is not None and pct <= SSR_DROP_PCT
 
 
+def _bar_stock_history(source, symbol: str, as_of: Date) -> list[StockSnapshot]:
+    """A per-symbol `StockSnapshot` history built purely from trailing daily bars (strictly < as_of), the
+    §1.4 stock-clock's `classify_stock_stage(history, today)` input. Only the CLOSE series is carried:
+    `rs_percentile` is cross-sectional (not reconstructable from one symbol's bars) so it is None across
+    history — HONEST LIMIT. Because the base→advance breakout demands `rs_strong` (rs_percentile ≥ 70),
+    NO history day can promote out of base; the machine can leave base only on TODAY's (universe) snapshot,
+    the one that DOES carry `rs_percentile`. So in THIS wiring the reachable set collapses to base-vs-advance:
+    the advance anchor lands on the final day, so the post-anchor `top`/`decline` transitions never fire —
+    the gate reduces to "a fresh breakout TODAY passes, else base → veto" (a stricter, not looser, gate: a
+    genuine sustained advance not printing a fresh breakout today still reads base and is vetoed; a topping
+    name also falls to base and is vetoed, just with the less-precise base reason). `top`/`decline` are
+    covered by the PURE composition tests and would fire once a caller threads real historical rs_percentile
+    (retaining the cross-section per day — a follow-up). `rvol`/`consecutive_up_days`/`pct_change` are left
+    None (the clock derives pct from the close series; the distribution/run legs only bind AFTER an advance
+    anchor, which this wiring never reaches). Trailing-only end==as_of fetch through the caller's
+    GuardedSource → PIT-safe."""
+    prior = [d for d in source.trading_calendar() if d < as_of]
+    if len(prior) < STOCK_MIN_HISTORY:
+        return []
+    start = prior[-STOCK_HISTORY_FETCH] if len(prior) >= STOCK_HISTORY_FETCH else prior[0]
+    bars = source.daily_bars(symbol, start, as_of)   # end==as_of is guard-legal (<= as_of)
+    if bars is None or getattr(bars, "empty", True) or "date" not in bars.columns:
+        return []
+    df = bars.copy()
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    closes = pd.to_numeric(df[df["date"] < as_of].sort_values("date")["close"], errors="coerce")
+    out: list[StockSnapshot] = []
+    prev: float | None = None
+    for close in closes:
+        if pd.isna(close):
+            prev = None
+            continue
+        out.append(StockSnapshot(symbol=symbol, name=symbol, status="trend_template",
+                                 close=float(close), prev_close=prev))
+        prev = float(close)
+    return out
+
+
+def stock_stage_for(source, universe, symbol: str, as_of: Date):
+    """The §1.4 per-candidate stock stage (a `StockStageReading` or None to abstain), read from the
+    symbol's bar-derived history + its TODAY universe snapshot (which carries `rs_percentile`). Abstains
+    (None — 禁止补格) with no universe / no snapshot / no close / warm-up (`classify_stock_stage` returns
+    None below MIN_HISTORY). `pct_change` is nulled on the today snapshot to force the clock's fraction
+    fallback (the universe stores pct in PERCENT; the clock's stall/climax thresholds are fractions)."""
+    today = universe.get(symbol) if universe is not None else None
+    if today is None or today.close is None:
+        return None
+    history = _bar_stock_history(source, symbol, as_of)
+    return classify_stock_stage(history, today.model_copy(update={"pct_change": None}))
+
+
 def screen_decision(decision: DecisionPackage, *, source, state: MarketState, episode_store=None,
                     history: Sequence[MarketState] | None = None,
-                    vocabulary: str = "momo") -> DecisionPackage:
+                    vocabulary: str = "momo", universe=None,
+                    clock_authority: bool = False) -> DecisionPackage:
     """Apply the L4 hard veto to a freshly-produced DecisionPackage: DROP candidates the immutable-core
     guard blocks (SSR / reverse-split-pending / risk-off / backside regime) — plus, when an `episode_store`
     is wired, an §6 episode-taboo (a symbol with a strong PIT-masked nuke history). Record dropped reasons
@@ -127,6 +187,16 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
     still drops the candidate. Absent -> `has_dilution_filing` (veto-forever fail-closed, byte-identical).
     Safety-only-tightens: the lifecycle lifts a veto only with dated proof of closure, never adds one.
 
+    `clock_authority` (§1.4, default OFF -> byte-identical): when ON and `vocabulary == "growth"`, the
+    theme (§1.2) + stock (§1.3) clock reads are composed ON TOP of the immutable market veto as a DOWNWARD
+    cascade (`compose_downward_cascade`, tighten-only): the candidate's theme phase (its sector-map group's
+    `GrowthThemeClock` read) can add a veto (exhaustion) / cap appetite; its stock stage
+    (`stock_stage_for`) is a long-eligibility gate (只在 advance 做多 — base/top/decline VETO). The reads
+    are attached to KEPT candidates (`stock_stage`/`theme_phase`/`climax_run`) for the sizing cap + the
+    console. A lower clock NEVER loosens a higher gate (reasons only add, the tier cap only lowers). OFF,
+    or momo, or an unreadable read (禁止补格) -> no cascade -> byte-identical. `universe` is the today
+    snapshot source for the stock stage; None -> the stock gate abstains.
+
     PIT-safe: all data reads go through a fresh GuardedSource(AsOfGuard(state.date)); SSR reads only
     prior-day bars (< as_of) and corp actions are announce-keyed (<= as_of); episode recall is masked at
     `for_asof(state.date)`. Vetoed candidates are dropped (never entered/scored) rather than annotated — a
@@ -151,6 +221,12 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
     taboo_stats = (summarize(episode_store.for_asof(as_of, limit=None), key=lambda e: e.symbol)
                    if episode_store is not None else {})   # limit=None: full PIT history (past the 50-cap)
     panic = detect_panic_state(history, state) if history else False   # P1: momentum-crash window (per-day, not per-name)
+    # §1.4 clock_authority (default OFF -> the whole block is skipped -> byte-identical): under a growth H
+    # read the theme lifecycle once for the day (state.theme_breadth None on the live path -> {} -> theme
+    # abstains) + build the sector map once; the per-candidate stock stage is read inside the loop.
+    clock_on = clock_authority and vocabulary == "growth"
+    theme_reads = GrowthThemeClock().read(history or (), state) if clock_on else {}
+    sector_map = make_sector_map() if clock_on else None
     kept, notes = [], []
     for c in decision.candidates:
         if candidate_action(c) != "enter":     # P0.6: a trim/exit is a derisk on a HELD name, not a
@@ -169,9 +245,21 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
                                episode_taboo=is_episode_taboo(taboo_stats.get(c.symbol)),
                                panic_state=panic)
         v = veto(ctx)
-        if v.vetoed:
-            notes.append(f"vetoed {c.symbol}: {'; '.join(v.reasons)}")
+        reasons = list(v.reasons)              # market + data-flag veto (immutable L4 surface, unchanged)
+        cascade = stock_reading = theme_phase = None
+        if clock_on:                           # §1.4 downward cascade: theme + stock ON TOP (tighten-only)
+            group = sector_map.sector_of(c.symbol)
+            theme_phase = theme_reads[group].phase if group in theme_reads else None
+            stock_reading = stock_stage_for(guarded, universe, c.symbol, as_of)
+            cascade = compose_downward_cascade(theme_phase=theme_phase, stock=stock_reading)
+            reasons += list(cascade.veto_reasons)     # additive: never removes a market/data veto
+        if reasons:
+            notes.append(f"vetoed {c.symbol}: {'; '.join(reasons)}")
         else:
+            if clock_on:                       # attach the reads to the KEPT candidate (sizing cap + console)
+                c = c.model_copy(update={"stock_stage": stock_reading.stage if stock_reading else "",
+                                         "theme_phase": theme_phase or "",
+                                         "climax_run": bool(cascade and cascade.reduce_flag)})
             kept.append(c)
             if earnings_available and has_upcoming_earnings(earnings_cal, c.symbol, as_of, EARNINGS_T_MINUS):
                 # P5b: a KEPT new entry reporting within T-3 -> surface the §4.5 checklist requirement
@@ -192,12 +280,14 @@ class GuardedPolicy:
 
     def __init__(self, inner, source, *, episode_store=None,
                  state_history: Sequence[MarketState] | None = None,
-                 vocabulary: str = "momo", track_history: bool = False) -> None:
+                 vocabulary: str = "momo", track_history: bool = False,
+                 clock_authority: bool = False) -> None:
         self._inner = inner
         self._source = source
         self._episode_store = episode_store
         self._vocabulary = vocabulary               # P2: pick the regime reader (rides with the H)
         self._track_history = track_history
+        self._clock_authority = clock_authority     # §1.4: compose theme+stock ON TOP (default OFF)
         # The strictly-prior daily MarketStates: the panic veto's backdrop AND the growth clock's
         # FTD/distribution window. P2 activates both by ACCUMULATING them across decide() calls
         # (track_history=True). A passed list is grown IN PLACE — InnerLoop's persistent history survives
@@ -216,7 +306,8 @@ class GuardedPolicy:
         decision = self._inner.decide(state, universe, **kw)
         out = screen_decision(decision, source=self._source, state=state,
                               episode_store=self._episode_store, history=self._state_history,
-                              vocabulary=self._vocabulary)
+                              vocabulary=self._vocabulary, universe=universe,
+                              clock_authority=self._clock_authority)
         if self._track_history:
             self._state_history.append(state)       # grow AFTER using as the strictly-prior context
         return out

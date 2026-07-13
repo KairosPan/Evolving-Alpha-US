@@ -52,6 +52,12 @@ class Candidate(BaseModel):
     entry: str = ""
     exit_stop: str = ""
     size_tier: SizeTier | None = None                # from L3 sizing
+    # §1.4 three-clock authority reads (attached by the clock_authority cascade in the L4 guard; default
+    # "" / False = flag OFF or the clock abstained → byte-identical, and the sizing-side clock_tier_cap
+    # reads them as a no-op). Surfaced for the human-confirm / console + the DAgger record.
+    stock_stage: str = ""                             # §1.3 stock-clock read, e.g. "stock:advance"
+    theme_phase: str = ""                             # §1.2 theme-clock read, e.g. "theme:institutional"
+    climax_run: bool = False                          # §1.3 climax reduce flag (surfaced; never an add)
     fill_feasibility: FillFeasibility | None = None  # from eval/fill (inference path)
     taboo_check: list[TabooCheck] = Field(default_factory=list)   # from L4 guard
     counterview: str = ""

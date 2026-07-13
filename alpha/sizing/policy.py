@@ -5,11 +5,12 @@ from typing import Callable
 
 from alpha.eval.decision import DecisionPackage, Portfolio
 from alpha.regime.classifier import GCycle
+from alpha.regime.clock_authority import clock_tier_cap
 from alpha.sizing.action import candidate_action, derisk_tier
 from alpha.sizing.correlation import Pick
 from alpha.sizing.float_size import float_capped_tier
 from alpha.sizing.portfolio import plan_portfolio
-from alpha.sizing.position import SizingConfig, size_tier
+from alpha.sizing.position import SIZE_TIER_WEIGHT, SizingConfig, size_tier
 from alpha.state.market import MarketState
 
 _DEFAULT_CONFIG = SizingConfig()
@@ -55,6 +56,11 @@ def size_decision(decision: DecisionPackage, *, state: MarketState,
     portfolio exposure reflects the same caps). ADDITIVE / DEFAULT-OFF: floats=None -> the cap branch is
     never entered -> byte-identical. VERDICT-NEUTRAL: the cap only touches size_tier/portfolio, which
     scoring never reads.
+
+    §1.4 clock_authority cap (spec 2026-07-13-three-clock-activation): each tier is ALSO capped at the
+    tightest of the theme/stock clock reads the L4 guard attached to the candidate (`clock_tier_cap` over
+    `stock_stage`/`theme_phase`/`climax_run`). ADDITIVE / DEFAULT-OFF: no reads attached (flag OFF /
+    abstain) -> None -> no cap -> byte-identical. Tighten-only + VERDICT-NEUTRAL (touches only size_tier).
     """
     regime = decision.regime or GCycle().read(state)
     rg = regime.risk_gate
@@ -63,6 +69,13 @@ def size_decision(decision: DecisionPackage, *, state: MarketState,
         t = derisk_tier(candidate_action(c), size_tier(c.confidence, rg))
         if floats is not None:
             t = float_capped_tier(t, floats.get(c.symbol), config)
+        # §1.4 clock_authority appetite/stage cap (tighten-only): the guard attached the theme/stock reads
+        # to KEPT candidates; cap the tier at the tightest of them. Empty reads (flag OFF / abstain) ->
+        # clock_tier_cap None -> no change -> byte-identical. VERDICT-NEUTRAL (touches only size_tier).
+        cap = clock_tier_cap(getattr(c, "stock_stage", ""), getattr(c, "theme_phase", ""),
+                             climax_run=getattr(c, "climax_run", False))
+        if cap is not None and SIZE_TIER_WEIGHT[cap] < SIZE_TIER_WEIGHT[t]:
+            t = cap
         return t
 
     sized = [c.model_copy(update={"size_tier": _tier(c)}) for c in decision.candidates]

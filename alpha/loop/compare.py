@@ -111,8 +111,11 @@ def compare_harnesses(harness_factory: Callable[[], HarnessState], source, start
     vocab = "momo"
 
     def _wrap(policy):
+        # clock_authority (§1.4) rides on cfg -> threaded to EVERY arm's GuardedPolicy identically, so both
+        # arms compose the SAME theme+stock cascade over the SAME source/window (verdict-symmetric, the
+        # screen-flag / recall_store pattern). Default OFF -> byte-identical.
         p = GuardedPolicy(policy, source, episode_store=recall_store, vocabulary=vocab,
-                          track_history=True) if cfg.screen else policy
+                          track_history=True, clock_authority=cfg.clock_authority) if cfg.screen else policy
         return SizingPolicy(p) if cfg.size else p
 
     # Hexpert FIRST when shadow (its series seeds HCH); frozen H = bare agent walk, no Refiner/manager.
