@@ -12,6 +12,7 @@ import json
 from datetime import date as Date
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -41,6 +42,19 @@ def set_sonia_client(client) -> None:
 
 def _sonia() -> SoniaClient:
     return _SONIA if _SONIA is not None else SoniaClient()
+
+
+_SONIA_DOWN = "Sonia service unavailable — start it with `python -m sonia`"
+
+
+def _sonia_banner(exc: Exception) -> str:
+    """Map an httpx failure from a Sonia call to the operator banner. Two distinct signals:
+    an HTTPStatusError means Sonia IS up but returned 4xx/5xx (e.g. a 404 route — the request
+    failed); any other httpx error (ConnectError etc., no response) means the process isn't
+    running. Same-looking 'unavailable' banner for both hides which one it is."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return f"Sonia returned an error (HTTP {exc.response.status_code}) — the service is up but the request failed"
+    return _SONIA_DOWN
 
 
 def set_workbench_client(client) -> None:
@@ -357,8 +371,6 @@ def create_app() -> FastAPI:
     def subagent(request: Request):
         return _brain_stub(request, "subagent")
 
-    import httpx
-
     def _cockpit_ctx(request, session: dict | None, banner: str = ""):
         return {"active": "teach",
                 "session_id": (session or {}).get("session_id", ""),
@@ -381,9 +393,8 @@ def create_app() -> FastAPI:
             latest = next((s for s in sessions if s.get("status") == "open"), None)
             session = _sonia().get_session(latest["session_id"]) if latest else None
             return render(request, "cockpit.html", _cockpit_ctx(request, session))
-        except httpx.HTTPError:
-            return render(request, "cockpit.html", _cockpit_ctx(request, None,
-                          banner="Sonia service unavailable — start it with `python -m sonia`"))
+        except httpx.HTTPError as exc:
+            return render(request, "cockpit.html", _cockpit_ctx(request, None, banner=_sonia_banner(exc)))
 
     @app.post("/evolve/message")
     def message(request: Request, session_id: str = Form(""), text: str = Form(""),
@@ -393,11 +404,10 @@ def create_app() -> FastAPI:
         try:
             out = _sonia().chat(session_id or None, clean, attachments)
             session = _sonia().get_session(out["session_id"])
-        except httpx.HTTPError:
+        except httpx.HTTPError as exc:
             return render(request, "partials/message_assistant.html",
                           {"session_id": session_id, "m": {"message_id": "err", "role": "assistant",
-                           "text": "Sonia service unavailable — start it with `python -m sonia`.",
-                           "directions": [], "edits": []},
+                           "text": _sonia_banner(exc), "directions": [], "edits": []},
                            "banner": "unavailable"})
         return render(request, "partials/_two_turns.html",
                       {"session_id": out["session_id"], "user": out["user_message"],
@@ -405,17 +415,17 @@ def create_app() -> FastAPI:
                        "pending": drawer.pending_view(session),
                        "brain": drawer.brain_view(da.load_brain(), materialized=da.brain_badge()["is_live"])})
 
-    def _unavailable(request):
+    def _unavailable(request, exc: Exception | None = None):
         return render(request, "partials/unavailable.html",
-                      {"banner": "Sonia service unavailable — start it with `python -m sonia`"})
+                      {"banner": _sonia_banner(exc) if exc is not None else _SONIA_DOWN})
 
     @app.post("/evolve/{session_id}/edit/{edit_id}")
     def edit(request: Request, session_id: str, edit_id: str, action: str = Form(...)):
         try:
             _sonia().edit(session_id, edit_id, action)
             session = _sonia().get_session(session_id)
-        except httpx.HTTPError:
-            return _unavailable(request)
+        except httpx.HTTPError as exc:
+            return _unavailable(request, exc)
         return render(request, "partials/_pending.html",
                       {"session_id": session_id, "pending": drawer.pending_view(session)})
 
@@ -424,8 +434,8 @@ def create_app() -> FastAPI:
         try:
             out = _sonia().propose(session_id, message_id)
             session = _sonia().get_session(session_id)
-        except httpx.HTTPError:
-            return _unavailable(request)
+        except httpx.HTTPError as exc:
+            return _unavailable(request, exc)
         return render(request, "partials/_propose_result.html",
                       {"session_id": session_id, "m": out["message"],
                        "pending": drawer.pending_view(session)})
@@ -435,8 +445,8 @@ def create_app() -> FastAPI:
         try:
             _sonia().apply(session_id, message_id)
             session = _sonia().get_session(session_id)
-        except httpx.HTTPError:
-            return _unavailable(request)
+        except httpx.HTTPError as exc:
+            return _unavailable(request, exc)
         return render(request, "partials/_drawer_update.html",
                       {"session_id": session_id, "pending": drawer.pending_view(session),
                        "brain": drawer.brain_view(da.load_brain(), materialized=da.brain_badge()["is_live"])})
@@ -446,8 +456,8 @@ def create_app() -> FastAPI:
         try:
             _sonia().rollback(session_id, message_id)
             session = _sonia().get_session(session_id)
-        except httpx.HTTPError:
-            return _unavailable(request)
+        except httpx.HTTPError as exc:
+            return _unavailable(request, exc)
         return render(request, "partials/_drawer_update.html",
                       {"session_id": session_id, "pending": drawer.pending_view(session),
                        "brain": drawer.brain_view(da.load_brain(), materialized=da.brain_badge()["is_live"])})
@@ -462,8 +472,8 @@ def create_app() -> FastAPI:
         # HTMX skips the swap on 204) so the row vanishes. No full document → no nesting.
         try:
             _sonia().delete_session(session_id)
-        except httpx.HTTPError:
-            return _unavailable(request)
+        except httpx.HTTPError as exc:
+            return _unavailable(request, exc)
         return Response(status_code=200, content="")
 
     @app.get("/evolve/sessions/{session_id}")

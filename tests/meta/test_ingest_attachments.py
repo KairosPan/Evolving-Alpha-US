@@ -1,4 +1,5 @@
-from alpha.meta.ingest import ingest_attachments
+from alpha.meta import ingest
+from alpha.meta.ingest import _MAX_FILES, ingest_attachments
 
 
 def test_text_file_decoded_and_text_preserved():
@@ -52,3 +53,35 @@ def test_corrupt_pdf_becomes_friendly_note_not_a_crash():
     assert len(atts) == 1
     assert atts[0].kind == "file" and atts[0].name == "bad.pdf"
     assert "could not read PDF" in atts[0].text
+
+
+def test_under_cap_is_byte_identical():
+    """A normal small batch is unchanged: no cap note, one attachment per file."""
+    files = [("a.txt", b"hello"), ("b.md", b"# hi")]
+    clean, atts = ingest_attachments("prose", files=files)
+    assert clean == "prose"
+    assert len(atts) == 2 and all("cap" not in a.text.lower() for a in atts)
+
+
+def test_over_file_count_stops_early_and_notes():
+    """More than _MAX_FILES attachments: only the first _MAX_FILES are ingested, then ONE cap note;
+    the tail is skipped (never raises)."""
+    files = [(f"f{i}.txt", b"x") for i in range(_MAX_FILES + 3)]
+    _, atts = ingest_attachments("", files=files)
+    ingested = [a for a in atts if a.name.startswith("f")]
+    assert len(ingested) == _MAX_FILES                       # tail not decoded
+    assert f"f{_MAX_FILES}.txt" not in {a.name for a in atts}  # first dropped file absent
+    notes = [a for a in atts if "cap" in a.text.lower() and "skipped" in a.text.lower()]
+    assert len(notes) == 1                                    # exactly one summarizing note
+
+
+def test_over_total_size_stops_early_and_notes(monkeypatch):
+    """Aggregate bytes over _MAX_TOTAL_BYTES: stop before the file that would breach it + note."""
+    monkeypatch.setattr(ingest, "_MAX_TOTAL_BYTES", 10)
+    files = [("a.txt", b"12345"), ("b.txt", b"67890"), ("c.txt", b"this pushes past the cap")]
+    _, atts = ingest.ingest_attachments("", files=files)
+    names = {a.name for a in atts}
+    assert "a.txt" in names and "b.txt" in names   # 5 + 5 == 10 fits
+    assert "c.txt" not in names                     # would breach → never decoded
+    notes = [a for a in atts if "cap" in a.text.lower() and "skipped" in a.text.lower()]
+    assert len(notes) == 1

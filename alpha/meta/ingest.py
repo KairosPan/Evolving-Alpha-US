@@ -91,6 +91,12 @@ _TEXT_EXT = {".txt", ".md", ".csv"}
 _IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 _MAX_TEXT = 50_000
 
+# Bound the composer's attachment batch so one call can't hand us unbounded/huge input to decode.
+# On exceeding EITHER cap we stop decoding the tail and leave a single note (see ingest_attachments).
+# The private-IP / SSRF network leg is a separate hardening (see fetch_url) — this is the local cap only.
+_MAX_FILES = 20              # attachment-count cap per composer submission
+_MAX_TOTAL_BYTES = 20_000_000  # aggregate raw-bytes cap (~20 MB) across all attached files
+
 
 def _ext(name: str) -> str:
     return ("." + name.rsplit(".", 1)[-1].lower()) if "." in name else ""
@@ -117,9 +123,24 @@ def _pdf_text(data: bytes) -> str:
 def ingest_attachments(text: str, files=None, *, fetcher=None) -> tuple[str, list[Attachment]]:
     """(clean_text, attachments) from composer text + uploaded (filename, bytes) files. txt/md/csv
     decoded, pdf via pypdf, images rejected (no vision), unknown rejected; http(s) URLs in `text`
-    fetched via the scheme-allowlisted fetch_url. Never raises — bad inputs become note attachments."""
+    fetched via the scheme-allowlisted fetch_url. Bounded by _MAX_FILES / _MAX_TOTAL_BYTES — the
+    tail past either cap is skipped with one summarizing note. Never raises — bad inputs become
+    note attachments."""
     out: list[Attachment] = []
-    for name, data in (files or []):
+    files = list(files or [])
+    running = 0
+    for i, (name, data) in enumerate(files):
+        data = data or b""
+        # Fail-open cap: stop decoding once the count OR aggregate-size bound is hit and leave a
+        # single note so the operator knows the tail was dropped (function still never raises).
+        if i >= _MAX_FILES or running + len(data) > _MAX_TOTAL_BYTES:
+            skipped = len(files) - i
+            total = sum(len(d or b"") for _, d in files)
+            out.append(Attachment(kind="file", name="[ingest cap]",
+                                   text=f"[{skipped} of {len(files)} attachments / {total} bytes exceeded the "
+                                        f"ingest cap ({_MAX_FILES} files / {_MAX_TOTAL_BYTES} bytes); the rest were skipped]"))
+            break
+        running += len(data)
         ext = _ext(name)
         if ext in _IMAGE_EXT:
             out.append(Attachment(kind="file", name=name, mime="image",

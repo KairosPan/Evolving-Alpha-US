@@ -1,3 +1,4 @@
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -143,3 +144,40 @@ def test_mutating_routes_dont_500_when_sonia_down(client):
         client.post("/evolve/s1/delete"),
     ):
         assert r.status_code == 200 and "unavailable" in r.text.lower()
+
+
+class _Sonia404:
+    """Injected Sonia client whose every call returns HTTP 404 → SoniaClient.raise_for_status()
+    raises httpx.HTTPStatusError. Models 'Sonia is UP but the request failed' (distinct from a
+    down process, which raises httpx.ConnectError)."""
+
+    def request(self, method, path, json=None):
+        return httpx.Response(404, request=httpx.Request(method, "http://sonia.test" + path))
+
+
+def test_connect_error_banner_says_unavailable(client):
+    # Sonia process down → httpx.ConnectError (dead port) → the "start the service" banner.
+    webapp.set_sonia_client(SoniaClient(base_url="http://127.0.0.1:9", timeout=0.2))
+    body = client.get("/").text
+    assert "unavailable" in body.lower()
+    assert "404" not in body
+
+
+def test_http_status_error_banner_is_distinct_from_unavailable(client):
+    # Sonia UP but returning 404 → httpx.HTTPStatusError → a DIFFERENT operator signal than "down".
+    webapp.set_sonia_client(SoniaClient(client=_Sonia404()))
+    body = client.get("/").text
+    assert "404" in body                       # the status is surfaced
+    assert "error" in body.lower()             # framed as an error response, not a down service
+    assert "unavailable" not in body.lower()   # NOT the "service isn't running" banner
+
+
+def test_message_route_splits_the_two_error_banners(client):
+    # The chat fallback bubble carries the same split as the landing banner.
+    webapp.set_sonia_client(SoniaClient(base_url="http://127.0.0.1:9", timeout=0.2))
+    down = client.post("/evolve/message", data={"text": "hi"}).text
+    assert "unavailable" in down.lower() and "404" not in down
+
+    webapp.set_sonia_client(SoniaClient(client=_Sonia404()))
+    errored = client.post("/evolve/message", data={"text": "hi"}).text
+    assert "404" in errored and "unavailable" not in errored.lower()
