@@ -95,3 +95,22 @@ def test_guarded_migration_old_db(tmp_path):
     assert len(rows) == 1
     assert rows[0].kind == "trade"   # migration filled in the DEFAULT
     s.close()
+
+
+def test_file_backed_store_is_wal_with_busy_timeout(tmp_path):
+    """Concurrent-writer hardening (§5.12): a FILE-backed brain.db opens in WAL journal mode with a
+    non-zero busy_timeout, so a reader and a writer don't block each other and a contended writer
+    waits+retries instead of raising 'database is locked'."""
+    s = EpisodeStore.open(str(tmp_path / "brain.db"))
+    assert s._conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
+    assert s._conn.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
+    s.close()
+
+
+def test_in_memory_store_ignores_wal_but_keeps_busy_timeout():
+    """WAL is a no-op on a ':memory:' db (PRAGMA returns 'memory'), so the in-memory test path stays
+    byte-identical; busy_timeout still applies."""
+    s = EpisodeStore.in_memory()
+    assert s._conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "memory"
+    assert s._conn.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
+    s.close()

@@ -36,6 +36,13 @@ class EpisodeStore:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
         self._conn.row_factory = sqlite3.Row
+        # Concurrent-writer hardening (charter-conformance §5.12): sonia + workbench mutate ONE shared
+        # brain.db (LiveBrainStore file-locks + the cross-face reconcile sweep). WAL lets a reader and a
+        # writer proceed without blocking each other; busy_timeout makes a contended writer wait+retry
+        # instead of raising 'database is locked' immediately. WAL is a no-op on a ':memory:' db (the
+        # PRAGMA returns 'memory'), so the in-memory test path is byte-identical.
+        self._conn.execute("PRAGMA busy_timeout=5000")
+        self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(_SCHEMA)
         # Guarded migration: brain.db may pre-date the 'kind'/'scope' columns.
         cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(episodes)")}
