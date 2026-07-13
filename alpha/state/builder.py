@@ -8,6 +8,7 @@ from alpha.features.breadth import (
 )
 from alpha.features.runner import runner_echelon
 from alpha.features.sentiment import DEFAULT_MIN_SAMPLES, normalize_sentiment, raw_sentiment
+from alpha.features.theme_breadth_types import ThemeBreadthReading
 from alpha.state.market import MarketState
 from alpha.universe.universe import CandidateUniverse
 
@@ -17,7 +18,8 @@ def build_market_state(universe: CandidateUniverse, day: Date, *, as_of: DateTim
                        prev_gainers: frozenset[str] = frozenset(),
                        min_samples: int = DEFAULT_MIN_SAMPLES,
                        breadth: BreadthReading | None = None,
-                       market_counts: tuple[int, int] | None = None) -> MarketState:
+                       market_counts: tuple[int, int] | None = None,
+                       theme_breadth: ThemeBreadthReading | None = None) -> MarketState:
     """The L1 perception build from the day's (prebuilt) universe: breadth counts + runner echelon +
     follow-through + sentiment composite. The driver threads `history` (prior-day sentiment_raw, <= day)
     and `prev_gainers` (the previous day's gainer symbols); with the empty defaults this reproduces the
@@ -33,7 +35,9 @@ def build_market_state(universe: CandidateUniverse, day: Date, *, as_of: DateTim
     (the live loop) builds `universe` through a GuardedSource(AsOfGuard(day)); this function does not
     re-fetch. Breadth is computed the same trailing-only way and threaded in via `breadth` (like
     history/prev_gainers): default None leaves the four breadth fields None ("not computed") so every
-    current caller's MarketState is byte-identical to the pre-P0.4 build.
+    current caller's MarketState is byte-identical to the pre-P0.4 build. `theme_breadth` (P5b) is
+    threaded through the same additive way — default None leaves `MarketState.theme_breadth` None (the
+    theme-lifecycle clock's input; a later driver computes and threads it), byte-identical when omitted.
 
     `market_counts` (P2, gainer/loser over the FULL tape via `universe.tape_breadth`) decouples the
     MARKET-breadth fields (`gainer_count`/`loser_count`/`breadth_raw` — the growth market clock + panic
@@ -60,4 +64,5 @@ def build_market_state(universe: CandidateUniverse, day: Date, *, as_of: DateTim
         pct_above_200dma=(breadth.pct_above_200dma if breadth else None),
         net_new_highs=(breadth.net_new_highs if breadth else None),
         advances=(breadth.advances if breadth else None),
-        declines=(breadth.declines if breadth else None), as_of=as_of)
+        declines=(breadth.declines if breadth else None),
+        theme_breadth=theme_breadth, as_of=as_of)

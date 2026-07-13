@@ -5,6 +5,8 @@ from datetime import date as Date, datetime as DateTime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from alpha.features.theme_breadth_types import ThemeBreadthReading
+
 
 class RunnerRung(BaseModel):
     """One rung of the runner echelon (连板梯队 analog): a tier, its count, representative tickers."""
@@ -36,4 +38,8 @@ class MarketState(BaseModel):
     net_new_highs: int | None = None              # 52-week new highs minus new lows
     advances: int | None = None                   # symbols up on the day
     declines: int | None = None                   # symbols down on the day
+    # ── growth-doctrine theme/sector breadth (P5b) — default None ("not computed"), consumed by the
+    #    theme-lifecycle clock (`alpha/regime/theme_clock.py`). None until the caller threads a
+    #    ThemeBreadthReading in; default None keeps every current MarketState byte-identical ──
+    theme_breadth: ThemeBreadthReading | None = None
     as_of: DateTime                              # snapshot timestamp (lookahead audit)

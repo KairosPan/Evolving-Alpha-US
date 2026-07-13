@@ -18,13 +18,15 @@ from datetime import date as Date
 from statistics import mean, median
 
 import pandas as pd
-from pydantic import BaseModel, ConfigDict
 
 from alpha.data.sector_map import SectorMap
 from alpha.features.breadth import market_breadth, pct_above_ma
+from alpha.features.theme_breadth_types import GroupBreadthReading, ThemeBreadthReading
 from alpha.features.trend_template import (
     RS_LONG_WINDOW, RS_SHORT_WINDOW, rs_percentiles, rs_raw_score,
 )
+
+__all__ = ["GroupBreadthReading", "ThemeBreadthReading", "theme_breadth"]
 
 # 文献值待校准: the trend lookback is a calibration surface, pinned to the repo's ~1-month convention
 # (trend_template.SMA200_RISING_LOOKBACK). The theme clock reviews weekly (doctrine §1.4 clock_cadence),
@@ -32,38 +34,8 @@ from alpha.features.trend_template import (
 DEFAULT_TREND_LOOKBACK = 21
 DEFAULT_MIN_MEMBERS = 3     # < this many members in the cross-section => the group read is UNDETERMINED
 
-
-class GroupBreadthReading(BaseModel):
-    """Point-in-time breadth for one sector/theme group (frozen). A group with fewer than `min_members`
-    symbols in the cross-section is UNDETERMINED: `determined=False` and every signal None (never a
-    fabricated 0). Within a determined group, each signal is independently None when no member qualifies
-    (no member with enough history, no earlier as-of, <2 ranked members)."""
-    model_config = ConfigDict(frozen=True)
-    group: str
-    member_count: int
-    determined: bool
-    # ── per-group breadth snapshot (levels) — same undetermined semantics as market_breadth ──
-    pct_above_200dma: float | None = None    # fraction of the group above its own MA (as-of-latest<=day)
-    net_new_highs: int | None = None         # group 52-week new highs minus new lows
-    advances: int | None = None              # group members up ON `day`
-    declines: int | None = None              # group members down ON `day`
-    # ── per-group relative strength: cross-sectional (whole-tape) RS percentile, aggregated ──
-    rs_mean: float | None = None
-    rs_median: float | None = None
-    # ── §1.2 theme-lifecycle raw inputs (additive; the deferred clock differences/classifies) ──
-    rs_dispersion: float | None = None       # leader_rs_mean - laggard_rs_mean (within-group RS gap)
-    laggard_rs_mean: float | None = None     # the group's bottom-half RS level (the laggard_timer input)
-    breadth_trend: float | None = None       # pct_above_200dma(day) - pct_above_200dma(day-lookback)
-    rs_trend: float | None = None            # rs_mean(day) - rs_mean(day-lookback)
-
-
-class ThemeBreadthReading(BaseModel):
-    """Per-day bundle: one `GroupBreadthReading` per sector/theme group (incl. the 'unmapped' bucket).
-    Additive — a future regime reader threads this into `MarketState` default-None (byte-identical when
-    absent), the P0.4->P2 breadth-family precedent. See the spec's deferred theme-clock handoff."""
-    model_config = ConfigDict(frozen=True)
-    day: Date
-    groups: dict[str, GroupBreadthReading]
+# GroupBreadthReading / ThemeBreadthReading now live in `theme_breadth_types` (dependency-light, so
+# `alpha.state.market` can carry the bundle without a circular import); imported + re-exported above.
 
 
 def _asof_trading_days(bars_by_symbol: dict[str, pd.DataFrame], day: Date) -> list[Date]:
