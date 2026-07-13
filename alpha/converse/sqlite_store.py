@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS projects (
   staged_edits TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS messages (
   project_id TEXT NOT NULL, seq INTEGER NOT NULL, role TEXT NOT NULL, text TEXT NOT NULL,
+  origin TEXT,
   PRIMARY KEY (project_id, seq));
 """
 
@@ -41,6 +42,10 @@ class SqliteProjectStore:
         self._conn = conn
         conn.row_factory = sqlite3.Row
         conn.executescript(_SCHEMA)
+        # Guarded migration: a state.db may pre-date the message 'origin' column (A4 principal-origin).
+        mcols = {r["name"] for r in conn.execute("PRAGMA table_info(messages)")}
+        if "origin" not in mcols:
+            conn.execute("ALTER TABLE messages ADD COLUMN origin TEXT")
         tok = "trigram" if _trigram_ok(conn) else "unicode61"
         self.tokenizer = tok
         conn.execute(
@@ -78,8 +83,9 @@ class SqliteProjectStore:
         self._conn.execute("DELETE FROM messages_fts WHERE project_id=?", (project.project_id,))
         for seq, m in enumerate(project.messages):
             text = redact(m.text, secrets)
-            self._conn.execute("INSERT INTO messages (project_id, seq, role, text) VALUES (?,?,?,?)",
-                               (project.project_id, seq, m.role, text))
+            self._conn.execute(
+                "INSERT INTO messages (project_id, seq, role, text, origin) VALUES (?,?,?,?,?)",
+                (project.project_id, seq, m.role, text, m.origin))
             self._conn.execute("INSERT INTO messages_fts (project_id, seq, text) VALUES (?,?,?)",
                                (project.project_id, seq, text))
         self._conn.commit()
@@ -89,8 +95,10 @@ class SqliteProjectStore:
                                  (project_id,)).fetchone()
         if row is None:
             return None
-        msgs = [ChatMessage(role=r["role"], text=r["text"]) for r in self._conn.execute(
-            "SELECT role, text FROM messages WHERE project_id=? ORDER BY seq", (project_id,))]
+        msgs = [ChatMessage(role=r["role"], text=r["text"], origin=r["origin"])
+                for r in self._conn.execute(
+                    "SELECT role, text, origin FROM messages WHERE project_id=? ORDER BY seq",
+                    (project_id,))]
         return Project(
             project_id=row["project_id"], created_at=row["created_at"], title=row["title"],
             h_pin=row["h_pin"], messages=msgs,

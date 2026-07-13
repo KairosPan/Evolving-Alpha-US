@@ -59,8 +59,12 @@ def run_conversation(registry: ToolRegistry, chat: ChatLLMClient, system: str,
         except Exception as e:                       # a tool raising must not kill the conversation
             result = {"error": f"{type(e).__name__}: {e}"}
         calls.append({"tool": name, "args": args, "result": result})
-        msgs.append(ChatMessage(role="assistant", text=reply))
-        msgs.append(ChatMessage(role="user", text=f"[tool:{name} result]\n{_result_text(result)}"))
+        # Stamp the principal origin from the physical emit path (A4): the reply is the model's,
+        # the re-injected result is the tool's — so a stamped tool result (origin="tool") is
+        # distinguishable from a model-authored "[tool:…]" string (origin="model").
+        msgs.append(ChatMessage(role="assistant", text=reply, origin="model"))
+        msgs.append(ChatMessage(role="user", text=f"[tool:{name} result]\n{_result_text(result)}",
+                                origin="tool"))
     # Budget exhausted without a prose final answer. Return a fallback final_text (not "") so callers
     # that render res.final_text directly never show an empty turn; hit_max_iters stays True for any
     # caller that wants to special-case it.

@@ -236,6 +236,138 @@ def test_adopt_rejects_non_extending_fork_log(tmp_path):
     assert bstore.load()[0].memory.get("m-delta") is None   # nothing landed
 
 
+def _write_unchained_brain(root, h, log):
+    """Persist a brain.json with an UNCHAINED log — a pre-A4 (legacy) live brain, before the A4
+    integrity chain existed. (LiveBrainStore.save now finalizes the chain, so we write the file
+    directly to reconstruct the on-disk legacy state.)"""
+    import json
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "brain.json").write_text(json.dumps({"harness": h.to_dict(), "log": log.to_dict()}))
+
+
+def test_adopt_legacy_unchained_base_brain_still_extends(tmp_path):
+    """Regression (A4 review MEDIUM): a fork's in-run checkpoint finalizes its base prefix in
+    place, so a fork built on a LEGACY unchained live brain ships a chained base prefix. The
+    extends-check must be chain-agnostic — this valid packet must ADOPT, not bounce on a
+    metadata-only prefix difference. (At ship time every operator brain is unchained + fork-and-
+    propose is THE conformant self-study path, so this is the central path on first adopt.)"""
+    root = tmp_path / "brain"
+    h0, log0 = _h(), EditLog()
+    _add_lesson(h0, log0, "m-legacy-base")
+    _write_unchained_brain(root, h0, log0)
+    bstore = LiveBrainStore(str(root))
+    assert bstore.load()[1].records()[0].chain_hash is None      # legacy base is unchained on disk
+
+    def runner(h, log):
+        log.finalize_chain()                                     # an in-fork checkpoint chains the base
+        _add_lesson(h, log, "m-delta")
+        return h, log
+
+    prop = run_forked_evolution(bstore, runner, queue=ProposalQueue(str(tmp_path / "p")),
+                                kind="refine")
+    ok, reason = adopt_proposal(bstore, prop)
+    assert ok, reason
+    assert bstore.load()[0].memory.get("m-delta") is not None    # the delta landed
+
+
+def test_adopt_still_extends_when_fork_chains_a_chained_base(tmp_path):
+    """The complement: a normally-persisted (A4-chained) live brain adopts fine too — the
+    chain-agnostic compare is a no-op when both sides are already chained."""
+    bstore = _store(tmp_path)
+    h, log = bstore.load()
+    _add_lesson(h, log, "m-base")
+    bstore.save(h, log)                                          # chained base on disk
+
+    def runner(h2, log2):
+        log2.finalize_chain()
+        _add_lesson(h2, log2, "m-delta")
+        return h2, log2
+
+    prop = run_forked_evolution(bstore, runner, queue=ProposalQueue(str(tmp_path / "p")),
+                                kind="refine")
+    ok, reason = adopt_proposal(bstore, prop)
+    assert ok, reason
+    assert bstore.load()[0].memory.get("m-delta") is not None
+
+
+def test_adopt_still_rejects_genuine_prefix_content_tamper(tmp_path):
+    """The extends-check must still catch a REAL prefix rewrite — the fix relaxes only the derived
+    chain metadata, never a semantic edit field. A legacy unchained base whose prefix summary is
+    forged must still bounce."""
+    root = tmp_path / "brain"
+    h0, log0 = _h(), EditLog()
+    _add_lesson(h0, log0, "m-legacy-base")
+    _write_unchained_brain(root, h0, log0)
+    bstore = LiveBrainStore(str(root))
+
+    def runner(h, log):
+        log.finalize_chain()
+        _add_lesson(h, log, "m-delta")
+        return h, log
+
+    prop = run_forked_evolution(bstore, runner, queue=ProposalQueue(str(tmp_path / "p")),
+                                kind="refine")
+    tampered_prefix = [dict(r) for r in prop.log_dict]
+    tampered_prefix[0] = {**tampered_prefix[0], "summary": "forged history"}   # a SEMANTIC change
+    forged = prop.model_copy(update={"log_dict": tampered_prefix})
+    ok, reason = adopt_proposal(bstore, forged)
+    assert ok is False and "prefix" in reason
+    assert bstore.load()[0].memory.get("m-delta") is None        # nothing landed
+
+
+def test_adopt_not_stale_when_live_base_only_gets_chained(tmp_path):
+    """Residual closed (A4 review): a legacy unchained live base gets CHAINED the moment ANY
+    LiveBrainStore.save runs (adding NO new edits). The base_hash staleness pin compares CONTENT,
+    so a chain-metadata-only change must NOT be flagged 'stale: re-run' — otherwise every ship-time
+    (unchained) operator brain would spuriously flag all outstanding packets stale on its first
+    chaining write."""
+    root = tmp_path / "brain"
+    h0, log0 = _h(), EditLog()
+    _add_lesson(h0, log0, "m-base")
+    _write_unchained_brain(root, h0, log0)
+    bstore = LiveBrainStore(str(root))
+
+    def runner(h, log):
+        _add_lesson(h, log, "m-delta")
+        return h, log
+
+    prop = run_forked_evolution(bstore, runner, queue=ProposalQueue(str(tmp_path / "p")),
+                                kind="refine")
+    # an unrelated save chains the legacy base in place — NO new edits, only derived metadata
+    h, log = bstore.load()
+    assert log.records()[0].chain_hash is None                   # unchained before the save
+    bstore.save(h, log)
+    assert bstore.load()[1].records()[0].chain_hash is not None  # chained after, identical edits
+
+    ok, reason = adopt_proposal(bstore, prop)
+    assert ok, reason                                            # NOT stale — content unchanged
+    assert bstore.load()[0].memory.get("m-delta") is not None
+
+
+def test_adopt_still_stale_on_genuine_base_content_change(tmp_path):
+    """The complement: a REAL base content change between propose and adopt IS still flagged stale —
+    the chain-agnostic base_hash strips ONLY the derived chain fields, never a semantic edit."""
+    root = tmp_path / "brain"
+    h0, log0 = _h(), EditLog()
+    _add_lesson(h0, log0, "m-base")
+    _write_unchained_brain(root, h0, log0)
+    bstore = LiveBrainStore(str(root))
+
+    def runner(h, log):
+        _add_lesson(h, log, "m-delta")
+        return h, log
+
+    prop = run_forked_evolution(bstore, runner, queue=ProposalQueue(str(tmp_path / "p")),
+                                kind="refine")
+    h, log = bstore.load()                                       # a teaching edit lands (real change)
+    _add_lesson(h, log, "m-teach")
+    bstore.save(h, log)
+
+    ok, reason = adopt_proposal(bstore, prop)
+    assert ok is False and "stale" in reason
+    assert bstore.load()[0].memory.get("m-delta") is None        # nothing landed
+
+
 def test_brain_hash_round_trips_the_store(tmp_path):
     """The hash computed at fork time must equal the hash of the stored-then-reloaded brain
     (json round-trip stability — the reason to_dict is json-mode)."""

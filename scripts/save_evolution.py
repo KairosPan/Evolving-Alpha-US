@@ -26,9 +26,12 @@ from alpha.loop.inner_loop import InnerLoop, LoopConfig
 SEEDS_DIR = Path(__file__).resolve().parents[1] / "seeds"
 
 
-def evolution_view(edit_dicts: list[dict], report, start: Date, end: Date) -> dict:
-    """Assemble the Evolution view dict: the run window, a summary of the inner loop, and the
-    append-only edit records (EditRecord.model_dump()) in sequence."""
+def evolution_view(edit_dicts: list[dict], report, start: Date, end: Date,
+                   *, chain_head: str | None = None) -> dict:
+    """Assemble the Evolution view dict: the run window, a summary of the inner loop, the
+    append-only edit records (EditRecord.model_dump()) in sequence, and the EditLog integrity
+    chain head (A4 external anchor: the operator can eyeball or git-commit it — corruption-detection
+    only under the accepted T2-shell operator-trust posture)."""
     return {
         "window": {"start": start.isoformat(), "end": end.isoformat()},
         "summary": {
@@ -38,6 +41,7 @@ def evolution_view(edit_dicts: list[dict], report, start: Date, end: Date) -> di
             "n_edits": report.n_edits,
         },
         "edits": edit_dicts,
+        "chain_head": chain_head,
     }
 
 
@@ -53,7 +57,8 @@ def run_evolution(source, start: Date, end: Date, *, seeds_dir: Path | None = No
     loop = InnerLoop(mgr, source, start, end, agent_llm_factory(), refiner_llm_factory(),
                      config=LoopConfig(horizon=horizon))
     report = loop.run()
-    return evolution_view(mgr.log.to_dict(), report, start, end)
+    mgr.log.finalize_chain()                # A4: finalize the integrity chain, then surface its head
+    return evolution_view(mgr.log.to_dict(), report, start, end, chain_head=mgr.log.chain_head())
 
 
 def main() -> None:

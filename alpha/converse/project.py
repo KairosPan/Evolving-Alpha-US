@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from alpha.llm.chat import ChatMessage
 from alpha.meta.models import new_session_id, now_iso
+from alpha.trace import AttributionTuple
 
 
 class StagedEdit(BaseModel):
@@ -27,6 +28,7 @@ class ProjectTurn(BaseModel):
     final_text: str = ""
     tool_calls: list[dict] = Field(default_factory=list)   # JSON-safe (DecisionPackage results dumped)
     h_version: int | None = None                           # the SnapshotStore version this turn ran against
+    attribution: AttributionTuple | None = None            # A4: body-version × model-id × kernel-version
     created_at: str = ""
 
 

@@ -177,8 +177,16 @@ def sample_evolution() -> dict:
          "payload": {"status": {"before": "active", "after": "dormant"}},
          "rationale": "No qualifying setups in-window; decayed importance — parked to cut prompt noise."},
     ]
+    # A4 external anchor: the real integrity-chain head over these edits (finalized at persist time).
+    from alpha.harness.edit_log import EditLog
+    _log = EditLog()
+    for e in edits:
+        _log.append(e["tool"], e["target_kind"], e["target_id"], e["op"],
+                    summary=e.get("summary", ""), payload=e.get("payload"), rationale=e.get("rationale", ""))
+    _log.finalize_chain()
     return {
         "window": {"start": "2026-01-02", "end": "2026-03-31"},
         "summary": {"refines": 3, "breaker_trips": 0, "frozen_from": None, "n_edits": len(edits)},
         "edits": edits,
+        "chain_head": _log.chain_head(),
     }

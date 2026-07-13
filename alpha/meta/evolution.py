@@ -25,6 +25,22 @@ from alpha.meta.proposal_store import EvolutionProposal, ProposalQueue, brain_ha
 # would ship the discarded pre-rollback timeline (found by the 2026-07-09 adversarial review).
 Runner = Callable[[HarnessState, EditLog], tuple[HarnessState, EditLog]]
 
+# The integrity-chain fields (A4) are DERIVED metadata finalized at persist time — not semantic
+# edit content. A fork's in-run checkpoint finalizes its base-prefix records in place, and a legacy
+# (pre-A4, unchained) live brain gets chained the moment ANY LiveBrainStore.save runs — so the
+# packet's base and the live base can carry different chain metadata over identical edits. BOTH
+# adopt-time checks that ask "is this the same base?" — the base_hash staleness pin and the
+# prefix-extends check — compare edit CONTENT, so both strip these two fields on each side (at the
+# evolution comparison sites only; brain_hash itself and harness_digest/h_digest stay untouched).
+# A genuine base CONTENT change is still flagged (different content survives the strip); only a
+# chain-metadata-only difference is tolerated. verify_chain integrity detection is unaffected — it
+# is a different, whole-record check that reads exactly these fields.
+_CHAIN_FIELDS = ("prev_chain_hash", "chain_hash")
+
+
+def _chain_agnostic(records: list[dict]) -> list[dict]:
+    return [{k: v for k, v in r.items() if k not in _CHAIN_FIELDS} for r in records]
+
 
 def run_forked_evolution(bstore, runner: Runner, *, queue: ProposalQueue, kind: str,
                          window: dict | None = None) -> EvolutionProposal | None:
@@ -35,7 +51,7 @@ def run_forked_evolution(bstore, runner: Runner, *, queue: ProposalQueue, kind: 
     with bstore.lock():
         h, log = bstore.load()
     base_len = len(log)
-    base_hash = brain_hash(h.to_dict(), log.to_dict())
+    base_hash = brain_hash(h.to_dict(), _chain_agnostic(log.to_dict()))   # content, not chain metadata
 
     final_h, final_log = runner(h, log)
 
@@ -61,11 +77,11 @@ def adopt_proposal(bstore, proposal: EvolutionProposal, *,
     with bstore.lock():
         h, log = bstore.load()
         live_log_dict = log.to_dict()
-        if brain_hash(h.to_dict(), live_log_dict) != proposal.base_hash:
+        if brain_hash(h.to_dict(), _chain_agnostic(live_log_dict)) != proposal.base_hash:
             return False, "stale: live brain differs from the packet's base; re-run the evolution"
         if proposal.base_len != len(live_log_dict):
             return False, f"invalid packet: base_len={proposal.base_len} != live log {len(live_log_dict)}"
-        if proposal.log_dict[:proposal.base_len] != live_log_dict:
+        if _chain_agnostic(proposal.log_dict[:proposal.base_len]) != _chain_agnostic(live_log_dict):
             return False, "invalid packet: fork log does not extend the live log (prefix mismatch)"
         if proposal.records != proposal.log_dict[proposal.base_len:]:
             return False, "invalid packet: reviewed records differ from the landing delta"

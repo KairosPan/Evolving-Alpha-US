@@ -49,6 +49,7 @@ class SnapshotStore:
         self._root.mkdir(parents=True, exist_ok=True)
         latest = self.latest()
         version = 0 if latest is None else latest + 1
+        log.finalize_chain()                # A4: finalize the integrity chain at persist time
         payload = {"version": version, "label": label,
                    "harness": harness.to_dict(), "log": log.to_dict()}
         final = self._path(version)

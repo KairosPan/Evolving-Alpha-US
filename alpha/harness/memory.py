@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from alpha.harness.regime import is_family, normalize_phases
+from alpha.trace import DEFAULT_SCOPE, Scope
 
 Outcome = Literal["win", "loss", "principle"]
 
@@ -39,6 +40,7 @@ class Lesson(BaseModel):
     named_analog: str = ""
     lesson: str
     domain: Literal["trading", "operational"] = "trading"
+    scope: Scope = DEFAULT_SCOPE        # learned-context scope label (A4); rides every write, A8 gates on it
     importance: Importance = Field(default_factory=Importance)
     learned_asof: date | None = None   # PIT key: the date this lesson became KNOWABLE (None = seed/always-known)
 

@@ -4,6 +4,8 @@ from datetime import date as Date
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from alpha.trace import DEFAULT_SCOPE, Scope
+
 class Episode(BaseModel):
     """One scored pick (observation-channel; NOT a gated H edit). learned_asof = exit_date (the date the
     outcome became knowable), the PIT key recall masks on."""
@@ -22,6 +24,7 @@ class Episode(BaseModel):
     score: float = 0.0
     failure_kind: str = ""
     reflection_text: str = ""
+    scope: Scope = DEFAULT_SCOPE        # learned-context scope label (A4); rides every episode write
     learned_asof: Date | None = None   # defaults to exit_date (set below)
 
     @model_validator(mode="after")

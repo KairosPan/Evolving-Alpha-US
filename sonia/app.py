@@ -140,14 +140,14 @@ def create_app() -> FastAPI:
         if not sess.title:
             sess.title = (body.text or "untitled").strip()[:60] or "untitled"
         user_msg = Message(message_id=new_message_id(), role="user", created_at=now_iso(),
-                           text=body.text, attachments=body.attachments)
+                           text=body.text, attachments=body.attachments, origin="user")
         try:
             h, log = _brain_store().load()                           # inside the boundary: a locked/
             agent = SoniaAgent(MetaTools(h, log), make_client("sonia"))  # corrupt brain load must not
             asst = agent.respond(sess, user_msg)                     # 500 either — keep the user turn
         except Exception as e:                                       # never 500: keep the user turn
             asst = Message(message_id=new_message_id(), role="assistant", created_at=now_iso(),
-                           text=f"(Sonia couldn't respond: {type(e).__name__}: {e})")
+                           text=f"(Sonia couldn't respond: {type(e).__name__}: {e})", origin="model")
         sess.messages.append(user_msg)
         sess.messages.append(asst)
         sstore.put(sess)

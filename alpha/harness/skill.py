@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from alpha.harness.regime import is_family, normalize_phases
+from alpha.trace import DEFAULT_SCOPE, Scope
 
 SkillType = Literal["pattern", "feature", "failure_detector"]
 SkillStatus = Literal["active", "incubating", "dormant", "retired"]
@@ -63,6 +64,7 @@ class Skill(BaseModel):
     depends_on: list[str] = Field(default_factory=list)
     examples: list[str] = Field(default_factory=list)
     domain: Literal["trading", "operational"] = "trading"
+    scope: Scope = DEFAULT_SCOPE        # learned-context scope label (A4); rides every write, A8 gates on it
     status: SkillStatus = "incubating"
     notes: str = ""
     stats: SkillStats = Field(default_factory=SkillStats)

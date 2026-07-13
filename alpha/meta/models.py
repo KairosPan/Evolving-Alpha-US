@@ -6,6 +6,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from alpha.trace import MessageOrigin
+
 
 def new_session_id() -> str:
     return f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f')}-{uuid4().hex[:4]}"
@@ -71,6 +73,7 @@ class Message(BaseModel):
     role: Literal["user", "assistant"]
     created_at: str = ""
     text: str = ""
+    origin: MessageOrigin | None = None   # principal-origin stamp (A4); None = legacy/unstamped
     attachments: list[Attachment] = Field(default_factory=list)
     directions: list[ProposedDirection] = Field(default_factory=list)
     edits: list[ProposedEdit] = Field(default_factory=list)

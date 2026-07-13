@@ -45,4 +45,4 @@ class SoniaAgent:
         prose = reply.replace(block, "").strip() if block else reply.strip()
         directions = prompts.parse_directions(reply)
         return Message(message_id=new_message_id(), role="assistant", created_at=now_iso(),
-                       text=prose, directions=directions, edits=[])
+                       text=prose, directions=directions, edits=[], origin="model")

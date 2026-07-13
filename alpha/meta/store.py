@@ -53,6 +53,7 @@ class LiveBrainStore:
         return HarnessState.from_dict(data["harness"]), EditLog.from_dict(data["log"])
 
     def save(self, harness: HarnessState, log: EditLog) -> Path:
+        log.finalize_chain()                # A4: finalize the integrity chain at persist time
         _atomic_write(self._brain, json.dumps({"harness": harness.to_dict(), "log": log.to_dict()}))
         return self._brain
 

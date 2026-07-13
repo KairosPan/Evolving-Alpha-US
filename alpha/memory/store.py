@@ -5,14 +5,15 @@ from alpha.memory.episodes import Episode
 
 _COLS = ("episode_id", "symbol", "skill_id", "kind", "family", "phase", "narrative",
          "entry_date", "exit_date", "outcome", "advantage", "score",
-         "failure_kind", "reflection_text", "learned_asof", "superseded")
+         "failure_kind", "reflection_text", "scope", "learned_asof", "superseded")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS episodes (
   episode_id TEXT PRIMARY KEY, symbol TEXT, skill_id TEXT, kind TEXT NOT NULL DEFAULT 'trade',
   family TEXT, phase TEXT, narrative TEXT,
   entry_date TEXT, exit_date TEXT, outcome TEXT, advantage REAL, score REAL,
-  failure_kind TEXT, reflection_text TEXT, learned_asof TEXT NOT NULL, superseded INTEGER DEFAULT 0);
+  failure_kind TEXT, reflection_text TEXT, scope TEXT NOT NULL DEFAULT 'agent-global',
+  learned_asof TEXT NOT NULL, superseded INTEGER DEFAULT 0);
 CREATE INDEX IF NOT EXISTS ix_episodes_learned_asof ON episodes(learned_asof);
 CREATE VIRTUAL TABLE IF NOT EXISTS episodes_fts USING fts5(reflection_text, narrative, content='');
 """
@@ -25,6 +26,7 @@ def _row_to_episode(r: sqlite3.Row) -> Episode:
                    entry_date=Date.fromisoformat(r["entry_date"]), exit_date=Date.fromisoformat(r["exit_date"]),
                    outcome=r["outcome"], advantage=r["advantage"], score=r["score"],
                    failure_kind=r["failure_kind"] or "", reflection_text=r["reflection_text"] or "",
+                   scope=r["scope"] or "agent-global",
                    learned_asof=Date.fromisoformat(r["learned_asof"]))
 
 
@@ -35,10 +37,12 @@ class EpisodeStore:
         self._conn = conn
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
-        # Guarded migration: brain.db may pre-date the 'kind' column.
+        # Guarded migration: brain.db may pre-date the 'kind'/'scope' columns.
         cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(episodes)")}
         if "kind" not in cols:
             self._conn.execute("ALTER TABLE episodes ADD COLUMN kind TEXT NOT NULL DEFAULT 'trade'")
+        if "scope" not in cols:
+            self._conn.execute("ALTER TABLE episodes ADD COLUMN scope TEXT NOT NULL DEFAULT 'agent-global'")
         self._conn.commit()
 
     @classmethod

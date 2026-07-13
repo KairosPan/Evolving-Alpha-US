@@ -6,8 +6,10 @@ import logging
 from datetime import date as _Date
 
 from alpha.eval.decision import DecisionPackage
+from alpha.harness.snapshot import harness_digest
 from alpha.harness.state import HarnessState
 from alpha.llm.chat import ChatMessage
+from alpha.trace import attribution_of
 
 from alpha.converse.agent import build_converse_registry, build_system_prompt
 from alpha.converse.loop import run_conversation
@@ -66,8 +68,8 @@ def converse_project(
                                                read_only=read_only, write_mode=write_mode)
     system = build_system_prompt(h, registry, asof=asof)
 
-    # 4. Append the user message.
-    project.messages.append(ChatMessage(role="user", text=user_text))
+    # 4. Append the user message (principal-origin stamped from the user channel — A4).
+    project.messages.append(ChatMessage(role="user", text=user_text, origin="user"))
 
     # 5. Run the conversation loop.
     res = run_conversation(registry, chat_llm, system, project.messages,
@@ -78,6 +80,10 @@ def converse_project(
     turn = new_turn(user_text)
     turn.final_text = res.final_text
     turn.h_version = h_version
+    # Attribution tuple (A4): body-version × model-id × kernel-version, so watchdog incident
+    # attribution can name which edit/model/release is a suspect. h_digest = A1's body-version leg.
+    turn.attribution = attribution_of(
+        body_digest=harness_digest(h), model_id=getattr(chat_llm, "model", None))
     safe_tool_calls: list[dict] = []
     for tc in res.tool_calls:
         result = tc["result"]
