@@ -40,7 +40,11 @@ _EXTRACTION_INSTRUCTION = (
     'output {"ops": [{"tool":..., "args":..., "rationale":...}, ...]} using the EXACT tool vocabulary '
     "above, with a non-empty rationale on every op. If it does NOT yet warrant a concrete change "
     '(too vague, still clarifying, purely conversational), output '
-    '{"no_edit": true, "reason": "<one sentence why>"}.'
+    '{"no_edit": true, "reason": "<one sentence why>"}. '
+    "If the edit targets a doctrine section, skill, or lesson that does NOT exist in the brain above, "
+    'output {"no_edit": true, "reason": "<the target that was not found>"} — NEVER rewrite the '
+    "nearest-similar existing entry to fit (that silently corrupts an unrelated entry); a create is a "
+    "write_skill / process_memory op, and doctrine has no create op, so a missing doctrine section is no_edit."
 )
 
 

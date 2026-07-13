@@ -43,8 +43,10 @@ class Lesson(BaseModel):
     learned_asof: date | None = None   # PIT key: the date this lesson became KNOWABLE (None = seed/always-known)
 
     @classmethod
-    def from_seed(cls, d: dict) -> "Lesson":
-        phases, applies_all = normalize_phases(d.get("phases", d.get("regime", [])))
+    def from_seed(cls, d: dict, *, normalize=normalize_phases) -> "Lesson":
+        # `normalize` selects the phase vocabulary: default momo (byte-identical); the growth pack
+        # passes normalize_growth_phases (Option B — parallel scale-typed clocks, P0.3).
+        phases, applies_all = normalize(d.get("phases", d.get("regime", [])))
         family = d.get("family")
         if family is not None and not is_family(family):
             raise ValueError(f"unknown family: {family!r}")

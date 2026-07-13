@@ -69,9 +69,11 @@ class Skill(BaseModel):
     gate: GateSpec | None = None
 
     @classmethod
-    def from_seed(cls, d: dict) -> "Skill":
+    def from_seed(cls, d: dict, *, normalize=normalize_phases) -> "Skill":
+        # `normalize` selects the phase vocabulary: default momo (byte-identical); the growth pack
+        # passes normalize_growth_phases (Option B — parallel scale-typed clocks, P0.3).
         raw_phases = d.get("phases", d.get("applicable_regime", []))
-        phases, applies_all = normalize_phases(raw_phases)
+        phases, applies_all = normalize(raw_phases)
         family = d.get("family")
         if family is not None and not is_family(family):
             raise ValueError(f"unknown family: {family!r}")

@@ -21,8 +21,10 @@ class DoctrineEntry(BaseModel):
     guidance: str
 
     @classmethod
-    def from_seed(cls, d: dict) -> "DoctrineEntry":
-        phases, applies_all = normalize_phases(d.get("phases", d.get("regime", [])))
+    def from_seed(cls, d: dict, *, normalize=normalize_phases) -> "DoctrineEntry":
+        # `normalize` selects the phase vocabulary: default momo (byte-identical); the growth pack
+        # passes normalize_growth_phases (Option B — parallel scale-typed clocks, P0.3).
+        phases, applies_all = normalize(d.get("phases", d.get("regime", [])))
         family = d.get("family")
         if family is not None and not is_family(family):
             raise ValueError(f"unknown family: {family!r}")
@@ -42,8 +44,8 @@ class Doctrine(BaseModel):
     entries: list[DoctrineEntry] = Field(default_factory=list)
 
     @classmethod
-    def from_seed_list(cls, items: list[dict]) -> "Doctrine":
-        return cls(entries=[DoctrineEntry.from_seed(d) for d in items])
+    def from_seed_list(cls, items: list[dict], *, normalize=normalize_phases) -> "Doctrine":
+        return cls(entries=[DoctrineEntry.from_seed(d, normalize=normalize) for d in items])
 
     def get(self, section: str) -> DoctrineEntry | None:
         return next((e for e in self.entries if e.section == section), None)

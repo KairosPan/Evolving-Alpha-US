@@ -38,3 +38,11 @@ def test_render_conversation_serialises_roles_and_text():
     out = prompts.render_conversation([ChatMessage(role="user", text="hi"),
                                        ChatMessage(role="assistant", text="hello")])
     assert "hi" in out and "hello" in out and "user" in out.lower()
+
+
+def test_extraction_system_forbids_nearest_neighbor_rewrite():
+    # preset 2 (P0.3): a target-not-found edit must return no_edit, never rewrite the nearest entry
+    system = prompts.render_extraction_system(load_seeds("seeds"))
+    lowered = system.lower()
+    assert "does not exist" in lowered or "not found" in lowered
+    assert "never rewrite" in lowered and "nearest" in lowered
