@@ -6,6 +6,7 @@ from alpha.eval.decision import Candidate, DecisionPackage
 from alpha.regime.classifier import RegimeRead
 from alpha.sizing.policy import SizingPolicy, size_decision
 from alpha.state.market import MarketState
+from alpha.universe.stock import StockSnapshot
 from alpha.universe.universe import CandidateUniverse
 
 CUR = date(2026, 6, 12)
@@ -122,3 +123,111 @@ def test_sizing_annotations_are_verdict_neutral():
     sp = PoolScorer()
     assert ({s: c.score for s, c in sp.score_step(plain, **kw).items()}
             == {s: c.score for s, c in sp.score_step(annotated, **kw).items()})
+
+
+# ── P5b float-aware sizing (spec 2026-07-13-p5b-float-feed-design.md) ────────────────────────────────
+
+_HOT = RegimeRead(phase="trend", confidence=0.7, frontside=True, risk_gate=0.9)   # 0.9 x 0.9 -> heavy
+
+
+def test_size_decision_floats_none_is_byte_identical():
+    # the default-off contract: passing floats=None must equal the no-floats call, package-for-package
+    pkg = _pkg(Candidate(symbol="RUN", confidence=0.9), Candidate(symbol="LAG", confidence=0.4), regime=_HOT)
+    assert size_decision(pkg, state=_state()) == size_decision(pkg, state=_state(), floats=None)
+
+
+def test_size_decision_small_float_caps_tier_huge_float_unchanged():
+    # non-vacuous: a small-float name drops heavy -> probe; a huge-float name is unconstrained
+    out = size_decision(_pkg(Candidate(symbol="MICRO", confidence=0.9),
+                             Candidate(symbol="BIG", confidence=0.9), regime=_HOT), state=_state(),
+                        floats={"MICRO": 3_000_000.0, "BIG": 500_000_000.0})
+    tiers = {c.symbol: c.size_tier for c in out.candidates}
+    assert tiers == {"MICRO": "probe", "BIG": "heavy"}          # small capped, huge untouched
+    # ... and without floats BOTH are heavy (proves the cap, not the confidence, moved MICRO)
+    base = size_decision(_pkg(Candidate(symbol="MICRO", confidence=0.9),
+                              Candidate(symbol="BIG", confidence=0.9), regime=_HOT), state=_state())
+    assert {c.symbol: c.size_tier for c in base.candidates} == {"MICRO": "heavy", "BIG": "heavy"}
+
+
+def test_size_decision_float_caps_portfolio_exposure():
+    # the aggregate exposure reflects the same caps: MICRO probe (0.25) + BIG heavy (1.0) = 1.25, not 2.0
+    out = size_decision(_pkg(Candidate(symbol="MICRO", confidence=0.9),
+                             Candidate(symbol="BIG", confidence=0.9), regime=_HOT), state=_state(),
+                        floats={"MICRO": 3_000_000.0, "BIG": 500_000_000.0})
+    assert out.portfolio.total_exposure == 1.25
+    base = size_decision(_pkg(Candidate(symbol="MICRO", confidence=0.9),
+                              Candidate(symbol="BIG", confidence=0.9), regime=_HOT), state=_state())
+    assert base.portfolio.total_exposure == 2.0                 # uncapped baseline (non-vacuous)
+
+
+def test_float_refinement_is_verdict_neutral_non_vacuously():
+    # mirrors test_sizing_annotations_are_verdict_neutral: float caps the tier, but the scorer ignores it
+    from alpha.eval.scorer import PoolScorer
+    from alpha.eval.oracle import DayMembership
+    from datetime import date as _date
+    plain = size_decision(_pkg(Candidate(symbol="RUN", confidence=0.9),
+                               Candidate(symbol="LAG", confidence=0.9), regime=_HOT), state=_state())
+    capped = size_decision(_pkg(Candidate(symbol="RUN", confidence=0.9),
+                                Candidate(symbol="LAG", confidence=0.9), regime=_HOT), state=_state(),
+                           floats={"RUN": 3_000_000.0, "LAG": 3_000_000.0})
+    # non-vacuous: the float cap genuinely changed the tiers (heavy -> probe)
+    assert {c.symbol: c.size_tier for c in plain.candidates} != {c.symbol: c.size_tier for c in capped.candidates}
+    dmem = DayMembership(gainers=frozenset({"RUN"}), losers=frozenset())
+    emem = DayMembership(gainers=frozenset({"RUN"}), losers=frozenset({"LAG"}))
+    kw = dict(decision_mem=dmem, exit_mem=emem, entry_day=CUR, exit_day=_date(2026, 6, 16), oracle=None)
+    sp = PoolScorer()
+    assert ({s: c.score for s, c in sp.score_step(plain, **kw).items()}
+            == {s: c.score for s, c in sp.score_step(capped, **kw).items()})    # size never enters the score
+
+
+def _uni(*stocks):
+    return CandidateUniverse.from_stocks(list(stocks))
+
+
+def _snap(symbol, free_float):
+    return StockSnapshot(symbol=symbol, name=symbol, status="gainer", free_float=free_float)
+
+
+class _HotStub:
+    """A policy returning a heavy-conviction pick for each requested symbol (regime already hot)."""
+    def __init__(self, *symbols):
+        self._symbols = symbols
+    def decide(self, state, universe):
+        return _pkg(*[Candidate(symbol=s, confidence=0.9) for s in self._symbols], regime=_HOT)
+
+
+def test_sizing_policy_float_aware_caps_from_universe():
+    # float_aware=True derives the float map from the universe (StockSnapshot.free_float millions x1e6):
+    # MICRO at 3.0M shares -> probe; BIG at 500M -> heavy
+    uni = _uni(_snap("MICRO", 3.0), _snap("BIG", 500.0))
+    out = SizingPolicy(_HotStub("MICRO", "BIG"), float_aware=True).decide(_state(), uni)
+    assert {c.symbol: c.size_tier for c in out.candidates} == {"MICRO": "probe", "BIG": "heavy"}
+
+
+def test_sizing_policy_float_aware_off_is_byte_identical():
+    # default float_aware=False -> the universe's free_float is IGNORED -> tier-only (both heavy)
+    uni = _uni(_snap("MICRO", 3.0), _snap("BIG", 500.0))
+    off = SizingPolicy(_HotStub("MICRO", "BIG")).decide(_state(), uni)
+    assert {c.symbol: c.size_tier for c in off.candidates} == {"MICRO": "heavy", "BIG": "heavy"}
+
+
+def test_sizing_policy_float_aware_no_float_in_universe_byte_identical():
+    # float_aware=True but the snapshot has no free_float -> no cap for that name (byte-identical)
+    uni = _uni(_snap("PLAIN", None))
+    out = SizingPolicy(_HotStub("PLAIN"), float_aware=True).decide(_state(), uni)
+    assert out.candidates[0].size_tier == "heavy"
+
+
+def test_sizing_policy_decorator_order_preserved_with_float_aware():
+    # SizingPolicy still wraps its inner (order = size the post-veto survivors); float_aware is orthogonal
+    class _Guard:
+        def __init__(self):
+            self.seen = False
+        def decide(self, state, universe):
+            self.seen = True                                     # the inner (guard) runs first
+            return _pkg(Candidate(symbol="RUN", confidence=0.9), regime=_HOT)
+    guard = _Guard()
+    sp = SizingPolicy(guard, float_aware=True)
+    assert sp._inner is guard                                    # sizing is the OUTER decorator
+    out = sp.decide(_state(), _uni(_snap("RUN", 3.0)))
+    assert guard.seen and out.candidates[0].size_tier == "probe"  # guard ran, then float-aware sizing capped

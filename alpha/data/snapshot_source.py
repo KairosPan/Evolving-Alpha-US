@@ -13,6 +13,7 @@ from alpha.data.earnings import (
     known_calendar,
     known_earnings,
 )
+from alpha.data.float_shares import FloatFact, float_from_frame, known_float
 from alpha.data.offerings import OfferingEvent, events_from_frame, known_offering_events
 from alpha.data.pit_store import PITStore
 from alpha.data.short_interest import ShortInterest, known_short_interest, si_from_frame
@@ -91,3 +92,10 @@ class SnapshotSource:
 
     def offerings_available(self) -> bool:
         return self._store.has_offering_events()
+
+    def float_known(self, symbol: str, as_of: Date) -> list[FloatFact]:
+        facts = float_from_frame(self._store.get_float())
+        return [f for f in known_float(facts, as_of) if f.symbol == symbol]
+
+    def float_available(self) -> bool:
+        return self._store.has_float()

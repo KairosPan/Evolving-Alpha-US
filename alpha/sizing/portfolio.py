@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from alpha.sizing.correlation import Pick, correlated_groups, group_by_narrative
+from alpha.sizing.float_size import float_capped_tier
 from alpha.sizing.position import SIZE_TIER_WEIGHT, SizeTier, SizingConfig, size_tier
 
 
@@ -22,10 +24,18 @@ class PortfolioPlan:
     capped: bool                           # raw netted exposure exceeded the budget
 
 
-def plan_portfolio(picks: list[Pick], risk_gate: float, config: SizingConfig) -> PortfolioPlan:
-    """Assign size tiers, net same-narrative picks to one bet, cap aggregate exposure by risk_gate."""
-    sized = [SizedPick(symbol=p.symbol, narrative=p.narrative,
-                       size_tier=size_tier(p.confidence, risk_gate)) for p in picks]
+def plan_portfolio(picks: list[Pick], risk_gate: float, config: SizingConfig, *,
+                   floats: Mapping[str, float] | None = None) -> PortfolioPlan:
+    """Assign size tiers, net same-narrative picks to one bet, cap aggregate exposure by risk_gate.
+
+    P5b (spec 2026-07-13-p5b-float-feed): when `floats` (symbol -> free float in RAW shares) is provided,
+    each pick's tier is further capped for a small float (liquidity-aware), so the netted exposure reflects
+    the same caps as the per-name tiers. floats=None -> byte-identical."""
+    def _tier(p: Pick) -> SizeTier:
+        t = size_tier(p.confidence, risk_gate)
+        return float_capped_tier(t, floats.get(p.symbol), config) if floats is not None else t
+
+    sized = [SizedPick(symbol=p.symbol, narrative=p.narrative, size_tier=_tier(p)) for p in picks]
     tier_by_symbol = {s.symbol: s.size_tier for s in sized}
     # each narrative group counts ONCE, at its strongest-conviction member's weight (one bet)
     raw_exposure = 0.0

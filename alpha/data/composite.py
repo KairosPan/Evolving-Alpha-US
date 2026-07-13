@@ -12,6 +12,7 @@ from datetime import date as Date
 import pandas as pd
 
 from alpha.data.earnings import EarningsCalendarEntry, EarningsFact
+from alpha.data.float_shares import FloatFact
 from alpha.data.offerings import OfferingEvent
 from alpha.data.short_interest import ShortInterest
 from alpha.data.source import MarketDataSource
@@ -21,10 +22,10 @@ from alpha.data.source import MarketDataSource
 # backend can check reverse-split/dilution (the P3 tri-state fix), so routing the probe apart from the
 # corp data it describes would let the probe lie. `earnings` (P5a) groups its three coupled methods for
 # the same reason (earnings_available describes whichever backend serves the earnings data). `short_interest`
-# + `offerings` (P5b) each group their `*_known` + `*_available` methods for the same reason. P5 feeds add
-# their own groups when their methods land.
+# + `offerings` (P5b) each group their `*_known` + `*_available` methods for the same reason; `float` (P5b)
+# groups float_known + float_available. P5 feeds add their own groups when their methods land.
 _CAPABILITIES = frozenset({"calendar", "bars", "snapshot", "corp_actions", "earnings",
-                           "short_interest", "offerings"})
+                           "short_interest", "offerings", "float"})
 
 
 class CompositeSource:
@@ -99,3 +100,10 @@ class CompositeSource:
 
     def offerings_available(self) -> bool:
         return self._route("offerings").offerings_available()
+
+    # ── float group (P5b) — free-float feed (float_known + float_available route together) ──
+    def float_known(self, symbol: str, as_of: Date) -> list[FloatFact]:
+        return self._route("float").float_known(symbol, as_of)
+
+    def float_available(self) -> bool:
+        return self._route("float").float_available()

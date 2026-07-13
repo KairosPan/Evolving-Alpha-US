@@ -19,6 +19,7 @@ from alpha.data.alpaca import AlpacaSource
 from alpha.data.composite import CompositeSource
 from alpha.data.edgar import EdgarOfferingsSource, EdgarSource
 from alpha.data.finra import FinraSource
+from alpha.data.float_feed import FloatSource
 from alpha.data.pit_store import PITStore
 from alpha.data.snapshot_source import SnapshotSource
 from alpha.data.source import MarketDataSource
@@ -44,6 +45,12 @@ def _build_edgar_offerings(*, pit_root: str | None = None) -> MarketDataSource:
     # Offerings-lifecycle-only backend (P5b) — composed for the `offerings` capability via
     # `ALPHA_DATA_COMPOSITE=offerings=edgar_offerings`.
     return EdgarOfferingsSource()
+
+
+def _build_float_feed(*, pit_root: str | None = None) -> MarketDataSource:
+    # Free-float-only backend (P5b) — composed for the `float` capability via
+    # `ALPHA_DATA_COMPOSITE=float=float_feed`; reads ALPHA_FLOAT_USER_AGENT from env itself.
+    return FloatSource()
 
 
 def _build_snapshot(*, pit_root: str | None = None) -> MarketDataSource:
@@ -91,7 +98,8 @@ def _build_composite(*, pit_root: str | None = None) -> MarketDataSource:
 
 
 _SOURCES = {"alpaca": _build_alpaca, "snapshot": _build_snapshot, "composite": _build_composite,
-            "edgar": _build_edgar, "finra": _build_finra, "edgar_offerings": _build_edgar_offerings}
+            "edgar": _build_edgar, "finra": _build_finra, "edgar_offerings": _build_edgar_offerings,
+            "float_feed": _build_float_feed}
 
 
 def make_source(name: str | None = None, *, pit_root: str | None = None) -> MarketDataSource:

@@ -179,3 +179,28 @@ class PITStore:
         if "process_date" in df.columns:
             df["process_date"] = pd.to_datetime(df["process_date"]).dt.date
         return df
+
+    # ── free float (P5b) — facts keyed on knowable_date; has_float() is the tri-state MISSING seam (True
+    #    even for an empty frame, False only when the artifact is absent — like has_short_interest). ──
+    def _float_path(self) -> Path:
+        return self._root / "float_shares.parquet"
+
+    def has_float(self) -> bool:
+        return self._float_path().exists()
+
+    def put_float(self, df: pd.DataFrame) -> None:
+        out = df.copy()
+        for c in ("knowable_date", "as_of_period"):
+            if c in out.columns:
+                out[c] = out[c].map(lambda d: d.isoformat() if d is not None else None)
+        _atomic_to_parquet(out, self._float_path())
+
+    def get_float(self) -> pd.DataFrame | None:
+        p = self._float_path()
+        if not p.exists():
+            return None
+        df = pd.read_parquet(p)
+        for c in ("knowable_date", "as_of_period"):
+            if c in df.columns:
+                df[c] = pd.to_datetime(df[c]).dt.date
+        return df
