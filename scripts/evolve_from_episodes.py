@@ -26,7 +26,7 @@ from alpha.memory.store import EpisodeStore
 from alpha.meta.conflict_store import ConflictQueue
 from alpha.meta.evolution import run_forked_evolution
 from alpha.meta.proposal_store import ProposalQueue, proposals_dir
-from alpha.meta.store import LiveBrainStore
+from alpha.meta.body_git import make_brain_store
 from alpha.refine.forge import forge_skills
 from alpha.settings import Settings, EVOLUTION_EPISODES_DB_DEFAULT
 
@@ -39,7 +39,7 @@ def run_evolve_from_episodes(*, brain_dir: str, conflicts_dir: str, episodes_db:
     """One forge pass over episode evidence. mode="propose" (default, conformant): fork + packet.
     mode="autonomous": pre-pivot in-place forge, gated by $ALPHA_UNSAFE_AUTONOMOUS.
     Returns {"mode", "applied", "held", "rejected", ...} (applied = fork-applied in propose mode)."""
-    bstore = LiveBrainStore(brain_dir)
+    bstore = make_brain_store(brain_dir, git=Settings.from_env().body_git)   # A5: git-backed iff ALPHA_BODY_GIT
     cq = ConflictQueue(conflicts_dir)
 
     if mode == "autonomous":

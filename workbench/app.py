@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from alpha.llm.config import make_client
 from alpha.data.registry import make_source
-from alpha.meta.store import LiveBrainStore
+from alpha.meta.body_git import make_brain_store
 from alpha.converse.sqlite_store import SqliteProjectStore
 from alpha.converse.workspace import Workspace
 from alpha.converse.session import converse_project
@@ -39,7 +39,7 @@ def _agent_llm(): return _AGENT_LLM if _AGENT_LLM is not None else make_client("
 def _source():    return _SOURCE if _SOURCE is not None else make_source()
 
 
-def _brain_store():   return LiveBrainStore(_brain_dir())
+def _brain_store():   return make_brain_store(_brain_dir(), git=Settings.from_env().body_git)
 def _project_store(): return SqliteProjectStore.open(Settings.from_env().projects_db)
 
 

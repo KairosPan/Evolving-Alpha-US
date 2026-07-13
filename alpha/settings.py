@@ -38,6 +38,7 @@ class Settings(BaseModel):
     proposals_dir: str = "./state/proposals"  # mirror only; alpha/meta/proposal_store.proposals_dir() is authoritative (TCB file, reads env itself)
     workspace_dir: str = "./state/workspaces"
     episodes_db: str | None = None
+    body_git: bool = False        # A5: opt-in git-backed Body Store (ALPHA_BODY_GIT); off = today, byte-identical
     sonia_url: str = "http://127.0.0.1:8810"
     workbench_url: str = "http://127.0.0.1:8820"
     data_source: str = "alpaca"
@@ -59,6 +60,7 @@ class Settings(BaseModel):
         "proposals_dir": "ALPHA_PROPOSALS_DIR",
         "workspace_dir": "ALPHA_WORKSPACE_DIR",
         "episodes_db": "ALPHA_EPISODES_DB",
+        "body_git": "ALPHA_BODY_GIT",
         "sonia_url": "ALPHA_SONIA_URL",
         "workbench_url": "ALPHA_WORKBENCH_URL",
         "data_source": "ALPHA_DATA_SOURCE",

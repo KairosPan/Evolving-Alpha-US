@@ -21,6 +21,7 @@ from alpha.meta.sonia_agent import SoniaAgent, turn_text
 from alpha.meta.conflict_store import ConflictQueue
 from alpha.meta.evolution import adopt_proposal
 from alpha.meta.proposal_store import ProposalQueue, proposals_dir
+from alpha.meta.body_git import make_brain_store
 from alpha.meta.reconcile import reconcile_session, reconcile_staged_edits
 from alpha.meta.store import LiveBrainStore, SessionStore
 from alpha.settings import Settings
@@ -29,7 +30,8 @@ _MUTATION_LOCK = threading.Lock()
 
 
 def _brain_store() -> LiveBrainStore:
-    return LiveBrainStore(Settings.from_env().live_brain_dir)
+    s = Settings.from_env()
+    return make_brain_store(s.live_brain_dir, git=s.body_git)   # A5: git-backed iff ALPHA_BODY_GIT
 
 
 def _session_store() -> SessionStore:

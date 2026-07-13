@@ -19,6 +19,7 @@ def test_defaults_match_todays_literals():
     assert s.web_decision is None and s.web_decisions_dir is None
     assert s.web_verdict is None and s.web_verdicts_dir is None and s.web_evolution is None
     assert s.pit_root is None
+    assert s.body_git is False        # A5: git-backed Body Store is opt-in (ALPHA_BODY_GIT); off by default
     assert EVOLUTION_EPISODES_DB_DEFAULT == "./state/brain.db"
 
 

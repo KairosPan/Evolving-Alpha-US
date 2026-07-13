@@ -35,7 +35,7 @@ from alpha.loop.inner_loop import InnerLoop, LoopConfig
 from alpha.memory.store import EpisodeStore
 from alpha.meta.evolution import run_forked_evolution
 from alpha.meta.proposal_store import ProposalQueue, proposals_dir
-from alpha.meta.store import LiveBrainStore
+from alpha.meta.body_git import make_brain_store
 from alpha.meta.conflict_store import ConflictQueue
 from alpha.settings import Settings, EVOLUTION_EPISODES_DB_DEFAULT
 
@@ -60,7 +60,7 @@ def run_refine_live(source, start: Date, end: Date, *, brain_dir: str, conflicts
     refiner_llm_factory = metered_factory(
         refiner_llm_factory or (lambda: make_client("refiner")), "refiner", meter)
     cfg = loop_config if loop_config is not None else LoopConfig(horizon=horizon)
-    bstore = LiveBrainStore(brain_dir)
+    bstore = make_brain_store(brain_dir, git=Settings.from_env().body_git)   # A5: git-backed iff ALPHA_BODY_GIT
     cq = ConflictQueue(conflicts_dir)
     held_before = len(cq.all())
 
