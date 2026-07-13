@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import tempfile
 from datetime import date as Date, datetime as DateTime
 from pathlib import Path
@@ -38,6 +39,9 @@ from alpha.harness.loader import load_pack, load_seeds
 from alpha.harness.snapshot import harness_digest
 from alpha.harness.state import HarnessState
 from alpha.llm.config import make_client
+from alpha.llm.metering import (
+    BudgetExceeded, SpendMeter, add_budget_args, budget_from_env, format_summary, metered_factory,
+)
 from alpha.memory.store import EpisodeStore
 from alpha.redact import collect_secrets, redact
 from alpha.settings import Settings
@@ -51,7 +55,7 @@ SEEDS_DIR = Path(__file__).resolve().parents[1] / "seeds"
 def produce_decisions(source, start: Date, end: Date, *, seeds_dir: Path | None = None,
                       harness: "HarnessState | None" = None,
                       agent_llm_factory=None, screen: bool = True, size: bool = True,
-                      episode_store=None, collect=None):
+                      episode_store=None, collect=None, meter=None):
     """Yield one DecisionPackage per trading day in [start, end] (act-only). `screen`/`size` mirror
     LoopConfig: GuardedPolicy is the L4 veto, SizingPolicy the L3 sizing — both default ON. The
     perception history (sentiment_raw / prior gainers) is threaded forward exactly like InnerLoop so
@@ -64,8 +68,11 @@ def produce_decisions(source, start: Date, end: Date, *, seeds_dir: Path | None 
     loaded) — additive, eval/loop never read it.
     harness: a pre-loaded H (its `vocabulary` is the run's true pack). None -> load it here from
     seeds_dir (None -> active pack). save_decisions passes the H it loaded so the sidecar's seed_pack
-    is sourced from the SAME H that produced the decisions (not a separate env read)."""
-    agent_llm_factory = agent_llm_factory or (lambda: make_client("agent"))
+    is sourced from the SAME H that produced the decisions (not a separate env read).
+    meter: optional A6 SpendMeter — records every agent call (this is the decisions batch's spend
+    scope) and HALTS on a budget breach. Default None -> byte-identical (unmetered)."""
+    agent_llm_factory = metered_factory(
+        agent_llm_factory or (lambda: make_client("agent")), "agent", meter)
     # Pack-aware default (P0.5): seeds_dir=None resolves the active pack (env ALPHA_SEED_PACK, momo
     # default = byte-identical); an explicit dir stays momo (back-compat / tests).
     h = harness if harness is not None else (load_pack() if seeds_dir is None else load_seeds(seeds_dir))
@@ -157,6 +164,7 @@ def main() -> None:
     ap.add_argument("--no-size", action="store_true", help="emit unsized decisions (skip L3 sizing)")
     ap.add_argument("--brain", metavar="PATH", help="read-only EpisodeStore (brain.db) for §6 recall+taboo; "
                     "defaults to $ALPHA_EPISODES_DB if set")
+    add_budget_args(ap)
     args = ap.parse_args()
 
     s = Settings.from_env()
@@ -166,9 +174,19 @@ def main() -> None:
     store = DecisionStore(args.out_dir)
     brain = args.brain or s.episodes_db
     episode_store = EpisodeStore.open(brain, create_if_missing=False) if brain else None
-    n = save_decisions(source, args.start, args.end, store,
-                       screen=not args.no_screen, size=not args.no_size, episode_store=episode_store)
+    # A6: the decisions batch always meters; a budget (CLI/env) makes spend an enforced per-run ceiling.
+    meter = SpendMeter(budget_from_env(usd=args.budget_usd, tokens=args.budget_tokens,
+                                       soft_ratio=args.soft_ratio))
+    try:
+        n = save_decisions(source, args.start, args.end, store,
+                           screen=not args.no_screen, size=not args.no_size,
+                           episode_store=episode_store, meter=meter)
+    except BudgetExceeded as e:
+        print(f"HALTED: {e}", file=sys.stderr)
+        print(format_summary(meter.summary()), file=sys.stderr)
+        sys.exit(1)
     print(f"saved {n} daily decisions {args.start}..{args.end} -> {args.out_dir}")
+    print(format_summary(meter.summary()))
 
 
 if __name__ == "__main__":

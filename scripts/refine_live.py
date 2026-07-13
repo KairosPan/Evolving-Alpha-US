@@ -18,7 +18,7 @@ the breaker may machine-revert the live brain mid-run. Experiments only.
     python scripts/refine_live.py snap 2026-01-02 2026-03-31
 """
 from __future__ import annotations
-import argparse, os, tempfile
+import argparse, os, sys, tempfile
 from datetime import date as Date
 from pathlib import Path
 
@@ -28,6 +28,9 @@ from alpha.data.snapshot_source import SnapshotSource
 from alpha.harness.manager import HarnessManager
 from alpha.harness.snapshot import SnapshotStore
 from alpha.llm.config import make_client
+from alpha.llm.metering import (
+    BudgetExceeded, SpendMeter, add_budget_args, budget_from_env, format_summary, metered_factory,
+)
 from alpha.loop.inner_loop import InnerLoop, LoopConfig
 from alpha.memory.store import EpisodeStore
 from alpha.meta.evolution import run_forked_evolution
@@ -43,12 +46,19 @@ def run_refine_live(source, start: Date, end: Date, *, brain_dir: str, conflicts
                     agent_llm_factory=None, refiner_llm_factory=None, horizon: int = 2,
                     agent_factory=None, loop_config: "LoopConfig | None" = None,
                     episodes_db: "str | None" = None, mode: str = "propose",
-                    proposals_root: "str | None" = None) -> dict:
+                    proposals_root: "str | None" = None,
+                    meter: "SpendMeter | None" = None) -> dict:
     """One self-study pass over [start, end]. mode="propose" (default, conformant): fork + packet,
     no live writes. mode="autonomous": pre-pivot in-place evolution, gated by $ALPHA_UNSAFE_AUTONOMOUS.
-    Tests inject MockLLM factories + tmp dirs; the live path uses per-role make_client (temp=0)."""
-    agent_llm_factory = agent_llm_factory or (lambda: make_client("agent"))
-    refiner_llm_factory = refiner_llm_factory or (lambda: make_client("refiner"))
+    Tests inject MockLLM factories + tmp dirs; the live path uses per-role make_client (temp=0).
+
+    meter (A6): a threaded SpendMeter records every agent/refiner call (token count × price) and, if it
+    carries a budget, HALTS the run on breach (BudgetExceeded propagates). meter=None -> byte-identical,
+    unmetered. When set, the return dict carries `spend=meter.summary()` (the per-refinement scalar)."""
+    agent_llm_factory = metered_factory(
+        agent_llm_factory or (lambda: make_client("agent")), "agent", meter)
+    refiner_llm_factory = metered_factory(
+        refiner_llm_factory or (lambda: make_client("refiner")), "refiner", meter)
     cfg = loop_config if loop_config is not None else LoopConfig(horizon=horizon)
     bstore = LiveBrainStore(brain_dir)
     cq = ConflictQueue(conflicts_dir)
@@ -73,9 +83,12 @@ def run_refine_live(source, start: Date, end: Date, *, brain_dir: str, conflicts
             h, log = bstore.load()
             mgr, report = _loop(h, log, episode_store=episode_store, recall_store=episode_store)
             bstore.save(mgr.harness, mgr.log)             # persist the evolved brain (UNSAFE path)
-        return {"mode": "autonomous", "n_edits": report.n_edits,
-                "held": len(cq.all()) - held_before, "refines": len(report.refine_events),
-                "brain_dir": brain_dir, "conflicts_dir": conflicts_dir}
+        out = {"mode": "autonomous", "n_edits": report.n_edits,
+               "held": len(cq.all()) - held_before, "refines": len(report.refine_events),
+               "brain_dir": brain_dir, "conflicts_dir": conflicts_dir}
+        if meter is not None:
+            out["spend"] = meter.summary()
+        return out
 
     # propose (default): the fork writes NO live episodes — a discarded fork must die with its
     # session; recall/taboo still READ the live DB (the compare_harnesses read-handle pattern).
@@ -90,11 +103,14 @@ def run_refine_live(source, start: Date, end: Date, *, brain_dir: str, conflicts
     prop = run_forked_evolution(bstore, runner, queue=ProposalQueue(root), kind="refine",
                                 window={"start": start.isoformat(), "end": end.isoformat()})
     report = box.get("report")
-    return {"mode": "propose", "proposal_id": prop.proposal_id if prop is not None else None,
-            "n_delta": len(prop.records) if prop is not None else 0,
-            "held": len(cq.all()) - held_before,
-            "refines": len(report.refine_events) if report is not None else 0,
-            "brain_dir": brain_dir, "conflicts_dir": conflicts_dir, "proposals_dir": root}
+    out = {"mode": "propose", "proposal_id": prop.proposal_id if prop is not None else None,
+           "n_delta": len(prop.records) if prop is not None else 0,
+           "held": len(cq.all()) - held_before,
+           "refines": len(report.refine_events) if report is not None else 0,
+           "brain_dir": brain_dir, "conflicts_dir": conflicts_dir, "proposals_dir": root}
+    if meter is not None:
+        out["spend"] = meter.summary()
+    return out
 
 
 def main() -> None:
@@ -107,17 +123,27 @@ def main() -> None:
     ap.add_argument("--horizon", type=int, default=2)
     ap.add_argument("--autonomous", action="store_true",
                     help=f"pre-pivot in-place evolution (requires {_UNSAFE_ENV}=1)")
+    add_budget_args(ap)
     args = ap.parse_args()
     s = Settings.from_env()
     pit_root = Path(args.pit_root)
     source = SnapshotSource(PITStore(pit_root))
     verify_checksums(pit_root, fail_closed=True)   # D6: fail closed — self-study must run on pinned data
-    out = run_refine_live(source, args.start, args.end,
-                          brain_dir=s.live_brain_dir,
-                          conflicts_dir=s.conflicts_dir,
-                          horizon=args.horizon,
-                          episodes_db=s.episodes_db or EVOLUTION_EPISODES_DB_DEFAULT,
-                          mode="autonomous" if args.autonomous else "propose")
+    # A6: the dreaming/self-study pass always meters; a budget (CLI/env) makes spend an enforced ceiling.
+    meter = SpendMeter(budget_from_env(usd=args.budget_usd, tokens=args.budget_tokens,
+                                       soft_ratio=args.soft_ratio))
+    try:
+        out = run_refine_live(source, args.start, args.end,
+                              brain_dir=s.live_brain_dir,
+                              conflicts_dir=s.conflicts_dir,
+                              horizon=args.horizon,
+                              episodes_db=s.episodes_db or EVOLUTION_EPISODES_DB_DEFAULT,
+                              mode="autonomous" if args.autonomous else "propose",
+                              meter=meter)
+    except BudgetExceeded as e:
+        print(f"HALTED: {e}", file=sys.stderr)
+        print(format_summary(meter.summary()), file=sys.stderr)
+        sys.exit(1)
     if out["mode"] == "autonomous":
         print(f"{out['n_edits']} self-study edits applied (UNSAFE autonomous mode) · "
               f"{out['held']} conflicts held ({out['refines']} refines) -> {out['conflicts_dir']}")
@@ -128,6 +154,7 @@ def main() -> None:
     else:
         print(f"no surviving edits — nothing proposed "
               f"({out['refines']} refines ran, {out['held']} conflicts held)")
+    print(format_summary(meter.summary()))
 
 
 if __name__ == "__main__":

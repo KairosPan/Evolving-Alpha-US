@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import os
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from alpha.llm.client import LLMClient, MockLLMClient
+
+if TYPE_CHECKING:
+    from alpha.llm.metering import SpendMeter
 
 Role = Literal["agent", "refiner", "sonia", "converse"]
 
@@ -18,11 +21,15 @@ _DEFAULTS: dict[str, tuple[str, str]] = {
 }
 
 
-def make_client(role: Role) -> LLMClient:
+def make_client(role: Role, *, meter: "SpendMeter | None" = None) -> LLMClient:
     """Build the LLM client for a role from env (ALPHA_<ROLE>_PROVIDER / _MODEL).
 
     providers: 'mock' (offline), 'anthropic' (ClaudeClient), 'openai_compat' (OpenAICompatClient).
     temperature defaults to 0.0 (eval determinism); override with ALPHA_LLM_TEMPERATURE.
+
+    meter (A6, charter *Resources as Security*): when a SpendMeter is passed, the raw client is wrapped
+    so every call meters (token count × price) into it and a budget breach halts the run loudly.
+    meter=None (the default) returns the raw client UNCHANGED — byte-identical, unmetered.
     """
     if role not in _DEFAULTS:
         raise ValueError(f"unknown role: {role!r} (expected one of {sorted(_DEFAULTS)})")
@@ -32,11 +39,13 @@ def make_client(role: Role) -> LLMClient:
     temperature = float(os.environ.get("ALPHA_LLM_TEMPERATURE", "0"))
 
     if provider == "mock":
-        return MockLLMClient(os.environ.get("ALPHA_MOCK_RESPONSE", "{}"))
-    if provider == "anthropic":
+        raw: LLMClient = MockLLMClient(os.environ.get("ALPHA_MOCK_RESPONSE", "{}"))
+    elif provider == "anthropic":
         from alpha.llm.anthropic import ClaudeClient
-        return ClaudeClient(model=model, temperature=temperature)
-    if provider == "openai_compat":
+        raw = ClaudeClient(model=model, temperature=temperature)
+    elif provider == "openai_compat":
         from alpha.llm.openai_compat import OpenAICompatClient
-        return OpenAICompatClient(model=model, temperature=temperature)
-    raise ValueError(f"unknown provider: {provider!r} (expected mock|anthropic|openai_compat)")
+        raw = OpenAICompatClient(model=model, temperature=temperature)
+    else:
+        raise ValueError(f"unknown provider: {provider!r} (expected mock|anthropic|openai_compat)")
+    return raw if meter is None else meter.wrap(raw, role=role)

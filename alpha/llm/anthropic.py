@@ -3,6 +3,19 @@ from __future__ import annotations
 import os
 import time
 
+from alpha.llm.metering import Usage
+
+
+def _usage_from_anthropic(u) -> "Usage | None":
+    """Normalize an Anthropic usage object (input_tokens / output_tokens) → Usage, or None."""
+    if u is None:
+        return None
+    tin = getattr(u, "input_tokens", None)
+    tout = getattr(u, "output_tokens", None)
+    if tin is None or tout is None:
+        return None
+    return Usage(tokens_in=int(tin), tokens_out=int(tout))
+
 
 class ClaudeClient:
     """Anthropic Claude client. Smoke-only for real calls; retry/backoff; injectable transport.
@@ -31,6 +44,7 @@ class ClaudeClient:
         self._max_retries = max_retries
         self._backoff = backoff
         self._sleep = sleep if sleep is not None else time.sleep
+        self.last_usage = None          # A6 metering side-channel: provider tokens of the last call
 
     def complete(self, system: str, user: str) -> str:
         if self._client is None:
@@ -42,6 +56,7 @@ class ClaudeClient:
                     model=self.model, max_tokens=self._max_tokens, temperature=self.temperature,
                     system=system, messages=[{"role": "user", "content": user}],
                 )
+                self.last_usage = _usage_from_anthropic(getattr(msg, "usage", None))
                 parts = [b.text for b in msg.content if getattr(b, "text", None)]
                 return "".join(parts)
             except Exception as e:           # noqa: BLE001 — transient: back off

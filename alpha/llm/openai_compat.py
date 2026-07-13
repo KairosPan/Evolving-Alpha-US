@@ -3,6 +3,19 @@ from __future__ import annotations
 import os
 import time
 
+from alpha.llm.metering import Usage
+
+
+def _usage_from_openai(u) -> "Usage | None":
+    """Normalize an OpenAI-style usage object (prompt_tokens / completion_tokens) → Usage, or None."""
+    if u is None:
+        return None
+    tin = getattr(u, "prompt_tokens", None)
+    tout = getattr(u, "completion_tokens", None)
+    if tin is None or tout is None:
+        return None
+    return Usage(tokens_in=int(tin), tokens_out=int(tout))
+
 
 class OpenAICompatClient:
     """OpenAI-compatible client (DeepSeek by default; any base_url). Smoke-only for real calls.
@@ -31,6 +44,7 @@ class OpenAICompatClient:
         self._max_retries = max_retries
         self._backoff = backoff
         self._sleep = sleep if sleep is not None else time.sleep
+        self.last_usage = None          # A6 metering side-channel: provider tokens of the last call
 
     def complete(self, system: str, user: str) -> str:
         if self._client is None:
@@ -45,6 +59,7 @@ class OpenAICompatClient:
                     response_format={"type": "json_object"},
                     temperature=self.temperature,
                 )
+                self.last_usage = _usage_from_openai(getattr(resp, "usage", None))
                 return resp.choices[0].message.content or ""
             except Exception as e:           # noqa: BLE001 — transient (network/rate/5xx): back off
                 last = e
@@ -66,6 +81,7 @@ class OpenAICompatClient:
                 resp = self._client.chat.completions.create(
                     model=self.model, messages=msgs, temperature=self.temperature,
                 )
+                self.last_usage = _usage_from_openai(getattr(resp, "usage", None))
                 return resp.choices[0].message.content or ""
             except Exception as e:           # noqa: BLE001 — transient: back off
                 last = e

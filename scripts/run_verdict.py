@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import tempfile
 from datetime import date as Date
 from pathlib import Path
@@ -38,6 +39,9 @@ from alpha.harness.snapshot import SnapshotStore
 from alpha.loop.compare import ComparisonReport, MultiWindowReport, compare_harnesses, multi_window
 from alpha.loop.inner_loop import LoopConfig
 from alpha.llm.config import make_client
+from alpha.llm.metering import (
+    BudgetExceeded, SpendMeter, add_budget_args, budget_from_env, format_summary, metered_factory,
+)
 from alpha.memory.store import EpisodeStore
 from alpha.universe import resolve_universe_screen
 
@@ -63,7 +67,8 @@ def split_windows(calendar: list[Date], start: Date, end: Date, n: int, *, horiz
 
 def run_verdict(source, start: Date, end: Date, *, seeds_dir: Path | None = None, horizon: int = 2,
                 windows: int = 1, shadow: bool = False, screen: bool = True,
-                agent_llm_factory=None, refiner_llm_factory=None, recall_store=None):
+                agent_llm_factory=None, refiner_llm_factory=None, recall_store=None,
+                meter=None):
     """Run the §9/§10 comparison over the captured `source`. Returns a ComparisonReport (windows<=1) or a
     MultiWindowReport (windows>1). Factories default to temp=0 `make_client` clients; tests inject MockLLM.
 
@@ -73,9 +78,16 @@ def run_verdict(source, start: Date, end: Date, *, seeds_dir: Path | None = None
 
     Pack-aware (P0.5): seeds_dir=None resolves the active pack (env ALPHA_SEED_PACK, momo default =
     byte-identical). The SAME factory feeds every arm, so both read one pack — verdict symmetry holds
-    (a growth run measures growth-vs-growth, never a mixed pair)."""
-    agent_llm_factory = agent_llm_factory or (lambda: make_client("agent"))
-    refiner_llm_factory = refiner_llm_factory or (lambda: make_client("refiner"))
+    (a growth run measures growth-vs-growth, never a mixed pair).
+
+    meter (A6): a threaded SpendMeter records every arm's agent/refiner calls (the replay-batch scope of
+    the charter's spend ceiling) and HALTS the run on a budget breach. meter=None -> byte-identical. The
+    meter is SHARED across arms — it is a per-run ceiling, not per-arm — so verdict symmetry is untouched
+    (metering is observe-and-enforce beside the run, it never feeds a decision)."""
+    agent_llm_factory = metered_factory(
+        agent_llm_factory or (lambda: make_client("agent")), "agent", meter)
+    refiner_llm_factory = metered_factory(
+        refiner_llm_factory or (lambda: make_client("refiner")), "refiner", meter)
     harness_factory = (lambda: load_pack()) if seeds_dir is None else (lambda: load_seeds(seeds_dir))
     store_factory = lambda: SnapshotStore(tempfile.mkdtemp())
     cfg = LoopConfig(horizon=horizon, screen=screen)  # screen ON = production posture; OFF = raw-skill
@@ -200,6 +212,7 @@ def main() -> None:
                     "into BOTH arms (symmetric); omit for the no-memory verdict")
     ap.add_argument("--json", metavar="PATH", help="also write the console JSON (web verdict view) to PATH "
                     "(single comparison; pair with --windows 1, the default)")
+    add_budget_args(ap)
     args = ap.parse_args()
 
     pit_root = Path(args.pit_root)
@@ -229,9 +242,17 @@ def main() -> None:
 
     recall_store = EpisodeStore.open(args.brain, create_if_missing=False) if args.brain else None
     print(f"  recall_store={'(brain) ' + args.brain if args.brain else '(none)'}")
-    result = run_verdict(source, args.start, args.end, horizon=args.horizon,
-                         windows=args.windows, shadow=args.shadow, screen=screen,
-                         recall_store=recall_store)
+    # A6: the replay/verdict batch always meters (shared across arms — a per-RUN ceiling); a budget halts.
+    meter = SpendMeter(budget_from_env(usd=args.budget_usd, tokens=args.budget_tokens,
+                                       soft_ratio=args.soft_ratio))
+    try:
+        result = run_verdict(source, args.start, args.end, horizon=args.horizon,
+                             windows=args.windows, shadow=args.shadow, screen=screen,
+                             recall_store=recall_store, meter=meter)
+    except BudgetExceeded as e:
+        print(f"HALTED: {e}", file=sys.stderr)
+        print(format_summary(meter.summary()), file=sys.stderr)
+        sys.exit(1)
     if isinstance(result, MultiWindowReport):
         print(format_multi(result))
         if args.json:
@@ -244,6 +265,8 @@ def main() -> None:
                                       universe_screen=universe_screen, seed_pack=seed_pack)
             Path(args.json).write_text(json.dumps(view, indent=2), encoding="utf-8")
             print(f"  wrote console JSON -> {args.json}  (ALPHA_WEB_VERDICT={args.json} python -m alpha_web)")
+    print()
+    print(format_summary(meter.summary()))
 
 
 if __name__ == "__main__":

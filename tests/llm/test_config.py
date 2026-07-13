@@ -1,6 +1,7 @@
 import pytest
 from alpha.llm.client import MockLLMClient
 from alpha.llm.config import make_client
+from alpha.llm.metering import MeteredClient, SpendMeter
 
 
 def test_mock_provider(monkeypatch):
@@ -34,3 +35,22 @@ def test_converse_role_resolves(monkeypatch):
     monkeypatch.setenv("ALPHA_CONVERSE_PROVIDER", "mock")
     monkeypatch.setenv("ALPHA_MOCK_RESPONSE", "{}")
     assert isinstance(make_client("converse"), MockLLMClient)
+
+
+# --------------------------------------------------------------------------- A6 metering seam
+
+def test_no_meter_returns_raw_client_byte_identical(monkeypatch):
+    """meter=None (the default) is byte-identical: the raw client, not a wrapper."""
+    monkeypatch.setenv("ALPHA_AGENT_PROVIDER", "mock")
+    c = make_client("agent")
+    assert isinstance(c, MockLLMClient) and not isinstance(c, MeteredClient)
+
+
+def test_meter_wraps_the_client_and_records(monkeypatch):
+    monkeypatch.setenv("ALPHA_AGENT_PROVIDER", "mock")
+    monkeypatch.setenv("ALPHA_MOCK_RESPONSE", '{"ok": 1}')
+    meter = SpendMeter()
+    c = make_client("agent", meter=meter)
+    assert isinstance(c, MeteredClient)
+    assert c.complete("s", "u") == '{"ok": 1}'          # metered call delegates unchanged
+    assert len(meter.records) == 1 and meter.records[0].role == "agent"

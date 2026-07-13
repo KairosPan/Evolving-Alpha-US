@@ -7,18 +7,22 @@ class _Block:
 
 
 class _Msg:
-    def __init__(self, text): self.content = [_Block(text)]
+    def __init__(self, text, usage=None): self.content, self.usage = [_Block(text)], usage
+
+
+class _Usage:
+    def __init__(self, it, ot): self.input_tokens, self.output_tokens = it, ot
 
 
 class _FakeMessages:
-    def __init__(self, text, fail_n=0):
-        self._text, self._fail_n, self.calls = text, fail_n, 0
+    def __init__(self, text, fail_n=0, usage=None):
+        self._text, self._fail_n, self.calls, self._usage = text, fail_n, 0, usage
         self.messages = self
     def create(self, **kw):
         self.calls += 1
         if self.calls <= self._fail_n:
             raise RuntimeError("overloaded")
-        return _Msg(self._text)
+        return _Msg(self._text, usage=self._usage)
 
 
 def _client(fake, sleeps):
@@ -30,6 +34,19 @@ def _client(fake, sleeps):
 
 def test_returns_text():
     assert _client(_FakeMessages('{"ok": 1}'), []).complete("s", "u") == '{"ok": 1}'
+
+
+def test_captures_provider_usage_when_present():
+    from alpha.llm.metering import Usage
+    c = _client(_FakeMessages('{"ok": 1}', usage=_Usage(21, 8)), [])
+    assert c.complete("s", "u") == '{"ok": 1}'
+    assert c.last_usage == Usage(tokens_in=21, tokens_out=8)
+
+
+def test_last_usage_none_when_provider_omits_usage():
+    c = _client(_FakeMessages('{"ok": 1}'), [])          # default usage=None
+    c.complete("s", "u")
+    assert c.last_usage is None
 
 
 def test_retries_then_succeeds():
