@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import copy
 
-from alpha.harness.edit_log import EditLog, EditProvenance, EditRecord
+from alpha.harness.edit_log import EditLog, EditRecord
 from alpha.harness.metatools import MetaTools
 from alpha.harness.state import HarnessState
 from alpha.llm.client import LLMClient
 from alpha.meta.models import ProposedEdit, new_edit_id
-from alpha.refine.apply import ALL_TOOLS, try_apply_op
+from alpha.meta.teach_surface import teach_provenance, teach_scope
+from alpha.refine.apply import try_apply_op
 from alpha.refine.ops import RefineOp
 
 _KIND = {
@@ -22,9 +23,9 @@ def preview_op(harness: HarnessState, op: RefineOp, *, retire_min: int = 5, prom
     """Dry-run one op on a deepcopy of the brain; never mutates `harness`. Returns a ProposedEdit
     (status 'proposed' with payload on success, 'failed' + apply_reason on rejection)."""
     scratch = copy.deepcopy(harness)
-    rec, reason = try_apply_op(MetaTools(scratch, EditLog()), scratch, op, allowed=ALL_TOOLS,
+    rec, reason = try_apply_op(MetaTools(scratch, EditLog()), scratch, op, allowed=teach_scope("sonia"),
                                min_retire_samples=retire_min, min_promote_samples=promote_min,
-                               provenance=EditProvenance(path="teaching", proposer="sonia"))
+                               provenance=teach_provenance("sonia"))
     if rec is not None:
         return ProposedEdit(edit_id=new_edit_id(), tool=op.tool, target_kind=rec.target_kind,
                             target_id=rec.target_id, op=rec.op, summary=rec.summary,
@@ -56,10 +57,9 @@ class MetaAgent:
             if e.status != "accepted":
                 continue
             op = RefineOp(tool=e.tool, args=dict(e.args), rationale=e.rationale)
-            rec, reason = try_apply_op(self.tools, self.h, op, allowed=ALL_TOOLS,
+            rec, reason = try_apply_op(self.tools, self.h, op, allowed=teach_scope("sonia"),
                                        min_retire_samples=self._retire_min, min_promote_samples=self._promote_min,
-                                       provenance=EditProvenance(path="teaching", proposer="sonia",
-                                                                 human_approver=human_approver))
+                                       provenance=teach_provenance("sonia", human_approver=human_approver))
             if rec is not None:
                 e.status, e.applied_seq, e.apply_reason = "applied", rec.seq, ""
                 applied.append(rec)

@@ -12,9 +12,9 @@ from alpha.converse.sqlite_store import SqliteProjectStore
 from alpha.converse.workspace import Workspace
 from alpha.converse.session import converse_project
 from alpha.harness.metatools import MetaTools
-from alpha.harness.edit_log import EditProvenance
 from alpha.refine.apply import try_apply_op, ALL_TOOLS
-from alpha.refine.ops import RefineOp, PASS_TOOLS
+from alpha.refine.ops import RefineOp
+from alpha.meta.teach_surface import teach_provenance, teach_scope
 from alpha.converse.approve import assert_approvable, StagedEditNotApproved
 from alpha.meta.reconcile import reconcile_session, reconcile_staged_edits
 from alpha.meta.store import SessionStore
@@ -168,10 +168,12 @@ def create_app() -> FastAPI:
                     return JSONResponse({"error": str(exc), "edit_id": eid, "status": "rejected"}, status_code=422)
                 snap = bstore.snapshot(f"approve-{eid}")
                 op = RefineOp(tool=se.op["tool"], args=dict(se.op["args"]), rationale=se.op.get("rationale", ""))
-                rec, reason = try_apply_op(MetaTools(h, log), h, op, allowed=PASS_TOOLS["M"],
+                # A8: the worker's REAL landing routes through the ONE write-scope authority
+                # (teach_surface), not a hard-coded scope/provenance — resolves byte-identically today
+                # (teach_scope("kairos")==PASS_TOOLS["M"]) but a future A7 narrowing lands in one place.
+                rec, reason = try_apply_op(MetaTools(h, log), h, op, allowed=teach_scope("kairos"),
                                            min_retire_samples=5, min_promote_samples=3,
-                                           provenance=EditProvenance(path="teaching", proposer="kairos",
-                                                                     human_approver="user"))
+                                           provenance=teach_provenance("kairos", human_approver="user"))
                 if rec is not None:
                     bstore.save(h, log)
                     se.applied_seq, se.snapshot_before, se.reason = rec.seq, snap, None

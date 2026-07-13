@@ -12,6 +12,7 @@ from alpha.harness.metatools import MetaTools
 from alpha.harness.skill import Skill
 from alpha.harness.state import HarnessState
 from alpha.refine.ops import PASS_TOOLS, RefineOp
+from alpha.trace import SCOPES, is_scope_wider, scope_rank
 
 if TYPE_CHECKING:
     from alpha.memory.aggregate import TaskStats
@@ -123,6 +124,33 @@ def _target_id(tool: str, args: dict) -> str | None:
     return str(v) if v is not None else None
 
 
+def _landed_scope(op: RefineOp) -> str | None:
+    """The scope this edit would land at, ONLY IF the op explicitly declares one (op.args['scope']).
+    None = undeclared -> A8's scope-mismatch gate is a byte-identical no-op (legacy / pre-label ops).
+    A garbage value also returns None (the dispatch's Scope-Literal validation rejects it later)."""
+    s = op.args.get("scope")
+    return s if s in SCOPES else None
+
+
+def _evidence_scope(provenance: EditProvenance | None) -> str:
+    """The effective scope of the cited evidence for the scope-mismatch gate — derived
+    CONSERVATIVELY (A8 governance decision, user-ratified): the NARROWEST scope observed in the
+    cited evidence (provenance.evidence_ref['evidence_scopes' | 'evidence_scope']), or 'per-session'
+    (narrowest) when unknown, so a wide edit off narrow/absent evidence bounces. The STORED default
+    scope label stays agent-global (A4); the GATE never reads it — it reads the cited evidence."""
+    ref = provenance.evidence_ref if provenance is not None else None
+    scopes: list[str] = []
+    if isinstance(ref, dict):
+        raw = ref.get("evidence_scopes")
+        if isinstance(raw, (list, tuple)):
+            scopes = [s for s in raw if s in SCOPES]
+        elif ref.get("evidence_scope") in SCOPES:
+            scopes = [ref["evidence_scope"]]
+    if not scopes:
+        return "per-session"
+    return min(scopes, key=scope_rank)
+
+
 def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowed: frozenset[str],
                  min_retire_samples: int, min_promote_samples: int,
                  provenance: EditProvenance | None = None,
@@ -134,7 +162,7 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
                  task_recall=None, asof=None,
                  normalize=None) -> tuple[EditRecord | None, str | None]:
     """Gate order: stamp coherence -> whitelist -> rationale -> empty-patch -> set-once/create guards ->
-    domain-aware separation -> [task branch: operational-M reject -> gate-side re-derivation ->
+    scope-mismatch (A8) -> domain-aware separation -> [task branch: operational-M reject -> gate-side re-derivation ->
     task floor (PC-8) -> conflict] -> trade floors -> conflict -> dispatch
     (dispatch errors -> clean reject reason). Returns (record, None) on apply | (None, reason).
 
@@ -174,6 +202,18 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
     # PC-4: set-once relabel guard — domain is immutable once an element is created; all provenances.
     if op.tool in ("patch_skill", "update_memory") and "domain" in op.args:
         return None, "domain is set-once; cannot be relabeled"
+    # A8 scope-mismatch static gate (charter *The External Channel* — "live from day one"): an edit
+    # landing at a scope WIDER than its cited evidence's scope fails and bounces to Sonia. ADDITIVE +
+    # fail-closed: fires ONLY when the op explicitly declares a landed scope (op.args['scope']); an
+    # undeclared/legacy op -> byte-identical pass. user_direct is exempt (the user's own hand carries
+    # agent-global authority; forgoes the packet counsel, charter *Applier*). Evidence scope defaults
+    # to the NARROWEST cited, or per-session when unknown (A8 governance decision; see the A8 spec).
+    landed = _landed_scope(op)
+    if landed is not None and (provenance is None or provenance.path != "user_direct"):
+        evidence = _evidence_scope(provenance)
+        if is_scope_wider(landed, evidence):
+            return None, (f"scope-mismatch: landed scope '{landed}' wider than evidence scope "
+                          f"'{evidence}' (bounces to Sonia)")
     # PC-5: domain-aware separation gate — task-evidenced ops may only target operational H.
     # Placed before the trade floors so operational targets (stats.n==0/expectancy=None) aren't
     # wrongly rejected by the retire/promote floor before we can route them.

@@ -12,9 +12,10 @@ from alpha.universe.universe import build_universe
 from alpha.state.builder import build_market_state
 
 from alpha.harness.metatools import MetaTools
-from alpha.harness.edit_log import EditLog, EditProvenance
+from alpha.harness.edit_log import EditLog
 from alpha.refine.apply import try_apply_op
-from alpha.refine.ops import RefineOp, PASS_TOOLS
+from alpha.refine.ops import RefineOp
+from alpha.meta.teach_surface import teach_provenance, teach_scope
 from alpha.meta.models import new_edit_id
 
 # propose_memory_edit is a nested meta-tool DISPATCHER: it forwards to one of the M-pass memory
@@ -50,10 +51,10 @@ def make_propose_edit_tool(harness, *, min_retire_samples: int = 5, min_promote_
         op = RefineOp(tool=tool, args=args, rationale=rationale)
         scratch = _copy.deepcopy(harness)
         rec, reason = try_apply_op(MetaTools(scratch, EditLog()), scratch, op,
-                                   allowed=PASS_TOOLS["M"],
+                                   allowed=teach_scope("kairos"),
                                    min_retire_samples=min_retire_samples,
                                    min_promote_samples=min_promote_samples,
-                                   provenance=EditProvenance(path="teaching", proposer="kairos"))
+                                   provenance=teach_provenance("kairos"))
         return {"staged": True, "edit_id": new_edit_id(), "tool": tool,
                 "op": {"tool": tool, "args": dict(args), "rationale": rationale},
                 "summary": rec.summary if rec is not None else "",

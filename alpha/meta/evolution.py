@@ -42,26 +42,73 @@ def _chain_agnostic(records: list[dict]) -> list[dict]:
     return [{k: v for k, v in r.items() if k not in _CHAIN_FIELDS} for r in records]
 
 
+# --- Deliberation-packet counsel (A8; charter *Evolution Deliberation Channel* "standard contents").
+# All KERNEL-GENERATED from the delta (never the proposer): the Runner returns only handles, so
+# there is no channel by which a proposer authors these. behavior_diff is additionally re-derived and
+# refused at adopt, catching a hand-forged packet dropped into the queue off the builder.
+def _behavior_diff(delta: list[dict]) -> list[dict]:
+    """Structural before/after — one row per surviving delta record. NOT a full session-replay
+    behavior diff (that needs the deferred trial-run replay infra, A10); the reviewable description
+    of WHAT changed in H, a pure function of the records so a proposer cannot forge it."""
+    return [{"seq": r.get("seq"), "tool": r.get("tool"), "target_kind": r.get("target_kind"),
+             "target_id": r.get("target_id"), "op": r.get("op"), "summary": r.get("summary", "")}
+            for r in delta]
+
+
+def _dedup(delta: list[dict], landed: list[dict], pending: list) -> list[dict]:
+    """Kernel-generated reuse/dedup listing: for each delta target, the landed records and pending
+    proposals touching the same (target_kind, target_id) — the charter's similarity field over the
+    existing library, never the proposer's self-report."""
+    out: list[dict] = []
+    for r in delta:
+        key = (r.get("target_kind"), r.get("target_id"))
+        landed_seqs = [lr.get("seq") for lr in landed
+                       if (lr.get("target_kind"), lr.get("target_id")) == key]
+        pending_ids = sorted({p.proposal_id for p in pending for pr in p.records
+                              if (pr.get("target_kind"), pr.get("target_id")) == key})
+        if landed_seqs or pending_ids:
+            out.append({"target_kind": key[0], "target_id": key[1],
+                        "landed_seqs": landed_seqs, "pending_proposal_ids": pending_ids})
+    return out
+
+
+def _coverage(delta: list[dict], window: dict | None) -> dict:
+    """Evidence coverage of the window (charter *Trial-run … coverage*): the honest 'no applicable
+    recorded coverage' value (has_coverage=False) when the window is empty."""
+    return {"window": dict(window or {}), "n_delta": len(delta), "has_coverage": bool(window)}
+
+
 def run_forked_evolution(bstore, runner: Runner, *, queue: ProposalQueue, kind: str,
-                         window: dict | None = None) -> EvolutionProposal | None:
+                         window: dict | None = None,
+                         cost: dict | None = None) -> EvolutionProposal | None:
     """Load the live brain (brief lock), run *runner* on it as a private fork (no lock held —
     load() returns private objects; nothing writes back), package the surviving delta.
     Returns the queued proposal, or None when the run produced no surviving edits (stated by
-    the caller, never silent)."""
+    the caller, never silent).
+
+    `cost` (A8; A6's per-refinement scalar) rides onto the packet unchanged; None = unmetered. The
+    packet's counsel fields (behavior diff / dedup / coverage) are KERNEL-GENERATED here from the
+    delta — the Runner contributes only the (harness, log) handles, so a proposer cannot author
+    them."""
     with bstore.lock():
         h, log = bstore.load()
     base_len = len(log)
     base_hash = brain_hash(h.to_dict(), _chain_agnostic(log.to_dict()))   # content, not chain metadata
+    landed = [r.model_dump(mode="json") for r in log.records()[:base_len]]  # the live base, for dedup
 
     final_h, final_log = runner(h, log)
 
     delta = final_log.records()[base_len:]
     if not delta:
         return None
+    delta_dicts = [r.model_dump(mode="json") for r in delta]
     return queue.new(kind=kind, base_len=base_len, base_hash=base_hash, window=window or {},
                      summary=f"{len(delta)} surviving edit(s) from a {kind} run",
-                     records=[r.model_dump(mode="json") for r in delta],
-                     harness_dict=final_h.to_dict(), log_dict=final_log.to_dict())
+                     records=delta_dicts,
+                     harness_dict=final_h.to_dict(), log_dict=final_log.to_dict(),
+                     behavior_diff=_behavior_diff(delta_dicts),
+                     dedup=_dedup(delta_dicts, landed, queue.all()),
+                     coverage=_coverage(delta_dicts, window), cost=cost)
 
 
 def adopt_proposal(bstore, proposal: EvolutionProposal, *,
@@ -85,6 +132,11 @@ def adopt_proposal(bstore, proposal: EvolutionProposal, *,
             return False, "invalid packet: fork log does not extend the live log (prefix mismatch)"
         if proposal.records != proposal.log_dict[proposal.base_len:]:
             return False, "invalid packet: reviewed records differ from the landing delta"
+        # A8: the behavior-diff counsel is KERNEL-GENERATED from the records — re-derive and refuse a
+        # forged one (a hand-built packet dropped into the queue off the builder). Legacy-tolerant:
+        # a pre-A8 packet carries behavior_diff=[] and skips the check (byte-identical).
+        if proposal.behavior_diff and proposal.behavior_diff != _behavior_diff(proposal.records):
+            return False, "invalid packet: behavior_diff does not match the delta (forged counsel)"
         new_h = HarnessState.from_dict(proposal.harness_dict)
         live_core = [e.model_dump(mode="json") for e in h.doctrine.immutable_core()]
         new_core = [e.model_dump(mode="json") for e in new_h.doctrine.immutable_core()]

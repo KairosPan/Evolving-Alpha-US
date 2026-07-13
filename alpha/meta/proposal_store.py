@@ -37,6 +37,14 @@ class EvolutionProposal(BaseModel):
     records: list[dict] = Field(default_factory=list)   # the delta, for the user's review
     harness_dict: dict = Field(default_factory=dict)    # the evolved fork brain
     log_dict: list[dict] = Field(default_factory=list)  # the evolved fork log (full)
+    # Deliberation-packet counsel (A8; charter *Evolution Deliberation Channel* — "standard
+    # contents"). KERNEL-GENERATED from the delta by run_forked_evolution, NEVER authored by the
+    # proposer (the Runner returns only handles). All default-empty -> a legacy/pre-A8 packet
+    # deserializes and adopts byte-identically. behavior_diff is re-derived + refused at adopt.
+    behavior_diff: list[dict] = Field(default_factory=list)  # structural before/after, one row per delta record
+    dedup: list[dict] = Field(default_factory=list)          # similarity vs pending proposals + landed edits
+    coverage: dict = Field(default_factory=dict)             # evidence coverage of the window
+    cost: dict | None = None                                 # A6 per-refinement spend summary (None = unmetered)
 
 
 def _atomic_write(path: Path, text: str) -> None:

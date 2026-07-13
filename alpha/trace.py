@@ -39,6 +39,21 @@ def is_tool_result(msg) -> bool:
 Scope = Literal["agent-global", "per-party", "per-session"]
 DEFAULT_SCOPE: Scope = "agent-global"   # today's corpus is Kairos's craft = agent-global (see spec)
 
+# Scope width ordering (narrow -> wide): per-session < per-party < agent-global. Consumed by A8's
+# gate-level scope-mismatch check (an edit landing WIDER than its cited evidence's scope bounces).
+_SCOPE_RANK: dict[str, int] = {"per-session": 0, "per-party": 1, "agent-global": 2}
+SCOPES = frozenset(_SCOPE_RANK)   # the three valid scope values (membership test for the gate)
+
+
+def scope_rank(scope: str) -> int:
+    """Width rank of a scope (higher = wider). Unknown scopes rank narrowest (fail-toward-strict)."""
+    return _SCOPE_RANK.get(scope, 0)
+
+
+def is_scope_wider(landed: str, evidence: str) -> bool:
+    """True iff `landed` is a WIDER scope than `evidence` — the scope-mismatch condition (A8)."""
+    return scope_rank(landed) > scope_rank(evidence)
+
 
 # --- Attribution tuple (charter *Traces*; *Edit Acceptance Protocol* — watchdog incident attribution)
 class AttributionTuple(BaseModel):

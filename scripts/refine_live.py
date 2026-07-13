@@ -101,7 +101,8 @@ def run_refine_live(source, start: Date, end: Date, *, brain_dir: str, conflicts
 
     root = proposals_root if proposals_root is not None else proposals_dir()
     prop = run_forked_evolution(bstore, runner, queue=ProposalQueue(root), kind="refine",
-                                window={"start": start.isoformat(), "end": end.isoformat()})
+                                window={"start": start.isoformat(), "end": end.isoformat()},
+                                cost=meter.summary() if meter is not None else None)  # A8: cost on the packet
     report = box.get("report")
     out = {"mode": "propose", "proposal_id": prop.proposal_id if prop is not None else None,
            "n_delta": len(prop.records) if prop is not None else 0,

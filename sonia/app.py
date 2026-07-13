@@ -20,13 +20,23 @@ from alpha.meta.models import Attachment, Message, Session, new_message_id, new_
 from alpha.meta.sonia_agent import SoniaAgent, turn_text
 from alpha.meta.conflict_store import ConflictQueue
 from alpha.meta.evolution import adopt_proposal
-from alpha.meta.proposal_store import ProposalQueue, proposals_dir
+from alpha.meta.proposal_store import ProposalQueue, brain_hash, proposals_dir
 from alpha.meta.body_git import make_brain_store
 from alpha.meta.reconcile import reconcile_session, reconcile_staged_edits
 from alpha.meta.store import LiveBrainStore, SessionStore
 from alpha.settings import Settings
 
 _MUTATION_LOCK = threading.Lock()
+
+_CHAIN_FIELDS = ("prev_chain_hash", "chain_hash")
+
+
+def _brain_content_hash(h, log) -> str:
+    """A8 staleness pin: content hash of the brain a preview was dry-run against. Chain-agnostic
+    (strips the A4 integrity-chain metadata, mirroring evolution.py's staleness pin) so a persist-
+    time chain finalize can't spuriously invalidate the pin — only a real content change does."""
+    records = [{k: v for k, v in r.items() if k not in _CHAIN_FIELDS} for r in log.to_dict()]
+    return brain_hash(h.to_dict(), records)
 
 
 def _brain_store() -> LiveBrainStore:
@@ -185,7 +195,7 @@ def create_app() -> FastAPI:
             return JSONResponse({"error": "already applied"}, status_code=409)
         idx = sess.messages.index(msg)
         convo = [ChatMessage(role=m.role, text=turn_text(m)) for m in sess.messages[: idx + 1]]
-        h, _ = _brain_store().load()                                   # read-only
+        h, log = _brain_store().load()                                 # read-only
         try:
             res = extract_ops(make_client("sonia"), h, convo)
         except Exception as e:                                         # extractor unavailable — visible, never silent
@@ -193,9 +203,11 @@ def create_app() -> FastAPI:
         if res.ops:
             msg.edits = [preview_op(h, op) for op in res.ops]
             msg.proposal_note = ""
+            msg.previewed_hash = _brain_content_hash(h, log)           # A8: pin the previewed brain
         else:
             msg.edits = []
             msg.proposal_note = res.reason
+            msg.previewed_hash = ""
         sstore.put(sess)
         return {"session_id": sid, "message": msg.model_dump()}
 
@@ -211,6 +223,12 @@ def create_app() -> FastAPI:
             bstore = _brain_store()
             with bstore.lock():
                 h, log = bstore.load()
+                # A8 staleness pin: what was previewed must be what lands. If the live brain moved
+                # since the preview (another teach landed, a rollback, a fork adopt), refuse and
+                # ask for a re-preview instead of silently applying against a different base.
+                if msg.previewed_hash and _brain_content_hash(h, log) != msg.previewed_hash:
+                    return JSONResponse(
+                        {"error": "stale: brain changed since preview; re-preview"}, status_code=409)
                 if not bstore.is_live():
                     bstore.save(h, log)                               # materialize before snapshot
                 msg.snapshot_before = bstore.snapshot(f"{sid}-{mid}")

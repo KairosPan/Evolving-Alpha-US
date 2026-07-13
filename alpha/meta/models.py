@@ -80,6 +80,8 @@ class Message(BaseModel):
     snapshot_before: str | None = None
     applied_seqs: list[int] = Field(default_factory=list)
     proposal_note: str = ""          # set when a /propose pass yielded no edit (the visible reason)
+    previewed_hash: str = ""         # A8 staleness pin: the brain-content hash the preview was dry-run
+                                     # against; /apply refuses (re-preview) if the live brain moved
 
 
 class Session(BaseModel):
