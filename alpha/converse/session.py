@@ -2,6 +2,7 @@
 """Persisted, H-version-stamped conversational turn with optional workspace commit."""
 from __future__ import annotations
 
+import logging
 from datetime import date as _Date
 
 from alpha.eval.decision import DecisionPackage
@@ -13,6 +14,8 @@ from alpha.converse.loop import run_conversation
 from alpha.converse.project import Project, StagedEdit, new_project, new_turn
 from alpha.converse.sqlite_store import SqliteProjectStore
 from alpha.converse.workspace import Workspace
+
+_log = logging.getLogger("alpha.converse.experience")
 
 
 def converse_project(
@@ -30,6 +33,7 @@ def converse_project(
     write_mode: str = "stage",
     registry_factory=None,
     experience_writer=None,
+    asof: _Date | None = None,
 ) -> Project:
     """Load-or-create *project_id*, run one conversation turn, persist and return the project."""
     # 1. Load or create the project.
@@ -60,7 +64,7 @@ def converse_project(
     else:
         registry, dispatch = registry_factory(h, agent_llm, source,
                                                read_only=read_only, write_mode=write_mode)
-    system = build_system_prompt(h, registry)
+    system = build_system_prompt(h, registry, asof=asof)
 
     # 4. Append the user message.
     project.messages.append(ChatMessage(role="user", text=user_text))
@@ -94,10 +98,19 @@ def converse_project(
     #     Default None ⇒ byte-identical when off. The writer is opaque to converse — it encapsulates
     #     EpisodeStore + record_task_episode so this module never imports alpha.arena (layer spine).
     if experience_writer is not None:
-        _asof = (_Date.fromisoformat(turn.created_at[:10]) if turn.created_at
-                 else _Date.today())
-        experience_writer(res, h, asof=_asof, project_id=project.project_id,
-                          turn_seq=len(project.turns) - 1)
+        # A2 item 4: use the ONE pinned logical date threaded into recall (build_system_prompt
+        # above) when provided, so task and trade episodes share one PIT-masked read (learned_asof
+        # <= asof). Fall back to the turn's own logical date only when unpinned (dormant default).
+        writer_asof = asof if asof is not None else (
+            _Date.fromisoformat(turn.created_at[:10]) if turn.created_at else _Date.today())
+        # A2 before-live (b): a writer exception must NOT kill the live turn (kairos-mining §4.6) —
+        # observation-only capture failing is logged, never propagated past the persisted turn.
+        try:
+            experience_writer(res, h, asof=writer_asof, project_id=project.project_id,
+                              turn_seq=len(project.turns) - 1)
+        except Exception:
+            _log.exception("experience_writer failed (project=%s turn_seq=%d); turn preserved",
+                           project.project_id, len(project.turns) - 1)
 
     # 7. Commit DecisionPackage results to workspace if provided.
     if workspace is not None:

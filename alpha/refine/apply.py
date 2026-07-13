@@ -88,6 +88,29 @@ def _element_domain(h: HarnessState, tool: str, tid: str | None, args: dict) -> 
     return getattr(el, "domain", None) if el is not None else None
 
 
+def _derive_confirmed_task_ids(log) -> frozenset[str]:
+    """Externally-confirmed task episode ids from DURABLE records only (A2 / kairos-mining §2.3).
+
+    A confirmation == a gated EditRecord stamped with `human_approver` whose `evidence_ref` lists
+    the confirmed task episode ids under `confirmed_episode_ids`. task_forge (and any self-study
+    proposer) cannot stamp `human_approver` — that is written only at human-approval time — so this
+    set is forgery-resistant AT THE WAIST: the gate derives the confirmed-positive count itself
+    instead of trusting the proposer's `confirmed_ids`/`task_stats`."""
+    out: set[str] = set()
+    for rec in log.records():
+        p = rec.provenance
+        # Harvest ONLY from a HUMAN-approval path (teaching approve / user_direct edit). A
+        # self_study record carrying human_approver — e.g. laundered via adopt_proposal's post-gate
+        # direct save, which bypasses the waist's leg-1 check — is NOT a valid confirmation source:
+        # its evidence_ref was authored by the proposer, so trusting it would re-open the self-write
+        # channel. This path-filter is the load-bearing leg (leg-1 alone can't see the bypass).
+        if (p is not None and p.human_approver and p.evidence_kind == "task"
+                and p.path in ("teaching", "user_direct") and p.evidence_ref):
+            for eid in (p.evidence_ref.get("confirmed_episode_ids") or []):
+                out.add(str(eid))
+    return frozenset(out)
+
+
 def _target_id(tool: str, args: dict) -> str | None:
     if tool in ("write_skill", "patch_skill", "retire_skill", "revive_skill", "promote_skill"):
         v = args.get("skill_id")
@@ -108,10 +131,18 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
                  min_task_samples: int = 3,
                  min_task_success_rate: float = 0.5,
                  min_task_confirmed_samples: int = 3,
+                 task_recall=None, asof=None,
                  normalize=None) -> tuple[EditRecord | None, str | None]:
     """Gate order: stamp coherence -> whitelist -> rationale -> empty-patch -> set-once/create guards ->
-    domain-aware separation -> task floor (PC-8) -> trade floors -> conflict -> dispatch
+    domain-aware separation -> [task branch: operational-M reject -> gate-side re-derivation ->
+    task floor (PC-8) -> conflict] -> trade floors -> conflict -> dispatch
     (dispatch errors -> clean reject reason). Returns (record, None) on apply | (None, reason).
+
+    `task_recall` (read-only EpisodeStore) + `asof` (keyword-only, A2): when both are threaded in on
+    a task-evidenced op, the gate re-derives `task_stats` ITSELF from `task_recall.for_asof(asof,
+    kind="task")` with `confirmed_ids` from durable EditLog records — the caller-supplied `task_stats`
+    is then ignored (kairos-mining §2.3). Both absent (the default) → byte-identical to the dormant
+    P-C build. Enforcement semantics are unchanged; this only wires the branch's evidence source.
 
     `normalize` (keyword-only) selects the create-path phase vocabulary; None → resolved FROM THE H
     being edited (`harness.vocabulary`), never the process env, so pack identity rides with the harness
@@ -126,6 +157,14 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
     if provenance is not None and provenance.path == "user_direct" and (
             provenance.proposer != "user" or not provenance.human_approver):
         return None, "user_direct requires proposer='user' with human_approver (unstamped direct edit refused)"
+    # A2 review-fix (leg 1): human_approver is a HUMAN act — it may ride only a user_direct or
+    # teaching edit. A self-study op may not self-stamp it, or a proposer could forge the external
+    # confirmation the confirmed-positive floor counts. Refused at the waist, before any durable
+    # record, like a mis-stamped user_direct. (The legit user-adopted self_study record carries
+    # human_approver via adopt_proposal's POST-gate direct save, which never reaches this waist;
+    # leg 2 in _derive_confirmed_task_ids fences that path out of the confirmed-derivation.)
+    if provenance is not None and provenance.human_approver and provenance.path not in ("user_direct", "teaching"):
+        return None, "human_approver may only ride a user_direct or teaching edit (self-study cannot self-approve)"
     if op.tool not in allowed:
         return None, "tool not in this pass or unknown"
     if not op.rationale or not op.rationale.strip():
@@ -139,12 +178,28 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
     # Placed before the trade floors so operational targets (stats.n==0/expectancy=None) aren't
     # wrongly rejected by the retire/promote floor before we can route them.
     if provenance is not None and provenance.evidence_kind == "task":
+        # A2 item 2: operational-M is out of scope — the task signal targets K + operational
+        # doctrine only (arena-spec §5), NEVER M (Lessons). Reject every task-evidenced memory op,
+        # closing the create-path gap where process_memory(domain="operational") slipped through.
+        if _target_kind(op.tool) == "memory":
+            return None, "separation: operational-M out of scope (task evidence targets K + operational-doctrine only)"
         domain = _element_domain(harness, op.tool, tid, op.args)
         if domain != "operational":
             return None, f"separation: task-evidence may only target operational H (target domain={domain})"
+        # A2 item 3 + before-live (a): gate-side re-derivation. With a read-only PIT-pinned task
+        # recall handle threaded in, the gate recomputes task_stats ITSELF from durable records and
+        # IGNORES the caller's task_stats (mirrors the verdict recall_store split so the gate can
+        # never become a self-write channel). task_recall=None → byte-identical (caller-supplied).
+        if task_recall is not None:
+            if asof is None:
+                return None, "task floor: asof required to re-derive task evidence (fails closed)"
+            from alpha.memory.aggregate import summarize_task   # lazy: respect the refine<->memory cycle
+            eps = task_recall.for_asof(asof, kind="task", limit=None)
+            confirmed = _derive_confirmed_task_ids(meta.log)
+            task_stats = summarize_task(eps, key=lambda e: e.skill_id, confirmed_ids=confirmed).get(tid)
         # Operational target: short-circuit the trade floors entirely.
         # PC-8 (Task 17): gate-side task floor — authority lives at the waist.
-        # None fails closed; the caller MUST supply precomputed task evidence.
+        # None fails closed; the caller MUST supply (or the gate MUST derive) task evidence.
         if task_stats is None:
             return None, "task floor: task_stats required for operational ops (fails closed)"
         if task_stats.n < min_task_samples:
@@ -155,6 +210,17 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
         if task_stats.confirmed_success_rate < min_task_success_rate:
             return None, (f"task floor: confirmed_success_rate={task_stats.confirmed_success_rate:.3f} "
                           f"< min_task_success_rate={min_task_success_rate}")
+        # A2 item 1: conflict routing — an operational task op contesting a teaching- or
+        # user_direct-owned element is HELD for adjudication, not silently applied. The task branch
+        # used to short-circuit past the trade path's conflict check at the tail of this function.
+        if conflict_queue is not None:
+            from alpha.refine.conflict import is_conflict
+            if is_conflict(meta.log, op, provenance):
+                contested = meta.log.latest_for(_target_kind(op.tool), tid) if tid else None
+                conflict_queue.add(op=op.model_dump(),
+                                   provenance=provenance.model_dump() if provenance else None,
+                                   contested=contested.model_dump() if contested else None)
+                return None, "held_for_review: self-study contests a teaching- or user-owned element"
         try:
             rec = _dispatch(meta, op, normalize=normalize)
         except _DISPATCH_ERRORS as e:

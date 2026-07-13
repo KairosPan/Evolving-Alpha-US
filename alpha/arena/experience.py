@@ -142,3 +142,21 @@ def record_task_episode(
     )
     episode_store.add(ep)
     return ep
+
+
+def make_experience_writer(episode_store: "EpisodeStore | None"):
+    """Return the converse_project `experience_writer` closure bound to *episode_store* (A2).
+
+    This is the OPT-IN activation wire: a live driver constructs the EpisodeStore (from
+    Settings.episodes_db) and passes the closure into converse_project. `episode_store is None`
+    (the default/dark state) → None, so the writer is never wired and behaviour is byte-identical.
+    The closure keeps converse arena-free: converse never imports alpha.arena; the app layer that
+    already builds the registry constructs this and injects it (same spine as registry_factory)."""
+    if episode_store is None:
+        return None
+
+    def _writer(res, h, *, asof, project_id, turn_seq):
+        return record_task_episode(res, h, asof=asof, project_id=project_id,
+                                   turn_seq=turn_seq, episode_store=episode_store)
+
+    return _writer

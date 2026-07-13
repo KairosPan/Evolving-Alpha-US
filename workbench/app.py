@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os, threading
+from datetime import date as _Date
 from pathlib import Path as _Path
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -52,6 +53,22 @@ def _brain_dir() -> str:
     return Settings.from_env().live_brain_dir
 
 
+def _task_capture():
+    """A2 opt-in activation of P-B task-episode capture, gated on ALPHA_EPISODES_DB.
+
+    Unset (the default) → (None, None) → fully dark: converse_project gets no writer and no pinned
+    asof, so behaviour is byte-identical to before P-B. Set → an observation-only writer bound to
+    the EpisodeStore + the live turn's pinned logical date (shared by recall and the writer). This
+    is the SOFT kill switch: unset the env var and capture stops (existing rows stay harmless —
+    kind='task' is fenced off every trade/verdict read by for_asof(kind='trade'))."""
+    db = Settings.from_env().episodes_db
+    if not db:
+        return None, None
+    from alpha.arena.experience import make_experience_writer
+    from alpha.memory.store import EpisodeStore
+    return make_experience_writer(EpisodeStore.open(db)), _Date.today()
+
+
 def _assert_brain_outside_workspace() -> None:
     """Fail fast if the brain dir is inside the workspace — a live shell could then reach it."""
     ws_root = _Path(Settings.from_env().workspace_dir).resolve()
@@ -99,12 +116,14 @@ def create_app() -> FastAPI:
         with _MUTATION_LOCK:
             _assert_brain_outside_workspace()
             h, _log = _brain_store().load()                 # read live brain for context/decide
+            writer, cap_asof = _task_capture()              # A2 opt-in flip (ALPHA_EPISODES_DB); dark by default
             try:
                 ws = _workspace()
                 proj = converse_project(DEFAULT_PROJECT_ID, body.text, harness=h, store=_project_store(),
                                         agent_llm=_agent_llm(), chat_llm=_chat_llm(), source=_source(),
                                         workspace=ws, write_mode="stage",
-                                        registry_factory=_arena_factory(ws.root))
+                                        registry_factory=_arena_factory(ws.root),
+                                        experience_writer=writer, asof=cap_asof)
             except Exception as e:                           # never 500 — keep the user turn
                 store = _project_store(); proj = store.get(DEFAULT_PROJECT_ID)
                 from alpha.converse.project import new_project, new_turn
