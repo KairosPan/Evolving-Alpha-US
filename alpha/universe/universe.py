@@ -43,6 +43,7 @@ from datetime import date as Date
 import pandas as pd
 
 from alpha.features.runner import consecutive_up_days
+from alpha.features.short_squeeze import short_squeeze_signals
 
 RUNNER_LOOKBACK = 30   # max consecutive-up-days probed (a run of n up-days needs n+1 closes)
 TREND_TEMPLATE_LOOKBACK = 300   # trailing trading days fetched per symbol for the Trend Template screen
@@ -131,6 +132,8 @@ def build_universe(source, day: Date, *, gainer_pct: float = 10.0,
     stocks: dict[str, StockSnapshot] = {}
     if snap is None or snap.empty:
         return CandidateUniverse(stocks)
+    si_available = _feed_available(source, "short_interest_available")   # P5: present -> populate the
+    float_available = _feed_available(source, "float_available")          #   short_squeeze legs from the feeds
     for rec in snap.to_dict("records"):
         symbol = str(rec["symbol"])
         close, prev = rec.get("close"), rec.get("prev_close")
@@ -152,6 +155,8 @@ def build_universe(source, day: Date, *, gainer_pct: float = 10.0,
             bars = _trailing_bars(source, symbol, day, max(rvol_window, RUNNER_LOOKBACK))
             rvol = _trailing_rvol(source, symbol, day, rvol_window, bars=bars)
             cud = _runner_up_days(bars, day)
+        si, dtc = _squeeze_legs(source, symbol, day, rec,
+                                si_available=si_available, float_available=float_available)
         stocks[symbol] = StockSnapshot(
             symbol=symbol, name=str(rec.get("name", "")), status=status,
             close=(float(close) if close is not None else None),
@@ -159,8 +164,8 @@ def build_universe(source, day: Date, *, gainer_pct: float = 10.0,
             pct_change=pct, gap_pct=gap,
             volume=(float(rec["volume"]) if rec.get("volume") is not None else None),
             rvol=rvol, consecutive_up_days=cud,
-            short_interest=_opt_float(rec.get("short_interest")),
-            days_to_cover=_opt_float(rec.get("days_to_cover")),
+            short_interest=si,
+            days_to_cover=dtc,
             free_float=_opt_float(rec.get("free_float")),
             options_flow=_opt_float(rec.get("options_flow")),
             social_sentiment=_opt_float(rec.get("social_sentiment")),
@@ -208,6 +213,8 @@ def build_trend_template_universe(source, day: Date, *,
     if snap is None or snap.empty:
         return CandidateUniverse(stocks)
     records = {str(rec["symbol"]): rec for rec in snap.to_dict("records")}
+    si_available = _feed_available(source, "short_interest_available")   # P5: short_squeeze legs (as above)
+    float_available = _feed_available(source, "float_available")
     bars_by_symbol = {sym: _trailing_bars(source, sym, day, lookback) for sym in records}
     for symbol, res in trend_template_screen(bars_by_symbol, day).items():
         if not res.passes:
@@ -216,6 +223,8 @@ def build_trend_template_universe(source, day: Date, *,
         close, prev, open_ = rec.get("close"), rec.get("prev_close"), rec.get("open")
         pct = ((close - prev) / prev * 100.0) if (close is not None and prev) else None
         gap = ((open_ - prev) / prev * 100.0) if (open_ is not None and prev) else None
+        si, dtc = _squeeze_legs(source, symbol, day, rec,
+                                si_available=si_available, float_available=float_available)
         stocks[symbol] = StockSnapshot(
             symbol=symbol, name=str(rec.get("name", "")), status="trend_template",
             close=(float(close) if close is not None else None),
@@ -223,8 +232,8 @@ def build_trend_template_universe(source, day: Date, *,
             pct_change=pct, gap_pct=gap,
             volume=(float(rec["volume"]) if rec.get("volume") is not None else None),
             rs_percentile=res.rs_percentile,
-            short_interest=_opt_float(rec.get("short_interest")),
-            days_to_cover=_opt_float(rec.get("days_to_cover")),
+            short_interest=si,
+            days_to_cover=dtc,
             free_float=_opt_float(rec.get("free_float")),
             options_flow=_opt_float(rec.get("options_flow")),
             social_sentiment=_opt_float(rec.get("social_sentiment")),
@@ -236,3 +245,26 @@ def _opt_float(value) -> float | None:
     """None-and-NaN-safe float. FINRA short-interest coverage is partial, so a present column can carry
     NaN for uncovered symbols — treat that as missing (None), never a fabricated 0/nan."""
     return None if value is None or pd.isna(value) else float(value)
+
+
+def _feed_available(source, name: str) -> bool:
+    """Optional-capability probe (fail-closed default False), mirroring GuardedSource's getattr posture:
+    a source predating the capability is treated as absent, never an AttributeError."""
+    probe = getattr(source, name, None)
+    return bool(probe()) if callable(probe) else False
+
+
+def _squeeze_legs(source, symbol: str, day: Date, rec, *, si_available: bool,
+                  float_available: bool) -> tuple[float | None, float | None]:
+    """P5: the StockSnapshot (short_interest %-of-float, days_to_cover) legs that the dormant
+    `short_squeeze` skill depends_on. Feed-derived when the FINRA short-interest feed is present (the
+    float feed supplies the %-of-float denominator); otherwise the pre-existing snapshot columns. Feed
+    absent -> no feed read -> the columns exactly as before (byte-identical default-off). The feed reads
+    are PIT-keyed by the source (publication_date / knowable_date <= day)."""
+    si_col, dtc_col = _opt_float(rec.get("short_interest")), _opt_float(rec.get("days_to_cover"))
+    if not si_available:
+        return si_col, dtc_col
+    short_records = source.short_interest_known(symbol, day)
+    float_records = source.float_known(symbol, day) if float_available else []
+    pct, dtc = short_squeeze_signals(short_records, float_records, symbol, day)
+    return (pct if pct is not None else si_col, dtc if dtc is not None else dtc_col)

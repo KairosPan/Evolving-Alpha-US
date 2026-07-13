@@ -9,6 +9,7 @@ import pandas as pd
 from alpha.data.calendar import prev_trading_day
 from alpha.data.corp_actions import has_dilution_filing, has_reverse_split_pending
 from alpha.data.firewall import AsOfGuard
+from alpha.data.offerings import is_dilution_overhang
 from alpha.data.source import GuardedSource
 from alpha.eval.decision import DecisionPackage
 from alpha.features.earnings import days_to_earnings, has_upcoming_earnings
@@ -121,6 +122,11 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
     checklist's completeness is a prose/human judgment the code-side guard cannot make; see
     `earnings_checklist_note` and spec 2026-07-13-p5b). No earnings feed -> byte-identical (no note).
 
+    P5: the dilution veto is lifecycle-aware when the offerings feed is present — a withdrawn/expired
+    shelf stops vetoing as of its own process_date (`is_dilution_overhang`), while an active announce
+    still drops the candidate. Absent -> `has_dilution_filing` (veto-forever fail-closed, byte-identical).
+    Safety-only-tightens: the lifecycle lifts a veto only with dated proof of closure, never adds one.
+
     PIT-safe: all data reads go through a fresh GuardedSource(AsOfGuard(state.date)); SSR reads only
     prior-day bars (< as_of) and corp actions are announce-keyed (<= as_of); episode recall is masked at
     `for_asof(state.date)`. Vetoed candidates are dropped (never entered/scored) rather than annotated — a
@@ -135,6 +141,10 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
     earnings_available = guarded.earnings_available()  # P5b: False -> no earnings feed -> no T-3 note (byte-
     earnings_cal = (guarded.earnings_calendar(as_of)   #   identical). The calendar is PIT-guarded (known_asof
                     if earnings_available else [])     #   <= as_of) exactly like corporate_actions_known.
+    offerings_available = guarded.offerings_available()  # P5: present -> lifecycle-aware dilution overhang
+                                                         #   (a withdrawn/expired shelf stops vetoing as of its
+                                                         #   own process_date); absent -> has_dilution_filing
+                                                         #   (veto-forever fail-closed default, byte-identical).
     snap = guarded.daily_snapshot(as_of)               # day's OHLC for the halt-then-dump proxy (guard-safe)
     rows = ({str(r["symbol"]): r for r in snap.to_dict("records")}
             if snap is not None and not snap.empty else {})
@@ -146,10 +156,15 @@ def screen_decision(decision: DecisionPackage, *, source, state: MarketState, ep
         if candidate_action(c) != "enter":     # P0.6: a trim/exit is a derisk on a HELD name, not a
             kept.append(c)                     #   new chase -> the L4 new-entry veto doesn't apply.
             continue                           #   Inert today (no producer emits trim/exit yet).
+        # P5: lifecycle-aware dilution when the offerings feed is present (a proven withdrawn/expired
+        # shelf lifts the veto as of its process_date); else veto-forever has_dilution_filing (unchanged).
+        # The feed reads ride the SAME guarded source both verdict arms wrap -> symmetric + PIT-guarded.
+        dilution = (is_dilution_overhang(guarded.offering_events_known(c.symbol, as_of), c.symbol, as_of)
+                    if offerings_available else has_dilution_filing(corp, c.symbol, as_of))
         ctx = CandidateContext(symbol=c.symbol, regime=regime,
                                ssr=ssr_active(guarded, c.symbol, as_of),
                                reverse_split_pending=has_reverse_split_pending(corp, c.symbol, as_of),
-                               dilution=has_dilution_filing(corp, c.symbol, as_of),
+                               dilution=dilution,
                                halt_then_dump=halt_then_dump_proxy(rows.get(c.symbol)),
                                episode_taboo=is_episode_taboo(taboo_stats.get(c.symbol)),
                                panic_state=panic)
