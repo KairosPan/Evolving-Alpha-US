@@ -79,23 +79,24 @@ python -m workbench               # :8820 ─┘
   (converse vs arena), two `build_market_state` (canonical: `alpha/state/builder.py`) — qualify
   by package before editing. Lowercase `kairos` = the sibling CN legal-agent repo.
 - **LLM defaults.** Per-role env `ALPHA_<ROLE>_{PROVIDER,MODEL}`; temperature defaults to 0.
-  All four roles default to provider `claude_code` / model `claude-fable-5` — Claude Fable 5 via the
-  headless Claude Code CLI (`claude -p`), drawing the operator's Pro/Max **subscription** quota, not a
-  metered API key (`alpha/llm/claude_code.py`; auth is ambient — `claude /login` or `claude setup-token`
-  → `CLAUDE_CODE_OAUTH_TOKEN`). GOTCHA: a set `ANTHROPIC_API_KEY` silently overrides the subscription
-  login and bills the API — unset it. Fable-5-on-subscription is a promo capped at 50% of the weekly
-  limit, ending 2026-07-19 → then re-point `STACKS["claude"]` to `claude-opus-4-8` in
-  `alpha/llm/stack.py` (one line; avoid per-role `ALPHA_<ROLE>_MODEL` pins — they compose badly with
-  the console switch). Heavy batch roles
+  All four roles default to provider `claude_sdk` / model `claude-fable-5` — Claude Fable 5 via the
+  Claude Agent SDK (`alpha/llm/claude_sdk.py`, `pip install claude-agent-sdk`), drawing the operator's
+  Pro/Max **subscription** quota, not a metered API key (auth is ambient — `claude /login` or
+  `claude setup-token` → `CLAUDE_CODE_OAUTH_TOKEN`). Each call is a pure completion on a neutral
+  surface the SDK maintains: `setting_sources=None` (loads no repo CLAUDE.md/settings), `tools=[]`,
+  `max_turns=1`; sync seam wraps the async `query()` in `asyncio.run` (+600s wait_for). GOTCHA: a set
+  `ANTHROPIC_API_KEY` silently overrides the subscription login and bills the API — unset it.
+  Fable-5-on-subscription is a promo capped at 50% of the weekly limit, ending 2026-07-19 → then
+  re-point `STACKS["claude"]` to `claude-opus-4-8` in `alpha/llm/stack.py` (one line; avoid per-role
+  `ALPHA_<ROLE>_MODEL` pins — they compose badly with the console switch). Heavy batch roles
   (agent/refiner) burn credit fastest → dial to DeepSeek with `ALPHA_<ROLE>_PROVIDER=openai_compat`
   (that path's `deepseek-v4-pro` is a NAME, not a live id → also set `ALPHA_<ROLE>_MODEL=deepseek-chat`).
-  Providers: `mock` | `claude_code` | `anthropic` (metered API key) | `openai_compat`.
+  Providers: `mock` | `claude_sdk` | `claude_code` (raw `claude -p` fallback, hardened tmp-cwd +
+  `--disallowedTools` surface) | `anthropic` (metered API key) | `openai_compat`.
   Between env and the defaults sits the console's entity switch: `state/llm_stack.json`
   (`ALPHA_LLM_STACK_FILE`) maps entity→stack (`sonia|kairos` → `claude|deepseek`, defined in
   `alpha/llm/stack.py`); the :8100 "Models" page writes it; `make_client` reads it per call, so a
-  switch lands mid-session and also steers CLI batch runs. The `claude -p` spawn runs on a
-  NEUTRAL surface — tmp cwd (loads no repo CLAUDE.md/settings; ~45% fewer input tokens/call) +
-  default `--disallowedTools` (no headless tool use); `extra_args` is the override seam.
+  switch lands mid-session and also steers CLI batch runs.
 - **Tests.** Fully offline (`FakeSource`/`MockLLMClient`); `tests/web|sonia|workbench`
   importorskip their extras and autouse `brain_session_isolation`; face-touching tests anywhere
   ELSE must request that fixture explicitly, or the cross-face sweep can rewrite the operator's

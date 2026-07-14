@@ -5,7 +5,7 @@ from alpha.llm import stack
 
 
 def test_stacks_and_entity_map_shape():
-    assert stack.STACKS["claude"] == ("claude_code", "claude-fable-5")
+    assert stack.STACKS["claude"] == ("claude_sdk", "claude-fable-5")
     assert stack.STACKS["deepseek"] == ("openai_compat", "deepseek-chat")
     assert stack.ROLE_ENTITY == {"sonia": "sonia", "refiner": "sonia",
                                  "agent": "kairos", "converse": "kairos"}

@@ -1,6 +1,6 @@
 from alpha.llm import stack
 from alpha.llm.config import make_client
-from alpha.llm.claude_code import ClaudeCodeClient
+from alpha.llm.claude_sdk import ClaudeSdkClient
 from alpha.llm.openai_compat import OpenAICompatClient
 
 
@@ -23,7 +23,7 @@ def test_file_layer_switches_entity_roles(monkeypatch, tmp_path):
         c = make_client(role)
         assert isinstance(c, OpenAICompatClient) and c.model == "deepseek-chat"
     _clear_role_env(monkeypatch, "sonia")                  # sonia entity absent → default (claude)
-    assert isinstance(make_client("sonia"), ClaudeCodeClient)
+    assert isinstance(make_client("sonia"), ClaudeSdkClient)
 
 
 def test_env_beats_file_per_field(monkeypatch, tmp_path):
@@ -40,13 +40,13 @@ def test_missing_file_means_defaults(monkeypatch, tmp_path):
     monkeypatch.setenv("ALPHA_LLM_STACK_FILE", str(tmp_path / "absent.json"))
     _clear_role_env(monkeypatch, "refiner")
     c = make_client("refiner")
-    assert isinstance(c, ClaudeCodeClient) and c.model == "claude-fable-5"
+    assert isinstance(c, ClaudeSdkClient) and c.model == "claude-fable-5"
 
 
 def test_unknown_stack_name_means_defaults(monkeypatch, tmp_path):
     _write(monkeypatch, tmp_path, {"sonia": "bogus-stack"})
     _clear_role_env(monkeypatch, "sonia")
-    assert isinstance(make_client("sonia"), ClaudeCodeClient)
+    assert isinstance(make_client("sonia"), ClaudeSdkClient)
 
 
 def test_suite_isolated_from_operator_state_file(monkeypatch):
@@ -56,4 +56,4 @@ def test_suite_isolated_from_operator_state_file(monkeypatch):
     assert os.environ["ALPHA_LLM_STACK_FILE"] != "./state/llm_stack.json"
     monkeypatch.delenv("ALPHA_SONIA_PROVIDER", raising=False)
     monkeypatch.delenv("ALPHA_SONIA_MODEL", raising=False)
-    assert isinstance(make_client("sonia"), ClaudeCodeClient)
+    assert isinstance(make_client("sonia"), ClaudeSdkClient)

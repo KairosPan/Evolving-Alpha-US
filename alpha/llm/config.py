@@ -18,10 +18,10 @@ Role = Literal["agent", "refiner", "sonia", "converse"]
 # Auth is ambient (Claude Code login / `claude setup-token`); the heavy batch roles (agent/refiner)
 # burn subscription credit fastest, so dial them to openai_compat if quota is tight.
 _DEFAULTS: dict[str, tuple[str, str]] = {
-    "agent": ("claude_code", "claude-fable-5"),
-    "refiner": ("claude_code", "claude-fable-5"),
-    "sonia": ("claude_code", "claude-fable-5"),
-    "converse": ("claude_code", "claude-fable-5"),
+    "agent": ("claude_sdk", "claude-fable-5"),
+    "refiner": ("claude_sdk", "claude-fable-5"),
+    "sonia": ("claude_sdk", "claude-fable-5"),
+    "converse": ("claude_sdk", "claude-fable-5"),
 }
 
 
@@ -29,8 +29,9 @@ def make_client(role: Role, *, meter: "SpendMeter | None" = None) -> LLMClient:
     """Build the LLM client for a role from env (ALPHA_<ROLE>_PROVIDER / _MODEL). The console's
     entity switch (state/llm_stack.json, see alpha/llm/stack.py) sits between env and the defaults.
 
-    providers: 'mock' (offline), 'claude_code' (ClaudeCodeClient — subscription quota via the Claude
-    Code CLI, the default), 'anthropic' (ClaudeClient — metered API key), 'openai_compat'
+    providers: 'mock' (offline), 'claude_sdk' (ClaudeSdkClient — subscription quota via the Claude
+    Agent SDK, the default), 'claude_code' (ClaudeCodeClient — same quota via a raw `claude -p`
+    spawn; env-reachable fallback), 'anthropic' (ClaudeClient — metered API key), 'openai_compat'
     (OpenAICompatClient — DeepSeek etc.).
     temperature defaults to 0.0 (eval determinism); override with ALPHA_LLM_TEMPERATURE.
 
@@ -53,6 +54,9 @@ def make_client(role: Role, *, meter: "SpendMeter | None" = None) -> LLMClient:
 
     if provider == "mock":
         raw: LLMClient = MockLLMClient(os.environ.get("ALPHA_MOCK_RESPONSE", "{}"))
+    elif provider == "claude_sdk":
+        from alpha.llm.claude_sdk import ClaudeSdkClient
+        raw = ClaudeSdkClient(model=model, temperature=temperature)
     elif provider == "claude_code":
         from alpha.llm.claude_code import ClaudeCodeClient
         raw = ClaudeCodeClient(model=model, temperature=temperature)
@@ -64,5 +68,6 @@ def make_client(role: Role, *, meter: "SpendMeter | None" = None) -> LLMClient:
         raw = OpenAICompatClient(model=model, temperature=temperature)
     else:
         raise ValueError(
-            f"unknown provider: {provider!r} (expected mock|claude_code|anthropic|openai_compat)")
+            f"unknown provider: {provider!r} "
+            f"(expected mock|claude_sdk|claude_code|anthropic|openai_compat)")
     return raw if meter is None else meter.wrap(raw, role=role)

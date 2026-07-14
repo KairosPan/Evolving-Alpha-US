@@ -20,7 +20,7 @@ _log = logging.getLogger("alpha.llm.stack")
 # Stack name → (provider, model). Defined HERE only. After the Fable-5-on-subscription promo ends
 # (2026-07-19), re-point "claude" to claude-opus-4-8 in this one line.
 STACKS: dict[str, tuple[str, str]] = {
-    "claude": ("claude_code", "claude-fable-5"),
+    "claude": ("claude_sdk", "claude-fable-5"),
     "deepseek": ("openai_compat", "deepseek-chat"),
 }
 
