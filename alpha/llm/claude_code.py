@@ -53,12 +53,21 @@ _NEUTRAL_DISALLOWED_TOOLS = ("Bash,Edit,Write,NotebookEdit,Read,Glob,Grep,"
                              "WebFetch,WebSearch,Task,TodoWrite")
 
 
+_NEUTRAL_CWD: "str | None" = None
+
+
 def _neutral_cwd() -> str:
-    """An empty, stable directory for the `claude -p` spawn, so no project CLAUDE.md or
-    .claude/settings.json is loaded (the CLI walks cwd upward; tmp's parents carry none)."""
-    d = os.path.join(tempfile.gettempdir(), "alpha-claude-neutral")
-    os.makedirs(d, exist_ok=True)
-    return d
+    """An empty, PRIVATE directory for the `claude -p` spawn, so no project CLAUDE.md or
+    .claude/settings.json is loaded (the CLI walks cwd upward; tmp's parents carry none).
+
+    mkdtemp (unpredictable name, mode 0700, empty by construction), cached per process — a fixed
+    shared path like /tmp/alpha-claude-neutral would be squattable by another local user, who
+    could pre-seed it with a hostile CLAUDE.md and reopen the very injection surface this closes
+    (commit security-review finding). One dir per process; OS tmp reapers collect them."""
+    global _NEUTRAL_CWD
+    if _NEUTRAL_CWD is None or not os.path.isdir(_NEUTRAL_CWD):
+        _NEUTRAL_CWD = tempfile.mkdtemp(prefix="alpha-claude-neutral-")
+    return _NEUTRAL_CWD
 
 
 def _flatten_chat(messages) -> str:

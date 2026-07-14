@@ -175,6 +175,23 @@ def test_neutral_cwd_bound_into_default_runner(monkeypatch, tmp_path):
     assert not os.path.exists(os.path.join(seen["cwd"], "CLAUDE.md"))
 
 
+def test_neutral_cwd_is_private_unpredictable_and_cached():
+    # Security (commit review finding): a PREDICTABLE shared tmp path (/tmp/alpha-claude-neutral)
+    # can be pre-created by another local user with a hostile CLAUDE.md inside — reopening the
+    # injection surface the neutral cwd exists to close. Must be mkdtemp-style: unpredictable
+    # name, owner-only mode, empty by construction, and cached per process (no per-call litter).
+    import os
+    import stat
+    import tempfile
+    from alpha.llm.claude_code import _neutral_cwd
+    d = _neutral_cwd()
+    assert d == _neutral_cwd()                                     # cached: one dir per process
+    assert os.path.realpath(d).startswith(os.path.realpath(tempfile.gettempdir()))
+    assert os.path.basename(d) != "alpha-claude-neutral"           # not the predictable fixed name
+    assert stat.S_IMODE(os.stat(d).st_mode) == 0o700               # owner-only (mkdtemp default)
+    assert os.listdir(d) == []                                     # empty — nothing to load
+
+
 def test_default_runner_times_out():
     import subprocess
     from alpha.llm.claude_code import _default_runner
