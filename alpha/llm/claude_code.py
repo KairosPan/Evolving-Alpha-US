@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import tempfile
 import time
 
 from alpha.llm.metering import Usage
@@ -27,16 +29,36 @@ def _usage_from_claude_code(env) -> "Usage | None":
     return Usage(tokens_in=tin, tokens_out=int(tout))
 
 
-def _default_runner(argv: "list[str]", stdin: str, timeout: "float | None" = None) -> str:
+def _default_runner(argv: "list[str]", stdin: str, timeout: "float | None" = None,
+                    cwd: "str | None" = None) -> str:
     """Shell out to the installed `claude` binary; return stdout, raise on non-zero exit.
 
     `timeout` (seconds) caps the spawn so a hung `claude` cannot block the role forever —
     subprocess.run raises subprocess.TimeoutExpired, which _invoke's broad except turns into a
-    retry/backoff and finally a raise. None = no cap (only injected runners pass None)."""
-    proc = subprocess.run(argv, input=stdin, capture_output=True, text=True, timeout=timeout)
+    retry/backoff and finally a raise. None = no cap (only injected runners pass None).
+    `cwd` is the NEUTRAL execution surface (see _neutral_cwd): never the service's repo root."""
+    proc = subprocess.run(argv, input=stdin, capture_output=True, text=True, timeout=timeout,
+                          cwd=cwd)
     if proc.returncode != 0:
         raise RuntimeError(f"claude CLI exited {proc.returncode}: {(proc.stderr or '').strip()[:500]}")
     return proc.stdout
+
+
+# Neutral execution surface. A pure-completion call must not carry Claude Code's ambient repo
+# context (CLAUDE.md, .claude/settings.json — quota burn + prompt contamination) nor its headless
+# tool surface (auto-allowed read-only tools could pull local files into the prompt under
+# injection). extra_args stays the operator override seam — it is appended AFTER these, and later
+# flags win in the claude CLI.
+_NEUTRAL_DISALLOWED_TOOLS = ("Bash,Edit,Write,NotebookEdit,Read,Glob,Grep,"
+                             "WebFetch,WebSearch,Task,TodoWrite")
+
+
+def _neutral_cwd() -> str:
+    """An empty, stable directory for the `claude -p` spawn, so no project CLAUDE.md or
+    .claude/settings.json is loaded (the CLI walks cwd upward; tmp's parents carry none)."""
+    d = os.path.join(tempfile.gettempdir(), "alpha-claude-neutral")
+    os.makedirs(d, exist_ok=True)
+    return d
 
 
 def _flatten_chat(messages) -> str:
@@ -81,15 +103,18 @@ class ClaudeCodeClient:
             self._run = runner          # injected runner owns its own timeout semantics
         elif shutil.which("claude") is not None:
             # Bind the per-call timeout (default 600s, matching the Anthropic SDK) so a hung `claude`
-            # spawn can't block the role forever. `_default_runner` is looked up as a module global at
-            # CALL time, so tests may monkeypatch it.
-            self._run = lambda argv, stdin: _default_runner(argv, stdin, timeout=timeout)
+            # spawn can't block the role forever, and the neutral cwd so the spawn never inherits the
+            # service's repo root. `_default_runner` is looked up as a module global at CALL time, so
+            # tests may monkeypatch it.
+            cwd = _neutral_cwd()
+            self._run = lambda argv, stdin: _default_runner(argv, stdin, timeout=timeout, cwd=cwd)
         else:
             self._run = None            # claude CLI not installed (offline tests inject a runner)
         self.last_usage = None          # A6 metering side-channel: provider tokens of the last call
 
     def _argv(self, system: str) -> "list[str]":
-        argv = ["claude", "-p", "--output-format", "json", "--model", self.model]
+        argv = ["claude", "-p", "--output-format", "json", "--model", self.model,
+                "--disallowedTools", _NEUTRAL_DISALLOWED_TOOLS]
         if system:
             argv += ["--append-system-prompt", system]
         return argv + self._extra_args

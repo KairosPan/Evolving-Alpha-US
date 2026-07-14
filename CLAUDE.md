@@ -93,7 +93,9 @@ python -m workbench               # :8820 ─┘
   Between env and the defaults sits the console's entity switch: `state/llm_stack.json`
   (`ALPHA_LLM_STACK_FILE`) maps entity→stack (`sonia|kairos` → `claude|deepseek`, defined in
   `alpha/llm/stack.py`); the :8100 "Models" page writes it; `make_client` reads it per call, so a
-  switch lands mid-session and also steers CLI batch runs.
+  switch lands mid-session and also steers CLI batch runs. The `claude -p` spawn runs on a
+  NEUTRAL surface — tmp cwd (loads no repo CLAUDE.md/settings; ~45% fewer input tokens/call) +
+  default `--disallowedTools` (no headless tool use); `extra_args` is the override seam.
 - **Tests.** Fully offline (`FakeSource`/`MockLLMClient`); `tests/web|sonia|workbench`
   importorskip their extras and autouse `brain_session_isolation`; face-touching tests anywhere
   ELSE must request that fixture explicitly, or the cross-face sweep can rewrite the operator's

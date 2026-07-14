@@ -131,6 +131,50 @@ def test_exposes_model_and_temperature():
     assert c.model == "claude-fable-5" and c.temperature == 0.0
 
 
+def test_argv_disallows_the_tool_surface():
+    # Neutral execution surface: a pure-completion call must not expose Claude Code's headless
+    # tool surface (auto-allowed read-only tools could pull local files into the prompt).
+    r = _FakeRunner()
+    _client(r).complete("s", "u")
+    argv = r.calls[0][0]
+    assert "--disallowedTools" in argv
+    spec = argv[argv.index("--disallowedTools") + 1]
+    for tool in ("Read", "Glob", "Grep", "Bash", "Edit", "Write", "WebFetch", "WebSearch", "Task"):
+        assert tool in spec
+
+
+def test_extra_args_come_after_the_default_hardening():
+    # extra_args stays the operator override seam: later flags win in the claude CLI.
+    r = _FakeRunner()
+    ClaudeCodeClient(model="claude-fable-5", runner=r,
+                     extra_args=["--allowedTools", "WebSearch"]).complete("s", "u")
+    argv = r.calls[0][0]
+    assert argv.index("--disallowedTools") < argv.index("--allowedTools")
+
+
+def test_default_runner_accepts_cwd(tmp_path):
+    from alpha.llm.claude_code import _default_runner
+    out = _default_runner(["pwd"], "", timeout=10, cwd=str(tmp_path))
+    assert out.strip() == str(tmp_path)
+
+
+def test_neutral_cwd_bound_into_default_runner(monkeypatch, tmp_path):
+    # The spawn must NOT inherit the service's cwd (the repo root), or `claude -p` loads this
+    # repo's CLAUDE.md + .claude/settings.json into every LLM call.
+    import alpha.llm.claude_code as mod
+    monkeypatch.setattr(mod.shutil, "which", lambda _n: "/usr/bin/claude")
+    seen = {}
+    def fake_runner(argv, stdin, timeout=None, cwd=None):
+        seen["cwd"] = cwd
+        return '{"result": "ok"}'
+    monkeypatch.setattr(mod, "_default_runner", fake_runner)
+    mod.ClaudeCodeClient(model="claude-fable-5").complete("s", "u")
+    import os
+    assert seen["cwd"] is not None and os.path.isdir(seen["cwd"])
+    assert os.path.realpath(seen["cwd"]) != os.path.realpath(os.getcwd())
+    assert not os.path.exists(os.path.join(seen["cwd"], "CLAUDE.md"))
+
+
 def test_default_runner_times_out():
     import subprocess
     from alpha.llm.claude_code import _default_runner
@@ -142,7 +186,7 @@ def test_timeout_is_bound_into_default_runner(monkeypatch):
     import alpha.llm.claude_code as mod
     monkeypatch.setattr(mod.shutil, "which", lambda _n: "/usr/bin/claude")
     seen = {}
-    def fake_runner(argv, stdin, timeout=None):
+    def fake_runner(argv, stdin, timeout=None, cwd=None):
         seen["timeout"] = timeout
         return '{"result": "ok"}'
     monkeypatch.setattr(mod, "_default_runner", fake_runner)
