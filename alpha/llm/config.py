@@ -26,7 +26,8 @@ _DEFAULTS: dict[str, tuple[str, str]] = {
 
 
 def make_client(role: Role, *, meter: "SpendMeter | None" = None) -> LLMClient:
-    """Build the LLM client for a role from env (ALPHA_<ROLE>_PROVIDER / _MODEL).
+    """Build the LLM client for a role from env (ALPHA_<ROLE>_PROVIDER / _MODEL). The console's
+    entity switch (state/llm_stack.json, see alpha/llm/stack.py) sits between env and the defaults.
 
     providers: 'mock' (offline), 'claude_code' (ClaudeCodeClient — subscription quota via the Claude
     Code CLI, the default), 'anthropic' (ClaudeClient — metered API key), 'openai_compat'
@@ -40,6 +41,12 @@ def make_client(role: Role, *, meter: "SpendMeter | None" = None) -> LLMClient:
     if role not in _DEFAULTS:
         raise ValueError(f"unknown role: {role!r} (expected one of {sorted(_DEFAULTS)})")
     def_provider, def_model = _DEFAULTS[role]
+    # Three layers, resolved PER FIELD: explicit role env (expert escape hatch) > the entity's
+    # named stack from the shared state file (the console switch) > _DEFAULTS.
+    from alpha.llm.stack import resolve_stack
+    stacked = resolve_stack(role)
+    if stacked is not None:
+        def_provider, def_model = stacked
     provider = os.environ.get(f"ALPHA_{role.upper()}_PROVIDER", def_provider)
     model = os.environ.get(f"ALPHA_{role.upper()}_MODEL", def_model)
     temperature = float(os.environ.get("ALPHA_LLM_TEMPERATURE", "0"))

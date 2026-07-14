@@ -54,3 +54,6 @@ def brain_session_isolation(tmp_path, monkeypatch):
     # A3: the Sonia discard hook writes rejected self-learning directions here; isolate it too so a
     # face test never touches the operator's real ./state (not reconcile-swept — signatures, not seqs).
     monkeypatch.setenv("ALPHA_NEG_CONSTRAINTS_DIR", str(tmp_path / "neg_constraints"))
+    # LLM entity-switch state file (console Models page) — isolate so face tests never read or
+    # write the operator's real ./state/llm_stack.json.
+    monkeypatch.setenv("ALPHA_LLM_STACK_FILE", str(tmp_path / "llm_stack.json"))
