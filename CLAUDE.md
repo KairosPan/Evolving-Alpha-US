@@ -88,6 +88,10 @@ python -m workbench               # :8820 ─┘
   (agent/refiner) burn credit fastest → dial to DeepSeek with `ALPHA_<ROLE>_PROVIDER=openai_compat`
   (that path's `deepseek-v4-pro` is a NAME, not a live id → also set `ALPHA_<ROLE>_MODEL=deepseek-chat`).
   Providers: `mock` | `claude_code` | `anthropic` (metered API key) | `openai_compat`.
+  Between env and the defaults sits the console's entity switch: `state/llm_stack.json`
+  (`ALPHA_LLM_STACK_FILE`) maps entity→stack (`sonia|kairos` → `claude|deepseek`, defined in
+  `alpha/llm/stack.py`); the :8100 "Models" page writes it; `make_client` reads it per call, so a
+  switch lands mid-session and also steers CLI batch runs.
 - **Tests.** Fully offline (`FakeSource`/`MockLLMClient`); `tests/web|sonia|workbench`
   importorskip their extras and autouse `brain_session_isolation`; face-touching tests anywhere
   ELSE must request that fixture explicitly, or the cross-face sweep can rewrite the operator's
