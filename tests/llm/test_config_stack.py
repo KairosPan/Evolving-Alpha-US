@@ -47,3 +47,13 @@ def test_unknown_stack_name_means_defaults(monkeypatch, tmp_path):
     _write(monkeypatch, tmp_path, {"sonia": "bogus-stack"})
     _clear_role_env(monkeypatch, "sonia")
     assert isinstance(make_client("sonia"), ClaudeCodeClient)
+
+
+def test_suite_isolated_from_operator_state_file(monkeypatch):
+    # The autouse conftest fixture must have pointed ALPHA_LLM_STACK_FILE at a tmp path already;
+    # a test run must never resolve the relative ./state/llm_stack.json default.
+    import os
+    assert os.environ["ALPHA_LLM_STACK_FILE"] != "./state/llm_stack.json"
+    monkeypatch.delenv("ALPHA_SONIA_PROVIDER", raising=False)
+    monkeypatch.delenv("ALPHA_SONIA_MODEL", raising=False)
+    assert isinstance(make_client("sonia"), ClaudeCodeClient)

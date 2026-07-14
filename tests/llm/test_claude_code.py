@@ -129,3 +129,23 @@ def test_missing_cli_raises_on_call(monkeypatch):
 def test_exposes_model_and_temperature():
     c = ClaudeCodeClient(model="claude-fable-5", temperature=0.0, runner=_FakeRunner())
     assert c.model == "claude-fable-5" and c.temperature == 0.0
+
+
+def test_default_runner_times_out():
+    import subprocess
+    from alpha.llm.claude_code import _default_runner
+    with pytest.raises(subprocess.TimeoutExpired):
+        _default_runner(["sleep", "5"], "", timeout=0.1)   # offline: no claude needed
+
+
+def test_timeout_is_bound_into_default_runner(monkeypatch):
+    import alpha.llm.claude_code as mod
+    monkeypatch.setattr(mod.shutil, "which", lambda _n: "/usr/bin/claude")
+    seen = {}
+    def fake_runner(argv, stdin, timeout=None):
+        seen["timeout"] = timeout
+        return '{"result": "ok"}'
+    monkeypatch.setattr(mod, "_default_runner", fake_runner)
+    c = mod.ClaudeCodeClient(model="claude-fable-5", timeout=42.0)
+    assert c.complete("s", "u") == "ok"
+    assert seen["timeout"] == 42.0

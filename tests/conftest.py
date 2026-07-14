@@ -57,3 +57,13 @@ def brain_session_isolation(tmp_path, monkeypatch):
     # LLM entity-switch state file (console Models page) — isolate so face tests never read or
     # write the operator's real ./state/llm_stack.json.
     monkeypatch.setenv("ALPHA_LLM_STACK_FILE", str(tmp_path / "llm_stack.json"))
+
+
+@pytest.fixture(autouse=True)
+def _llm_stack_isolation(tmp_path, monkeypatch):
+    """Autouse for the WHOLE suite: point the LLM entity-switch state file at a tmp path so no
+    test ever reads the operator's real ./state/llm_stack.json (the console switch writes it in
+    live use — a real file would otherwise flip provider resolution under tests that clear role
+    env; caught by the final whole-branch review). Tests that need a specific file still win by
+    setting ALPHA_LLM_STACK_FILE themselves (per-test monkeypatch.setenv overrides this one)."""
+    monkeypatch.setenv("ALPHA_LLM_STACK_FILE", str(tmp_path / "llm_stack_isolated.json"))

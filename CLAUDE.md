@@ -84,7 +84,9 @@ python -m workbench               # :8820 ─┘
   metered API key (`alpha/llm/claude_code.py`; auth is ambient — `claude /login` or `claude setup-token`
   → `CLAUDE_CODE_OAUTH_TOKEN`). GOTCHA: a set `ANTHROPIC_API_KEY` silently overrides the subscription
   login and bills the API — unset it. Fable-5-on-subscription is a promo capped at 50% of the weekly
-  limit, ending 2026-07-19 → then set `ALPHA_<ROLE>_MODEL=claude-opus-4-8`. Heavy batch roles
+  limit, ending 2026-07-19 → then re-point `STACKS["claude"]` to `claude-opus-4-8` in
+  `alpha/llm/stack.py` (one line; avoid per-role `ALPHA_<ROLE>_MODEL` pins — they compose badly with
+  the console switch). Heavy batch roles
   (agent/refiner) burn credit fastest → dial to DeepSeek with `ALPHA_<ROLE>_PROVIDER=openai_compat`
   (that path's `deepseek-v4-pro` is a NAME, not a live id → also set `ALPHA_<ROLE>_MODEL=deepseek-chat`).
   Providers: `mock` | `claude_code` | `anthropic` (metered API key) | `openai_compat`.

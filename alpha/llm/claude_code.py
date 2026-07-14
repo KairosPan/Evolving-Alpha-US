@@ -27,9 +27,13 @@ def _usage_from_claude_code(env) -> "Usage | None":
     return Usage(tokens_in=tin, tokens_out=int(tout))
 
 
-def _default_runner(argv: "list[str]", stdin: str) -> str:
-    """Shell out to the installed `claude` binary; return stdout, raise on non-zero exit."""
-    proc = subprocess.run(argv, input=stdin, capture_output=True, text=True)
+def _default_runner(argv: "list[str]", stdin: str, timeout: "float | None" = None) -> str:
+    """Shell out to the installed `claude` binary; return stdout, raise on non-zero exit.
+
+    `timeout` (seconds) caps the spawn so a hung `claude` cannot block the role forever —
+    subprocess.run raises subprocess.TimeoutExpired, which _invoke's broad except turns into a
+    retry/backoff and finally a raise. None = no cap (only injected runners pass None)."""
+    proc = subprocess.run(argv, input=stdin, capture_output=True, text=True, timeout=timeout)
     if proc.returncode != 0:
         raise RuntimeError(f"claude CLI exited {proc.returncode}: {(proc.stderr or '').strip()[:500]}")
     return proc.stdout
@@ -64,7 +68,8 @@ class ClaudeCodeClient:
 
     def __init__(self, model: str = "claude-fable-5", temperature: float = 0.0,
                  max_tokens: int = 4096, max_retries: int = 3, backoff: float = 1.0,
-                 sleep=None, runner=None, extra_args: "list[str] | None" = None) -> None:
+                 sleep=None, runner=None, extra_args: "list[str] | None" = None,
+                 timeout: float = 600.0) -> None:
         self.model = model
         self.temperature = temperature
         self._max_tokens = max_tokens
@@ -73,9 +78,12 @@ class ClaudeCodeClient:
         self._sleep = sleep if sleep is not None else time.sleep
         self._extra_args = list(extra_args) if extra_args else []
         if runner is not None:
-            self._run = runner
+            self._run = runner          # injected runner owns its own timeout semantics
         elif shutil.which("claude") is not None:
-            self._run = _default_runner
+            # Bind the per-call timeout (default 600s, matching the Anthropic SDK) so a hung `claude`
+            # spawn can't block the role forever. `_default_runner` is looked up as a module global at
+            # CALL time, so tests may monkeypatch it.
+            self._run = lambda argv, stdin: _default_runner(argv, stdin, timeout=timeout)
         else:
             self._run = None            # claude CLI not installed (offline tests inject a runner)
         self.last_usage = None          # A6 metering side-channel: provider tokens of the last call
