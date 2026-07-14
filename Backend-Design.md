@@ -2,12 +2,13 @@
 
 **Status:** drafted 2026-07-10 · standing document (first-class, like the charter).
 **Authority:** charter (`Evolving-Agent-Design-SoniaKairos.md`) > `Backend-Design.md` >
-`DEVELOPMENT-PLAN.md` > code — a downstream doc never leads an upstream one; on conflict, amend
-upstream first, then sync down with a dated marker.
+`ROADMAP.md` Part I (ex `DEVELOPMENT-PLAN.md`; plan+built-log merged 2026-07-13) > code — a
+downstream doc never leads an upstream one; on conflict, amend upstream first, then sync down
+with a dated marker.
 **Role:** the sole design home of the live system's backend AND its three faces.
 **Posture:** IN-PLACE EVOLUTION — charter organs land on the existing `alpha/*` packages;
 physical splits only where an organ hard-requires one (user decision 2026-07-10). Every gap is
-named once (G1–G14, §4) with its closing arc (A1–A12, executed by `DEVELOPMENT-PLAN.md`) or its
+named once (G1–G14, §4) with its closing arc (A1–A12, executed by `ROADMAP.md` Part I) or its
 deferred home (G13 track-tail note, G14 deferred ledger).
 
 ## §1 Process topology
@@ -445,7 +446,7 @@ mid-verdict, while the frozen arms take the same store via their read-only `epis
 recall/taboo parameters (`alpha/loop/compare.py:86-109`). And it obeys the charter's one binding Outcomes rule: no
 score ever ACCEPTs an edit; adoption stays the user's act.
 
-The vertical's backlog is the product track (P1–P9, owned by `DEVELOPMENT-PLAN.md`). One
+The vertical's backlog is the product track (P1–P9, owned by `ROADMAP.md` Part I). One
 ordering constraint is pinned here: P1 (adversarial trap-day battery) is the guardrail ordered
 BEFORE P2 (GCycle US recalibration) may loosen thresholds; P3 closes a verified hole — a
 missing corp-actions artifact computes dilution/reverse-split flags as `False`,
@@ -454,7 +455,7 @@ as "guard ran blind" — warn-the-human, threaded symmetrically into both verdic
 
 ## §4 Gap ledger
 
-The contract with `DEVELOPMENT-PLAN.md`. Ids are stable; the plan references them and nothing
+The contract with `ROADMAP.md` Part I. Ids are stable; the plan references them and nothing
 renumbers them.
 
 | Id | Organ | Gap | Severity / urgency | Arc |
@@ -513,7 +514,7 @@ cited here, not restated.
 - **`brain.db` does not roll back with the brain** (G9 substance): nothing calls
   `mark_superseded` on restore — defensible for an observation channel, unaddressed against the
   charter's journal-replay ideal.
-- **M3 delisting tradeoff** (DEVELOPMENT-PLAN §4 deferred ledger, accepted): a same-day
+- **M3 delisting tradeoff** (ROADMAP Part I §4 deferred ledger, accepted): a same-day
   `worthless_removal` is skipped by
   the strict `ex_date > entry_day` check. Carried so it is never silently rediscovered.
 
@@ -540,4 +541,4 @@ governance pins themselves** (arena no-order, stage-only, stamp coherence, red-l
 deleting a governance drill fails the suite the way deleting a firewall guard does. Its ancestor
 is the charter's standing coupling rule: "a guard without a drill is presumed broken". Queued
 (named 2026-07-10, backend-design round; not yet an arc) — the backlog home is
-`DEVELOPMENT-PLAN.md` §2 track tail, beside the scheduled-drills note.
+`ROADMAP.md` Part I §2 track tail, beside the scheduled-drills note.

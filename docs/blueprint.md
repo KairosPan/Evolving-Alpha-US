@@ -9,10 +9,10 @@
 > trading*; the project **pivoted to US hot-sector growth investing on 2026-07-11** (weeks-to-months
 > horizon, earnings/industry-cycle driven — momentum crash is now a named left tail, not the thesis).
 > The current doctrine lives in `docs/doctrine/2026-07-12-us-growth-doctrine-draft.md` and the P0
-> program in `DEVELOPMENT-PLAN.md`; the sentiment-cycle/leadership ideas here survive only at concept
+> program in `ROADMAP.md` Part I; the sentiment-cycle/leadership ideas here survive only at concept
 > level (轮回 ledger). ⚠️ **Structurally stale.** v1.0 also predates the harness/agent build-out,
 > `alpha/arena/`, and the three services (`alpha_web`/`sonia`/`workbench`). **For the authoritative
-> current structure and status see `CLAUDE.md` + `docs/PROJECT_STATE.md` + `DEVELOPMENT-PLAN.md`.**
+> current structure and status see `CLAUDE.md` + `ROADMAP.md` (Part II built log / Part I forward plan).**
 > What remains reliable here is the perception→universe→state→regime data-model reasoning and the
 > Continual-Harness two-loop framing (§1–§2); read the rest as historical rationale, not current fact.
 > **Spec:** `docs/superpowers/specs/2026-06-13-us-market-adaptation-design.md`

@@ -96,7 +96,7 @@ python -m workbench               # :8820 ─┘
 - **`LocalEnv` is not a security boundary** — the compensating control is workbench's boot
   assert that the brain lives outside the workspace.
 
-Design: `Backend-Design.md` · plan/backlog: `DEVELOPMENT-PLAN.md` (the single forward-looking
-doc) · built log: `docs/PROJECT_STATE.md` ·
+Design: `Backend-Design.md` · plan + built log: `ROADMAP.md` (Part I = forward plan, ex
+DEVELOPMENT-PLAN; Part II = append-only built log, ex docs/PROJECT_STATE; merged 2026-07-13) ·
 `docs/blueprint.md` formally demoted (perception/eval algorithmic reference only; doctrinally
 superseded by the growth pivot + structurally pre-build-out).
