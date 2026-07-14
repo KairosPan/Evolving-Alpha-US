@@ -9,18 +9,21 @@ from __future__ import annotations
 
 import html
 import json
+import os
+import shutil
 from datetime import date as Date
 from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from alpha.eval.decision import DecisionPackage
 from alpha.eval.decision_store import DecisionStore
 from alpha.eval.verdict_store import VerdictStore
+from alpha.llm import stack as llm_stack
 from alpha.meta.ingest import ingest_attachments
 from alpha.settings import Settings
 from alpha_web import data_access as da
@@ -82,6 +85,7 @@ NAV = [
     {"path": "/evolution", "key": "evolution", "label": "Autonomous"},
     {"path": "/conflicts", "key": "conflicts", "label": "Conflicts"},
     {"path": "/workbench", "key": "workbench", "label": "Workbench"},
+    {"path": "/models", "key": "models", "label": "Models"},
 ]
 
 BRAIN_KEYS = {"doctrine", "memory", "workflow", "skills", "connector", "subagent"}
@@ -91,6 +95,36 @@ _BRAIN_STUBS = {
     "connector": ("Connector", "External data/tool connections the agent draws on (Alpaca, EDGAR, MCP feeds…)."),
     "subagent":  ("Subagent",  "Specialized dispatch sub-agents the master agent delegates to."),
 }
+
+_ENTITY_ROWS = (
+    ("sonia", "Sonia — teaching + evolution", ("sonia", "refiner")),
+    ("kairos", "Kairos — decisions + workbench", ("agent", "converse")),
+)
+
+
+def _stack_rows() -> list[dict]:
+    current = llm_stack.read_stacks()
+    rows = []
+    for entity, label, roles in _ENTITY_ROWS:
+        pinned = [r for r in roles
+                  if os.environ.get(f"ALPHA_{r.upper()}_PROVIDER") or os.environ.get(f"ALPHA_{r.upper()}_MODEL")]
+        rows.append({"entity": entity, "label": label, "roles": ", ".join(roles),
+                     "selected": current.get(entity), "pinned_roles": pinned})
+    return rows
+
+
+def _stack_warnings() -> list[str]:
+    """Best-effort forewarnings from the CONSOLE's env — each face resolves its own env, so these
+    are hints, not gates; the faces' request-time error boundaries stay authoritative."""
+    warns = []
+    if shutil.which("claude") is None:
+        warns.append("claude CLI not found in this console's PATH — the claude stack needs Claude Code installed.")
+    if not os.environ.get("DEEPSEEK_API_KEY"):
+        warns.append("DEEPSEEK_API_KEY is not set in this console's env — the deepseek stack fails in any face missing it.")
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        warns.append("ANTHROPIC_API_KEY is set — the claude stack would bill the metered API instead of the subscription.")
+    return warns
+
 
 SKILL_STATUSES = ["active", "incubating", "dormant", "retired"]
 SKILL_TYPES = ["pattern", "failure_detector", "feature"]
@@ -300,6 +334,24 @@ def create_app() -> FastAPI:
                 media_type="text/html",
             )
         return Response(status_code=200, content="")
+
+    @app.get("/models")
+    def models_page(request: Request):
+        return render(request, "models.html", {
+            "active": "models", "rows": _stack_rows(), "stack_names": sorted(llm_stack.STACKS),
+            "stack_defs": llm_stack.STACKS, "warnings": _stack_warnings(),
+            "stack_file": llm_stack.stack_file_path(),
+        })
+
+    @app.post("/settings/llm")
+    def set_llm_stack(entity: str = Form(...), stack: str = Form(...)):
+        if entity not in llm_stack.ROLE_ENTITY.values() or stack not in llm_stack.STACKS:
+            return JSONResponse({"error": f"unknown entity or stack: {entity!r}/{stack!r}"},
+                                status_code=422)
+        stacks = llm_stack.read_stacks()
+        stacks[entity] = stack
+        llm_stack.write_stacks(stacks)
+        return RedirectResponse("/models", status_code=303)
 
     @app.get("/workbench")
     def workbench_page(request: Request):
