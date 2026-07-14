@@ -78,9 +78,16 @@ python -m workbench               # :8820 ─┘
 - **Names collide.** `agent.py` ×3, `registry.py` ×3, `store.py` ×2, `app.py` ×3, `tools.py`
   (converse vs arena), two `build_market_state` (canonical: `alpha/state/builder.py`) — qualify
   by package before editing. Lowercase `kairos` = the sibling CN legal-agent repo.
-- **LLM defaults.** Per-role env `ALPHA_<ROLE>_{PROVIDER,MODEL}`; temperature defaults to 0; the
-  default model id `deepseek-v4-pro` is not a valid live API id — override per role (e.g.
-  `ALPHA_SONIA_MODEL=deepseek-chat`).
+- **LLM defaults.** Per-role env `ALPHA_<ROLE>_{PROVIDER,MODEL}`; temperature defaults to 0.
+  All four roles default to provider `claude_code` / model `claude-fable-5` — Claude Fable 5 via the
+  headless Claude Code CLI (`claude -p`), drawing the operator's Pro/Max **subscription** quota, not a
+  metered API key (`alpha/llm/claude_code.py`; auth is ambient — `claude /login` or `claude setup-token`
+  → `CLAUDE_CODE_OAUTH_TOKEN`). GOTCHA: a set `ANTHROPIC_API_KEY` silently overrides the subscription
+  login and bills the API — unset it. Fable-5-on-subscription is a promo capped at 50% of the weekly
+  limit, ending 2026-07-19 → then set `ALPHA_<ROLE>_MODEL=claude-opus-4-8`. Heavy batch roles
+  (agent/refiner) burn credit fastest → dial to DeepSeek with `ALPHA_<ROLE>_PROVIDER=openai_compat`
+  (that path's `deepseek-v4-pro` is a NAME, not a live id → also set `ALPHA_<ROLE>_MODEL=deepseek-chat`).
+  Providers: `mock` | `claude_code` | `anthropic` (metered API key) | `openai_compat`.
 - **Tests.** Fully offline (`FakeSource`/`MockLLMClient`); `tests/web|sonia|workbench`
   importorskip their extras and autouse `brain_session_isolation`; face-touching tests anywhere
   ELSE must request that fixture explicitly, or the cross-face sweep can rewrite the operator's

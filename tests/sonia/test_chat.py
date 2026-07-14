@@ -39,7 +39,10 @@ def test_chat_appends_two_turns_and_persists(client):
 
 
 def test_chat_is_graceful_when_copilot_unavailable(client, monkeypatch):
-    monkeypatch.delenv("ALPHA_SONIA_PROVIDER", raising=False)        # default openai_compat
+    # Force a provider that fails to construct offline (openai_compat with no key) so make_client
+    # raises inside /chat's error boundary — the deterministic "copilot unavailable" trigger. (The
+    # default provider is now claude_code, which constructs fine, so we can't lean on the default.)
+    monkeypatch.setenv("ALPHA_SONIA_PROVIDER", "openai_compat")
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     body = client.post("/chat", json={"text": "hi"}).json()
     assert "couldn't respond" in body["assistant_message"]["text"].lower()

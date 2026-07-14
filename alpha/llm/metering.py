@@ -56,7 +56,9 @@ PRICES: dict[str, ModelPrice] = {
     "deepseek-reasoner": ModelPrice(0.55, 2.19),
     "deepseek-v4-pro": ModelPrice(0.55, 2.19),      # the intended default id (see llm/config.py)
     "claude-sonnet-4-6": ModelPrice(3.00, 15.00),
-    "claude-opus-4-8": ModelPrice(15.00, 75.00),
+    "claude-sonnet-5": ModelPrice(3.00, 15.00),
+    "claude-opus-4-8": ModelPrice(5.00, 25.00),
+    "claude-fable-5": ModelPrice(10.00, 50.00),     # default id (llm/config.py); API list price
 }
 # Unknown model → non-zero fallback: fail-toward-metering, so an unrecognized id is never silently free
 # (a silent $0 would let an adversary evade the ceiling by naming an untabled model).

@@ -10,21 +10,27 @@ if TYPE_CHECKING:
 
 Role = Literal["agent", "refiner", "sonia", "converse"]
 
-# (provider, model) defaults per role: ALL roles on DeepSeek deepseek-v4-pro (openai_compat).
-# NOTE: `deepseek-v4-pro` is the intended model NAME; if the live API rejects it as an unknown id,
-# override per role at runtime (e.g. ALPHA_AGENT_MODEL=deepseek-chat) — any OpenAI-compatible id works.
+# (provider, model) defaults per role: ALL roles on Claude Fable 5 via the Claude Code CLI
+# (`claude_code`), drawing on the operator's Pro/Max SUBSCRIPTION quota, not a metered API key.
+# NOTE (time-sensitive): Fable 5 on subscription is a promotion capped at 50% of the weekly limit and
+# scheduled to end 2026-07-19 — after that set ALPHA_<ROLE>_MODEL=claude-opus-4-8 (the durable
+# subscription model) or point a role back at DeepSeek (ALPHA_<ROLE>_PROVIDER=openai_compat).
+# Auth is ambient (Claude Code login / `claude setup-token`); the heavy batch roles (agent/refiner)
+# burn subscription credit fastest, so dial them to openai_compat if quota is tight.
 _DEFAULTS: dict[str, tuple[str, str]] = {
-    "agent": ("openai_compat", "deepseek-v4-pro"),
-    "refiner": ("openai_compat", "deepseek-v4-pro"),
-    "sonia": ("openai_compat", "deepseek-v4-pro"),
-    "converse": ("openai_compat", "deepseek-v4-pro"),
+    "agent": ("claude_code", "claude-fable-5"),
+    "refiner": ("claude_code", "claude-fable-5"),
+    "sonia": ("claude_code", "claude-fable-5"),
+    "converse": ("claude_code", "claude-fable-5"),
 }
 
 
 def make_client(role: Role, *, meter: "SpendMeter | None" = None) -> LLMClient:
     """Build the LLM client for a role from env (ALPHA_<ROLE>_PROVIDER / _MODEL).
 
-    providers: 'mock' (offline), 'anthropic' (ClaudeClient), 'openai_compat' (OpenAICompatClient).
+    providers: 'mock' (offline), 'claude_code' (ClaudeCodeClient — subscription quota via the Claude
+    Code CLI, the default), 'anthropic' (ClaudeClient — metered API key), 'openai_compat'
+    (OpenAICompatClient — DeepSeek etc.).
     temperature defaults to 0.0 (eval determinism); override with ALPHA_LLM_TEMPERATURE.
 
     meter (A6, charter *Resources as Security*): when a SpendMeter is passed, the raw client is wrapped
@@ -40,6 +46,9 @@ def make_client(role: Role, *, meter: "SpendMeter | None" = None) -> LLMClient:
 
     if provider == "mock":
         raw: LLMClient = MockLLMClient(os.environ.get("ALPHA_MOCK_RESPONSE", "{}"))
+    elif provider == "claude_code":
+        from alpha.llm.claude_code import ClaudeCodeClient
+        raw = ClaudeCodeClient(model=model, temperature=temperature)
     elif provider == "anthropic":
         from alpha.llm.anthropic import ClaudeClient
         raw = ClaudeClient(model=model, temperature=temperature)
@@ -47,5 +56,6 @@ def make_client(role: Role, *, meter: "SpendMeter | None" = None) -> LLMClient:
         from alpha.llm.openai_compat import OpenAICompatClient
         raw = OpenAICompatClient(model=model, temperature=temperature)
     else:
-        raise ValueError(f"unknown provider: {provider!r} (expected mock|anthropic|openai_compat)")
+        raise ValueError(
+            f"unknown provider: {provider!r} (expected mock|claude_code|anthropic|openai_compat)")
     return raw if meter is None else meter.wrap(raw, role=role)
