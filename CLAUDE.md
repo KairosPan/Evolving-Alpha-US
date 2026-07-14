@@ -3,7 +3,7 @@
 Descriptive, not prescriptive: when this file disagrees with the tree, the code is current and
 this file gets updated. This is the only CLAUDE.md — depth lives in docstrings and `docs/`.
 
-> Owner: KairosPan · reviewed 2026-07-11 · 1001 offline tests.
+> Owner: KairosPan · reviewed 2026-07-13 · 1912 offline tests.
 
 ## What this is
 
@@ -20,7 +20,7 @@ the worker. Code, comments and docs are English; the CN material is reference on
 
 | Where | What |
 |---|---|
-| `alpha/data`→`universe`→`state`→`regime` | perception: PIT-guarded sources → daily screen → `MarketState` → `GCycle` six-phase read |
+| `alpha/data`→`universe`→`state`→`regime` | perception: PIT-guarded sources → daily screen → `MarketState` → regime read: momo `GCycle` six-phase, or the growth pack's three scale-typed clocks (market `GrowthMarketClock` / theme `GrowthThemeClock` / stock `classify_stock_stage`) |
 | `alpha/harness` | the evolvable playbook `H` itself — doctrine/skills/memory, meta-tools, append-only edit log, snapshots. Not a test harness; the charter calls it the Body |
 | `alpha/refine` | proposes and gates edits; `apply.py::try_apply_op` is THE write-waist |
 | `alpha/agent` · `eval` · `sizing` · `guard` | decide & score: LLM policy → L4 hard veto → L3 sizing → honest walk-forward eval |
@@ -88,6 +88,11 @@ python -m workbench               # :8820 ─┘
 - **Honest eval.** Returns are gross (stated, not assumed); a delisting scores −1.0, never
   dropped; the guard DROPS vetoed candidates; sizing is verdict-neutral; decorator order
   `SizingPolicy(GuardedPolicy(…))` is load-bearing.
+- **Growth three-clock authority.** For a growth-H the market clock is already live (`screen.py` →
+  `RegimeRead` → veto+sizing); the theme+stock §1.4 downward-veto cascade (market vetoes theme vetoes
+  stock, tighten-only) rides behind `clock_authority` (default OFF → byte-identical), threaded
+  symmetrically into both verdict arms. Flip-on wants `ALPHA_UNIVERSE_SCREEN=trend_template` (else the
+  gainer screen leaves `rs_percentile` None → every name reads `stock:base` → all vetoed).
 - **`LocalEnv` is not a security boundary** — the compensating control is workbench's boot
   assert that the brain lives outside the workspace.
 
