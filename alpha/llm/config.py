@@ -10,8 +10,8 @@ if TYPE_CHECKING:
 
 Role = Literal["agent", "refiner", "sonia", "converse"]
 
-# (provider, model) defaults per role: ALL roles on Claude Fable 5 via the Claude Code CLI
-# (`claude_code`), drawing on the operator's Pro/Max SUBSCRIPTION quota, not a metered API key.
+# (provider, model) defaults per role: ALL roles on Claude Fable 5 via the Claude Agent SDK
+# (`claude_sdk`), drawing on the operator's Pro/Max SUBSCRIPTION quota, not a metered API key.
 # NOTE (time-sensitive): Fable 5 on subscription is a promotion capped at 50% of the weekly limit and
 # scheduled to end 2026-07-19 — after that set ALPHA_<ROLE>_MODEL=claude-opus-4-8 (the durable
 # subscription model) or point a role back at DeepSeek (ALPHA_<ROLE>_PROVIDER=openai_compat).

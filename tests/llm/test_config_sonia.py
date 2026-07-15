@@ -9,7 +9,7 @@ def test_sonia_mock_provider(monkeypatch):
     assert isinstance(make_client("sonia"), MockLLMClient)
 
 
-def test_sonia_defaults_to_claude_code_subscription(monkeypatch):
+def test_sonia_defaults_to_claude_sdk_subscription(monkeypatch):
     # default is now claude_sdk (Fable 5 on subscription quota); construction needs no API key and
     # does not raise when the CLI is absent (it raises only on an actual call — see test_claude_code).
     monkeypatch.delenv("ALPHA_SONIA_PROVIDER", raising=False)

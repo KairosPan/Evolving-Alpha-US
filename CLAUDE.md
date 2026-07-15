@@ -83,8 +83,8 @@ python -m workbench               # :8820 ─┘
   Claude Agent SDK (`alpha/llm/claude_sdk.py`, `pip install claude-agent-sdk`), drawing the operator's
   Pro/Max **subscription** quota, not a metered API key (auth is ambient — `claude /login` or
   `claude setup-token` → `CLAUDE_CODE_OAUTH_TOKEN`). Each call is a pure completion on a neutral
-  surface the SDK maintains: `setting_sources=None` (loads no repo CLAUDE.md/settings), `tools=[]`,
-  `max_turns=1`; sync seam wraps the async `query()` in `asyncio.run` (+600s wait_for). GOTCHA: a set
+  surface the SDK maintains: `setting_sources=[]` (ISOLATION mode — `None` would load everything), `strict_mcp_config=True`
+  (repo `.mcp.json` never loads), `tools=[]`, `max_turns=1`, neutral tmp cwd; sync seam wraps the async `query()` in `asyncio.run` (+600s wait_for). GOTCHA: a set
   `ANTHROPIC_API_KEY` silently overrides the subscription login and bills the API — unset it.
   Fable-5-on-subscription is a promo capped at 50% of the weekly limit, ending 2026-07-19 → then
   re-point `STACKS["claude"]` to `claude-opus-4-8` in `alpha/llm/stack.py` (one line; avoid per-role

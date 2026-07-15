@@ -117,8 +117,9 @@ def _stack_warnings() -> list[str]:
     """Best-effort forewarnings from the CONSOLE's env — each face resolves its own env, so these
     are hints, not gates; the faces' request-time error boundaries stay authoritative."""
     warns = []
-    if shutil.which("claude") is None:
-        warns.append("claude CLI not found in this console's PATH — the claude stack needs Claude Code installed.")
+    import importlib.util
+    if importlib.util.find_spec("claude_agent_sdk") is None:
+        warns.append("claude-agent-sdk not installed in this console's env — the claude stack needs it (pip install claude-agent-sdk).")
     if not os.environ.get("DEEPSEEK_API_KEY"):
         warns.append("DEEPSEEK_API_KEY is not set in this console's env — the deepseek stack fails in any face missing it.")
     if os.environ.get("ANTHROPIC_API_KEY"):

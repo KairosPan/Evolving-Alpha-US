@@ -47,7 +47,9 @@ def test_returns_result_text():
 
 
 def test_options_pin_the_neutral_surface():
-    # The SDK's whole point here: no filesystem settings, no tools, one turn.
+    # The SDK's whole point here: no filesystem settings, no MCP, no tools, one turn.
+    # CAUTION (adversarial-review catch): setting_sources=None means "no flag -> CLI default ->
+    # load EVERYTHING"; the isolation mode is the EXPLICIT EMPTY LIST (--setting-sources=).
     f = _FakeQuery()
     _client(f).complete("SYS", "the user prompt")
     prompt, opts = f.calls[0]
@@ -56,7 +58,10 @@ def test_options_pin_the_neutral_surface():
     assert opts.model == "claude-fable-5"
     assert opts.tools == []                  # all built-in tools disabled
     assert opts.max_turns == 1               # pure completion, no agent loop
-    assert opts.setting_sources is None      # loads NO CLAUDE.md / settings (SDK default, pinned)
+    assert opts.setting_sources == []        # ISOLATION MODE: loads NO CLAUDE.md / settings
+    assert opts.strict_mcp_config is True    # no ambient MCP (repo .mcp.json must not load)
+    import os
+    assert opts.cwd is not None and not os.path.exists(os.path.join(str(opts.cwd), "CLAUDE.md"))
 
 
 def test_empty_system_prompt_maps_to_none():

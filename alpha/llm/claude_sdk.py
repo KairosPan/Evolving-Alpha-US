@@ -3,16 +3,18 @@ from __future__ import annotations
 import asyncio
 import time
 
-from alpha.llm.claude_code import _flatten_chat, _usage_from_claude_code
+from alpha.llm.claude_code import _flatten_chat, _neutral_cwd, _usage_from_claude_code
 
 
 class ClaudeSdkClient:
     """Claude via the Claude Agent SDK (`claude-agent-sdk`), drawing on your Pro/Max SUBSCRIPTION
     quota — the officially-sanctioned personal-use path, same as the `claude -p` provider it
-    supersedes as the default. The SDK spawns the same Claude Code runtime, but Anthropic
-    maintains the isolation defaults for us: `setting_sources=None` loads NO filesystem settings
-    (no repo CLAUDE.md / .claude/settings.json in the prompt — no neutral-cwd hack needed), and
-    `tools=[]` + `max_turns=1` make each call a pure, loop-free completion.
+    supersedes as the default. The SDK spawns the same Claude Code runtime; each call is a pure,
+    loop-free completion on an explicitly pinned neutral surface: `setting_sources=[]` (the
+    documented ISOLATION MODE — `None` means "no flag → CLI default → load EVERYTHING", the exact
+    inversion an adversarial review caught here), `strict_mcp_config=True` + empty `mcp_servers`
+    (ambient MCP like the repo's .mcp.json never loads), `tools=[]`, `max_turns=1`, and a neutral
+    tmp `cwd` (defense-in-depth, shared with the claude_code provider).
 
     Auth is ambient: the Claude Code credential store (`claude /login`) or a `claude setup-token`
     → CLAUDE_CODE_OAUTH_TOKEN. This client stores no key. GOTCHA: a set ANTHROPIC_API_KEY
@@ -46,20 +48,26 @@ class ClaudeSdkClient:
         self.last_usage = None          # A6 metering side-channel: provider tokens of the last call
 
     def _options(self, system: str):
-        from claude_agent_sdk import ClaudeAgentOptions  # lazy — reached only with the sdk present
+        # Lazy import: reached in offline tests too (the test module importorskips the sdk), so
+        # an injected query_fn still gets real, typed options.
+        from claude_agent_sdk import ClaudeAgentOptions
         return ClaudeAgentOptions(
             system_prompt=system or None,
             model=self.model,
             tools=[],                    # disable ALL built-in tools: pure completion
             max_turns=1,                 # no agent loop
-            setting_sources=None,        # SDK default, pinned: load NO CLAUDE.md / settings
+            setting_sources=[],          # ISOLATION MODE: load NO CLAUDE.md / settings (None = ALL!)
+            strict_mcp_config=True,      # only mcp_servers below count — ambient .mcp.json ignored
+            mcp_servers={},              # ...and we declare none
+            cwd=_neutral_cwd(),          # defense-in-depth: spawn never sits in the repo
         )
 
     async def _acall(self, system: str, prompt: str) -> str:
         async def _collect() -> str:
+            from claude_agent_sdk.types import ResultMessage  # lazy, same guard as _options
             result = None
             async for message in self._query(prompt=prompt, options=self._options(system)):
-                if type(message).__name__ == "ResultMessage":
+                if isinstance(message, ResultMessage):
                     result = message
             if result is None:
                 raise RuntimeError("claude-agent-sdk stream ended with no ResultMessage")
