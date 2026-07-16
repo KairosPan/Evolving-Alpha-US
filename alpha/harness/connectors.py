@@ -34,7 +34,7 @@ class ConnectorRegistry:
     """Id-keyed registry (house style: mirrors SkillRegistry/MemoryStore). Always truthy."""
 
     def __init__(self, entries: dict[str, ConnectorEntry]) -> None:
-        self._entries = entries
+        self._entries = dict(entries)                         # copy (mirrors Workflow/SubagentRegistry)
 
     @classmethod
     def empty(cls) -> "ConnectorRegistry":

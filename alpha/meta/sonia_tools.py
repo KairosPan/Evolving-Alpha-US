@@ -35,11 +35,12 @@ def _dump(entry):
     return entry.model_dump(mode="json") if entry is not None else None
 
 
-def _default_source_factory():
+def _default_source_factory(impl_ref=None):
     # Lazy: importing make_source pulls the whole data stack (alpaca et al.), and building an
     # AlpacaSource reads env — so defer both to first tool DISPATCH, never registry build time.
+    # Honor the connector's declared impl_ref (None -> env default) instead of hardcoding the default.
     from alpha.data.registry import make_source
-    return make_source()                                    # RAW source (caller wraps per contract)
+    return make_source(impl_ref)                            # RAW source (caller wraps per contract)
 
 
 def _market_snapshot_fn(source_factory):
@@ -118,9 +119,13 @@ def build_sonia_registry(h, *, source_factory=None) -> tuple[ToolRegistry, Activ
     _add("view_subagent", "Full detail of one subagent, by subagent id.",
          lambda subagent_id: {"ok": True, "subagent": _dump(h.subagents.get(subagent_id))},
          {"subagent_id": {"type": "string"}}, ["subagent_id"])
-    _add("search_episodes", "Search PIT episodic memory for matching lessons (returns summaries).",
-         # Wired to an EpisodeStore when a brain db is present; empty pool -> no hits (fail-soft).
-         lambda query: {"ok": True, "hits": []},
+    _add("search_episodes",
+         "NOT YET WIRED to the EpisodeStore — always returns zero hits regardless of brain.db "
+         "contents. Do NOT infer that episodic memory is empty from an empty result.",
+         # Placeholder: episodic search is not yet wired to the EpisodeStore (recorded follow-up).
+         # It returns no hits even when brain.db is full, so the model must not over-trust an empty
+         # result as evidence of absence. The `note` makes the un-wired state explicit in the result.
+         lambda query: {"ok": True, "hits": [], "note": "episodic search not yet wired"},
          {"query": {"type": "string"}}, ["query"])
 
     # Market tools ride the alpaca connector declaration: register ONLY when the entry exists, is
@@ -128,7 +133,8 @@ def build_sonia_registry(h, *, source_factory=None) -> tuple[ToolRegistry, Activ
     # absent (never a boot error). Names match apply.py::_REGISTERABLE_TOOLS exactly (Task 7 pin).
     conn = h.connectors.get("alpaca")
     if conn is not None and conn.enabled and all(os.environ.get(k) for k in conn.env_keys):
-        make = source_factory if source_factory is not None else _default_source_factory
+        # Honor the connector's declared impl_ref (not the env default) unless a test injects a source.
+        make = source_factory if source_factory is not None else (lambda: _default_source_factory(conn.impl_ref))
         _add("market_snapshot", "Latest daily snapshot (price/volume) for one or more symbols.",
              _market_snapshot_fn(make),
              {"symbols": {"type": "array", "items": {"type": "string"},

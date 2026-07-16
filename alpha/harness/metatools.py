@@ -117,9 +117,11 @@ class MetaTools:
     # ── C connectors ──
     def write_connector(self, entry: ConnectorEntry, rationale: str) -> EditRecord:
         _require_rationale(rationale)
+        # upsert = create OR replace; record what a replace clobbers (before=None only on a true create).
+        before = existing.model_dump(mode="json") if (existing := self.h.connectors.get(entry.connector_id)) is not None else None
         self.h.connectors.upsert(entry)                       # id-keyed upsert (create/replace)
         return self.log.append("write_connector", "connector", entry.connector_id, "create",
-                               entry.name, payload={"before": None, "after": entry.model_dump()},
+                               entry.name, payload={"before": before, "after": entry.model_dump()},
                                rationale=rationale)
 
     def patch_connector(self, connector_id: str, fields: dict, rationale: str) -> EditRecord:
@@ -128,7 +130,10 @@ class MetaTools:
         if cur is None:
             raise KeyError(f"unknown connector: {connector_id}")   # raises -> not logged
         before = cur.model_dump()
-        updated = cur.model_copy(update=fields)
+        # Re-VALIDATE the merged entry (mirrors patch_workflow, not model_copy): model_copy(update=)
+        # bypasses pydantic validation, so a bad value (enabled="maybe") would land and then brick
+        # to_dict()->from_dict() at LiveBrainStore.load(). dispatch controls args, so the merge is safe.
+        updated = ConnectorEntry.model_validate({**cur.model_dump(mode="json"), **fields})
         self.h.connectors.upsert(updated)
         return self.log.append("patch_connector", "connector", connector_id, "update",
                                ",".join(fields), payload={"before": before, "after": updated.model_dump()},
@@ -140,9 +145,11 @@ class MetaTools:
     # ── W workflows ──
     def write_workflow(self, entry: WorkflowEntry, rationale: str) -> EditRecord:
         _require_rationale(rationale)
+        # upsert = create OR replace; record what a replace clobbers (before=None only on a true create).
+        before = existing.model_dump(mode="json") if (existing := self.h.workflows.get(entry.workflow_id)) is not None else None
         self.h.workflows.upsert(entry)                        # id-keyed upsert (create/replace)
         return self.log.append("write_workflow", "workflow", entry.workflow_id, "create",
-                               entry.name, payload={"before": None, "after": entry.model_dump()},
+                               entry.name, payload={"before": before, "after": entry.model_dump()},
                                rationale=rationale)
 
     def patch_workflow(self, workflow_id: str, fields: dict, rationale: str) -> EditRecord:
@@ -173,9 +180,11 @@ class MetaTools:
     # ── A subagents ──
     def write_subagent(self, entry: SubagentEntry, rationale: str) -> EditRecord:
         _require_rationale(rationale)
+        # upsert = create OR replace; record what a replace clobbers (before=None only on a true create).
+        before = existing.model_dump(mode="json") if (existing := self.h.subagents.get(entry.subagent_id)) is not None else None
         self.h.subagents.upsert(entry)                        # id-keyed upsert (create/replace)
         return self.log.append("write_subagent", "subagent", entry.subagent_id, "create",
-                               entry.name, payload={"before": None, "after": entry.model_dump()},
+                               entry.name, payload={"before": before, "after": entry.model_dump()},
                                rationale=rationale)
 
     def patch_subagent(self, subagent_id: str, fields: dict, rationale: str) -> EditRecord:

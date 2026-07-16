@@ -14,13 +14,15 @@ _KIND: dict[str, str] = {
     "write_workflow": "workflow", "patch_workflow": "workflow", "retire_workflow": "workflow",
     "write_subagent": "subagent", "patch_subagent": "subagent", "retire_subagent": "subagent",
 }
-# verbs that MUTATE/RETIRE/DEMOTE an EXISTING element (create verbs are excluded — they can't contest)
+# verbs that MUTATE/RETIRE/DEMOTE an EXISTING element (pure-create verbs are excluded — they can't
+# contest). write_connector/workflow/subagent are UPSERTS (create OR replace): a no-op for a fresh id
+# (latest_for -> None) but a genuine contest when replacing a teaching-/user-owned existing entry.
 _CONTEST_VERBS: frozenset[str] = frozenset({
     "patch_skill", "retire_skill", "revive_skill", "promote_skill",
     "demote_memory", "update_memory", "rewrite_doctrine",
-    "patch_connector", "disable_connector",
-    "patch_workflow", "retire_workflow",
-    "patch_subagent", "retire_subagent",
+    "write_connector", "patch_connector", "disable_connector",
+    "write_workflow", "patch_workflow", "retire_workflow",
+    "write_subagent", "patch_subagent", "retire_subagent",
 })
 
 def is_conflict(log: EditLog, op: RefineOp, provenance: EditProvenance | None) -> bool:

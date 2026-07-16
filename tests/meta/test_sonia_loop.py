@@ -172,3 +172,24 @@ def test_latest_decisions_soft_none_when_env_unset(monkeypatch):
     h = load_seeds(SEEDS)
     reg, pol = build_sonia_registry(h, source_factory=_fake_source)
     assert pol.dispatch("latest_decisions", {}) == {"ok": True, "decisions": None}
+
+
+def test_default_market_source_uses_connector_impl_ref(monkeypatch):
+    # No source_factory injected -> the default path must honor the connector's declared impl_ref,
+    # not the env make_source() default. Capture the name make_source is called with.
+    for k in _APCA_KEYS:
+        monkeypatch.setenv(k, "test-value")
+    captured = {}
+
+    import alpha.data.registry as reg_mod
+
+    def _spy_make_source(name=None, **kw):
+        captured["name"] = name
+        return _fake_source()
+
+    monkeypatch.setattr(reg_mod, "make_source", _spy_make_source)
+    h = load_seeds(SEEDS)                                      # alpaca connector seed: impl_ref="alpaca"
+    reg, pol = build_sonia_registry(h)                        # default factory (no injection)
+    out = pol.dispatch("market_snapshot", {"symbols": ["AAPL"]})
+    assert out["ok"] is True
+    assert captured["name"] == h.connectors.get("alpaca").impl_ref == "alpaca"

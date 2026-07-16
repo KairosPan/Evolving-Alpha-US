@@ -452,7 +452,7 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
         if cur is not None:      # unknown id -> let dispatch raise KeyError -> clean reject
             fields = {k: v for k, v in op.args.items() if k != "connector_id"}
             try:
-                merged = cur.model_copy(update=fields)
+                merged = ConnectorEntry.model_validate({**cur.model_dump(mode="json"), **fields})  # re-validate (no model_copy bypass) so preview==landing
             except _DISPATCH_ERRORS as e:
                 return None, f"{type(e).__name__}: {e}"
             bad = _check_connector(merged)
