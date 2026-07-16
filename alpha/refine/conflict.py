@@ -12,6 +12,7 @@ _KIND: dict[str, str] = {
     "rewrite_doctrine": "doctrine",
     "write_connector": "connector", "patch_connector": "connector", "disable_connector": "connector",
     "write_workflow": "workflow", "patch_workflow": "workflow", "retire_workflow": "workflow",
+    "write_subagent": "subagent", "patch_subagent": "subagent", "retire_subagent": "subagent",
 }
 # verbs that MUTATE/RETIRE/DEMOTE an EXISTING element (create verbs are excluded — they can't contest)
 _CONTEST_VERBS: frozenset[str] = frozenset({
@@ -19,6 +20,7 @@ _CONTEST_VERBS: frozenset[str] = frozenset({
     "demote_memory", "update_memory", "rewrite_doctrine",
     "patch_connector", "disable_connector",
     "patch_workflow", "retire_workflow",
+    "patch_subagent", "retire_subagent",
 })
 
 def is_conflict(log: EditLog, op: RefineOp, provenance: EditProvenance | None) -> bool:

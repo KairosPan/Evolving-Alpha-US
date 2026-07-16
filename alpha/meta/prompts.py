@@ -18,7 +18,9 @@ _TOOLS_DOC = (
     "write_connector(args: connector_id,name,kind[data_source|llm_role|mcp],impl_ref,capabilities[],env_keys[],instructions[,pit_key]), "
     "patch_connector(args: connector_id + any fields to change), disable_connector(args: connector_id), "
     "write_workflow(args: workflow_id,name,description,steps[{ref,note}][,user_only,phases]), "
-    "patch_workflow(args: workflow_id + any fields to change), retire_workflow(args: workflow_id). "
+    "patch_workflow(args: workflow_id + any fields to change), retire_workflow(args: workflow_id), "
+    "write_subagent(args: subagent_id,name,description,system_prompt[,llm_role,tools[],max_tier,skills_preload[],max_turns]), "
+    "patch_subagent(args: subagent_id + any fields to change), retire_subagent(args: subagent_id). "
     "NEVER rewrite an immutable [RED-LINE] doctrine section — it will be rejected."
 )
 
@@ -41,6 +43,9 @@ def render_brain_summary(h: HarnessState) -> str:
     parts.append("\nWORKFLOWS: (id [status])")
     for w in h.workflows.all():
         parts.append(f"- {w.workflow_id} [{w.status}] {w.description[:80]}")
+    parts.append("\nSUBAGENTS: (id [status])")
+    for a in h.subagents.all():
+        parts.append(f"- {a.subagent_id} [{a.status}] {a.description[:80]}")
     return "\n".join(parts)
 
 
@@ -51,11 +56,11 @@ _EXTRACTION_INSTRUCTION = (
     "above, with a non-empty rationale on every op. If it does NOT yet warrant a concrete change "
     '(too vague, still clarifying, purely conversational), output '
     '{"no_edit": true, "reason": "<one sentence why>"}. '
-    "If the edit targets a doctrine section, skill, lesson, connector, or workflow that does NOT exist "
-    'in the brain above, output {"no_edit": true, "reason": "<the target that was not found>"} — NEVER '
-    "rewrite the nearest-similar existing entry to fit (that silently corrupts an unrelated entry); a "
-    "create is a write_skill / process_memory / write_connector / write_workflow op, and doctrine has no "
-    "create op, so a missing doctrine section is no_edit."
+    "If the edit targets a doctrine section, skill, lesson, connector, workflow, or subagent that does "
+    'NOT exist in the brain above, output {"no_edit": true, "reason": "<the target that was not found>"} '
+    "— NEVER rewrite the nearest-similar existing entry to fit (that silently corrupts an unrelated "
+    "entry); a create is a write_skill / process_memory / write_connector / write_workflow / "
+    "write_subagent op, and doctrine has no create op, so a missing doctrine section is no_edit."
 )
 
 

@@ -5,6 +5,7 @@ from alpha.harness.edit_log import EditLog, EditRecord
 from alpha.harness.memory import Importance, Lesson
 from alpha.harness.skill import Skill, SkillStats
 from alpha.harness.state import HarnessState
+from alpha.harness.subagents import SubagentEntry
 from alpha.harness.workflows import WorkflowEntry
 
 
@@ -167,4 +168,36 @@ class MetaTools:
         before = cur.status
         self.h.workflows.upsert(cur.model_copy(update={"status": "retired"}))
         return self.log.append("retire_workflow", "workflow", workflow_id, "retire", "retired",
+                               payload={"before": before, "after": "retired"}, rationale=rationale)
+
+    # ── A subagents ──
+    def write_subagent(self, entry: SubagentEntry, rationale: str) -> EditRecord:
+        _require_rationale(rationale)
+        self.h.subagents.upsert(entry)                        # id-keyed upsert (create/replace)
+        return self.log.append("write_subagent", "subagent", entry.subagent_id, "create",
+                               entry.name, payload={"before": None, "after": entry.model_dump()},
+                               rationale=rationale)
+
+    def patch_subagent(self, subagent_id: str, fields: dict, rationale: str) -> EditRecord:
+        _require_rationale(rationale)
+        cur = self.h.subagents.get(subagent_id)
+        if cur is None:
+            raise KeyError(f"unknown subagent: {subagent_id}")   # raises -> not logged
+        before = cur.model_dump()
+        # Re-VALIDATE the merged entry (mirrors patch_workflow, not the flat connector model_copy):
+        # closes the model_copy-bypasses-validation gap so a patch is validated like a create.
+        updated = SubagentEntry.model_validate({**before, **fields})
+        self.h.subagents.upsert(updated)
+        return self.log.append("patch_subagent", "subagent", subagent_id, "update",
+                               ",".join(fields), payload={"before": before, "after": updated.model_dump()},
+                               rationale=rationale)
+
+    def retire_subagent(self, subagent_id: str, rationale: str) -> EditRecord:
+        _require_rationale(rationale)
+        cur = self.h.subagents.get(subagent_id)
+        if cur is None:
+            raise KeyError(f"unknown subagent: {subagent_id}")   # raises -> not logged
+        before = cur.status
+        self.h.subagents.upsert(cur.model_copy(update={"status": "retired"}))
+        return self.log.append("retire_subagent", "subagent", subagent_id, "retire", "retired",
                                payload={"before": before, "after": "retired"}, rationale=rationale)

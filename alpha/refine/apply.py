@@ -13,6 +13,7 @@ from alpha.harness.memory import Lesson
 from alpha.harness.metatools import MetaTools
 from alpha.harness.skill import Skill
 from alpha.harness.state import HarnessState
+from alpha.harness.subagents import SubagentEntry
 from alpha.harness.workflows import WorkflowEntry
 from alpha.refine.ops import PASS_TOOLS, RefineOp
 from alpha.trace import SCOPES, is_scope_wider, scope_rank
@@ -83,6 +84,13 @@ def _dispatch(meta: MetaTools, op: RefineOp, *, normalize) -> EditRecord:
         return m.patch_workflow(wid, args, rationale=r)
     if tool == "retire_workflow":
         return m.retire_workflow(args.pop("workflow_id"), rationale=r)
+    if tool == "write_subagent":
+        return m.write_subagent(SubagentEntry.model_validate(args), rationale=r)
+    if tool == "patch_subagent":
+        sid = args.pop("subagent_id")
+        return m.patch_subagent(sid, args, rationale=r)
+    if tool == "retire_subagent":
+        return m.retire_subagent(args.pop("subagent_id"), rationale=r)
     raise ValueError(f"unknown tool: {tool}")
 
 
@@ -187,6 +195,29 @@ def _check_workflow(entry: WorkflowEntry, h: HarnessState) -> str | None:
     return None
 
 
+# The parent tool surface a subagent entry may name (this arc: the observe-tier vocabulary). This is
+# the single source of truth for the "child ⊆ parent" subset rule until the G-pass dispatch lands;
+# Tasks 9/10 build the observe tools under EXACTLY these names — keep them in sync.
+_REGISTERABLE_TOOLS = frozenset({
+    "market_snapshot", "daily_bars", "latest_decisions",
+    "view_doctrine", "view_skill", "view_lesson", "view_workflow", "view_connector",
+    "view_subagent", "search_episodes", "decide",
+})
+
+
+def _check_subagent(entry: SubagentEntry) -> str | None:
+    """First failing structural-lint reason for a subagent entry, or None if clean. Pure function of
+    the entry so preview == landing. Two rungs: the dispatch-index char cap on `description` (the sole
+    routing signal), and the tools-subset rule — a subagent may only name tools from the registerable
+    parent surface (`_REGISTERABLE_TOOLS`), never invent capability the parent does not expose."""
+    if len(entry.description) > 1536:
+        return "description exceeds 1536 chars (the dispatch-index budget)"
+    extra = set(entry.tools) - _REGISTERABLE_TOOLS
+    if extra:
+        return f"tools not in the registerable parent set: {sorted(extra)}"
+    return None
+
+
 def _derive_confirmed_task_ids(log) -> frozenset[str]:
     """Externally-confirmed task episode ids from DURABLE records only (A2 / kairos-mining §2.3).
 
@@ -221,6 +252,8 @@ def _target_id(tool: str, args: dict) -> str | None:
         v = args.get("connector_id")
     elif tool in ("write_workflow", "patch_workflow", "retire_workflow"):
         v = args.get("workflow_id")
+    elif tool in ("write_subagent", "patch_subagent", "retire_subagent"):
+        v = args.get("subagent_id")
     else:
         v = None
     return str(v) if v is not None else None
@@ -446,6 +479,29 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
             except _DISPATCH_ERRORS as e:
                 return None, f"{type(e).__name__}: {e}"
             bad = _check_workflow(merged, harness)
+            if bad is not None:
+                return None, bad
+    # Subagent (A) structural lints (data rung R1/R2): description within the dispatch-index budget +
+    # tools-subset (a named tool outside the registerable parent surface bounces). Enforced at CREATE
+    # and at any PATCH (the PC-9 create-only-defeat pattern). Pure function of the (merged) entry so
+    # preview == landing; a malformed/unknown-target op bounces cleanly at dispatch (_DISPATCH_ERRORS).
+    if op.tool == "write_subagent":
+        try:
+            entry = SubagentEntry.model_validate(op.args)
+        except _DISPATCH_ERRORS as e:
+            return None, f"{type(e).__name__}: {e}"
+        bad = _check_subagent(entry)
+        if bad is not None:
+            return None, bad
+    elif op.tool == "patch_subagent":
+        cur = harness.subagents.get(op.args.get("subagent_id"))
+        if cur is not None:      # unknown id -> let dispatch raise KeyError -> clean reject
+            fields = {k: v for k, v in op.args.items() if k != "subagent_id"}
+            try:
+                merged = SubagentEntry.model_validate({**cur.model_dump(), **fields})
+            except _DISPATCH_ERRORS as e:
+                return None, f"{type(e).__name__}: {e}"
+            bad = _check_subagent(merged)
             if bad is not None:
                 return None, bad
     if op.tool == "retire_skill" and tid is not None:

@@ -11,10 +11,10 @@ def test_pass_structure():
     assert PASS_TOOLS["M"] == frozenset({"process_memory", "update_memory", "demote_memory"})
     assert PASS_TOOLS["C"] == frozenset({"write_connector", "patch_connector", "disable_connector"})
     assert PASS_TOOLS["W"] == frozenset({"write_workflow", "patch_workflow", "retire_workflow"})
-    # every IMPLEMENTED-pass tool is a real MetaTools method (W/A handlers land in later tasks, so
-    # their whitelist entries are reserved-but-unhandled — a W/A op bounces cleanly at the dispatch).
+    assert PASS_TOOLS["A"] == frozenset({"write_subagent", "patch_subagent", "retire_subagent"})
+    # every IMPLEMENTED-pass tool is a real MetaTools method (all six Body passes now have handlers).
     from alpha.harness.metatools import MetaTools
-    for pk in ("p", "K", "M", "C"):
+    for pk in ("p", "K", "M", "C", "W", "A"):
         for t in PASS_TOOLS[pk]:
             assert hasattr(MetaTools, t)
 

@@ -18,6 +18,7 @@ _KIND = {
     "rewrite_doctrine": "doctrine",
     "write_connector": "connector", "patch_connector": "connector", "disable_connector": "connector",
     "write_workflow": "workflow", "patch_workflow": "workflow", "retire_workflow": "workflow",
+    "write_subagent": "subagent", "patch_subagent": "subagent", "retire_subagent": "subagent",
 }
 
 
