@@ -161,8 +161,10 @@ def create_app() -> FastAPI:
         user_msg = Message(message_id=new_message_id(), role="user", created_at=now_iso(),
                            text=body.text, attachments=body.attachments, origin="user")
         try:
+            from alpha.meta.sonia_tools import build_sonia_registry
             h, log = _brain_store().load()                           # inside the boundary: a locked/
-            agent = SoniaAgent(MetaTools(h, log), make_client("sonia"))  # corrupt brain load must not
+            agent = SoniaAgent(MetaTools(h, log), make_client("sonia"),  # corrupt brain load must not
+                               registry_factory=build_sonia_registry)
             asst = agent.respond(sess, user_msg)                     # 500 either — keep the user turn
         except Exception as e:                                       # never 500: keep the user turn
             asst = Message(message_id=new_message_id(), role="assistant", created_at=now_iso(),
