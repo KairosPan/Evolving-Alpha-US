@@ -3,6 +3,7 @@ from alpha.harness.skill import Skill
 from alpha.harness.memory import Lesson
 from alpha.harness.doctrine import Doctrine
 from alpha.harness.connectors import ConnectorEntry, ConnectorRegistry
+from alpha.harness.workflows import WorkflowEntry, WorkflowRegistry, WorkflowStep
 from alpha.harness.registry import SkillRegistry, MemoryStore
 from alpha.harness.state import HarnessState
 from alpha.harness.errors import ImmutableDoctrineError
@@ -95,6 +96,30 @@ def test_legacy_dump_without_connectors_yields_empty_registry():
     legacy = _state().to_dict()
     legacy.pop("connectors")                             # simulate a pre-C dump
     assert len(HarnessState.from_dict(legacy).connectors) == 0
+
+
+def test_workflows_survive_harness_roundtrip():
+    """W (5th Body component): a populated WorkflowRegistry survives to_dict() -> from_dict(),
+    mirroring the connectors precedent (the new key holds the model_dump list, nested steps too)."""
+    st = _state()
+    st.workflows = WorkflowRegistry.from_workflows([
+        WorkflowEntry(workflow_id="morning_screen", name="Morning Screen",
+                      steps=[WorkflowStep(ref="skill_x", note="first")], phases=["trend"]),
+    ])
+    d = st.to_dict()
+    assert d["workflows"][0]["workflow_id"] == "morning_screen"    # serialised as a model_dump list
+    assert d["workflows"][0]["steps"][0]["ref"] == "skill_x"       # nested step serialised
+    st2 = HarnessState.from_dict(d)
+    w = st2.workflows.get("morning_screen")
+    assert w.steps[0].note == "first" and w.user_only is True
+
+
+def test_legacy_dump_without_workflows_yields_empty_registry():
+    """A pre-W brain.json / snapshot carries no `workflows` key -> loads as an EMPTY registry
+    (never a KeyError), byte-identical to the old behaviour."""
+    legacy = _state().to_dict()
+    legacy.pop("workflows")                              # simulate a pre-W dump
+    assert len(HarnessState.from_dict(legacy).workflows) == 0
 
 
 def test_domain_survives_harness_roundtrip():

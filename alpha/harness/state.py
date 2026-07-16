@@ -7,6 +7,7 @@ from alpha.harness.doctrine import Doctrine
 from alpha.harness.memory import Lesson
 from alpha.harness.registry import MemoryStore, SkillRegistry
 from alpha.harness.skill import Skill
+from alpha.harness.workflows import WorkflowEntry, WorkflowRegistry
 
 
 @dataclass
@@ -23,6 +24,7 @@ class HarnessState:
                                 #   the process env (P0.5). load_seeds/load_pack stamp it; legacy dumps
                                 #   without the field default "momo".
     connectors: ConnectorRegistry = field(default_factory=ConnectorRegistry.empty)   # C (4th Body component)
+    workflows: WorkflowRegistry = field(default_factory=WorkflowRegistry.empty)      # W (5th Body component)
 
     def active_skills_for(self, phase: str) -> list[Skill]:
         return [s for s in self.skills.by_phase(phase) if s.status == "active"]
@@ -37,6 +39,7 @@ class HarnessState:
             "doctrine": self.doctrine.model_dump(mode="json"),
             "vocabulary": self.vocabulary,
             "connectors": [c.model_dump(mode="json") for c in self.connectors.all()],
+            "workflows": [w.model_dump(mode="json") for w in self.workflows.all()],
         }
 
     @classmethod
@@ -51,4 +54,6 @@ class HarnessState:
             vocabulary=d.get("vocabulary", "momo"),   # legacy dumps (pre-P0.5) had no field -> momo
             connectors=ConnectorRegistry.from_connectors(
                 [ConnectorEntry.model_validate(x) for x in d.get("connectors", [])]),  # legacy -> empty
+            workflows=WorkflowRegistry.from_workflows(
+                [WorkflowEntry.model_validate(x) for x in d.get("workflows", [])]),    # legacy -> empty
         )
