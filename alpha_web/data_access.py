@@ -191,6 +191,22 @@ def split_doctrine(state: HarnessState) -> tuple[list[DoctrineEntry], list[Doctr
     return state.doctrine.immutable_core(), state.doctrine.mutable_entries()
 
 
+# ── Body components C/W/A — the three read-only registry listings ──────────────
+def list_connectors(state: HarnessState) -> list:
+    """The C registry entries the Connector page renders (declarations only — no URLs, no secrets)."""
+    return state.connectors.all()
+
+
+def list_workflows(state: HarnessState) -> list:
+    """The W registry entries the Workflow page renders (empty this arc — seeds carry none)."""
+    return state.workflows.all()
+
+
+def list_subagents(state: HarnessState) -> list:
+    """The A registry entries the Subagent page renders (empty this arc — seeds carry none)."""
+    return state.subagents.all()
+
+
 # ── phase-ring geometry (the signature element) ────────────────────────────────
 RING_CX = RING_CY = 60
 RING_R = 46

@@ -90,12 +90,6 @@ NAV = [
 
 BRAIN_KEYS = {"doctrine", "memory", "workflow", "skills", "connector", "subagent"}
 
-_BRAIN_STUBS = {
-    "workflow":  ("Workflow",  "Named multi-step playbooks Sonia composes from skills."),
-    "connector": ("Connector", "External data/tool connections the agent draws on (Alpaca, EDGAR, MCP feeds…)."),
-    "subagent":  ("Subagent",  "Specialized dispatch sub-agents the master agent delegates to."),
-}
-
 _ENTITY_ROWS = (
     ("sonia", "Sonia — teaching + evolution", ("sonia", "refiner")),
     ("kairos", "Kairos — decisions + workbench", ("agent", "converse")),
@@ -408,21 +402,23 @@ def create_app() -> FastAPI:
             pass
         return Response(status_code=204, headers={"HX-Redirect": "/workbench"})
 
-    def _brain_stub(request: Request, key: str):
-        title, blurb = _BRAIN_STUBS[key]
-        return render(request, "brain_stub.html", {"active": key, "title": title, "blurb": blurb})
+    @app.get("/connector")
+    def connector(request: Request):
+        h = da.load_brain()
+        return render(request, "connector.html",
+                      {"active": "connector", "connectors": da.list_connectors(h)})
 
     @app.get("/workflow")
     def workflow(request: Request):
-        return _brain_stub(request, "workflow")
-
-    @app.get("/connector")
-    def connector(request: Request):
-        return _brain_stub(request, "connector")
+        h = da.load_brain()
+        return render(request, "workflow.html",
+                      {"active": "workflow", "workflows": da.list_workflows(h)})
 
     @app.get("/subagent")
     def subagent(request: Request):
-        return _brain_stub(request, "subagent")
+        h = da.load_brain()
+        return render(request, "subagent.html",
+                      {"active": "subagent", "subagents": da.list_subagents(h)})
 
     def _cockpit_ctx(request, session: dict | None, banner: str = ""):
         return {"active": "teach",

@@ -423,16 +423,32 @@ def test_active_brain_child_is_marked(client):
     assert 'class="nav-subitem is-active"' in body        # the open drawer highlights Memory
 
 
-@pytest.mark.parametrize("path,title,needle", [
-    ("/workflow", "Workflow", "playbooks"),
-    ("/connector", "Connector", "connections"),
-    ("/subagent", "Subagent", "sub-agents"),
+def test_connector_page_renders_the_seeded_alpaca_connector(client):
+    """The Connector page is a real read-only render of the live brain (mirrors /doctrine). The
+    seeded `alpaca` connector (Task 3) appears with its id + instructions, and the page opens under
+    the Brain drawer with Connector marked active."""
+    r = client.get("/connector")
+    assert r.status_code == 200
+    body = r.text
+    assert "<!doctype html>" in body.lower()               # full page, not a fragment
+    assert "alpaca" in body                                 # the seeded connector id
+    assert "US equities daily bars" in body                 # its seeded instructions render
+    assert "not yet built" not in body.lower()             # the stub blurb is gone
+    assert "nav-group is-open" in body                      # opens under the Brain drawer
+    assert 'class="nav-subitem is-active"' in body          # Connector marked active
+
+
+@pytest.mark.parametrize("path,empty_needle", [
+    ("/workflow", "No workflows yet"),
+    ("/subagent", "No subagents yet"),
 ])
-def test_brain_stub_pages_render_readonly(client, path, title, needle):
+def test_workflow_and_subagent_pages_render_empty_state(client, path, empty_needle):
+    """Workflow/Subagent seeds are empty this arc — the real page renders an honest empty-state
+    block (not the old 'not yet built' stub) and still opens under the Brain drawer."""
     r = client.get(path)
     assert r.status_code == 200
-    assert "<!doctype html>" in r.text.lower()             # full page, not a fragment
-    assert title in r.text                                 # component name
-    assert needle in r.text                                # the one-line blurb
-    assert "not yet built" in r.text.lower()               # honest read-only empty state
-    assert "nav-group is-open" in r.text                   # opens under the Brain drawer
+    body = r.text
+    assert "<!doctype html>" in body.lower()               # full page, not a fragment
+    assert empty_needle in body                            # honest empty-state message
+    assert "not yet built" not in body.lower()             # the stub blurb is gone
+    assert "nav-group is-open" in body                      # opens under the Brain drawer

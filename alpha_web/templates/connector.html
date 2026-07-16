@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Connectors{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <p class="eyebrow">C · the connections</p>
+  <h1 class="page-title">Connectors</h1>
+  <p class="page-lede">External data and tool connections the co-pilot may draw on. Declarations only —
+    each entry references an operator-registered implementation and names the env-var keys it needs;
+    no URLs, no credential values, no executable content ever live here.</p>
+</div>
+
+{% if not connectors %}
+<div class="empty-state">No connectors yet — teach one in the cockpit.</div>
+{% endif %}
+
+<div class="cardlist">
+  {% for c in connectors %}
+  <div class="card{% if not c.enabled %} sealed{% endif %}">
+    <div class="top">
+      <span class="section">{{ c.connector_id }}</span>
+      <span class="tag">{{ c.kind }}</span>
+      <span class="tag{% if c.enabled %} fam{% endif %}">{{ "enabled" if c.enabled else "disabled" }}</span>
+    </div>
+    <div class="body">{{ c.instructions }}</div>
+    <div class="meta">
+      <span class="tag">impl: {{ c.impl_ref }}</span>
+      {% for cap in c.capabilities %}<span class="tag">{{ cap }}</span>{% endfor %}
+      {% if c.pit_key %}<span class="tag">PIT: {{ c.pit_key }}</span>{% endif %}
+      {% for k in c.env_keys %}<span class="tag">{{ k }}</span>{% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

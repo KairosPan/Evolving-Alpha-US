@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Subagents{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <p class="eyebrow">A · the dispatch personas</p>
+  <h1 class="page-title">Subagents</h1>
+  <p class="page-lede">Specialized dispatch personas the master agent can delegate to — the description
+    is the routing signal, the system prompt the body. Dispatch-ready state only this arc; the G pass
+    that runs them stays deferred.</p>
+</div>
+
+{% if not subagents %}
+<div class="empty-state">No subagents yet — teach one in the cockpit.</div>
+{% endif %}
+
+<div class="cardlist">
+  {% for a in subagents %}
+  <div class="card{% if a.status == "retired" %} sealed{% endif %}">
+    <div class="top">
+      <span class="section">{{ a.subagent_id }}</span>
+      <span class="tag">{{ a.name }}</span>
+      <span class="tag{% if a.status == "active" %} fam{% endif %}">{{ a.status }}</span>
+    </div>
+    <div class="body">{{ a.description }}</div>
+    <div class="meta">
+      <span class="tag">tier: {{ a.max_tier }}</span>
+      {% for t in a.tools %}<span class="tag">{{ t }}</span>{% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
