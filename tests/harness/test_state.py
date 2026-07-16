@@ -2,6 +2,7 @@ import pytest
 from alpha.harness.skill import Skill
 from alpha.harness.memory import Lesson
 from alpha.harness.doctrine import Doctrine
+from alpha.harness.connectors import ConnectorEntry, ConnectorRegistry
 from alpha.harness.registry import SkillRegistry, MemoryStore
 from alpha.harness.state import HarnessState
 from alpha.harness.errors import ImmutableDoctrineError
@@ -72,6 +73,28 @@ def test_legacy_dump_without_vocabulary_defaults_momo():
     legacy = _state().to_dict()
     legacy.pop("vocabulary")                             # simulate an old dump
     assert HarnessState.from_dict(legacy).vocabulary == "momo"
+
+
+def test_connectors_survive_harness_roundtrip():
+    """C (4th Body component): a populated ConnectorRegistry survives to_dict() -> from_dict(),
+    mirroring the vocabulary precedent (the new key holds the model_dump list, entries rebuilt)."""
+    st = _state()
+    st.connectors = ConnectorRegistry.from_connectors([
+        ConnectorEntry(connector_id="alpaca", name="Alpaca", kind="data_source", impl_ref="alpaca",
+                       pit_key="announce_date:=process_date"),
+    ])
+    d = st.to_dict()
+    assert d["connectors"][0]["connector_id"] == "alpaca"    # serialised as a model_dump list
+    st2 = HarnessState.from_dict(d)
+    assert st2.connectors.get("alpaca").pit_key == "announce_date:=process_date"
+
+
+def test_legacy_dump_without_connectors_yields_empty_registry():
+    """A pre-C brain.json / snapshot carries no `connectors` key -> loads as an EMPTY registry
+    (never a KeyError), byte-identical to the old behaviour."""
+    legacy = _state().to_dict()
+    legacy.pop("connectors")                             # simulate a pre-C dump
+    assert len(HarnessState.from_dict(legacy).connectors) == 0
 
 
 def test_domain_survives_harness_roundtrip():
