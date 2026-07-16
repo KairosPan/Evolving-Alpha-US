@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
+from alpha.harness.connectors import ConnectorEntry
 from alpha.harness.edit_log import EditProvenance, EditRecord
 from alpha.harness.errors import HarnessError
 from alpha.harness.memory import Lesson
@@ -58,6 +59,13 @@ def _dispatch(meta: MetaTools, op: RefineOp, *, normalize) -> EditRecord:
         return m.demote_memory(lid, factor, rationale=r)
     if tool == "rewrite_doctrine":
         return m.rewrite_doctrine(args.pop("section"), args.pop("new_guidance"), rationale=r)
+    if tool == "write_connector":
+        return m.write_connector(ConnectorEntry.model_validate(args), rationale=r)
+    if tool == "patch_connector":
+        cid = args.pop("connector_id")
+        return m.patch_connector(cid, args, rationale=r)
+    if tool == "disable_connector":
+        return m.disable_connector(args.pop("connector_id"), rationale=r)
     raise ValueError(f"unknown tool: {tool}")
 
 
@@ -98,6 +106,45 @@ def _is_taboo_less_trading_pattern(typ, domain, taboo) -> bool:
             and not any(isinstance(t, str) and t.strip() for t in (taboo or [])))
 
 
+_MAX_INSTRUCTIONS = 2000
+_LLM_ROLES = frozenset({"agent", "refiner", "sonia", "converse"})
+
+
+def _connector_impl_resolves(entry: ConnectorEntry) -> bool:
+    """A connector DECLARES a capability by referencing an operator-registered implementation by key;
+    editing the declaration must never invent a capability that does not exist (data rung R1/R2). A
+    data_source impl_ref must resolve in the data registry; an llm_role in the make_client roles; an
+    mcp reference has no registry to resolve against yet (accepted)."""
+    from alpha.data.registry import source_names       # lazy: keep refine independent of the data layer at import
+    if entry.kind == "data_source":
+        return entry.impl_ref in source_names()
+    if entry.kind == "llm_role":
+        return entry.impl_ref in _LLM_ROLES
+    return True                                          # mcp: no registry to resolve against yet
+
+
+def _env_keys_are_names(entry: ConnectorEntry) -> str | None:
+    """env_keys must be env-var NAMES ONLY — never a `NAME=value` credential and never an oversized
+    blob. A '=' or an over-64-char token is a value leak, refused at the waist."""
+    for k in entry.env_keys:
+        if "=" in k or len(k) > 64:
+            return f"env_keys must be env-var NAMES only, never values (offending: {k[:20]!r}...)"
+    return None
+
+
+def _check_connector(entry: ConnectorEntry) -> str | None:
+    """First failing structural-lint reason for a connector entry, or None if clean. Pure function of
+    the entry so preview (deepcopy + throwaway log) == landing."""
+    if not _connector_impl_resolves(entry):
+        return f"impl_ref {entry.impl_ref!r} does not resolve for kind {entry.kind!r}"
+    env_bad = _env_keys_are_names(entry)
+    if env_bad is not None:
+        return env_bad
+    if len(entry.instructions) > _MAX_INSTRUCTIONS:
+        return f"instructions too long ({len(entry.instructions)} > {_MAX_INSTRUCTIONS} chars)"
+    return None
+
+
 def _derive_confirmed_task_ids(log) -> frozenset[str]:
     """Externally-confirmed task episode ids from DURABLE records only (A2 / kairos-mining §2.3).
 
@@ -128,6 +175,8 @@ def _target_id(tool: str, args: dict) -> str | None:
         v = args.get("lesson_id")
     elif tool == "rewrite_doctrine":
         v = args.get("section")
+    elif tool in ("write_connector", "patch_connector", "disable_connector"):
+        v = args.get("connector_id")
     else:
         v = None
     return str(v) if v is not None else None
@@ -308,6 +357,30 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
                 op.args.get("type", existing.type), existing.domain,
                 op.args.get("taboo", existing.taboo)):
             return None, "red-line: patch would leave a trading pattern skill with no taboo (魂骨宪法 §4)"
+    # Connector (C) structural lints (data rung R1/R2): impl_ref must resolve, env_keys must be
+    # env-var NAMES only, instructions within the char cap. Enforced at CREATE and at any PATCH
+    # (a create-only lint is defeated by a follow-up patch — the PC-9 pattern). Pure function of the
+    # (merged) entry so preview == landing. A malformed op / unknown patch target bounces cleanly at
+    # dispatch (_DISPATCH_ERRORS), so the lint only runs when it can build the entry to check.
+    if op.tool == "write_connector":
+        try:
+            entry = ConnectorEntry.model_validate(op.args)
+        except _DISPATCH_ERRORS as e:
+            return None, f"{type(e).__name__}: {e}"
+        bad = _check_connector(entry)
+        if bad is not None:
+            return None, bad
+    elif op.tool == "patch_connector":
+        cur = harness.connectors.get(op.args.get("connector_id"))
+        if cur is not None:      # unknown id -> let dispatch raise KeyError -> clean reject
+            fields = {k: v for k, v in op.args.items() if k != "connector_id"}
+            try:
+                merged = cur.model_copy(update=fields)
+            except _DISPATCH_ERRORS as e:
+                return None, f"{type(e).__name__}: {e}"
+            bad = _check_connector(merged)
+            if bad is not None:
+                return None, bad
     if op.tool == "retire_skill" and tid is not None:
         sk = harness.skills.get(tid)
         if sk is not None and sk.stats.n < min_retire_samples:

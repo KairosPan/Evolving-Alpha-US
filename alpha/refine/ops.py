@@ -7,15 +7,25 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from alpha.llm.extract import extract_json_object
 
-PassKind = Literal["p", "G", "K", "M"]
+PassKind = Literal["p", "G", "K", "M", "C", "W", "A"]
+# PASS_ORDER = the passes the autonomous self-study Refiner runs (refiner.py iterates it). The Body
+# passes C/W/A (connector/workflow/subagent) are edited ONLY through the write-waist via teaching /
+# user_direct — the trading Refiner does NOT auto-propose them — so they live in PASS_TOOLS (feeding
+# ALL_TOOLS / teach scope) but are DELIBERATELY absent from PASS_ORDER.
 PASS_ORDER: tuple[PassKind, ...] = ("p", "G", "K", "M")
 
 # Per-pass tool whitelist. G is a RESERVED no-op (no tools, no LLM call) until G sub-agents exist.
+# C/W/A are the Body passes (H's fourth/fifth/sixth components); their handlers land per-task —
+# C (connector) now, W (workflow) / A (subagent) in later tasks (until then a W/A op reaches the
+# gate via ALL_TOOLS but bounces cleanly at dispatch as an unknown tool).
 PASS_TOOLS: dict[PassKind, frozenset[str]] = {
     "p": frozenset({"rewrite_doctrine"}),
     "G": frozenset(),
     "K": frozenset({"write_skill", "patch_skill", "retire_skill", "revive_skill", "promote_skill"}),
     "M": frozenset({"process_memory", "update_memory", "demote_memory"}),
+    "C": frozenset({"write_connector", "patch_connector", "disable_connector"}),
+    "W": frozenset({"write_workflow", "patch_workflow", "retire_workflow"}),
+    "A": frozenset({"write_subagent", "patch_subagent", "retire_subagent"}),
 }
 
 

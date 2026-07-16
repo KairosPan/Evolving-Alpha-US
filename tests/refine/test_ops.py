@@ -2,15 +2,19 @@ from alpha.refine.ops import PASS_ORDER, PASS_TOOLS, RefineOp, parse_extraction,
 
 
 def test_pass_structure():
+    # PASS_ORDER = the self-study Refiner's passes ONLY; the Body passes C/W/A ride in PASS_TOOLS
+    # (feeding ALL_TOOLS / teach scope) but are edited via teaching/user_direct, never auto-refined.
     assert PASS_ORDER == ("p", "G", "K", "M")
     assert PASS_TOOLS["G"] == frozenset()                        # G is a reserved no-op
     assert PASS_TOOLS["p"] == frozenset({"rewrite_doctrine"})
     assert "promote_skill" in PASS_TOOLS["K"] and "retire_skill" in PASS_TOOLS["K"]
     assert PASS_TOOLS["M"] == frozenset({"process_memory", "update_memory", "demote_memory"})
-    # every non-G tool is a real MetaTools method
+    assert PASS_TOOLS["C"] == frozenset({"write_connector", "patch_connector", "disable_connector"})
+    # every IMPLEMENTED-pass tool is a real MetaTools method (W/A handlers land in later tasks, so
+    # their whitelist entries are reserved-but-unhandled — a W/A op bounces cleanly at the dispatch).
     from alpha.harness.metatools import MetaTools
-    for tools in PASS_TOOLS.values():
-        for t in tools:
+    for pk in ("p", "K", "M", "C"):
+        for t in PASS_TOOLS[pk]:
             assert hasattr(MetaTools, t)
 
 

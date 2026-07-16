@@ -102,6 +102,12 @@ _SOURCES = {"alpaca": _build_alpaca, "snapshot": _build_snapshot, "composite": _
             "float_feed": _build_float_feed}
 
 
+def source_names() -> set[str]:
+    """Public accessor for the registered data-source keys — used by the connector write-waist lint
+    to resolve a `data_source` connector's impl_ref. Callers must NOT import the private `_SOURCES`."""
+    return set(_SOURCES)
+
+
 def make_source(name: str | None = None, *, pit_root: str | None = None) -> MarketDataSource:
     """Build the active data source. Name precedence: explicit arg > ALPHA_DATA_SOURCE env > 'alpaca'.
     Returns a RAW source (callers wrap with GuardedSource at the eval/loop layer)."""

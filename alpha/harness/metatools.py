@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from alpha.harness.connectors import ConnectorEntry
 from alpha.harness.edit_log import EditLog, EditRecord
 from alpha.harness.memory import Importance, Lesson
 from alpha.harness.skill import Skill, SkillStats
@@ -110,3 +111,26 @@ class MetaTools:
         self.h.doctrine.rewrite(section, new_guidance)       # immutable -> raises -> not logged
         return self.log.append("rewrite_doctrine", "doctrine", section, "rewrite",
                                payload={"old": old_guidance, "new": new_guidance}, rationale=rationale)
+
+    # ── C connectors ──
+    def write_connector(self, entry: ConnectorEntry, rationale: str) -> EditRecord:
+        _require_rationale(rationale)
+        self.h.connectors.upsert(entry)                       # id-keyed upsert (create/replace)
+        return self.log.append("write_connector", "connector", entry.connector_id, "create",
+                               entry.name, payload={"before": None, "after": entry.model_dump()},
+                               rationale=rationale)
+
+    def patch_connector(self, connector_id: str, fields: dict, rationale: str) -> EditRecord:
+        _require_rationale(rationale)
+        cur = self.h.connectors.get(connector_id)
+        if cur is None:
+            raise KeyError(f"unknown connector: {connector_id}")   # raises -> not logged
+        before = cur.model_dump()
+        updated = cur.model_copy(update=fields)
+        self.h.connectors.upsert(updated)
+        return self.log.append("patch_connector", "connector", connector_id, "update",
+                               ",".join(fields), payload={"before": before, "after": updated.model_dump()},
+                               rationale=rationale)
+
+    def disable_connector(self, connector_id: str, rationale: str) -> EditRecord:
+        return self.patch_connector(connector_id, {"enabled": False}, rationale)

@@ -16,6 +16,7 @@ _KIND = {
     "revive_skill": "skill", "promote_skill": "skill",
     "process_memory": "memory", "update_memory": "memory", "demote_memory": "memory",
     "rewrite_doctrine": "doctrine",
+    "write_connector": "connector", "patch_connector": "connector", "disable_connector": "connector",
 }
 
 
