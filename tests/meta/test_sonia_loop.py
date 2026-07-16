@@ -4,6 +4,7 @@ tool-call JSON then a prose finish (the same shape as the arena's test_policy sc
 import json
 from pathlib import Path
 
+from alpha.data.source import FakeSource
 from alpha.harness.edit_log import EditLog
 from alpha.harness.loader import load_seeds
 from alpha.harness.metatools import MetaTools
@@ -12,6 +13,15 @@ from alpha.meta.sonia_agent import SoniaAgent
 from alpha.meta.sonia_tools import build_sonia_registry
 
 SEEDS = Path(__file__).resolve().parents[2] / "seeds"   # momo pack lives at seeds/, not seeds/momo
+
+# The alpaca connector seed names these two env vars; all must be present for market tools to register.
+_APCA_KEYS = ("APCA_API_KEY_ID", "APCA_API_SECRET_KEY")
+_MARKET_TOOLS = {"market_snapshot", "daily_bars", "latest_decisions"}
+
+
+def _fake_source():
+    # Minimal offline source: daily_snapshot/daily_bars return empty frames (never raise).
+    return FakeSource(calendar=[], bars={}, snapshots={})
 
 # The seven tool NAMES must match apply.py::_REGISTERABLE_TOOLS exactly (Task 7 pinned this set).
 _VIEW_TOOLS = {"view_doctrine", "view_skill", "view_lesson", "view_workflow",
@@ -103,3 +113,62 @@ def test_system_prompt_advertises_tool_arg_names():
     system = agent._system(reg)
     assert "view_connector(connector_id" in system            # arg name is rendered
     assert '{"tool"' in system                                # call protocol is spelled out
+
+
+# ── Task 10: connector-gated market tools (lazy source, fail-soft) ─────────────────────────────
+
+def test_market_tools_registered_when_connector_enabled_and_keys_present(monkeypatch):
+    for k in _APCA_KEYS:
+        monkeypatch.setenv(k, "test-value")
+    h = load_seeds(SEEDS)                                      # alpaca connector seed is enabled
+    reg, pol = build_sonia_registry(h, source_factory=_fake_source)
+    names = {s["name"] for s in reg.specs()}
+    assert _MARKET_TOOLS <= names                             # all three gated tools appear
+    for name in _MARKET_TOOLS:                                # and are observe-tier under the policy
+        assert pol.tiers[name].name == "T0_OBSERVE"
+    out = pol.dispatch("market_snapshot", {"symbols": ["AAPL"]})
+    assert out["ok"] is True                                  # empty snapshot is still a soft success
+
+
+def test_market_tools_absent_when_connector_disabled(monkeypatch):
+    for k in _APCA_KEYS:                                       # keys present, but the connector is OFF
+        monkeypatch.setenv(k, "test-value")
+    h = load_seeds(SEEDS)
+    h.connectors.get("alpaca").enabled = False
+    reg, pol = build_sonia_registry(h, source_factory=_fake_source)
+    names = {s["name"] for s in reg.specs()}
+    assert not (_MARKET_TOOLS & names)                        # gated off entirely
+    assert _VIEW_TOOLS <= names                               # the seven view tools still register
+
+
+def test_market_tools_absent_when_env_keys_missing(monkeypatch):
+    for k in _APCA_KEYS:                                       # connector ON, but keys not in the env
+        monkeypatch.delenv(k, raising=False)
+    h = load_seeds(SEEDS)
+    assert h.connectors.get("alpaca").enabled                 # keys are the only remaining gate
+    reg, pol = build_sonia_registry(h, source_factory=_fake_source)
+    names = {s["name"] for s in reg.specs()}
+    assert not (_MARKET_TOOLS & names)
+
+
+def test_market_tool_is_fail_soft_when_source_raises(monkeypatch):
+    for k in _APCA_KEYS:
+        monkeypatch.setenv(k, "test-value")
+
+    class _Boom:                                              # a source whose fetch raises mid-loop
+        def daily_snapshot(self, day):
+            raise RuntimeError("boom")
+
+    h = load_seeds(SEEDS)
+    reg, pol = build_sonia_registry(h, source_factory=_Boom)
+    out = pol.dispatch("market_snapshot", {"symbols": ["AAPL"]})
+    assert out["ok"] is False and "error" in out             # caught, never raised into the loop
+
+
+def test_latest_decisions_soft_none_when_env_unset(monkeypatch):
+    for k in _APCA_KEYS:
+        monkeypatch.setenv(k, "test-value")
+    monkeypatch.delenv("ALPHA_WEB_DECISIONS_DIR", raising=False)
+    h = load_seeds(SEEDS)
+    reg, pol = build_sonia_registry(h, source_factory=_fake_source)
+    assert pol.dispatch("latest_decisions", {}) == {"ok": True, "decisions": None}

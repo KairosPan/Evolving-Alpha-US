@@ -6,15 +6,22 @@ fail-closed `ActivityPolicy` — Sonia's hands still only touch the brain-edit d
 teach/propose chain (the extract_ops -> preview -> gated apply waist), never write from here.
 
 Tool NAMES match apply.py::_REGISTERABLE_TOOLS exactly (view_doctrine/view_skill/view_lesson/
-view_workflow/view_connector/view_subagent/search_episodes). Market snapshot tools are Task 10.
+view_workflow/view_connector/view_subagent/search_episodes). Three market tools (market_snapshot/
+daily_bars/latest_decisions) join ONLY when the alpaca connector is enabled and its env keys are set
+(otherwise absent); they wrap a lazily-built RAW source in GuardedSource+AsOfGuard per call, fail-soft.
 
 This module MAY import `alpha.arena` — the AST guard only walks `alpha/converse`, not `alpha/meta`.
 """
 from __future__ import annotations
 
+import os
+from datetime import date, timedelta
+
 from alpha.arena.contract import CapabilityTier
 from alpha.arena.policy import ActivityPolicy
 from alpha.converse.registry import ToolRegistry
+from alpha.data.firewall import AsOfGuard
+from alpha.data.source import GuardedSource
 
 
 def _schema(name: str, desc: str, props: dict, required: list[str]) -> dict:
@@ -28,12 +35,64 @@ def _dump(entry):
     return entry.model_dump(mode="json") if entry is not None else None
 
 
-def build_sonia_registry(h) -> tuple[ToolRegistry, ActivityPolicy]:
-    """Seven read-only brain-browse tools over H, all T0_OBSERVE. Returns (registry, fail-closed policy).
+def _default_source_factory():
+    # Lazy: importing make_source pulls the whole data stack (alpaca et al.), and building an
+    # AlpacaSource reads env — so defer both to first tool DISPATCH, never registry build time.
+    from alpha.data.registry import make_source
+    return make_source()                                    # RAW source (caller wraps per contract)
+
+
+def _market_snapshot_fn(source_factory):
+    def market_snapshot(symbols) -> dict:
+        # Mirror make_decide_for_date_tool: wrap the RAW source in GuardedSource(AsOfGuard(today))
+        # per call (PIT-wrap is the caller's job). Fail-soft — never raise into the loop.
+        try:
+            today = date.today()
+            guarded = GuardedSource(source_factory(), AsOfGuard(today))
+            df = guarded.daily_snapshot(today)
+            if symbols:
+                df = df[df["symbol"].isin(list(symbols))]
+            return {"ok": True, "asof": today.isoformat(), "snapshot": df.to_dict(orient="records")}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+    return market_snapshot
+
+
+def _daily_bars_fn(source_factory):
+    def daily_bars(symbol, days: int = 30) -> dict:
+        try:
+            today = date.today()
+            start = today - timedelta(days=int(days))
+            guarded = GuardedSource(source_factory(), AsOfGuard(today))
+            df = guarded.daily_bars(symbol, start, today)
+            return {"ok": True, "symbol": symbol, "bars": df.to_dict(orient="records")}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+    return daily_bars
+
+
+def _latest_decisions_fn():
+    def latest_decisions() -> dict:
+        try:
+            root = os.environ.get("ALPHA_WEB_DECISIONS_DIR")
+            if not root:
+                return {"ok": True, "decisions": None}       # no store configured -> soft absence
+            from alpha.eval.decision_store import DecisionStore
+            pkg = DecisionStore(root).latest()
+            return {"ok": True, "decisions": pkg.model_dump(mode="json") if pkg is not None else None}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+    return latest_decisions
+
+
+def build_sonia_registry(h, *, source_factory=None) -> tuple[ToolRegistry, ActivityPolicy]:
+    """Read-only brain-browse tools over H (all T0_OBSERVE), plus three market tools ONLY when the
+    alpaca connector is enabled and its env keys are present. Returns (registry, fail-closed policy).
 
     Each fn is called by the loop as `fn(**args)` (registry.call), so its single param name IS the
     schema arg name the model must emit. Results are fail-soft dicts ({"ok": bool, ...}); an unknown
-    id returns the entry as None rather than raising."""
+    id returns the entry as None rather than raising. `source_factory` (default: lazy make_source)
+    supplies the RAW market source; a per-call GuardedSource(AsOfGuard(today)) does the PIT wrap."""
     reg = ToolRegistry()
     tiers: dict[str, CapabilityTier] = {}
 
@@ -63,6 +122,23 @@ def build_sonia_registry(h) -> tuple[ToolRegistry, ActivityPolicy]:
          # Wired to an EpisodeStore when a brain db is present; empty pool -> no hits (fail-soft).
          lambda query: {"ok": True, "hits": []},
          {"query": {"type": "string"}}, ["query"])
+
+    # Market tools ride the alpaca connector declaration: register ONLY when the entry exists, is
+    # enabled, AND every named env key is present — so a missing .env.alpaca leaves them simply
+    # absent (never a boot error). Names match apply.py::_REGISTERABLE_TOOLS exactly (Task 7 pin).
+    conn = h.connectors.get("alpaca")
+    if conn is not None and conn.enabled and all(os.environ.get(k) for k in conn.env_keys):
+        make = source_factory if source_factory is not None else _default_source_factory
+        _add("market_snapshot", "Latest daily snapshot (price/volume) for one or more symbols.",
+             _market_snapshot_fn(make),
+             {"symbols": {"type": "array", "items": {"type": "string"},
+                          "description": "ticker symbols"}}, ["symbols"])
+        _add("daily_bars", "Recent daily OHLCV bars for one symbol (default last 30 days).",
+             _daily_bars_fn(make),
+             {"symbol": {"type": "string"},
+              "days": {"type": "integer", "description": "lookback days (default 30)"}}, ["symbol"])
+        _add("latest_decisions", "The most recent persisted DecisionPackage, if a run produced one.",
+             _latest_decisions_fn(), {}, [])
 
     return reg, ActivityPolicy(reg, tiers)
 

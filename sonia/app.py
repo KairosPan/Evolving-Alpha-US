@@ -163,6 +163,10 @@ def create_app() -> FastAPI:
         try:
             from alpha.meta.sonia_tools import build_sonia_registry
             h, log = _brain_store().load()                           # inside the boundary: a locked/
+            # SoniaAgent calls registry_factory(h) -> build_sonia_registry with source_factory=None,
+            # i.e. the default lazy make_source. The connector-gated market tools thus construct a
+            # source only when dispatched, inside this never-500 boundary: a missing .env.alpaca just
+            # leaves them absent (or returns ok=False), it never boot-blocks /chat.
             agent = SoniaAgent(MetaTools(h, log), make_client("sonia"),  # corrupt brain load must not
                                registry_factory=build_sonia_registry)
             asst = agent.respond(sess, user_msg)                     # 500 either — keep the user turn
