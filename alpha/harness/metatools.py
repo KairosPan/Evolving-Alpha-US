@@ -5,6 +5,7 @@ from alpha.harness.edit_log import EditLog, EditRecord
 from alpha.harness.memory import Importance, Lesson
 from alpha.harness.skill import Skill, SkillStats
 from alpha.harness.state import HarnessState
+from alpha.harness.workflows import WorkflowEntry
 
 
 def _jsonable(v: object) -> object:
@@ -134,3 +135,36 @@ class MetaTools:
 
     def disable_connector(self, connector_id: str, rationale: str) -> EditRecord:
         return self.patch_connector(connector_id, {"enabled": False}, rationale)
+
+    # ── W workflows ──
+    def write_workflow(self, entry: WorkflowEntry, rationale: str) -> EditRecord:
+        _require_rationale(rationale)
+        self.h.workflows.upsert(entry)                        # id-keyed upsert (create/replace)
+        return self.log.append("write_workflow", "workflow", entry.workflow_id, "create",
+                               entry.name, payload={"before": None, "after": entry.model_dump()},
+                               rationale=rationale)
+
+    def patch_workflow(self, workflow_id: str, fields: dict, rationale: str) -> EditRecord:
+        _require_rationale(rationale)
+        cur = self.h.workflows.get(workflow_id)
+        if cur is None:
+            raise KeyError(f"unknown workflow: {workflow_id}")   # raises -> not logged
+        before = cur.model_dump()
+        # Re-VALIDATE the merged entry (not model_copy like the flat connector patch): WorkflowEntry
+        # has a nested list[WorkflowStep], and model_copy(update=) would store raw dicts. dispatch
+        # controls args, so the merge is safe.
+        updated = WorkflowEntry.model_validate({**before, **fields})
+        self.h.workflows.upsert(updated)
+        return self.log.append("patch_workflow", "workflow", workflow_id, "update",
+                               ",".join(fields), payload={"before": before, "after": updated.model_dump()},
+                               rationale=rationale)
+
+    def retire_workflow(self, workflow_id: str, rationale: str) -> EditRecord:
+        _require_rationale(rationale)
+        cur = self.h.workflows.get(workflow_id)
+        if cur is None:
+            raise KeyError(f"unknown workflow: {workflow_id}")   # raises -> not logged
+        before = cur.status
+        self.h.workflows.upsert(cur.model_copy(update={"status": "retired"}))
+        return self.log.append("retire_workflow", "workflow", workflow_id, "retire", "retired",
+                               payload={"before": before, "after": "retired"}, rationale=rationale)

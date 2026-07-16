@@ -17,6 +17,7 @@ _KIND = {
     "process_memory": "memory", "update_memory": "memory", "demote_memory": "memory",
     "rewrite_doctrine": "doctrine",
     "write_connector": "connector", "patch_connector": "connector", "disable_connector": "connector",
+    "write_workflow": "workflow", "patch_workflow": "workflow", "retire_workflow": "workflow",
 }
 
 

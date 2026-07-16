@@ -1,6 +1,7 @@
 # alpha/refine/apply.py
 from __future__ import annotations
 
+import re as _re
 from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
@@ -12,6 +13,7 @@ from alpha.harness.memory import Lesson
 from alpha.harness.metatools import MetaTools
 from alpha.harness.skill import Skill
 from alpha.harness.state import HarnessState
+from alpha.harness.workflows import WorkflowEntry
 from alpha.refine.ops import PASS_TOOLS, RefineOp
 from alpha.trace import SCOPES, is_scope_wider, scope_rank
 
@@ -19,6 +21,8 @@ if TYPE_CHECKING:
     from alpha.memory.aggregate import TaskStats
 
 ALL_TOOLS = frozenset().union(*PASS_TOOLS.values())
+
+_SKILL_ID_SHAPE = _re.compile(r"^[a-z0-9]+(?:[_-][a-z0-9]+)*$")   # an id-shaped step ref (no spaces)
 
 _DISPATCH_ERRORS = (HarnessError, KeyError, ValueError, ValidationError, TypeError, AttributeError)
 
@@ -66,6 +70,19 @@ def _dispatch(meta: MetaTools, op: RefineOp, *, normalize) -> EditRecord:
         return m.patch_connector(cid, args, rationale=r)
     if tool == "disable_connector":
         return m.disable_connector(args.pop("connector_id"), rationale=r)
+    if tool == "write_workflow":
+        entry = WorkflowEntry.model_validate(args)
+        entry.content_hash = _workflow_hash(entry)            # stamp the content digest before upsert
+        return m.write_workflow(entry, rationale=r)
+    if tool == "patch_workflow":
+        wid = args.pop("workflow_id")
+        cur = m.h.workflows.get(wid)
+        if cur is not None:                                   # unknown id -> patch_workflow raises KeyError
+            merged = WorkflowEntry.model_validate({**cur.model_dump(), **args})   # coerce nested steps
+            args["content_hash"] = _workflow_hash(merged)     # recompute on the updated entry
+        return m.patch_workflow(wid, args, rationale=r)
+    if tool == "retire_workflow":
+        return m.retire_workflow(args.pop("workflow_id"), rationale=r)
     raise ValueError(f"unknown tool: {tool}")
 
 
@@ -145,6 +162,31 @@ def _check_connector(entry: ConnectorEntry) -> str | None:
     return None
 
 
+def _workflow_hash(entry: WorkflowEntry) -> str:
+    """Canonical content digest of a workflow entry (excludes content_hash itself). Recomputed at the
+    waist on every create/patch so the stored hash always reflects the landed content — a patch that
+    changes content changes the hash. Uses the repo's edit-log/snapshot canonicalizer for stability."""
+    from alpha.integrity import sha256_canonical_json    # lazy: mirror snapshot.py's canonicalizer
+    body = entry.model_dump(mode="json")
+    body.pop("content_hash", None)
+    return sha256_canonical_json(body)
+
+
+def _check_workflow(entry: WorkflowEntry, h: HarnessState) -> str | None:
+    """First failing structural-lint reason for a workflow entry, or None if clean. Pure function of
+    the (entry, H) so preview == landing. Step referential-integrity is PERMISSIVE (taboo-lint's
+    block-known-bad posture): only an id-shaped ref that resolves to a RETIRED skill is rejected;
+    free-prose refs (with spaces) and unknown id-shaped refs (possibly future skills) are allowed."""
+    if len(entry.description) > 200:
+        return "description exceeds 200 chars (the index budget)"
+    for st in entry.steps:
+        if _SKILL_ID_SHAPE.match(st.ref):                     # looks like a skill id -> must not be retired
+            sk = h.skills.get(st.ref)
+            if sk is not None and sk.status == "retired":
+                return f"step ref {st.ref!r} resolves to a retired skill"
+    return None
+
+
 def _derive_confirmed_task_ids(log) -> frozenset[str]:
     """Externally-confirmed task episode ids from DURABLE records only (A2 / kairos-mining §2.3).
 
@@ -177,6 +219,8 @@ def _target_id(tool: str, args: dict) -> str | None:
         v = args.get("section")
     elif tool in ("write_connector", "patch_connector", "disable_connector"):
         v = args.get("connector_id")
+    elif tool in ("write_workflow", "patch_workflow", "retire_workflow"):
+        v = args.get("workflow_id")
     else:
         v = None
     return str(v) if v is not None else None
@@ -379,6 +423,29 @@ def try_apply_op(meta: MetaTools, harness: HarnessState, op: RefineOp, *, allowe
             except _DISPATCH_ERRORS as e:
                 return None, f"{type(e).__name__}: {e}"
             bad = _check_connector(merged)
+            if bad is not None:
+                return None, bad
+    # Workflow (W) structural lints (data rung R1/R2): description within the index budget +
+    # step referential-integrity (a step ref that resolves to a RETIRED skill bounces; unknown/free
+    # refs stay permissive). Enforced at CREATE and at any PATCH (the PC-9 create-only-defeat pattern).
+    # Pure function of the (merged) entry + H so preview == landing.
+    if op.tool == "write_workflow":
+        try:
+            entry = WorkflowEntry.model_validate(op.args)
+        except _DISPATCH_ERRORS as e:
+            return None, f"{type(e).__name__}: {e}"
+        bad = _check_workflow(entry, harness)
+        if bad is not None:
+            return None, bad
+    elif op.tool == "patch_workflow":
+        cur = harness.workflows.get(op.args.get("workflow_id"))
+        if cur is not None:      # unknown id -> let dispatch raise KeyError -> clean reject
+            fields = {k: v for k, v in op.args.items() if k != "workflow_id"}
+            try:
+                merged = WorkflowEntry.model_validate({**cur.model_dump(), **fields})   # coerce nested steps
+            except _DISPATCH_ERRORS as e:
+                return None, f"{type(e).__name__}: {e}"
+            bad = _check_workflow(merged, harness)
             if bad is not None:
                 return None, bad
     if op.tool == "retire_skill" and tid is not None:

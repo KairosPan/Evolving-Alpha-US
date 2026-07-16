@@ -16,7 +16,9 @@ _TOOLS_DOC = (
     "update_memory(args: lesson_id + fields), demote_memory(args: lesson_id, factor), "
     "rewrite_doctrine(args: section, new_guidance), "
     "write_connector(args: connector_id,name,kind[data_source|llm_role|mcp],impl_ref,capabilities[],env_keys[],instructions[,pit_key]), "
-    "patch_connector(args: connector_id + any fields to change), disable_connector(args: connector_id). "
+    "patch_connector(args: connector_id + any fields to change), disable_connector(args: connector_id), "
+    "write_workflow(args: workflow_id,name,description,steps[{ref,note}][,user_only,phases]), "
+    "patch_workflow(args: workflow_id + any fields to change), retire_workflow(args: workflow_id). "
     "NEVER rewrite an immutable [RED-LINE] doctrine section — it will be rejected."
 )
 
@@ -36,6 +38,9 @@ def render_brain_summary(h: HarnessState) -> str:
     parts.append("\nCONNECTORS: (id [kind, status])")
     for c in h.connectors.all():
         parts.append(f"- {c.connector_id} [{c.kind}, {'on' if c.enabled else 'off'}] {c.instructions[:80]}")
+    parts.append("\nWORKFLOWS: (id [status])")
+    for w in h.workflows.all():
+        parts.append(f"- {w.workflow_id} [{w.status}] {w.description[:80]}")
     return "\n".join(parts)
 
 
@@ -46,11 +51,11 @@ _EXTRACTION_INSTRUCTION = (
     "above, with a non-empty rationale on every op. If it does NOT yet warrant a concrete change "
     '(too vague, still clarifying, purely conversational), output '
     '{"no_edit": true, "reason": "<one sentence why>"}. '
-    "If the edit targets a doctrine section, skill, lesson, or connector that does NOT exist in the brain "
-    'above, output {"no_edit": true, "reason": "<the target that was not found>"} — NEVER rewrite the '
-    "nearest-similar existing entry to fit (that silently corrupts an unrelated entry); a create is a "
-    "write_skill / process_memory / write_connector op, and doctrine has no create op, so a missing "
-    "doctrine section is no_edit."
+    "If the edit targets a doctrine section, skill, lesson, connector, or workflow that does NOT exist "
+    'in the brain above, output {"no_edit": true, "reason": "<the target that was not found>"} — NEVER '
+    "rewrite the nearest-similar existing entry to fit (that silently corrupts an unrelated entry); a "
+    "create is a write_skill / process_memory / write_connector / write_workflow op, and doctrine has no "
+    "create op, so a missing doctrine section is no_edit."
 )
 
 

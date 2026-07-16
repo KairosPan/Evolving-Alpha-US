@@ -10,6 +10,7 @@ def test_pass_structure():
     assert "promote_skill" in PASS_TOOLS["K"] and "retire_skill" in PASS_TOOLS["K"]
     assert PASS_TOOLS["M"] == frozenset({"process_memory", "update_memory", "demote_memory"})
     assert PASS_TOOLS["C"] == frozenset({"write_connector", "patch_connector", "disable_connector"})
+    assert PASS_TOOLS["W"] == frozenset({"write_workflow", "patch_workflow", "retire_workflow"})
     # every IMPLEMENTED-pass tool is a real MetaTools method (W/A handlers land in later tasks, so
     # their whitelist entries are reserved-but-unhandled — a W/A op bounces cleanly at the dispatch).
     from alpha.harness.metatools import MetaTools
