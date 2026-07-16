@@ -177,6 +177,12 @@ a { color: inherit; text-decoration: none; }
   border: 1px dashed var(--line); border-radius: var(--r-sm);
   padding: 14px 16px; color: var(--fg-faint); font-size: 13px;
 }
+/* Generic empty-state box (e.g. /connector /workflow /subagent card lists with no entries yet —
+   those pages render <div class="empty-state"> directly, without the .brain-stub wrapper). */
+.empty-state {
+  border: 1px dashed var(--line); border-radius: var(--r-sm);
+  padding: 14px 16px; color: var(--fg-faint); font-size: 13px;
+}
 
 .main { display: flex; flex-direction: column; min-width: 0; }
 

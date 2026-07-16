@@ -3,7 +3,7 @@
 Descriptive, not prescriptive: when this file disagrees with the tree, the code is current and
 this file gets updated. This is the only CLAUDE.md — depth lives in docstrings and `docs/`.
 
-> Owner: KairosPan · reviewed 2026-07-13 · 1912 offline tests.
+> Owner: KairosPan · reviewed 2026-07-16 · 2046 offline tests.
 
 ## What this is
 
@@ -21,7 +21,7 @@ the worker. Code, comments and docs are English; the CN material is reference on
 | Where | What |
 |---|---|
 | `alpha/data`→`universe`→`state`→`regime` | perception: PIT-guarded sources → daily screen → `MarketState` → regime read: momo `GCycle` six-phase, or the growth pack's three scale-typed clocks (market `GrowthMarketClock` / theme `GrowthThemeClock` / stock `classify_stock_stage`) |
-| `alpha/harness` | the evolvable playbook `H` itself — doctrine/skills/memory, meta-tools, append-only edit log, snapshots. Not a test harness; the charter calls it the Body |
+| `alpha/harness` | the evolvable playbook `H` itself, now six components `(p, K, M, C, W, A)` — doctrine/skills/memory + connectors/workflows/subagents, meta-tools, append-only edit log, snapshots. Not a test harness; the charter calls it the Body |
 | `alpha/refine` | proposes and gates edits; `apply.py::try_apply_op` is THE write-waist |
 | `alpha/agent` · `eval` · `sizing` · `guard` | decide & score: LLM policy → L4 hard veto → L3 sizing → honest walk-forward eval |
 | `alpha/loop` | `InnerLoop` (live-H day driver, capability breaker) + the 4-arm HCH-vs-Hexpert verdict |
@@ -64,8 +64,18 @@ python -m workbench               # :8820 ─┘
 - **Verdict symmetry (load-bearing).** Verdict paths thread a read-only `recall_store=` into
   `InnerLoop` — never `episode_store=` — so HCH cannot self-write mid-verdict;
   `scripts/refine_live.py` is the only intended same-store-for-both caller.
-- **`H` in code is `(p, K, M)`.** `HarnessState` holds doctrine/skills/memory only;
-  `PASS_TOOLS["G"]` is a reserved empty pass. Docs writing `H=(p,G,K,M)` describe pass order.
+- **`H` in code is `(p, K, M, C, W, A)`.** `HarnessState` holds doctrine/skills/memory plus the
+  Body six-component arc's connectors/workflows/subagents — all real, gated components (writable
+  through the one write-waist, snapshot/rollback-covered), but **declarative only**: workflow/
+  subagent execution (the engine, G-pass dispatch, hooks/cron) is deferred, so C/W/A describe
+  capabilities without running them yet. `PASS_TOOLS["G"]` stays a reserved empty pass and
+  `PASS_ORDER` stays `(p, G, K, M)` — the new component ops ride `PASS_TOOLS` (waist dispatch), not
+  `PASS_ORDER`, so the self-study Refiner never auto-edits the Body. Docs writing `H=(p,G,K,M)`
+  describe pass order, not the state tuple. Sonia now has a T0 observe loop: six `view_*`
+  brain-browse tools plus `search_episodes`, all read-only over `H`, plus three market tools
+  (`market_snapshot`/`daily_bars`/`latest_decisions`) that register ONLY when the alpaca
+  connector is enabled and its env keys are present (else simply absent, never a boot error) —
+  lazy-built source, fail-soft per call.
 - **Governance (charter, amended 2026-07-08; worker-propose retired 2026-07-13/A7).** Two hands,
   one waist: the WORKER DOES NOT PROPOSE at all — only a Sonia proposal (incl. the A3 reflect
   channel) or the user's direct edit via sonia `POST /edit` (`user_direct` provenance, sample
