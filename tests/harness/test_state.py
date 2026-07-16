@@ -4,6 +4,7 @@ from alpha.harness.memory import Lesson
 from alpha.harness.doctrine import Doctrine
 from alpha.harness.connectors import ConnectorEntry, ConnectorRegistry
 from alpha.harness.workflows import WorkflowEntry, WorkflowRegistry, WorkflowStep
+from alpha.harness.subagents import SubagentEntry, SubagentRegistry
 from alpha.harness.registry import SkillRegistry, MemoryStore
 from alpha.harness.state import HarnessState
 from alpha.harness.errors import ImmutableDoctrineError
@@ -120,6 +121,31 @@ def test_legacy_dump_without_workflows_yields_empty_registry():
     legacy = _state().to_dict()
     legacy.pop("workflows")                              # simulate a pre-W dump
     assert len(HarnessState.from_dict(legacy).workflows) == 0
+
+
+def test_subagents_survive_harness_roundtrip():
+    """A (6th Body component): a populated SubagentRegistry survives to_dict() -> from_dict(),
+    mirroring the workflows precedent (the new key holds the model_dump list, entries rebuilt)."""
+    st = _state()
+    st.subagents = SubagentRegistry.from_subagents([
+        SubagentEntry(subagent_id="research", name="Research Analyst",
+                      description="Deep multi-source research on a single ticker.",
+                      tools=["read", "search"], max_turns=12),
+    ])
+    d = st.to_dict()
+    assert d["subagents"][0]["subagent_id"] == "research"    # serialised as a model_dump list
+    assert d["subagents"][0]["tools"] == ["read", "search"]  # list field serialised
+    st2 = HarnessState.from_dict(d)
+    a = st2.subagents.get("research")
+    assert a.max_turns == 12 and a.llm_role == "inherit" and a.status == "active"
+
+
+def test_legacy_dump_without_subagents_yields_empty_registry():
+    """A pre-A brain.json / snapshot carries no `subagents` key -> loads as an EMPTY registry
+    (never a KeyError), byte-identical to the old behaviour."""
+    legacy = _state().to_dict()
+    legacy.pop("subagents")                              # simulate a pre-A dump
+    assert len(HarnessState.from_dict(legacy).subagents) == 0
 
 
 def test_domain_survives_harness_roundtrip():
