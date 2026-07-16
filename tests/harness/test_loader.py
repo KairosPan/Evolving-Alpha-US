@@ -46,3 +46,11 @@ def test_load_seeds_non_list_top_level_raises(tmp_path):
     (tmp_path / "skills.json").write_text('{"not": "a list"}', encoding="utf-8")
     with pytest.raises(ValueError):
         load_seeds(tmp_path)
+
+
+def test_load_seeds_without_connectors_file_yields_empty_registry(tmp_path):
+    # connectors.json is OPTIONAL (unlike skills/memory/doctrine which stay required): a seed dir
+    # without it loads with an empty connector registry rather than raising FileNotFoundError.
+    _write_seeds(tmp_path)   # writes skills/memory/doctrine, NO connectors.json
+    st = load_seeds(tmp_path)
+    assert len(st.connectors) == 0

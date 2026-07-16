@@ -91,6 +91,16 @@ def test_laggard_launch_incubates_on_a_feed():
     assert s.status == "incubating" and s.depends_on == ["theme_breadth"]
 
 
+def test_growth_pack_seeds_exactly_one_alpaca_connector():
+    # C (4th Body component): the growth pack ships the same one `alpaca` data-source connector.
+    # workflows/subagents are asserted empty in Tasks 4/6.
+    h = _growth()
+    assert len(h.connectors) == 1
+    c = h.connectors.get("alpaca")
+    assert c is not None and c.impl_ref == "alpaca"
+    assert "bars" in c.capabilities
+
+
 # ── the co-residence bar is enforced by types ──────────────────────────────
 def test_growth_pack_under_momo_vocab_drops_every_phase():
     # loading the growth seeds with the MOMO normalizer drops all scale-typed tokens -> proves the

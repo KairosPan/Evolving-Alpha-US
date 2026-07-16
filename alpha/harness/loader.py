@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 
+from alpha.harness.connectors import ConnectorEntry, ConnectorRegistry
 from alpha.harness.doctrine import Doctrine
 from alpha.harness.growth_regime import normalize_growth_phases
 from alpha.harness.memory import Lesson
@@ -52,8 +53,15 @@ def load_seeds(seeds_dir: str | Path, *, vocabulary: str = "momo") -> HarnessSta
     memory = MemoryStore.from_lessons(
         [Lesson.from_seed(x, normalize=normalize) for x in _read_json_list(d / "memory.json")])
     doctrine = Doctrine.from_seed_list(_read_json_list(d / "doctrine.json"), normalize=normalize)
+    # C (4th Body component): connectors.json is OPTIONAL — skills/memory/doctrine stay required, but a
+    # pack (or legacy dir) without connectors loads as an empty registry rather than raising. Connectors
+    # carry no phases, so no `normalize` pass. `_read_json_list` raises on a missing file, hence the guard.
+    connectors_path = d / "connectors.json"
+    connector_rows = _read_json_list(connectors_path) if connectors_path.exists() else []
+    connectors = ConnectorRegistry.from_connectors([ConnectorEntry.model_validate(r) for r in connector_rows])
     # US-1e adds: cycle = StateMachine.from_seed_list(_read_json_list(d / "state_machine.json"))
-    return HarnessState(doctrine=doctrine, skills=skills, memory=memory, vocabulary=vocabulary)
+    return HarnessState(doctrine=doctrine, skills=skills, memory=memory, vocabulary=vocabulary,
+                        connectors=connectors)
 
 
 def active_pack_name() -> str:

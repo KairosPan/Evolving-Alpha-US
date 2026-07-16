@@ -63,3 +63,13 @@ def test_squeeze_offense_is_incubating():
     # offense that needs US-3 data ships incubating (not minted active)
     assert h.skills.get("short_squeeze").status == "incubating"
     assert h.skills.get("gamma_squeeze").status == "incubating"
+
+
+def test_momo_pack_seeds_exactly_one_alpaca_connector():
+    # C (4th Body component): the pack ships one data-source connector, `alpaca`.
+    # workflows/subagents are asserted empty in Tasks 4/6.
+    h = _h()
+    assert len(h.connectors) == 1
+    c = h.connectors.get("alpaca")
+    assert c is not None and c.impl_ref == "alpaca"
+    assert "bars" in c.capabilities

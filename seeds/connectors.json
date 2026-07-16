@@ -1,0 +1,17 @@
+[
+  {
+    "connector_id": "alpaca",
+    "name": "Alpaca US Equities",
+    "kind": "data_source",
+    "impl_ref": "alpaca",
+    "capabilities": ["bars", "snapshots", "corp_actions", "calendar"],
+    "env_keys": ["APCA_API_KEY_ID", "APCA_API_SECRET_KEY"],
+    "instructions": "US equities daily bars, snapshots, corporate actions and the market calendar. IEX feed on free/paper keys.",
+    "pit_key": "announce_date:=process_date",
+    "enabled": true,
+    "required": false,
+    "tier": "T0_OBSERVE",
+    "domain": "trading",
+    "notes": "Seeded connector; credentials live in .env.alpaca (env-var names above)."
+  }
+]
