@@ -187,3 +187,39 @@ def test_write_connector_self_study_fresh_id_not_held():
                                provenance=EditProvenance(path="self_study", proposer="refiner"),
                                conflict_queue=q)
     assert reason is None and rec is not None and q.items == []
+
+
+# ── kind="mcp" connectors: impl_ref resolves against the operator MCP registry (server_names) ────
+def test_write_connector_mcp_resolves_registered_server(monkeypatch):
+    import alpha.mcp.registry as mcp_reg
+    from alpha.mcp.registry import McpServerSpec
+    monkeypatch.setitem(mcp_reg._SERVERS, "demo",
+                        McpServerSpec(server_id="demo", command=["demo-server"], allowed_tools=["echo"]))
+    h, log = _h(), EditLog()
+    rec, reason = _apply(h, log, "write_connector",
+                         _args(connector_id="demo", name="Demo MCP", kind="mcp", impl_ref="demo",
+                               capabilities=["echo"], env_keys=["DEMO_TOKEN"], instructions="demo."))
+    assert reason is None and rec is not None
+    assert h.connectors.get("demo").kind == "mcp"
+
+
+def test_write_connector_mcp_rejects_unregistered_server():
+    h, log = _h(), EditLog()                                   # registry ships empty -> "ghost" unresolvable
+    rec, reason = _apply(h, log, "write_connector",
+                         _args(connector_id="ghost", name="Ghost", kind="mcp", impl_ref="ghost",
+                               capabilities=[], env_keys=[], instructions="x"))
+    assert rec is None and "impl_ref" in reason
+
+
+def test_connector_impl_resolves_mcp_unit(monkeypatch):
+    """Direct unit over the write-waist predicate: mcp resolves against the MCP registry; data_source
+    lint byte-identical."""
+    import alpha.mcp.registry as mcp_reg
+    from alpha.mcp.registry import McpServerSpec
+    from alpha.refine.apply import _connector_impl_resolves
+    monkeypatch.setitem(mcp_reg._SERVERS, "demo", McpServerSpec(server_id="demo", command=["x"]))
+    ok = ConnectorEntry(connector_id="c", name="c", kind="mcp", impl_ref="demo")
+    bad = ConnectorEntry(connector_id="c", name="c", kind="mcp", impl_ref="nope")
+    assert _connector_impl_resolves(ok) is True and _connector_impl_resolves(bad) is False
+    ds = ConnectorEntry(connector_id="c", name="c", kind="data_source", impl_ref="alpaca")
+    assert _connector_impl_resolves(ds) is True                # data_source path unchanged

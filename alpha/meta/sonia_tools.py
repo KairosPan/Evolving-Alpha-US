@@ -86,20 +86,57 @@ def _latest_decisions_fn():
     return latest_decisions
 
 
-def build_sonia_registry(h, *, source_factory=None) -> tuple[ToolRegistry, ActivityPolicy]:
+def _default_mcp_client_factory(spec):
+    # Lazy: importing the client is cheap, but building it spawns the MCP child (stdio) and resolves
+    # the whitelisted env — defer to first tool DISPATCH, never registry build time (mirrors the
+    # market-source lazy pattern above). An injected factory (tests) short-circuits this entirely.
+    from alpha.mcp.client import McpClient
+    return McpClient(spec)
+
+
+def _mcp_tool_fn(conn, spec, tool_name, make_client):
+    """One dispatch fn for a single MCP tool. Owns the client lifecycle PER DISPATCH — build → list →
+    call → close() in a finally — so no stdio child process / reader thread leaks across /chat turns
+    (build_sonia_registry is rebuilt every turn and has NO teardown owner; a cached-across-turns client
+    would orphan a child on each MCP dispatch). The live tools/list is the third leg of the capability
+    intersection, enforced HERE at dispatch (a registered tool the live server does not currently offer
+    fails soft). Efficiency note: this re-spawns per dispatch — acceptable for a rarely-called observe
+    path; a pooled client with a real turn-end teardown owner is a follow-up (flagged)."""
+    def mcp_tool(arguments=None) -> dict:
+        client = None
+        try:
+            client = make_client(spec)                       # per dispatch: spawn (real) / wrap (fake)
+            listed = client.list_tools()
+            if not listed.get("ok"):
+                return {"ok": False, "error": listed.get("error", "tools/list failed")}
+            if tool_name not in (listed.get("tools") or []):
+                return {"ok": False, "error": f"tool {tool_name!r} not offered by live server {conn.impl_ref!r}"}
+            return client.call_tool(tool_name, arguments or {})
+        except Exception as e:                               # belt-and-suspenders: never raise into the loop
+            return {"ok": False, "error": str(e)}
+        finally:
+            if client is not None:
+                client.close()                               # no leak: terminate the child every dispatch
+    return mcp_tool
+
+
+def build_sonia_registry(h, *, source_factory=None, mcp_client_factory=None) -> tuple[ToolRegistry, ActivityPolicy]:
     """Read-only brain-browse tools over H (all T0_OBSERVE), plus three market tools ONLY when the
-    alpaca connector is enabled and its env keys are present. Returns (registry, fail-closed policy).
+    alpaca connector is enabled and its env keys are present, plus namespaced MCP tools for each
+    enabled+resolvable kind="mcp" connector. Returns (registry, fail-closed policy).
 
     Each fn is called by the loop as `fn(**args)` (registry.call), so its single param name IS the
     schema arg name the model must emit. Results are fail-soft dicts ({"ok": bool, ...}); an unknown
     id returns the entry as None rather than raising. `source_factory` (default: lazy make_source)
-    supplies the RAW market source; a per-call GuardedSource(AsOfGuard(today)) does the PIT wrap."""
+    supplies the RAW market source; a per-call GuardedSource(AsOfGuard(today)) does the PIT wrap.
+    `mcp_client_factory` (default: lazy McpClient) builds an MCP client from a server spec — tests
+    inject a FakeMcpTransport-backed factory so no subprocess spawns."""
     reg = ToolRegistry()
     tiers: dict[str, CapabilityTier] = {}
 
-    def _add(name, desc, fn, props, required):
+    def _add(name, desc, fn, props, required, *, tier: CapabilityTier = CapabilityTier.T0_OBSERVE):
         reg.register(name, _schema(name, desc, props, required), fn)
-        tiers[name] = CapabilityTier.T0_OBSERVE
+        tiers[name] = tier                                   # brain-browse tools default T0; MCP passes conn.tier
 
     _add("view_doctrine", "Full guidance text of one doctrine section, by section id.",
          lambda section: {"ok": True, "entry": _dump(h.doctrine.get(section))},
@@ -145,6 +182,41 @@ def build_sonia_registry(h, *, source_factory=None) -> tuple[ToolRegistry, Activ
               "days": {"type": "integer", "description": "lookback days (default 30)"}}, ["symbol"])
         _add("latest_decisions", "The most recent persisted DecisionPackage, if a run produced one.",
              _latest_decisions_fn(), {}, [])
+
+    # MCP connectors (Body component C): for each ENABLED kind="mcp" connector whose env_keys are all
+    # present AND whose impl_ref resolves in the operator MCP registry, register namespaced observe
+    # tools mcp_<connector_id>_<tool>. Registered NAMES = intersection(connector.capabilities,
+    # spec.allowed_tools) — capabilities is an ENFORCED allowlist (empty / no overlap -> register
+    # nothing, fail-closed). The server's LIVE tools/list is the third leg, enforced at DISPATCH so
+    # registration never spawns the child (lazy client, mirrors _default_source_factory). All T0.
+    from alpha.mcp.registry import get_server, server_names as _mcp_server_names
+    _mcp_servers = _mcp_server_names()
+    for conn in h.connectors.all():
+        if conn.kind != "mcp" or not conn.enabled:
+            continue
+        if not all(os.environ.get(k) for k in conn.env_keys):
+            continue                                         # env keys missing -> absent (never a boot error)
+        if conn.impl_ref not in _mcp_servers:
+            continue                                         # unresolvable server -> absent
+        spec = get_server(conn.impl_ref)
+        if spec is None:                                     # defensive (impl_ref was in server_names)
+            continue
+        allowed = set(spec.allowed_tools)
+        registerable = [t for t in conn.capabilities if t in allowed]   # ENFORCED intersection, order-stable
+        if not registerable:
+            continue                                         # empty capabilities / no overlap -> nothing
+        try:
+            conn_tier = CapabilityTier[conn.tier]            # "T0_OBSERVE" -> enum; the tier gate participates
+        except KeyError:
+            continue                                         # unrecognized tier string -> register nothing (fail-closed)
+        make_client = mcp_client_factory if mcp_client_factory is not None else _default_mcp_client_factory
+        for tool_name in registerable:
+            _add(f"mcp_{conn.connector_id}_{tool_name}",
+                 f"MCP tool {tool_name!r} on server {conn.impl_ref!r} ({conn.name}). Fail-soft.",
+                 _mcp_tool_fn(conn, spec, tool_name, make_client),
+                 {"arguments": {"type": "object",
+                                "description": f"arguments object for MCP tool {tool_name!r}"}},
+                 [], tier=conn_tier)                         # respect the operator-declared connector tier (not hardcoded T0)
 
     return reg, ActivityPolicy(reg, tiers)
 

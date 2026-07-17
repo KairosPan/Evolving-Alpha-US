@@ -139,13 +139,16 @@ def _connector_impl_resolves(entry: ConnectorEntry) -> bool:
     """A connector DECLARES a capability by referencing an operator-registered implementation by key;
     editing the declaration must never invent a capability that does not exist (data rung R1/R2). A
     data_source impl_ref must resolve in the data registry; an llm_role in the make_client roles; an
-    mcp reference has no registry to resolve against yet (accepted)."""
+    mcp reference in the operator MCP registry (alpha.mcp.registry.server_names)."""
     from alpha.data.registry import source_names       # lazy: keep refine independent of the data layer at import
     if entry.kind == "data_source":
         return entry.impl_ref in source_names()
     if entry.kind == "llm_role":
         return entry.impl_ref in _LLM_ROLES
-    return True                                          # mcp: no registry to resolve against yet
+    if entry.kind == "mcp":
+        from alpha.mcp.registry import server_names as mcp_server_names   # lazy: mirror the data-layer import
+        return entry.impl_ref in mcp_server_names()
+    return True
 
 
 def _env_keys_are_names(entry: ConnectorEntry) -> str | None:
