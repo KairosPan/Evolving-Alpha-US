@@ -1,4 +1,4 @@
-"""US-0 acceptance gate: the four firewall surfaces each have a specific guarding test.
+"""US-0 acceptance gate: each firewall surface has a specific guarding test.
 
 Asserts each surface's named guarding test FUNCTION exists (deleting one fails this gate);
 the functions themselves run as part of the normal suite.
@@ -14,6 +14,7 @@ SURFACES = [
     ("tests.data.test_corp_actions", "test_has_reverse_split_pending_pit"),         # 2 corp-action announce-date PIT
     ("tests.data.test_snapshot_source", "test_bars_are_raw_not_future_adjusted"),   # 3 split-vintage raw-PIT
     ("tests.universe.test_build_universe", "test_rvol_uses_only_trailing_bars"),     # 4 windowed-rank trailing-only
+    ("tests.kit.test_replay", "test_yields_every_calendar_day_guarded"),           # 5 backtest replay PIT channel
 ]
 
 
