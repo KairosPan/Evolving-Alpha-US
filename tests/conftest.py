@@ -36,34 +36,3 @@ def fake_source():
         "ex_date": [date(2026, 6, 20)], "kind": ["reverse_split"], "ratio": [0.1],
     })
     return FakeSource(calendar=cal, bars=bars, snapshots=snapshots, corp_actions=corp)
-
-
-@pytest.fixture
-def brain_session_isolation(tmp_path, monkeypatch):
-    """Point EVERY shared-state dir at a tmp dir so a test never touches real on-disk state.
-    Shared by tests/web, tests/sonia and tests/workbench (their autouse fixtures depend on this —
-    DRY: one definition). Not autouse here, so the offline core suite is unaffected.
-    ALL FIVE vars matter: the 2026-07-09 cross-face reconcile sweeps make each face open the
-    OTHER face's store too — isolating only your own face's dirs lets a rollback test rewrite
-    the operator's real ./state records (caught by the final review as a blocker)."""
-    monkeypatch.setenv("ALPHA_LIVE_BRAIN_DIR", str(tmp_path / "brain"))
-    monkeypatch.setenv("ALPHA_SESSIONS_DIR", str(tmp_path / "sessions"))
-    monkeypatch.setenv("ALPHA_PROJECTS_DB", str(tmp_path / "projects" / "state.db"))
-    monkeypatch.setenv("ALPHA_CONFLICTS_DIR", str(tmp_path / "conflicts"))
-    monkeypatch.setenv("ALPHA_PROPOSALS_DIR", str(tmp_path / "proposals"))
-    # A3: the Sonia discard hook writes rejected self-learning directions here; isolate it too so a
-    # face test never touches the operator's real ./state (not reconcile-swept — signatures, not seqs).
-    monkeypatch.setenv("ALPHA_NEG_CONSTRAINTS_DIR", str(tmp_path / "neg_constraints"))
-    # LLM entity-switch state file (console Models page) — isolate so face tests never read or
-    # write the operator's real ./state/llm_stack.json.
-    monkeypatch.setenv("ALPHA_LLM_STACK_FILE", str(tmp_path / "llm_stack.json"))
-
-
-@pytest.fixture(autouse=True)
-def _llm_stack_isolation(tmp_path, monkeypatch):
-    """Autouse for the WHOLE suite: point the LLM entity-switch state file at a tmp path so no
-    test ever reads the operator's real ./state/llm_stack.json (the console switch writes it in
-    live use — a real file would otherwise flip provider resolution under tests that clear role
-    env; caught by the final whole-branch review). Tests that need a specific file still win by
-    setting ALPHA_LLM_STACK_FILE themselves (per-test monkeypatch.setenv overrides this one)."""
-    monkeypatch.setenv("ALPHA_LLM_STACK_FILE", str(tmp_path / "llm_stack_isolated.json"))

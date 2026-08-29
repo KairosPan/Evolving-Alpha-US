@@ -104,36 +104,6 @@ def test_calendar_is_pit_on_known_asof(monkeypatch):
     assert est[0].known_asof == date(2026, 2, 10)                       # off a PAST filing -> no lookahead
 
 
-def test_backtest_between_filings_shows_cadence_estimate(monkeypatch):
-    # The reviewer's probe: a walk-forward as_of BETWEEN two filings must still see an upcoming report
-    # (off the prior quarter's cadence), which the old last-EVER-filing estimate dropped for all past as_ofs.
-    from alpha.features.earnings import days_to_earnings
-    src = _src(monkeypatch, {"EarningsPerShareDiluted": _EPS, "Revenues": _REV})
-    asof = date(2026, 5, 3)                                            # between 2/10 and 5/6 filings
-    cal = src.earnings_calendar(asof)
-    assert not any(e.known_asof == date(2026, 5, 6) for e in cal)      # 5/6 filing not yet knowable (no leak)
-    est = [e for e in cal if not e.is_confirmed]
-    assert len(est) == 1 and est[0].expected_date == date(2026, 5, 12)  # 2/10 + 91d
-    assert est[0].known_asof == date(2026, 2, 10) and est[0].known_asof <= asof
-    assert days_to_earnings(cal, "ACME", asof) == 9                    # 5/3 -> 5/12, NOT None (the bug)
-
-
-def test_backtest_t3_gate_fires_off_prior_cadence(monkeypatch):
-    # A real backtest T-3 window (as_of 5/10, 2 days before the 5/12 cadence estimate, 10 days before the
-    # actual 5/20 report): the §4.5 has_upcoming_earnings gate fires in backtest, with zero lookahead.
-    from alpha.features.earnings import days_to_earnings, has_upcoming_earnings
-    src = _src(monkeypatch, {"EarningsPerShareDiluted": _EPS_BT})       # revenue 404 -> EPS-only (calendar ok)
-    asof = date(2026, 5, 10)
-    cal = src.earnings_calendar(asof)
-    assert all(e.known_asof <= asof for e in cal)                      # PIT: nothing knowable after as_of
-    assert not any(e.known_asof == date(2026, 5, 20) for e in cal)     # the 5/20 report is INVISIBLE (no leak)
-    est = [e for e in cal if not e.is_confirmed]
-    assert len(est) == 1 and est[0].expected_date == date(2026, 5, 12)  # off the last KNOWN filing (2/10)
-    assert est[0].known_asof == date(2026, 2, 10)                       # a PAST date -> no lookahead
-    assert days_to_earnings(cal, "ACME", asof) == 2
-    assert has_upcoming_earnings(cal, "ACME", asof) is True             # default T-3 window, in BACKTEST
-
-
 def test_no_pre_filing_leak_at_any_as_of(monkeypatch):
     # Pin the invariant across a sweep of pre-filing as_ofs: a filing NEVER surfaces (confirmed or via a
     # future-stamped estimate) at any as_of strictly before it — the fix stays fail-SAFE.

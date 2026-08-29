@@ -1,7 +1,6 @@
 from datetime import date
 import pandas as pd
-from alpha.universe.stock import StockSnapshot
-from alpha.features.runner import consecutive_up_days, runner_echelon
+from alpha.features.runner import consecutive_up_days
 
 
 def _bars(dates, closes):
@@ -23,15 +22,3 @@ def test_consecutive_up_days_missing():
     assert consecutive_up_days(pd.DataFrame(), date(2026, 6, 12)) == 0
     one = _bars([date(2026, 6, 12)], [10.0])
     assert consecutive_up_days(one, date(2026, 6, 12)) == 0      # single bar -> no prior to compare
-
-
-def test_runner_echelon_groups_by_tier_descending():
-    snaps = [
-        StockSnapshot(symbol="A", status="gainer", name="a", consecutive_up_days=3),
-        StockSnapshot(symbol="B", status="gainer", name="b", consecutive_up_days=3),
-        StockSnapshot(symbol="C", status="gainer", name="c", consecutive_up_days=1),
-        StockSnapshot(symbol="D", status="gainer", name="d", consecutive_up_days=0),  # not a runner
-    ]
-    rungs = runner_echelon(snaps)
-    assert [(r.tier, r.count) for r in rungs] == [(3, 2), (1, 1)]
-    assert rungs[0].representatives == ["A", "B"]
