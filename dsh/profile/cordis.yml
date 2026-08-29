@@ -1,0 +1,41 @@
+# alpaca-kit profile TEMPLATE - verify key names against current dsh docs before install.
+#
+# This file is the CONTENT of the profile (which server to mount, with which env, which skill
+# roots, what always needs approval), written in the indicative shape the plan used. It is not
+# a validated dsh config: dsh is a developer preview and says so - "THERE WILL BE
+# COMPATIBILITY-BREAKING CHANGES". Per the frozen 2026-08-22 survey
+# (docs/research/2026-08-22-deepseek-harness-dsh-survey.md), a real cordis.yml is a LIST of
+# plugin entries {id, name, config, disabled}, and a profile lives at
+# $DSH_HOME/profiles/<name>/ (default $DSH_HOME=~/.dsh) with its own cordis.patch.yml. So at
+# install time: translate each block below into the plugin row that owns it, then confirm with
+#     dsh --profile <name> --dump-config
+# which prints the tree the machine actually boots. Every printed row is patchable.
+#
+# <ABSOLUTE PATH TO THIS REPO> stays a placeholder here on purpose - it is filled in only in
+# the installed copy under the harness home, never in the repo copy.
+
+llm:
+  provider: deepseek          # first-party llm-deepseek adapter; DEEPSEEK_API_KEY from env
+
+mcp:
+  servers:
+    alpaca-kit:
+      command: [python, -m, alpaca_kit.mcp]
+      cwd: <ABSOLUTE PATH TO THIS REPO>
+      env:
+        APCA_API_KEY_ID: ${APCA_API_KEY_ID}
+        APCA_API_SECRET_KEY: ${APCA_API_SECRET_KEY}
+        ALPHA_PIT_ROOT: data/pit/2yr
+        # ALPACA_KIT_ENABLE_ORDERS: "1"   # operator-only; NEVER set in the repo copy
+
+skills:
+  # Skill discovery expects <root>/<name>/SKILL.md, so the roots are the two GROUP dirs, not
+  # their parent: pointing at dsh/skills alone would look for dsh/skills/mechanics/SKILL.md.
+  paths:
+    - <ABSOLUTE PATH TO THIS REPO>/dsh/skills/mechanics
+    - <ABSOLUTE PATH TO THIS REPO>/dsh/skills/style-kairos
+
+permissions:
+  always_ask: [place_order, cancel_order]
+
+workspace: <ABSOLUTE PATH TO THIS REPO>

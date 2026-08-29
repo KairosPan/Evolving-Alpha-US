@@ -7,7 +7,7 @@ CLAUDE.md, and depth lives in docstrings, `docs/`, and `AGENTS.md`.
 A market-strategy-account research workbench, reset 2026-08-29 from the retired Sonia-Kairos
 self-evolving-H product. MARKET + ACCOUNT are `alpaca_kit` — one package, two faces: importable
 library and MCP server. STRATEGY is `strategies/`, the agent's arena; its runtime is DeepSeek
-Harness (dsh), whose repo-side profile template `dsh/` is not on disk yet. Spec:
+Harness (dsh), configured from the repo-side template + skill packs in `dsh/`. Spec:
 `docs/superpowers/specs/2026-08-29-market-strategy-account-skeleton-design.md`.
 
 ## Map
@@ -18,6 +18,7 @@ Harness (dsh), whose repo-side profile template `dsh/` is not on disk yet. Spec:
 | `alpaca_kit/{pit,feeds,features}/` + `{replay,universe,integrity}.py` | PIT store/capture/CHECKSUMS · EDGAR + FINRA/float feeds · trend_template/gainer screens + breadth · backtest day iterator · daily screen · canonical hasher |
 | `alpaca_kit/mcp/` | the read-only MCP tool surface; order tools live in `account.py` and register only under `ALPACA_KIT_ENABLE_ORDERS=1` |
 | `strategies/` · `data/pit/` · `scripts/` | one directory per strategy (`_template` is the copy source) · offline PIT beds, gitignored · capture_window/capture_broad/smoke_alpaca |
+| `dsh/` | the harness config the operator installs: `profile/cordis.yml` template + `skills/mechanics` (neutral: backtest rules, alpaca-kit guide) and `skills/style-kairos` (operator style: doctrine/signals/lessons, generated from the retired seeds_v2 packs by `scripts/convert_seeds.py`) |
 
 ## Commands
 ```bash
