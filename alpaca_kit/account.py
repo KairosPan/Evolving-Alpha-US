@@ -16,6 +16,7 @@ PAPER_HOST = "https://paper-api.alpaca.markets"
 _HINTS = {
     401: "check APCA_API_KEY_ID / APCA_API_SECRET_KEY (source .env.alpaca first)",
     403: "endpoint not entitled for these keys",
+    422: "order is no longer cancelable / the order request was rejected",
     429: "rate limited - back off and retry",
 }
 
@@ -46,8 +47,13 @@ class TradingClient:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return json.loads(resp.read().decode() or "null")
         except urllib.error.HTTPError as e:
+            try:                                          # the body carries Alpaca's real reason
+                body = e.read().decode("utf-8", "replace")[:300]
+            except Exception:
+                body = ""
             hint = _HINTS.get(e.code, "")
-            raise TradingAPIError(f"{method} {path} -> HTTP {e.code}. {hint}".strip()) from e
+            msg = f"{method} {path} -> HTTP {e.code}. {hint}".strip()
+            raise TradingAPIError(f"{msg} Response: {body}" if body else msg) from e
         except urllib.error.URLError as e:
             raise TradingAPIError(f"{method} {path} -> network error: {e.reason}") from e
 
@@ -62,10 +68,14 @@ class TradingClient:
         return self._request("GET", "/v2/orders", params={"status": status}) or []
 
     # -- mutating (registered as MCP tools only behind the operator gate) --------
+    def _require_paper(self, action: str) -> None:
+        """The reset's safety line: no mutation may leave this process for a live account."""
+        if "paper-api" not in self.base_url:
+            raise RuntimeError(f"refusing to {action} against non-paper host {self.base_url}")
+
     def place_order(self, symbol: str, qty: float, side: str, order_type: str = "market",
                     time_in_force: str = "day", limit_price: float | None = None) -> dict:
-        if "paper-api" not in self.base_url:
-            raise RuntimeError(f"refusing to place an order against non-paper host {self.base_url}")
+        self._require_paper("place an order")
         body = {"symbol": symbol, "qty": str(qty), "side": side, "type": order_type,
                 "time_in_force": time_in_force}
         if limit_price is not None:
@@ -73,4 +83,5 @@ class TradingClient:
         return self._request("POST", "/v2/orders", body=body)
 
     def cancel_order(self, order_id: str) -> dict:
+        self._require_paper("cancel an order")
         return self._request("DELETE", f"/v2/orders/{order_id}") or {"status": "canceled"}
