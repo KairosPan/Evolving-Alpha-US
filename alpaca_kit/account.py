@@ -1,8 +1,9 @@
 """Alpaca TRADING-host client (paper account): /v2/account, /v2/positions, /v2/orders.
 
 Same seam pattern as alpaca_kit.alpaca._get_json: stdlib urllib, offline-testable by
-monkeypatching _request, actionable error hints. place_order is code-level pinned to the
-paper host - a non-paper base URL refuses to place orders (the reset's safety line).
+monkeypatching _request, actionable error hints. BOTH mutating methods - place_order and
+cancel_order - are code-level pinned to the paper host: a non-paper base URL refuses to
+mutate at all (the reset's safety line).
 """
 from __future__ import annotations
 
@@ -12,7 +13,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-PAPER_HOST = "https://paper-api.alpaca.markets"
+PAPER_HOSTNAME = "paper-api.alpaca.markets"
+PAPER_HOST = f"https://{PAPER_HOSTNAME}"
 _HINTS = {
     401: "check APCA_API_KEY_ID / APCA_API_SECRET_KEY (source .env.alpaca first)",
     403: "endpoint not entitled for these keys",
@@ -69,8 +71,15 @@ class TradingClient:
 
     # -- mutating (registered as MCP tools only behind the operator gate) --------
     def _require_paper(self, action: str) -> None:
-        """The reset's safety line: no mutation may leave this process for a live account."""
-        if "paper-api" not in self.base_url:
+        """The reset's safety line: no mutation may leave this process for a live account.
+
+        Compares the parsed HOSTNAME, never a substring. A substring test is defeated by URL
+        userinfo: "https://paper-api.alpaca.markets@api.alpaca.markets" contains "paper-api",
+        but urllib resolves the host to api.alpaca.markets - a LIVE order with the APCA headers
+        attached. Anything urlsplit cannot read a hostname out of (no scheme, junk) is refused
+        too: the pin fails closed.
+        """
+        if urllib.parse.urlsplit(self.base_url).hostname != PAPER_HOSTNAME:
             raise RuntimeError(f"refusing to {action} against non-paper host {self.base_url}")
 
     def place_order(self, symbol: str, qty: float, side: str, order_type: str = "market",

@@ -104,6 +104,23 @@ def test_screen_returns_screened_stock_records(fake_source):
     assert out["rows"][0]["status"] == "gainer"
 
 
+def test_market_snapshot_defaults_to_the_latest_trading_day_not_today(fake_source):
+    # Spec section 4: "default: latest trading day". fake_source's calendar ends 2026-06-12,
+    # which is in the past relative to today - exactly the weekend/holiday shape, where a bare
+    # Date.today() default fails soft with SnapshotMissingError instead of answering.
+    tools = build_tools(env=dict(PIT), source_factory=lambda: fake_source)
+    out = tools["market_snapshot"].fn()
+    assert out["ok"] is True, out
+    assert [r["symbol"] for r in out["rows"]] == ["RUN", "FLOP"]     # the 2026-06-12 snapshot
+
+
+def test_market_snapshot_default_is_fail_soft_on_an_empty_calendar():
+    empty = FakeSource(calendar=[], bars={}, snapshots={}, corp_actions=pd.DataFrame())
+    tools = build_tools(env=dict(PIT), source_factory=lambda: empty)
+    out = tools["market_snapshot"].fn()
+    assert out["ok"] is False and "calendar" in out["error"]
+
+
 def test_pit_guard_blocks_future_as_of(fake_source):
     tools = build_tools(env=dict(PIT), source_factory=lambda: fake_source)
     out = tools["market_snapshot"].fn(date="2026-06-12", as_of="2026-06-10")

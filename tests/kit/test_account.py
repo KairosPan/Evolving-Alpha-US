@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import pytest
@@ -92,6 +93,24 @@ def test_cancel_order_refuses_non_paper_host(monkeypatch):
                         lambda *a, **k: pytest.fail("transport reached - the paper pin did not fire"))
     with pytest.raises(RuntimeError, match="paper"):
         c.cancel_order("order-1")
+
+
+@pytest.mark.parametrize("action", ["place_order", "cancel_order"])
+def test_userinfo_host_cannot_smuggle_a_live_order_past_the_paper_pin(monkeypatch, action):
+    # The documented bypass of a SUBSTRING pin: the userinfo part contains "paper-api", but
+    # urllib resolves the host to api.alpaca.markets, i.e. a LIVE order with APCA headers on it.
+    # Both mutating methods must refuse; hermetic, so a regression fails here, not on a socket.
+    monkeypatch.setenv("APCA_API_KEY_ID", "k")
+    monkeypatch.setenv("APCA_API_SECRET_KEY", "s")
+    monkeypatch.setenv("APCA_API_BASE_URL", "https://paper-api.alpaca.markets@api.alpaca.markets")
+    c = TradingClient()
+    assert urllib.parse.urlsplit(c.base_url).hostname == "api.alpaca.markets"   # the real host
+    monkeypatch.setattr(c, "_request",
+                        lambda *a, **k: pytest.fail("transport reached - the paper pin did not fire"))
+    call = {"place_order": lambda: c.place_order("AAPL", 1, "buy"),
+            "cancel_order": lambda: c.cancel_order("order-1")}[action]
+    with pytest.raises(RuntimeError, match="paper"):
+        call()
 
 
 def test_cancel_order_deletes_the_order_path(client, monkeypatch):

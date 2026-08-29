@@ -160,10 +160,23 @@ def build_tools(env=None, *, source_factory=None, trading_factory=None,
     # ---- snapshot-backed: captured PIT bed only (a live cross-section does not exist) ----------
     if pit_root:
         def market_snapshot(date: str | None = None, as_of: str | None = None):
-            day = _d(date) if date else Date.today()
-            g = _guarded(snapshot_factory, _d(as_of) if as_of else Date.today())
+            today = Date.today()
+            # Spec section 4: the DEFAULT is the latest trading day, not today. Today is not a
+            # trading day every weekend and holiday, and a captured bed's calendar can end long
+            # before today - both cases used to fail soft with SnapshotMissingError on a bare
+            # call. The as_of cursor below still defaults to today, never to the resolved day.
+            if date:
+                day = _d(date)
+            else:
+                past = [d for d in snapshot_factory().trading_calendar() if d <= today]
+                if not past:
+                    return {"ok": False,
+                            "error": "no trading day on or before today in the bed's calendar"}
+                day = max(past)
+            g = _guarded(snapshot_factory, _d(as_of) if as_of else today)
             return _frame(g.daily_snapshot(day))
-        add("market_snapshot", "full-market daily cross-section for a date (offline PIT bed)",
+        add("market_snapshot", "full-market daily cross-section for a date (offline PIT bed); "
+                               "date defaults to the latest trading day at or before today",
             market_snapshot)
 
         def screen(date: str, kind: str = "gainer", as_of: str | None = None):
