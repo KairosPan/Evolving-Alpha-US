@@ -32,5 +32,6 @@ python -m alpaca_kit.mcp    # the MCP server, stdio
 - Prices are stored **RAW/unadjusted**; `make_source()` returns a RAW source by contract, so
   wrapping it in `GuardedSource` + `AsOfGuard` is the caller's job.
 - Backtests run **only through `alpaca_kit.replay.replay_days`**, bounded to a bed's usable window
-  (2yr 2024-06-03..2026-07-09, broad 2025-11-17..2026-03-27) — outside it, `SnapshotMissingError`.
+  (2yr 2024-06-03..2026-07-09, broad 2025-11-17..2026-03-27) — outside it a snapshot read raises
+  `SnapshotMissingError`, but bar and corp-action reads just return empty, so bounding is on you.
   The five honest-eval rules: `docs/backtest-rules.md`.

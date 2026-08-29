@@ -14,9 +14,13 @@ bug class once.
    | `data/pit/2yr` | 2024-06-03 .. 2026-07-09 | 526 |
    | `data/pit/broad` | 2025-11-17 .. 2026-03-27 | 90 |
 
-   Dates outside a bed's window raise `SnapshotMissingError` by design — fail-loud, never
-   silent. An unbounded `replay_days(pit_root=...)` therefore walks 2016 first and crashes;
-   pass `start=`/`end=` (the template's `BED_START`/`BED_END`).
+   Stay inside the stated window: the beds do NOT fail uniformly outside it. A snapshot read
+   out of window raises `SnapshotMissingError`, but `daily_bars` and `corporate_actions`
+   return an EMPTY frame and say nothing, and `replay_days` is a lazy generator that checks
+   nothing at all. So an unbounded `replay_days(pit_root=...)` walks ~2,100 pre-window days:
+   a snapshot-driven backtest crashes on day one, while a bars-driven one silently
+   undercounts — the hazard rules 2 and 5 exist to prevent. Bounding the replay with
+   `start=`/`end=` (the template's `BED_START`/`BED_END`) is the only guardrail.
 
 2. **Delisting is a terminal loss.** A symbol that delists or halts to zero during a hold
    scores -1.0. It is NEVER dropped from the sample (survivorship laundering).

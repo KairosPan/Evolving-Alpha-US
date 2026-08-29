@@ -1,7 +1,9 @@
 """Screen for <strategy>: emits candidate symbols for a given day.
 
-Usage (offline bed):
-    ALPHA_DATA_SOURCE=snapshot ALPHA_PIT_ROOT=data/pit/2yr python screen.py 2026-03-02
+Usage (offline bed) — ALPHA_PIT_ROOT is resolved against the CWD, so run this from the
+repo root (or give it an absolute path):
+    ALPHA_DATA_SOURCE=snapshot ALPHA_PIT_ROOT=data/pit/2yr \
+        python strategies/<name>/screen.py 2026-03-02
 
 The registry picks the source (ALPHA_DATA_SOURCE, default alpaca); the guard is ours to
 apply, per the RAW-source contract. Note the cross-section screen needs daily snapshots,
