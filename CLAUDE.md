@@ -35,4 +35,7 @@ python -m alpaca_kit.mcp    # the MCP server, stdio
 - Backtests run **only through `alpaca_kit.replay.replay_days`**, bounded to a bed's usable window
   (2yr 2024-06-03..2026-07-09, broad 2025-11-17..2026-03-27) — outside it a snapshot read raises
   `SnapshotMissingError`, but bar and corp-action reads just return empty, so bounding is on you.
+  Neither bed carries **warmup**: bars start AT the window start, so the whole window replays but
+  long-indicator readings mature late — on 2yr the 200DMA from 2025-03-20 and 52-week metrics from
+  2025-06-04 (trend_template names only from 2025-06-05); broad (90d) never gets there.
   The five honest-eval rules: `docs/backtest-rules.md`.

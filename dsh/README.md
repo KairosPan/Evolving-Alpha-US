@@ -4,7 +4,7 @@ STRATEGY runs on DeepSeek Harness (dsh). This directory is the repo's half of th
 
 | Path | What |
 |---|---|
-| `profile/cordis.yml` | profile TEMPLATE — mounts the alpaca-kit MCP server, the skill roots, the approval list |
+| `profile/cordis.yml` | profile TEMPLATE — mounts the alpaca-kit MCP server, the skill roots, and the INTENDED approval list (see step 6) |
 | `skills/mechanics/` | neutral mechanics, always apply: `backtest-rules`, `alpaca-kit-guide` |
 | `skills/style-kairos/` | the operator's own style: `doctrine`, `signals`, `lessons` — converted from the retired `seeds_v2/` JSON packs by `scripts/convert_seeds.py` |
 
@@ -65,14 +65,27 @@ deferring. Every style-kairos SKILL.md carries that scope header at the top.
    so a wrong path still lists all ten. That failure shows up per call instead:
    `screen` returns `ok=False, SnapshotMissingError`. Ten tools means the wiring is right; it does
    not by itself mean the bed is.
-6. **The ORDERS flag lives ONLY in the home copy.** `place_order`/`cancel_order` register only
-   when `ALPACA_KIT_ENABLE_ORDERS=1` **and** the APCA keys are present — the flag alone registers
-   nothing (`alpaca_kit/mcp/tools.py` gates on `orders_on and has_keys`), which is the spec's
-   double gate. The flag stays commented out in the repo copy of `cordis.yml` and is uncommented,
-   if ever, only by the operator in the installed copy — outside the agent's workspace, where the
-   agent cannot edit it back on. Keep the template's
-   `permissions: always_ask: [place_order, cancel_order]` either way: it is a second, independent
-   layer, and the one that still holds if the flag is ever mis-set.
+6. **The ORDERS flag lives ONLY in the home copy — and it is the only gate this repo enforces.**
+   `place_order`/`cancel_order` register only when `ALPACA_KIT_ENABLE_ORDERS=1` **and** the APCA
+   keys are present — the flag alone registers nothing (`alpaca_kit/mcp/tools.py` gates on
+   `orders_on and has_keys`). That is the spec's **Gate 1, registration**; the `has_keys` half is
+   extra hardening on the same gate, not a second one. The flag stays commented out in the repo
+   copy of `cordis.yml` and is uncommented, if ever, only by the operator in the installed copy —
+   outside the agent's workspace, where the agent cannot edit it back on.
+
+   **Gate 2 — per-order human approval — is INTENT in this branch, not an established layer.**
+   The template's `permissions: always_ask: [place_order, cancel_order]` is written in the same
+   indicative shape as the rest of the file and is **not** validated against a live dsh: in the
+   frozen survey, approval policy is a per-SESSION `ask`/`never` knob, per-tool allow/deny/ask
+   lives in the `tools/pre-execute` waterfall rather than in profile YAML, and MCP tools carry a
+   `serverName` namespace, so bare tool names would not match even if a top-level block bound. An
+   unrecognised YAML key merges silently, which fails open. So: **pin Gate 2 at install** against
+   the current dsh docs, by whichever mechanism it then offers — a permission preset whose
+   approval policy is `ask` (the shipped `workspace-write` preset already is), a
+   `tools/pre-execute` ask rule, or a per-tool key if one now exists — and then **confirm that an
+   order call actually prompts, before you trust the flag**. Until that confirmation, treat Gate 1
+   as the only layer standing between the agent and a paper order; do not rely on Gate 2 to hold
+   if the flag is ever mis-set.
 7. **Re-check the key names.** dsh is a developer preview and states that there will be
    compatibility-breaking changes. The shape in `profile/cordis.yml` is indicative, pinned
    against a survey frozen 2026-08-22

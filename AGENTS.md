@@ -19,8 +19,12 @@ strategies/.
   2025-11-17 .. 2026-03-27 (90 days). Each bed's trading_calendar() runs back to 2016 with no
   snapshots there, and the beds fail differently outside the window: a snapshot read raises
   SnapshotMissingError, while bar and corp-action reads return an EMPTY frame silently. Stay
-  inside the window. Set ALPHA_PIT_ROOT=data/pit/2yr (plus ALPHA_DATA_SOURCE=snapshot) for
-  offline work; both are resolved against the CWD, so run from the repo root.
+  inside the window. The beds also carry NO warmup: bars start AT the window start, so long
+  indicators are blind at first. The full window is replayable, but on 2yr the 200DMA is valid
+  only from 2025-03-20 and 52-week metrics from 2025-06-04 (trend_template returns zero names
+  before 2025-06-05); broad, at 90 days, never satisfies either. Set
+  ALPHA_PIT_ROOT=data/pit/2yr (plus ALPHA_DATA_SOURCE=snapshot) for offline work; both are
+  resolved against the CWD, so run from the repo root.
 - docs/backtest-rules.md — the five honest-eval rules. Every backtest follows them.
 - Tests: python -m pytest (offline, no keys; -q is already the default). Keep it green.
 

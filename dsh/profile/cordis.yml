@@ -35,6 +35,18 @@ skills:
     - <ABSOLUTE PATH TO THIS REPO>/dsh/skills/mechanics
     - <ABSOLUTE PATH TO THIS REPO>/dsh/skills/style-kairos
 
+# Gate 2 (per-order human approval) as INTENT, not as a validated key. The frozen survey has
+# no profile-level per-TOOL always_ask: ApprovalPolicy is a per-SESSION two-value knob
+# (ask | never, survey line 600), per-tool allow/deny/ask lives in the tools/pre-execute
+# waterfall (line 621, a plugin seam rather than YAML), and MCP tools are registered under a
+# serverName namespace (line 684), so bare tool names would not match even if a top-level block
+# did bind. An unrecognised key merges SILENTLY - it fails open, quietly.
+#
+# At install, realize this intent against the CURRENT dsh docs by whichever mechanism dsh then
+# offers - a permission preset whose approval policy is `ask` (the shipped workspace-write
+# preset already is), a tools/pre-execute ask rule, or a per-tool key if one now exists - and
+# then CONFIRM that an order call actually prompts. Until it is pinned and confirmed, Gate 1
+# (registration: ALPACA_KIT_ENABLE_ORDERS plus the APCA keys, above) is the only ENFORCED layer.
 permissions:
   always_ask: [place_order, cancel_order]
 

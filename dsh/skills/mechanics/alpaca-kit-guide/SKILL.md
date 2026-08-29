@@ -19,7 +19,10 @@
 - Corporate actions are keyed on announce_date := Alpaca process_date (no true announce
   field exists; this is the lookahead-safe key — it lags reality, never leads).
 - Bars feed is IEX on free/paper keys (SIP returns 403). History reaches ~2021 only.
-- Offline bed: ALPHA_PIT_ROOT=data/pit/2yr (526 days, 2024-06→2026-07, ~800 symbols).
+- Offline bed: ALPHA_PIT_ROOT=data/pit/2yr (526 days, 2024-06→2026-07, ~800 symbols). No
+  warmup: bars start at the window start, so `screen(kind="trend_template")` returns zero names
+  before 2025-06-05 and `breadth` returns `pct_above_200dma`/`net_new_highs` as None before
+  2025-03-20/2025-06-04 — inside ok=true. The 90-day broad bed never satisfies either.
 - Tools are fail-soft: {"ok": false, "error": ...} means fix the call or the env, not retry loops.
   `corp_actions` reports ok=false when the artifact is missing rather than an empty clean
   result — "could not check" is never the same answer as "nothing pending".
