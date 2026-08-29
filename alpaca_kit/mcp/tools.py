@@ -1,20 +1,33 @@
 """The MCP toolset, SDK-free and fully offline-testable.
 
-Registration rules (spec section 4/5): keyless EDGAR always; market tools behind APCA keys
-or an offline PIT root; account queries behind keys; order tools behind keys AND the
-operator-only ALPACA_KIT_ENABLE_ORDERS flag (set in the dsh profile, outside the agent's
-workspace). Every tool body is fail-soft: exceptions return ok=False with an actionable
-message, never raise into the harness.
+Registration rules (spec section 4/5, as amended by the Task 6 review): keyless EDGAR always;
+key-or-bed market tools (daily_bars, calendar, corp_actions) behind APCA keys OR an offline PIT
+root; snapshot-backed tools (market_snapshot, screen, breadth) behind ALPHA_PIT_ROOT alone, since
+AlpacaSource.daily_snapshot raises NotImplementedError and a daily cross-section exists only on a
+captured bed; account queries behind keys; order tools behind keys AND the operator-only
+ALPACA_KIT_ENABLE_ORDERS flag (set in the dsh profile, outside the agent's workspace). Every tool
+body is fail-soft: exceptions return ok=False with an actionable message, never raise into the
+harness.
 
-PIT: every dated call wraps the RAW source in GuardedSource(AsOfGuard(as_of)) - the tool
-layer is the guard-wrapping caller the data-layer contract demands.
+PIT: every dated market call wraps the RAW source in GuardedSource(AsOfGuard(as_of)) - the tool
+layer is the guard-wrapping caller the data-layer contract demands - and as_of defaults to TODAY,
+never to the requested date, because a cursor set to the request is a tautology that guards
+nothing. `earnings` is the deliberate exception: EdgarSource.earnings_known filters on
+filing_date <= as_of itself, so a wrap would only check as_of against as_of.
+
+Every frame leaves through _frame, which is JSON-safe by construction: dates become ISO strings
+and NaN/NaT become null (a bare NaN is invalid JSON per RFC 8259 and strict parsers reject it).
 """
 from __future__ import annotations
 
 import functools
+import math
 import os
 from dataclasses import dataclass
 from datetime import date as Date
+from datetime import datetime as DateTime
+
+import pandas as pd
 
 from alpaca_kit.firewall import AsOfGuard
 from alpaca_kit.source import GuardedSource
@@ -48,8 +61,19 @@ def _d(s: str) -> Date:
     return Date.fromisoformat(s)
 
 
+def _jsonable(v):
+    """One cell -> a JSON-encodable value. date/datetime -> ISO string; NaN/NaT/None -> None."""
+    if isinstance(v, float):                 # numpy float64 subclasses float
+        return v if math.isfinite(v) else None   # bare NaN/Infinity is invalid JSON (RFC 8259)
+    if v is None or v is pd.NaT:
+        return None
+    if isinstance(v, (DateTime, Date)):      # datetime / pd.Timestamp are date subclasses
+        return v.isoformat()
+    return v
+
+
 def _frame(df) -> dict:
-    rows = df.to_dict(orient="records")
+    rows = [{k: _jsonable(v) for k, v in rec.items()} for rec in df.to_dict(orient="records")]
     out = {"ok": True, "rows": rows[:MAX_ROWS]}
     if len(rows) > MAX_ROWS:
         out["truncated"] = f"{len(rows)} rows, first {MAX_ROWS} shown"
@@ -67,12 +91,24 @@ def build_tools(env=None, *, source_factory=None, trading_factory=None,
     pit_root = env.get("ALPHA_PIT_ROOT")
     orders_on = env.get("ALPACA_KIT_ENABLE_ORDERS") == "1"
 
-    if source_factory is None:
+    def _bed_source():
+        """The captured-bed source. Its daily_snapshot is the only working one (AlpacaSource
+        raises NotImplementedError), so it backs the snapshot tools even when keys are present."""
         from alpaca_kit.registry import make_source
+        return make_source("snapshot", pit_root=pit_root)
+
+    injected_source = source_factory is not None
+    if not injected_source:
         if has_keys:
+            from alpaca_kit.registry import make_source
             source_factory = lambda: make_source("alpaca")            # noqa: E731
         elif pit_root:
-            source_factory = lambda: make_source("snapshot", pit_root=pit_root)  # noqa: E731
+            source_factory = _bed_source
+    # market_snapshot/screen read a CAPTURED bed, never live Alpaca: gate them on ALPHA_PIT_ROOT
+    # alone. An injected factory SUPPLIES the source but never OPENS the gate, so registration
+    # stays a pure function of `env` (the same posture the order gate takes).
+    snapshot_factory = source_factory if injected_source else _bed_source
+
     if edgar_factory is None:
         from alpaca_kit.feeds.edgar import EdgarSource
         edgar_factory = EdgarSource
@@ -99,36 +135,48 @@ def build_tools(env=None, *, source_factory=None, trading_factory=None,
             return _frame(g.daily_bars(symbol, _d(start), _d(end)))
         add("daily_bars", "RAW unadjusted daily bars for a symbol", daily_bars)
 
-        def market_snapshot(date: str | None = None, as_of: str | None = None):
-            day = _d(date) if date else Date.today()
-            g = _guarded(source_factory, _d(as_of) if as_of else day)
-            return _frame(g.daily_snapshot(day))
-        add("market_snapshot", "full-market daily cross-section for a date", market_snapshot)
-
         def calendar(start: str, end: str):
             cal = source_factory().trading_calendar()
             return {"ok": True, "days": [d.isoformat() for d in cal
                                          if _d(start) <= d <= _d(end)]}
         add("calendar", "trading days in a date range", calendar)
 
-        def corp_actions(as_of: str | None = None):
+        def corp_actions(symbol: str | None = None, as_of: str | None = None):
             day = _d(as_of) if as_of else Date.today()
             g = _guarded(source_factory, day)
-            return _frame(g.corporate_actions_known(day))
-        add("corp_actions", "corporate actions known as of a date (announce-date keyed)", corp_actions)
+            if not g.corp_actions_available():
+                # Never collapse MISSING into checked-and-clean: an empty ok=True here would tell
+                # the agent "no split/delisting pending" when the truth is "could not check".
+                return {"ok": False, "error": "corp actions artifact missing - could not check"}
+            df = g.corporate_actions_known(day)
+            if symbol is not None and not df.empty:
+                df = df[df["symbol"] == symbol]
+            if "announce_date" in df.columns:
+                df = df.sort_values("announce_date", ascending=False)   # newest-first BEFORE the cap
+            return _frame(df)
+        add("corp_actions", "corporate actions known as of a date (announce-date keyed), newest "
+                            "first; optionally filtered to one symbol", corp_actions)
+
+    # ---- snapshot-backed: captured PIT bed only (a live cross-section does not exist) ----------
+    if pit_root:
+        def market_snapshot(date: str | None = None, as_of: str | None = None):
+            day = _d(date) if date else Date.today()
+            g = _guarded(snapshot_factory, _d(as_of) if as_of else Date.today())
+            return _frame(g.daily_snapshot(day))
+        add("market_snapshot", "full-market daily cross-section for a date (offline PIT bed)",
+            market_snapshot)
 
         def screen(date: str, kind: str = "gainer", as_of: str | None = None):
-            from alpaca_kit.universe import build_trend_template_universe, build_universe
+            from alpaca_kit.universe import build_universe
             day = _d(date)
-            g = _guarded(source_factory, _d(as_of) if as_of else day)
-            uni = (build_trend_template_universe(g, day) if kind == "trend_template"
-                   else build_universe(g, day))
+            g = _guarded(snapshot_factory, _d(as_of) if as_of else Date.today())
+            # screen=kind routes through the universe module's own resolver, so an explicit kind
+            # beats ambient ALPHA_UNIVERSE_SCREEN and an unknown kind raises -> ok=False.
+            uni = build_universe(g, day, screen=kind)
             # CandidateUniverse indexes StockSnapshots by symbol; .all() is its list accessor.
             return {"ok": True, "rows": [s.model_dump(mode="json") for s in uni.all()][:MAX_ROWS]}
-        add("screen", "daily screen: kind=gainer or trend_template", screen)
+        add("screen", "daily screen (offline PIT bed): kind=gainer or trend_template", screen)
 
-    # ---- breadth (offline bed only: bars must be local) -------------------------
-    if pit_root:
         def breadth(date: str):
             from alpaca_kit.features.breadth import market_breadth
             from alpaca_kit.pit.pit_store import PITStore
@@ -156,16 +204,18 @@ def build_tools(env=None, *, source_factory=None, trading_factory=None,
         add("orders", "order list; Alpaca returns the 50 most recent OPEN orders by default - "
                       "pass status=closed or status=all for others", orders)
 
-        # ---- reserved: operator gate (spec section 5, Gate 1) -------------------
-        if orders_on:
-            def place_order(symbol: str, qty: float, side: str, order_type: str = "market",
-                            limit_price: float | None = None):
-                return {"ok": True, **(trading_factory().place_order(
-                    symbol, qty, side, order_type=order_type, limit_price=limit_price) or {})}
-            add("place_order", "submit a PAPER order (operator-gated)", place_order)
+    # ---- reserved: operator gate (spec section 5, Gate 1) -----------------------
+    # Gated on has_keys, NOT on trading_factory: an injected factory must never be able to
+    # register the mutating tools for a keyless process.
+    if orders_on and has_keys:
+        def place_order(symbol: str, qty: float, side: str, order_type: str = "market",
+                        limit_price: float | None = None):
+            return {"ok": True, **(trading_factory().place_order(
+                symbol, qty, side, order_type=order_type, limit_price=limit_price) or {})}
+        add("place_order", "submit a PAPER order (operator-gated)", place_order)
 
-            def cancel_order(order_id: str):
-                return {"ok": True, **(trading_factory().cancel_order(order_id) or {})}
-            add("cancel_order", "cancel a paper order by id (operator-gated)", cancel_order)
+        def cancel_order(order_id: str):
+            return {"ok": True, **(trading_factory().cancel_order(order_id) or {})}
+        add("cancel_order", "cancel a paper order by id (operator-gated)", cancel_order)
 
     return tools
