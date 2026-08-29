@@ -15,24 +15,43 @@ deferring. Every style-kairos SKILL.md carries that scope header at the top.
 
 ## Install
 
-1. **Create the harness home.** `npx @deepseek-ai/dsh web` once (`$DSH_HOME`, default
+1. **Install the Python side first.** `pip install -e ".[live]"` in this repo. The profile
+   mounts the MCP server as `python -m alpaca_kit.mcp`, which imports `alpaca_kit` and its
+   deps (`mcp`, `pandas`, `pyarrow`, `pydantic`); `[live]` adds `alpaca-py`, without which the
+   live `daily_bars` path cannot fetch. Nothing below works until this import does:
+   `python -c "import alpaca_kit.mcp.server"`.
+2. **Create the harness home.** `npx @deepseek-ai/dsh web` once (`$DSH_HOME`, default
    `~/.dsh`; the web UI comes up on http://127.0.0.1:3080). This is what creates the profile
    directory layout the next step writes into.
-2. **Copy the profile in.** Copy `dsh/profile/cordis.yml` into the harness home's profile
+3. **Copy the profile in.** Copy `dsh/profile/cordis.yml` into the harness home's profile
    location per the current dsh docs — as of the frozen survey that is
    `$DSH_HOME/profiles/<name>/` and its patch file is `cordis.patch.yml`. Fill in every
    `<ABSOLUTE PATH TO THIS REPO>` placeholder in the copy; the repo copy keeps the
-   placeholders. Confirm what actually booted with `dsh --profile <name> --dump-config`.
-3. **Give it the keys.** `source .env.alpaca` and `source .env.deepseek` in the shell that
+   placeholders. In the same pass, replace the bare `python` in the server `command:` with the
+   ABSOLUTE path of the interpreter step 1 installed into (`python -c "import sys;
+   print(sys.executable)"`) — dsh spawns the server as a subprocess whose `PATH` need not be
+   your shell's, and a bare `python` can resolve to a system interpreter that has none of the
+   deps. Confirm what actually booted with `dsh --profile <name> --dump-config`.
+4. **Give it the keys.** `source .env.alpaca` and `source .env.deepseek` in the shell that
    launches dsh (`APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `DEEPSEEK_API_KEY`), or put the
    variables in the home profile's env block. Neither file is loaded automatically, and
-   neither is in git. Without `ALPHA_PIT_ROOT` the snapshot-backed tools
+   neither is in git. `ALPHA_PIT_ROOT` is already in the template's env block (`data/pit/2yr`,
+   relative to the server's `cwd`) — keep it: without it the snapshot-backed tools
    (`market_snapshot`, `screen`, `breadth`) do not register at all.
-4. **The ORDERS flag lives ONLY in the home copy.** `ALPACA_KIT_ENABLE_ORDERS=1` is what
+5. **Check what registered, before blaming dsh.** The toolset is a pure function of the
+   environment, so it is checkable without the harness — in the same shell and cwd the server
+   will run in:
+   ```bash
+   python -c "from alpaca_kit.mcp.tools import build_tools; print(sorted(build_tools()))"
+   ```
+   Keys + bed gives all ten read-only tools (`account`, `breadth`, `calendar`, `corp_actions`,
+   `daily_bars`, `earnings`, `market_snapshot`, `orders`, `positions`, `screen`) and no order
+   tools. Only `earnings` means neither the keys nor `ALPHA_PIT_ROOT` reached the process.
+6. **The ORDERS flag lives ONLY in the home copy.** `ALPACA_KIT_ENABLE_ORDERS=1` is what
    registers `place_order`/`cancel_order`. It stays commented out in the repo copy of
    `cordis.yml` and is uncommented, if ever, only by the operator in the installed copy —
    outside the agent's workspace, where the agent cannot edit it back on.
-5. **Re-check the key names.** dsh is a developer preview and states that there will be
+7. **Re-check the key names.** dsh is a developer preview and states that there will be
    compatibility-breaking changes. The shape in `profile/cordis.yml` is indicative, pinned
    against a survey frozen 2026-08-22
    (`docs/research/2026-08-22-deepseek-harness-dsh-survey.md`), not against a live install.
