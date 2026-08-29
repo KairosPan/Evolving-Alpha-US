@@ -91,7 +91,7 @@ class PITStore:
         return df
 
     # ── earnings (P5a) — facts keyed on filing_date, calendar on known_asof; frames from
-    #    alpha/data/earnings.py's converters. has_earnings() is the tri-state MISSING seam (mirrors
+    #    alpaca_kit.feeds.earnings.py's converters. has_earnings() is the tri-state MISSING seam (mirrors
     #    has_corp_actions): True even for an empty facts frame, False only when the artifact is absent. ──
     def _earnings_facts_path(self) -> Path:
         return self._root / "earnings_facts.parquet"

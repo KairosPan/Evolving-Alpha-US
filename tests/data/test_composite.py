@@ -6,10 +6,10 @@ from datetime import date
 import pandas as pd
 import pytest
 
-from alpha.data.composite import CompositeSource
-from alpha.data.firewall import AsOfGuard, LookaheadError
-from alpha.data.registry import _SOURCES, make_composite_source, make_source
-from alpha.data.source import FakeSource, GuardedSource
+from alpaca_kit.composite import CompositeSource
+from alpaca_kit.firewall import AsOfGuard, LookaheadError
+from alpaca_kit.registry import _SOURCES, make_composite_source, make_source
+from alpaca_kit.source import FakeSource, GuardedSource
 
 
 def _base_source() -> FakeSource:
@@ -136,7 +136,7 @@ def test_composite_is_registered(apca, monkeypatch):
 def test_make_source_composite_env_routes_corp_to_snapshot(apca, monkeypatch, tmp_path):
     # base=alpaca (bars/snapshot vendor), corp_actions overridden to an offline snapshot store.
     import pandas as pd
-    from alpha.data.pit_store import PITStore
+    from alpaca_kit.pit.pit_store import PITStore
     store = PITStore(tmp_path)
     store.put_corp_actions(pd.DataFrame({"symbol": ["SNP"], "announce_date": [date(2026, 6, 1)],
                                          "ex_date": [date(2026, 6, 5)], "kind": ["cash_dividend"],
@@ -171,7 +171,7 @@ def test_composite_recursion_guard(apca, monkeypatch):
 
 def test_default_source_byte_identical_when_composite_unused(apca, monkeypatch):
     # Registering 'composite' must not perturb the default path.
-    from alpha.data.alpaca import AlpacaSource
+    from alpaca_kit.alpaca import AlpacaSource
     monkeypatch.delenv("ALPHA_DATA_SOURCE", raising=False)
     assert isinstance(make_source(), AlpacaSource)
     assert isinstance(make_source("alpaca"), AlpacaSource)
@@ -181,7 +181,7 @@ def test_default_source_byte_identical_when_composite_unused(apca, monkeypatch):
 
 def _earnings_backend() -> FakeSource:
     """An earnings-only backend (a distinct symbol EARN; no bars)."""
-    from alpha.data.earnings import EarningsCalendarEntry, EarningsFact
+    from alpaca_kit.feeds.earnings import EarningsCalendarEntry, EarningsFact
     facts = [EarningsFact(symbol="EARN", fiscal_period="2026Q1", period_end=date(2026, 3, 31),
                           filing_date=date(2026, 6, 5), actual_eps=2.0)]
     cal = [EarningsCalendarEntry(symbol="EARN", expected_date=date(2026, 6, 5),
@@ -204,7 +204,7 @@ def test_unset_earnings_falls_to_base_and_raises_not_implemented():
     # an EDGAR-less base like AlpacaSource would raise NotImplementedError. Prove both shapes:
     comp = CompositeSource(_base_source())                        # no earnings override
     assert comp.earnings_available() is False                     # falls to base (no earnings) -> MISSING
-    from alpha.data.alpaca import AlpacaSource
+    from alpaca_kit.alpaca import AlpacaSource
 
     class _NoEarnAlpaca(AlpacaSource):
         def __init__(self):
@@ -222,21 +222,21 @@ def test_guarded_composite_blocks_future_earnings():
 
 
 def test_earnings_is_a_known_capability():
-    from alpha.data.composite import _CAPABILITIES
+    from alpaca_kit.composite import _CAPABILITIES
     assert "earnings" in _CAPABILITIES
 
 
 # ── short_interest + offerings capability routing (P5b) ───────────────────────────────────────────────
 
 def _si_backend() -> FakeSource:
-    from alpha.data.short_interest import ShortInterest
+    from alpaca_kit.feeds.short_interest import ShortInterest
     si = [ShortInterest(symbol="SI", settlement_date=date(2026, 6, 14),
                         publication_date=date(2026, 6, 25), shares_short=1.0e7, days_to_cover=5.0)]
     return FakeSource(calendar=[], bars={}, snapshots={}, short_interest=si)
 
 
 def _offerings_backend() -> FakeSource:
-    from alpha.data.offerings import OfferingEvent
+    from alpaca_kit.feeds.offerings import OfferingEvent
     events = [OfferingEvent(symbol="OFR", offering_id="A", event="announce", kind="shelf",
                             process_date=date(2026, 6, 9))]
     return FakeSource(calendar=[], bars={}, snapshots={}, offering_events=events)
@@ -254,7 +254,7 @@ def test_short_interest_and_offerings_route_to_their_backends():
 
 
 def test_unset_short_interest_and_offerings_fall_to_base_and_raise():
-    from alpha.data.alpaca import AlpacaSource
+    from alpaca_kit.alpaca import AlpacaSource
 
     class _NoFeedsAlpaca(AlpacaSource):
         def __init__(self):
@@ -277,5 +277,5 @@ def test_guarded_composite_blocks_future_short_interest_and_offerings():
 
 
 def test_short_interest_and_offerings_are_known_capabilities():
-    from alpha.data.composite import _CAPABILITIES
+    from alpaca_kit.composite import _CAPABILITIES
     assert {"short_interest", "offerings"} <= _CAPABILITIES

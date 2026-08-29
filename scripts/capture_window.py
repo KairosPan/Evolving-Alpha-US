@@ -6,9 +6,9 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from alpha.data.registry import make_source
-from alpha.data.capture import capture_window
-from alpha.data.pit_store import PITStore
+from alpaca_kit.registry import make_source
+from alpaca_kit.pit.capture import capture_window
+from alpaca_kit.pit.pit_store import PITStore
 
 
 def main() -> None:

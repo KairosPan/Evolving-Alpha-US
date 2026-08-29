@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from datetime import date
 
-from alpha.data.float_shares import FloatFact
-from alpha.data.short_interest import ShortInterest
-from alpha.features.short_squeeze import short_squeeze_signals
+from alpaca_kit.feeds.float_shares import FloatFact
+from alpaca_kit.feeds.short_interest import ShortInterest
+from alpaca_kit.features.short_squeeze import short_squeeze_signals
 
 _AS_OF = date(2026, 6, 12)
 

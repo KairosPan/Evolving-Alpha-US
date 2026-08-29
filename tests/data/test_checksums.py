@@ -6,9 +6,9 @@ from datetime import date
 
 import pytest
 
-from alpha.data.capture import capture_window
-from alpha.data.pit_store import PITStore
-from alpha.data.integrity_check import verify_checksums
+from alpaca_kit.pit.capture import capture_window
+from alpaca_kit.pit.pit_store import PITStore
+from alpaca_kit.pit.integrity_check import verify_checksums
 
 
 def _captured_root(tmp_path, fake_source):

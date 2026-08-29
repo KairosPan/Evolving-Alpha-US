@@ -5,7 +5,7 @@ from datetime import date
 
 import pandas as pd
 
-from alpha.data.float_shares import (
+from alpaca_kit.feeds.float_shares import (
     FloatFact,
     float_from_frame,
     float_to_frame,

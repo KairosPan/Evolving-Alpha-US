@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from alpha.features.trend_template import (
+from alpaca_kit.features.trend_template import (
     TREND_TEMPLATE_CRITERIA, evaluate_trend_template, rs_percentiles, rs_raw_score,
     trend_template_screen,
 )

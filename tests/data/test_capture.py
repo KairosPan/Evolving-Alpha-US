@@ -5,10 +5,10 @@ from __future__ import annotations
 
 from datetime import date
 
-from alpha.data.capture import capture_window
-from alpha.data.corp_actions import has_reverse_split_pending
-from alpha.data.pit_store import PITStore
-from alpha.data.snapshot_source import SnapshotSource
+from alpaca_kit.pit.capture import capture_window
+from alpaca_kit.feeds.corp_actions import has_reverse_split_pending
+from alpaca_kit.pit.pit_store import PITStore
+from alpaca_kit.pit.snapshot_source import SnapshotSource
 
 
 def test_capture_window_stores_corp_actions(fake_source, tmp_path):

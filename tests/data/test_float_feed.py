@@ -5,7 +5,7 @@ from datetime import date
 
 import pytest
 
-from alpha.data.float_feed import FloatSource
+from alpaca_kit.feeds.float_feed import FloatSource
 
 
 class _StubFloatSource(FloatSource):

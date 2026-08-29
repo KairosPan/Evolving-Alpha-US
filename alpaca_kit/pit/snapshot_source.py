@@ -4,8 +4,8 @@ from datetime import date as Date
 
 import pandas as pd
 
-from alpha.data.corp_actions import known_corporate_actions
-from alpha.data.earnings import (
+from alpaca_kit.feeds.corp_actions import known_corporate_actions
+from alpaca_kit.feeds.earnings import (
     EarningsCalendarEntry,
     EarningsFact,
     calendar_from_frame,
@@ -13,10 +13,10 @@ from alpha.data.earnings import (
     known_calendar,
     known_earnings,
 )
-from alpha.data.float_shares import FloatFact, float_from_frame, known_float
-from alpha.data.offerings import OfferingEvent, events_from_frame, known_offering_events
-from alpha.data.pit_store import PITStore
-from alpha.data.short_interest import ShortInterest, known_short_interest, si_from_frame
+from alpaca_kit.feeds.float_shares import FloatFact, float_from_frame, known_float
+from alpaca_kit.feeds.offerings import OfferingEvent, events_from_frame, known_offering_events
+from alpaca_kit.pit.pit_store import PITStore
+from alpaca_kit.feeds.short_interest import ShortInterest, known_short_interest, si_from_frame
 
 _EMPTY_BARS = ["date", "open", "high", "low", "close", "volume"]
 
@@ -63,7 +63,7 @@ class SnapshotSource:
     def corp_actions_available(self) -> bool:
         """False iff corp_actions.parquet is absent — the guard could not check reverse-split/dilution.
         True for a present (even empty) artifact. Distinguishes MISSING from checked-and-clean, which
-        both otherwise collapse to an empty frame -> False flags (see alpha/data/corp_actions.py)."""
+        both otherwise collapse to an empty frame -> False flags (see alpaca_kit.feeds.corp_actions.py)."""
         return self._store.has_corp_actions()
 
     # ── earnings (P5a) — served from PITStore fixtures, PIT-filtered on filing_date / known_asof ──

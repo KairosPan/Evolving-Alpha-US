@@ -5,7 +5,7 @@ from datetime import date
 
 import pandas as pd
 
-from alpha.data.offerings import (
+from alpaca_kit.feeds.offerings import (
     OfferingEvent,
     events_from_frame,
     events_to_frame,

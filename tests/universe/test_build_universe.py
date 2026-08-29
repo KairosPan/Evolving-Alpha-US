@@ -2,8 +2,8 @@
 from __future__ import annotations
 from datetime import date
 import pandas as pd
-from alpha.data.source import FakeSource
-from alpha.universe.universe import build_universe
+from alpaca_kit.source import FakeSource
+from alpaca_kit.universe import build_universe
 
 
 def test_build_universe_screens_gainers(fake_source):
@@ -22,8 +22,8 @@ def test_rvol_uses_only_trailing_bars(fake_source):
 
 def test_build_universe_is_guard_safe(fake_source):
     # A guard at 6/12 must not block building the 6/12 universe (uses <=6/12 only).
-    from alpha.data.firewall import AsOfGuard
-    from alpha.data.source import GuardedSource
+    from alpaca_kit.firewall import AsOfGuard
+    from alpaca_kit.source import GuardedSource
     gs = GuardedSource(fake_source, AsOfGuard(date(2026, 6, 12)))
     u = build_universe(gs, date(2026, 6, 12), gainer_pct=10.0, gap_pct=5.0, rvol_window=2)
     assert u.get("RUN") is not None
@@ -37,8 +37,8 @@ def test_build_universe_populates_consecutive_up_days(fake_source):
 
 def test_build_universe_runner_tier_is_guard_safe(fake_source):
     # cud bars are fetched with end == day <= as_of, so the firewall does not trip.
-    from alpha.data.firewall import AsOfGuard
-    from alpha.data.source import GuardedSource
+    from alpaca_kit.firewall import AsOfGuard
+    from alpaca_kit.source import GuardedSource
     gs = GuardedSource(fake_source, AsOfGuard(date(2026, 6, 12)))
     u = build_universe(gs, date(2026, 6, 12), gainer_pct=10.0, gap_pct=5.0, rvol_window=2)
     assert u.get("RUN").consecutive_up_days == 2

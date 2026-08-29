@@ -1,4 +1,4 @@
-# alpha/data/float_shares.py
+# alpaca_kit.feeds.float_shares.py
 #
 # Free-float data model + source-agnostic PIT primitives (P5b; spec
 # docs/superpowers/specs/2026-07-13-p5b-float-feed-design.md). Free float (shares outstanding minus

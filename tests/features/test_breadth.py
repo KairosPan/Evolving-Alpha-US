@@ -1,6 +1,6 @@
-from alpha.universe.stock import StockSnapshot
-from alpha.universe.universe import CandidateUniverse
-from alpha.features.breadth import (
+from alpaca_kit.stock import StockSnapshot
+from alpaca_kit.universe import CandidateUniverse
+from alpaca_kit.features.breadth import (
     counts, failed_breakout_count, follow_through_rate, gap_and_go_count,
 )
 

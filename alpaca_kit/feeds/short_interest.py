@@ -1,4 +1,4 @@
-# alpha/data/short_interest.py
+# alpaca_kit.feeds.short_interest.py
 #
 # FINRA short-interest data model + source-agnostic PIT primitive (P5b; spec
 # docs/superpowers/specs/2026-07-13-p5b-shortinterest-offerings-design.md). FINRA collects each security's

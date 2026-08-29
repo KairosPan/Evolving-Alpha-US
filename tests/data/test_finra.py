@@ -5,7 +5,7 @@ from datetime import date
 
 import pytest
 
-from alpha.data.finra import FinraSource
+from alpaca_kit.feeds.finra import FinraSource
 
 # A FINRA-shaped payload: two settlements, the later one carrying an explicit disseminationDate, the
 # earlier one relying on the derived settlement+lag publication date.

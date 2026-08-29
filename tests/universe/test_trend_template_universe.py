@@ -6,9 +6,9 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from alpha.data.firewall import AsOfGuard
-from alpha.data.source import FakeSource, GuardedSource
-from alpha.universe.universe import build_trend_template_universe, build_universe
+from alpaca_kit.firewall import AsOfGuard
+from alpaca_kit.source import FakeSource, GuardedSource
+from alpaca_kit.universe import build_trend_template_universe, build_universe
 
 DAY = date(2026, 6, 12)
 
@@ -95,7 +95,7 @@ def test_empty_env_screen_falls_back_to_gainer_byte_identical(fake_source, monke
 
 def test_resolve_universe_screen(monkeypatch):
     import pytest
-    from alpha.universe import resolve_universe_screen
+    from alpaca_kit.universe import resolve_universe_screen
     monkeypatch.delenv("ALPHA_UNIVERSE_SCREEN", raising=False)
     assert resolve_universe_screen() == "gainer"                  # unset -> default
     monkeypatch.setenv("ALPHA_UNIVERSE_SCREEN", "")

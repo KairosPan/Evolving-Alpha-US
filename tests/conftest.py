@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import date
 import pandas as pd
 import pytest
-from alpha.data.source import FakeSource
+from alpaca_kit.source import FakeSource
 
 
 @pytest.fixture

@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import capture_window as cw  # noqa: E402
 
-from alpha.data.pit_store import PITStore  # noqa: E402
+from alpaca_kit.pit.pit_store import PITStore  # noqa: E402
 
 
 def test_main_builds_source_via_make_source(monkeypatch, tmp_path, fake_source):

@@ -5,17 +5,17 @@ from typing import Protocol
 
 import pandas as pd
 
-from alpha.data.corp_actions import known_corporate_actions
-from alpha.data.earnings import (
+from alpaca_kit.feeds.corp_actions import known_corporate_actions
+from alpaca_kit.feeds.earnings import (
     EarningsCalendarEntry,
     EarningsFact,
     known_calendar,
     known_earnings,
 )
-from alpha.data.firewall import AsOfGuard
-from alpha.data.float_shares import FloatFact, known_float
-from alpha.data.offerings import OfferingEvent, known_offering_events
-from alpha.data.short_interest import ShortInterest, known_short_interest
+from alpaca_kit.firewall import AsOfGuard
+from alpaca_kit.feeds.float_shares import FloatFact, known_float
+from alpaca_kit.feeds.offerings import OfferingEvent, known_offering_events
+from alpaca_kit.feeds.short_interest import ShortInterest, known_short_interest
 
 _EMPTY_BARS = ["date", "open", "high", "low", "close", "volume"]
 _EMPTY_SNAP = ["symbol", "name", "open", "high", "low", "close", "volume", "prev_close",
@@ -32,18 +32,18 @@ class MarketDataSource(Protocol):
     def corporate_actions_known(self, as_of: Date) -> pd.DataFrame: ...
     def corp_actions_available(self) -> bool: ...   # False = corp artifact MISSING (guard cannot check)
     # ── earnings (P5a; OPTIONAL capability — a source without it raises NotImplementedError, like
-    #    daily_snapshot on AlpacaSource). filing_date/known_asof are the PIT keys (alpha/data/earnings.py).
+    #    daily_snapshot on AlpacaSource). filing_date/known_asof are the PIT keys (alpaca_kit.feeds.earnings.py).
     def earnings_known(self, symbol: str, as_of: Date) -> list[EarningsFact]: ...   # filing_date <= as_of
     def earnings_calendar(self, as_of: Date) -> list[EarningsCalendarEntry]: ...    # known_asof  <= as_of
     def earnings_available(self) -> bool: ...        # False = earnings artifact MISSING (fail-closed)
-    # ── short interest (P5b; OPTIONAL) — publication_date is the PIT key (alpha/data/short_interest.py).
+    # ── short interest (P5b; OPTIONAL) — publication_date is the PIT key (alpaca_kit.feeds.short_interest.py).
     def short_interest_known(self, symbol: str, as_of: Date) -> list[ShortInterest]: ...  # publication_date <= as_of
     def short_interest_available(self) -> bool: ...  # False = short-interest artifact MISSING (fail-closed)
     # ── offerings lifecycle (P5b; OPTIONAL) — each event's own process_date is the PIT key
-    #    (alpha/data/offerings.py). is_dilution_overhang folds these; corp has_dilution_filing = fail-closed default.
+    #    (alpaca_kit.feeds.offerings.py). is_dilution_overhang folds these; corp has_dilution_filing = fail-closed default.
     def offering_events_known(self, symbol: str, as_of: Date) -> list[OfferingEvent]: ...  # process_date <= as_of
     def offerings_available(self) -> bool: ...       # False = offerings artifact MISSING (fail-closed)
-    # ── free float (P5b; OPTIONAL) — knowable_date is the PIT key (alpha/data/float_shares.py); free_float
+    # ── free float (P5b; OPTIONAL) — knowable_date is the PIT key (alpaca_kit.feeds.float_shares.py); free_float
     #    in RAW shares. The denominator ShortInterest.percent_of_float needs + the L3 float-aware sizing input.
     def float_known(self, symbol: str, as_of: Date) -> list[FloatFact]: ...  # knowable_date <= as_of
     def float_available(self) -> bool: ...           # False = float artifact MISSING (fail-closed)

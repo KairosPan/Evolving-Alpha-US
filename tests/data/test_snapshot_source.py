@@ -2,8 +2,8 @@ from __future__ import annotations
 from datetime import date
 import pandas as pd
 import pytest
-from alpha.data.pit_store import PITStore
-from alpha.data.snapshot_source import SnapshotSource, SnapshotMissingError
+from alpaca_kit.pit.pit_store import PITStore
+from alpaca_kit.pit.snapshot_source import SnapshotSource, SnapshotMissingError
 
 
 def _seed(tmp_path):
@@ -59,7 +59,7 @@ def test_corp_actions_available_reflects_artifact_presence(tmp_path):
 # ── earnings (P5a) ────────────────────────────────────────────────────────────────────────────────
 
 def _seed_earnings(tmp_path):
-    from alpha.data.earnings import (EarningsCalendarEntry, EarningsFact,
+    from alpaca_kit.feeds.earnings import (EarningsCalendarEntry, EarningsFact,
                                      calendar_to_frame, facts_to_frame)
     store = PITStore(tmp_path)
     facts = [EarningsFact(symbol="RUN", fiscal_period="2026Q1", period_end=date(2026, 3, 31),
@@ -99,8 +99,8 @@ def test_snapshot_earnings_available_reflects_artifact_presence(tmp_path):
 # ── short interest + offerings (P5b) ─────────────────────────────────────────────────────────────────
 
 def _seed_si_offerings(tmp_path):
-    from alpha.data.short_interest import ShortInterest, si_to_frame
-    from alpha.data.offerings import OfferingEvent, events_to_frame
+    from alpaca_kit.feeds.short_interest import ShortInterest, si_to_frame
+    from alpaca_kit.feeds.offerings import OfferingEvent, events_to_frame
     store = PITStore(tmp_path)
     si = [ShortInterest(symbol="RUN", settlement_date=date(2026, 6, 14),
                         publication_date=date(2026, 6, 25), shares_short=1.2e7, days_to_cover=6.0),
@@ -124,7 +124,7 @@ def test_snapshot_short_interest_pit_and_symbol_filter(tmp_path):
 
 
 def test_snapshot_offering_events_lifecycle_pit(tmp_path):
-    from alpha.data.offerings import is_dilution_overhang
+    from alpaca_kit.feeds.offerings import is_dilution_overhang
     src, _ = _seed_si_offerings(tmp_path)
     before = src.offering_events_known("RUN", date(2026, 6, 19))
     assert is_dilution_overhang(before, "RUN", date(2026, 6, 19)) is True   # announced, not yet withdrawn

@@ -1,8 +1,8 @@
 # tests/universe/test_universe.py
 from __future__ import annotations
 import pytest
-from alpha.universe.stock import StockSnapshot
-from alpha.universe.universe import CandidateUniverse
+from alpaca_kit.stock import StockSnapshot
+from alpaca_kit.universe import CandidateUniverse
 
 
 def _snap(symbol, status="gainer", rvol=None):

@@ -12,15 +12,15 @@ from datetime import date
 
 import pandas as pd
 
-from alpha.data.capture import capture_window
-from alpha.data.earnings import EarningsCalendarEntry, EarningsFact
-from alpha.data.float_shares import FloatFact
-from alpha.data.integrity_check import MANIFEST_NAME, verify_checksums
-from alpha.data.offerings import OfferingEvent, is_dilution_overhang
-from alpha.data.pit_store import PITStore
-from alpha.data.short_interest import ShortInterest
-from alpha.data.snapshot_source import SnapshotSource
-from alpha.data.source import FakeSource
+from alpaca_kit.pit.capture import capture_window
+from alpaca_kit.feeds.earnings import EarningsCalendarEntry, EarningsFact
+from alpaca_kit.feeds.float_shares import FloatFact
+from alpaca_kit.pit.integrity_check import MANIFEST_NAME, verify_checksums
+from alpaca_kit.feeds.offerings import OfferingEvent, is_dilution_overhang
+from alpaca_kit.pit.pit_store import PITStore
+from alpaca_kit.feeds.short_interest import ShortInterest
+from alpaca_kit.pit.snapshot_source import SnapshotSource
+from alpaca_kit.source import FakeSource
 
 _CAL = [date(2026, 6, 10), date(2026, 6, 11), date(2026, 6, 12)]
 _END = date(2026, 6, 12)

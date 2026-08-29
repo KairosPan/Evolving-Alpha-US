@@ -1,6 +1,6 @@
 from datetime import date
 import pandas as pd
-from alpha.features.runner import consecutive_up_days
+from alpaca_kit.features.runner import consecutive_up_days
 
 
 def _bars(dates, closes):

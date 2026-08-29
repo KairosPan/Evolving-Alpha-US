@@ -5,7 +5,7 @@ from datetime import date as Date
 import pandas as pd
 from pydantic import BaseModel, ConfigDict
 
-from alpha.universe.universe import CandidateUniverse
+from alpaca_kit.universe import CandidateUniverse
 
 
 def counts(universe: CandidateUniverse) -> tuple[int, int, int]:

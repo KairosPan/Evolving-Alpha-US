@@ -1,4 +1,4 @@
-# alpha/features/short_squeeze.py
+# alpaca_kit.features.short_squeeze.py
 #
 # Derived, PIT-safe short-squeeze SIGNALS (P5 consume-path activation; spec
 # docs/superpowers/specs/2026-07-13-p5-consume-path-activations-design.md §1). The data layer answers
@@ -20,8 +20,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import date as Date
 
-from alpha.data.float_shares import FloatFact, latest_known_float
-from alpha.data.short_interest import ShortInterest
+from alpaca_kit.feeds.float_shares import FloatFact, latest_known_float
+from alpaca_kit.feeds.short_interest import ShortInterest
 
 
 def short_squeeze_signals(short_records: Iterable[ShortInterest], float_records: Iterable[FloatFact],

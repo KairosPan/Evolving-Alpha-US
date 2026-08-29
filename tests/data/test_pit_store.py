@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import date
 import pandas as pd
-from alpha.data.pit_store import PITStore
+from alpaca_kit.pit.pit_store import PITStore
 
 
 def test_snapshot_roundtrip(tmp_path):
@@ -60,7 +60,7 @@ def test_has_corp_actions_distinguishes_missing_from_present_but_empty(tmp_path)
 def test_earnings_roundtrip_preserves_dates_and_optionals(tmp_path):
     # P5a: facts persist via the earnings.py frame converters (iso dates on write, parsed on read),
     # round-tripping back to the exact models incl. None optionals (revenue absent stays None, not NaN).
-    from alpha.data.earnings import (EarningsCalendarEntry, EarningsFact,
+    from alpaca_kit.feeds.earnings import (EarningsCalendarEntry, EarningsFact,
                                      calendar_from_frame, calendar_to_frame,
                                      facts_from_frame, facts_to_frame)
     store = PITStore(tmp_path)
@@ -80,7 +80,7 @@ def test_earnings_roundtrip_preserves_dates_and_optionals(tmp_path):
 def test_short_interest_roundtrip_and_tri_state(tmp_path):
     # P5b: records persist via the short_interest.py frame converters; has_short_interest() is the
     # tri-state MISSING seam (absent=False, present-even-empty=True).
-    from alpha.data.short_interest import ShortInterest, si_from_frame, si_to_frame
+    from alpaca_kit.feeds.short_interest import ShortInterest, si_from_frame, si_to_frame
     store = PITStore(tmp_path)
     assert store.has_short_interest() is False                        # MISSING: no parquet
     records = [ShortInterest(symbol="RUN", settlement_date=date(2026, 6, 14),
@@ -94,7 +94,7 @@ def test_short_interest_roundtrip_and_tri_state(tmp_path):
 
 
 def test_offering_events_roundtrip_and_tri_state(tmp_path):
-    from alpha.data.offerings import OfferingEvent, events_from_frame, events_to_frame
+    from alpaca_kit.feeds.offerings import OfferingEvent, events_from_frame, events_to_frame
     store = PITStore(tmp_path)
     assert store.has_offering_events() is False                       # MISSING: no parquet
     events = [OfferingEvent(symbol="RUN", offering_id="333-1", event="announce", kind="shelf",

@@ -2,7 +2,7 @@
 from __future__ import annotations
 from datetime import date
 import pandas as pd
-from alpha.data.alpaca import _normalize_bars, _normalize_snapshot
+from alpaca_kit.alpaca import _normalize_bars, _normalize_snapshot
 
 
 def test_normalize_bars_columns_and_types():

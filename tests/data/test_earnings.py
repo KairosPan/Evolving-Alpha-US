@@ -5,7 +5,7 @@ from datetime import date
 
 import pandas as pd
 
-from alpha.data.earnings import (
+from alpaca_kit.feeds.earnings import (
     EarningsCalendarEntry,
     EarningsFact,
     calendar_from_frame,

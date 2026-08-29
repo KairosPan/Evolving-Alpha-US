@@ -1,4 +1,4 @@
-# alpha/data/earnings.py
+# alpaca_kit.feeds.earnings.py
 #
 # Earnings feed data models + source-agnostic PIT primitives (P5a; spec
 # docs/superpowers/specs/2026-07-13-p5a-earnings-feed-design.md). Two record kinds with two lookahead-safe

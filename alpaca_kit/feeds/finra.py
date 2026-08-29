@@ -1,4 +1,4 @@
-# alpha/data/finra.py
+# alpaca_kit.feeds.finra.py
 #
 # FinraSource — the live SHORT-INTEREST backend for the `short_interest` capability group (P5b; spec
 # docs/superpowers/specs/2026-07-13-p5b-shortinterest-offerings-design.md). FINRA publishes a public
@@ -9,7 +9,7 @@
 #
 # PIT key = the FINRA dissemination date (ShortInterest.publication_date), NOT the settlement date the
 # position is measured as-of. The dissemination date can only LAG the settlement, never precede it, so it
-# never leaks the future (see alpha/data/short_interest.py). When a raw record carries no dissemination
+# never leaks the future (see alpaca_kit.feeds.short_interest.py). When a raw record carries no dissemination
 # field, publication_date is derived from the settlement date by a CALENDAR-day cushion chosen to provably
 # EXCEED FINRA's ~8-business-day dissemination in any holiday window — so a fallback-derived key is always
 # >= the true dissemination (never early), even across the Christmas/New-Year double-holiday span. Being
@@ -24,7 +24,7 @@ import os
 from datetime import date as Date
 from datetime import timedelta
 
-from alpha.data.short_interest import ShortInterest, known_short_interest
+from alpaca_kit.feeds.short_interest import ShortInterest, known_short_interest
 
 # FINRA disseminates ~8 business days after settlement. Absent a per-record dissemination field, derive
 # publication_date = settlement + this many CALENDAR days. 8 business days spans at most ~14 calendar days

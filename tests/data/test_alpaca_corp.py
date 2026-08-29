@@ -12,7 +12,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from alpha.data.alpaca import _KNOWN_LOOKBACK_DAYS, AlpacaSource, _normalize_corp
+from alpaca_kit.alpaca import _KNOWN_LOOKBACK_DAYS, AlpacaSource, _normalize_corp
 
 NORM_COLS = ["symbol", "announce_date", "ex_date", "kind", "ratio"]
 
@@ -105,7 +105,7 @@ def test_normalize_empty_and_missing():
 def test_normalize_feeds_firewall_pit_primitives():
     # announce_date:=process_date must satisfy the announce-keyed firewall unchanged: a reverse split
     # processed 6/09 (ex 6/20) is "known & pending" as of 6/12 but "unknown" as of 6/08 (no lookahead).
-    from alpha.data.corp_actions import has_reverse_split_pending, known_corporate_actions
+    from alpaca_kit.feeds.corp_actions import has_reverse_split_pending, known_corporate_actions
     corp = _normalize_corp(_payload(reverse_splits=[REVERSE_SPLIT]))
     assert list(known_corporate_actions(corp, date(2026, 6, 12))["symbol"]) == ["RUN"]
     assert known_corporate_actions(corp, date(2026, 6, 8)).empty
@@ -180,7 +180,7 @@ def test_fetch_corp_actions_paginates(alpaca):
 
 
 def test_resolve_feed_defaults_iex_and_env_override(monkeypatch):
-    from alpha.data.alpaca import _resolve_feed
+    from alpaca_kit.alpaca import _resolve_feed
     monkeypatch.delenv("ALPHA_DATA_FEED", raising=False)
     assert _resolve_feed() == "iex"                         # free/paper default — avoids the SIP 403
     monkeypatch.setenv("ALPHA_DATA_FEED", "SIP")

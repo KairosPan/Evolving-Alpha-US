@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from datetime import date
 
-from alpha.data.alpaca import AlpacaSource
+from alpaca_kit.alpaca import AlpacaSource
 
 
 def main() -> None:

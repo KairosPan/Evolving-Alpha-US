@@ -1,4 +1,4 @@
-# alpha/data/edgar.py
+# alpaca_kit.feeds.edgar.py
 #
 # EdgarSource — the live EARNINGS backend for the `earnings` capability group (P5a; spec
 # docs/superpowers/specs/2026-07-13-p5a-earnings-feed-design.md). Reads SEC EDGAR's free XBRL
@@ -16,13 +16,13 @@ import os
 from datetime import date as Date
 from datetime import timedelta
 
-from alpha.data.earnings import (
+from alpaca_kit.feeds.earnings import (
     EarningsCalendarEntry,
     EarningsFact,
     known_calendar,
     known_earnings,
 )
-from alpha.data.offerings import OfferingEvent, known_offering_events
+from alpaca_kit.feeds.offerings import OfferingEvent, known_offering_events
 
 _FACTS_URL = "https://data.sec.gov/api/xbrl/companyconcept/CIK{cik:010d}/us-gaap/{concept}.json"
 _TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"

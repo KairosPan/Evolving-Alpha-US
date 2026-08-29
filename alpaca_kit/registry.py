@@ -1,12 +1,12 @@
-# alpha/data/registry.py
+# alpaca_kit.registry.py
 #
-# Select the active MarketDataSource by name/env — the data-layer twin of alpha/llm/config.py::make_client.
+# Select the active MarketDataSource by name/env.
 # Whole-source swap only: each registered source implements the full MarketDataSource Protocol (an
 # unsupported capability raises NotImplementedError in that method). Returns a RAW source; callers wrap it
 # in GuardedSource at the eval/loop layer.
 #
 # Add a new vendor:
-#   1. Implement the MarketDataSource Protocol in alpha/data/<vendor>.py.
+#   1. Implement the MarketDataSource Protocol in alpaca_kit/<vendor>.py.
 #   2. Add a _build_<vendor>(*, pit_root=None) -> MarketDataSource here.
 #   3. Register one line in _SOURCES.
 #   4. Select it with ALPHA_DATA_SOURCE=<vendor>.
@@ -15,14 +15,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from alpha.data.alpaca import AlpacaSource
-from alpha.data.composite import CompositeSource
-from alpha.data.edgar import EdgarOfferingsSource, EdgarSource
-from alpha.data.finra import FinraSource
-from alpha.data.float_feed import FloatSource
-from alpha.data.pit_store import PITStore
-from alpha.data.snapshot_source import SnapshotSource
-from alpha.data.source import MarketDataSource
+from alpaca_kit.alpaca import AlpacaSource
+from alpaca_kit.composite import CompositeSource
+from alpaca_kit.feeds.edgar import EdgarOfferingsSource, EdgarSource
+from alpaca_kit.feeds.finra import FinraSource
+from alpaca_kit.feeds.float_feed import FloatSource
+from alpaca_kit.pit.pit_store import PITStore
+from alpaca_kit.pit.snapshot_source import SnapshotSource
+from alpaca_kit.source import MarketDataSource
 
 
 def _build_alpaca(*, pit_root: str | None = None) -> MarketDataSource:
@@ -100,12 +100,6 @@ def _build_composite(*, pit_root: str | None = None) -> MarketDataSource:
 _SOURCES = {"alpaca": _build_alpaca, "snapshot": _build_snapshot, "composite": _build_composite,
             "edgar": _build_edgar, "finra": _build_finra, "edgar_offerings": _build_edgar_offerings,
             "float_feed": _build_float_feed}
-
-
-def source_names() -> set[str]:
-    """Public accessor for the registered data-source keys — used by the connector write-waist lint
-    to resolve a `data_source` connector's impl_ref. Callers must NOT import the private `_SOURCES`."""
-    return set(_SOURCES)
 
 
 def make_source(name: str | None = None, *, pit_root: str | None = None) -> MarketDataSource:

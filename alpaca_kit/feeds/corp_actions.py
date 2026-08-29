@@ -1,11 +1,11 @@
-# alpha/data/corp_actions.py
+# alpaca_kit.feeds.corp_actions.py
 #
 # Source-agnostic PIT helpers over the normalized corp-actions frame (COLUMNS below). The `announce_date`
 # column is the point-in-time availability key — the day the action became known to us. For the Alpaca
 # source it is populated from `process_date` (the day Alpaca processed/published the action): Alpaca's
 # corporate-actions feed exposes NO real announcement date, and process_date is the earliest day an action
 # is retrievable, so keying on it is conservative against announcement latency and never leaks the future
-# (see alpha/data/alpaca.py:_normalize_corp). The dilution kinds (atm/shelf/offering) are NOT in Alpaca's
+# (see alpaca_kit.alpaca.py:_normalize_corp). The dilution kinds (atm/shelf/offering) are NOT in Alpaca's
 # feed — they are EDGAR filings, deferred to a real EDGAR source; Alpaca supplies reverse_split / delist.
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def has_dilution_filing(corp: pd.DataFrame, symbol: str, as_of: Date) -> bool:
     overhang once filed, so this reports ANY announced dilution-kind filing — i.e. it vetoes FOREVER once
     announced. This is the explicit fail-closed **default** when the offerings lifecycle feed (P5b) is
     ABSENT: with no withdrawal/expiry data we conservatively assume the overhang persists (no-connector =
-    conservative). When the lifecycle feed IS present, `alpha/data/offerings.is_dilution_overhang` is the
+    conservative). When the lifecycle feed IS present, `alpaca_kit.feeds.offerings.is_dilution_overhang` is the
     lifecycle-aware successor — it lets a withdrawn/expired shelf stop vetoing as of its own lifecycle date.
     PIT-safe: keyed on announce_date <= as_of via known_corporate_actions."""
     known = known_corporate_actions(corp, as_of)

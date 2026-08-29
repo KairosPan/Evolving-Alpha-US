@@ -1,6 +1,6 @@
 # tests/data/test_calendar.py
 from datetime import date
-from alpha.data.calendar import trading_days_between, next_trading_day, prev_trading_day
+from alpaca_kit.pit.calendar import trading_days_between, next_trading_day, prev_trading_day
 
 CAL = [date(2026, 6, 8), date(2026, 6, 9), date(2026, 6, 10), date(2026, 6, 11), date(2026, 6, 12)]
 

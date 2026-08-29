@@ -1,4 +1,4 @@
-# alpha/data/float_feed.py
+# alpaca_kit.feeds.float_feed.py
 #
 # FloatSource — the live FREE-FLOAT backend for the `float` capability group (P5b; spec
 # docs/superpowers/specs/2026-07-13-p5b-float-feed-design.md). Reads a vendor free-float product via a
@@ -15,7 +15,7 @@
 # schedule (which lets FinraSource derive a provably-late key by a bounded calendar cushion), the SEC filing
 # lag is VARIABLE/unbounded (30-90+ days by filer class, plus late NT filings), so no finite period-offset
 # is provably never-early. Dropping mirrors EdgarSource dropping filed=None rows and corp_actions'
-# announce_date:=process_date — always key on the LATER, knowable date (see alpha/data/float_shares.py:14).
+# announce_date:=process_date — always key on the LATER, knowable date (see alpaca_kit.feeds.float_shares.py:14).
 #
 # NOTE: free float has no single canonical free API — it is vendor-derived, or reconstructed from EDGAR
 # cover-page shares outstanding minus Forms 3/4/5 + Rule-144 restricted. The concrete vendor endpoint/auth
@@ -27,7 +27,7 @@ from __future__ import annotations
 import os
 from datetime import date as Date
 
-from alpha.data.float_shares import FloatFact, known_float
+from alpaca_kit.feeds.float_shares import FloatFact, known_float
 
 # Live endpoint is a documented stub (see module header); the fixed host keeps the seam offline-testable.
 _FLOAT_URL = "https://api.example-float-vendor.com/v1/free-float?symbol={symbol}"

@@ -2,7 +2,7 @@
 from __future__ import annotations
 from datetime import date
 import pandas as pd
-from alpha.data.corp_actions import known_corporate_actions, has_reverse_split_pending
+from alpaca_kit.feeds.corp_actions import known_corporate_actions, has_reverse_split_pending
 
 CORP = pd.DataFrame({
     "symbol": ["RUN", "RUN"],
@@ -34,14 +34,14 @@ def test_has_reverse_split_pending_pit():
 
 
 def test_has_dilution_filing_announced_offering():
-    from alpha.data.corp_actions import has_dilution_filing
+    from alpaca_kit.feeds.corp_actions import has_dilution_filing
     corp = pd.DataFrame({"symbol": ["DIL"], "announce_date": [date(2026, 6, 9)],
                          "ex_date": [date(2026, 6, 20)], "kind": ["atm"], "ratio": [None]})
     assert has_dilution_filing(corp, "DIL", date(2026, 6, 12)) is True     # announced by as_of -> overhang
 
 
 def test_has_dilution_filing_pit_and_wrong_kind():
-    from alpha.data.corp_actions import has_dilution_filing
+    from alpaca_kit.feeds.corp_actions import has_dilution_filing
     # DIL's shelf is announced AFTER as_of (PIT); OTHER's atm IS known (6/9<=6/12) but wrong symbol ->
     # exercises the symbol filter on a NON-empty known frame, not just the empty-frame short-circuit.
     corp = pd.DataFrame({"symbol": ["DIL", "OTHER"], "announce_date": [date(2026, 6, 20), date(2026, 6, 9)],

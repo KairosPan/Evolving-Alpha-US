@@ -64,7 +64,7 @@ def _has_current_bar(bars: pd.DataFrame | None, day: Date) -> bool:
     predates `day` (capture lag, a halt, or a stale feed) has no usable current-day price: it fails
     the screen fail-closed and is dropped from the RS ranking pool so its stale close cannot
     contaminate the cross-sectional percentile. Mirrors the missing-current-day posture documented in
-    alpha/universe/universe.py:64-68 (`_runner_up_days`)."""
+    alpaca_kit.universe.py:64-68 (`_runner_up_days`)."""
     if bars is None or getattr(bars, "empty", True) or "date" not in bars.columns:
         return False
     asof = [d for d in pd.to_datetime(bars["date"]).dt.date if d <= day]
@@ -116,7 +116,7 @@ def rs_percentiles(raw_scores: dict[str, float | None]) -> dict[str, float]:
 
     Symbols with a None raw score are dropped from the ranking pool (insufficient history) and get no
     percentile. Convention: percentile = 100 * (fraction of the pool with score <= x) — the same `<=`
-    convention as `alpha.features.sentiment.normalize_sentiment`, so the strongest name scores 100 and
+    convention used throughout, so the strongest name scores 100 and
     RS >= 70 means the top ~30%.
     """
     pool = {s: v for s, v in raw_scores.items() if v is not None}

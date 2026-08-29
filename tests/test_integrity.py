@@ -1,6 +1,6 @@
-"""alpha/integrity — the one hashing utility (kairos-mining §6 order-3)."""
+"""alpaca_kit.integrity — the one hashing utility (kairos-mining §6 order-3)."""
 import hashlib
-from alpha.integrity import sha256_bytes, sha256_file, canonical_json, sha256_canonical_json
+from alpaca_kit.integrity import sha256_bytes, sha256_file, canonical_json, sha256_canonical_json
 
 
 def test_sha256_bytes_matches_hashlib():

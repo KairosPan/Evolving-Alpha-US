@@ -23,9 +23,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from alpha.data.alpaca import AlpacaSource, _normalize_bars
-from alpha.data.capture import capture_window
-from alpha.data.pit_store import PITStore
+from alpaca_kit.alpaca import AlpacaSource, _normalize_bars
+from alpaca_kit.pit.capture import capture_window
+from alpaca_kit.pit.pit_store import PITStore
 
 _MAJOR = {"NASDAQ", "NYSE", "ARCA", "AMEX", "BATS"}
 

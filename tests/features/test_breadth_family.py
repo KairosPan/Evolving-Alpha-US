@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from alpha.features.breadth import (
+from alpaca_kit.features.breadth import (
     BreadthReading, advance_decline, market_breadth, net_new_highs, pct_above_ma,
 )
 

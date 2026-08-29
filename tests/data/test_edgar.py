@@ -5,7 +5,7 @@ from datetime import date
 
 import pytest
 
-from alpha.data.edgar import EdgarNotFound, EdgarSource
+from alpaca_kit.feeds.edgar import EdgarNotFound, EdgarSource
 
 # EPS diluted: a clean Q1 quarter (keep), a 6-month YTD row (DROP by duration filter), an FY annual (keep).
 _EPS = {"units": {"USD/shares": [
@@ -172,8 +172,8 @@ def test_get_json_403_hints_user_agent(monkeypatch):
 
 # ── EdgarOfferingsSource — the `offerings` lifecycle backend (P5b) ──────────────────────────────────
 
-from alpha.data.edgar import EdgarOfferingsSource  # noqa: E402
-from alpha.data.offerings import is_dilution_overhang  # noqa: E402
+from alpaca_kit.feeds.edgar import EdgarOfferingsSource  # noqa: E402
+from alpaca_kit.feeds.offerings import is_dilution_overhang  # noqa: E402
 
 # A submissions-shaped payload (columnar `recent` arrays): a shelf S-3 (file 333-1) announced 2024-06-09,
 # then WITHDRAWN via an RW on 2025-01-15 (same file number -> one offering); plus an unrelated 8-K (ignored).

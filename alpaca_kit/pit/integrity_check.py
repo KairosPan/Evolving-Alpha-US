@@ -1,9 +1,9 @@
-# alpha/data/integrity_check.py
+# alpaca_kit.pit.integrity_check.py
 """D6: CHECKSUMS integrity manifest — write once at capture time, verify at read time.
 
 Manifest format: `CHECKSUMS` at the PIT root, one line per regular file under root (except
 CHECKSUMS itself): `"{sha256}  {posix-relpath}"`, sorted by relpath. `write_checksums` produces
-it (called last by `alpha.data.capture.capture_window`, so both capture CLIs inherit it);
+it (called last by `alpaca_kit.pit.capture.capture_window`, so both capture CLIs inherit it);
 `verify_checksums` re-hashes every file on disk and diffs it against the manifest, typing each
 discrepancy `mismatch:` (digest differs), `missing:` (manifest lists a file that's gone), or
 `extra:` (a file on disk with no manifest entry).
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from alpha.integrity import sha256_file
+from alpaca_kit.integrity import sha256_file
 
 MANIFEST_NAME = "CHECKSUMS"
 

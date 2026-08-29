@@ -1,7 +1,7 @@
 [project]
-name = "alpha"
-version = "0.0.1"
-description = "Sonia-Kairos-US-Stock — self-evolving US-equities momentum co-pilot (Sonia teaches, Kairos acts; no live orders)"
+name = "alpaca-kit"
+version = "0.1.0"
+description = "alpaca_kit - PIT-guarded US market data + Alpaca paper account, as a library and an MCP server"
 requires-python = ">=3.11"
 dependencies = [
     "pandas>=2.0",
@@ -10,17 +10,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-live = ["alpaca-py>=0.30", "pandas-market-calendars>=4.0", "openai>=1.0", "anthropic>=0.40", "claude-agent-sdk>=0.2"]
-web = ["fastapi>=0.110", "uvicorn>=0.29", "jinja2>=3.1", "python-multipart>=0.0.9", "httpx>=0.27", "pypdf>=4.0", "markdown-it-py>=2.2"]
-sonia = ["fastapi>=0.110", "uvicorn>=0.29", "openai>=1.0", "claude-agent-sdk>=0.2"]
-dev = ["pytest>=8.0", "httpx>=0.27"]
+live = ["alpaca-py>=0.30", "pandas-market-calendars>=4.0"]
+dev = ["pytest>=8.0"]
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["alpha*", "alpha_web*", "sonia*", "workbench*"]
+include = ["alpaca_kit*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

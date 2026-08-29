@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from alpha.data.composite import CompositeSource
-from alpha.data.firewall import AsOfGuard
-from alpha.data.float_feed import FloatSource
-from alpha.data.float_shares import FloatFact, float_to_frame
-from alpha.data.pit_store import PITStore
-from alpha.data.registry import make_composite_source, make_source
-from alpha.data.snapshot_source import SnapshotSource
-from alpha.data.source import FakeSource, GuardedSource
+from alpaca_kit.composite import CompositeSource
+from alpaca_kit.firewall import AsOfGuard
+from alpaca_kit.feeds.float_feed import FloatSource
+from alpaca_kit.feeds.float_shares import FloatFact, float_to_frame
+from alpaca_kit.pit.pit_store import PITStore
+from alpaca_kit.registry import make_composite_source, make_source
+from alpaca_kit.pit.snapshot_source import SnapshotSource
+from alpaca_kit.source import FakeSource, GuardedSource
 
 CUR = date(2026, 6, 12)
 

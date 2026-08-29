@@ -5,7 +5,7 @@ from datetime import date
 
 import pandas as pd
 
-from alpha.data.short_interest import (
+from alpaca_kit.feeds.short_interest import (
     ShortInterest,
     known_short_interest,
     si_from_frame,

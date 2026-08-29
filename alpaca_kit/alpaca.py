@@ -1,4 +1,4 @@
-# alpha/data/alpaca.py
+# alpaca_kit.alpaca.py
 from __future__ import annotations
 
 import os
@@ -7,7 +7,7 @@ from datetime import timedelta
 
 import pandas as pd
 
-from alpha.data.corp_actions import known_corporate_actions
+from alpaca_kit.feeds.corp_actions import known_corporate_actions
 
 _DATA_BASE = "https://data.alpaca.markets"
 _BARS_COLS = ["date", "open", "high", "low", "close", "volume"]

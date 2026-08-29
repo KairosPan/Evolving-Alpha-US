@@ -1,4 +1,4 @@
-# alpha/data/offerings.py
+# alpaca_kit.feeds.offerings.py
 #
 # EDGAR offering-lifecycle typed events + the source-agnostic dilution-overhang REDUCER (P5b; spec
 # docs/superpowers/specs/2026-07-13-p5b-shortinterest-offerings-design.md; design input: kairos-mining §3
@@ -24,7 +24,7 @@ from datetime import date as Date
 import pandas as pd
 from pydantic import BaseModel, ConfigDict
 
-from alpha.data.corp_actions import DILUTION_KINDS  # noqa: F401 — the shared dilution kind vocabulary
+from alpaca_kit.feeds.corp_actions import DILUTION_KINDS  # noqa: F401 — the shared dilution kind vocabulary
 
 OFFERING_EVENTS = ("announce", "effective", "withdrawn", "expired")   # the lifecycle transitions
 _CLOSED_EVENTS = frozenset({"withdrawn", "expired"})                  # terminal -> the veto lifts

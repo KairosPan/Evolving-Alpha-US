@@ -1,4 +1,4 @@
-# alpha/data/composite.py
+# alpaca_kit.composite.py
 #
 # CompositeSource — a MarketDataSource that routes EACH capability to a (possibly different) backend, so
 # P5's enrichment feeds (earnings / short-interest / EDGAR offerings / float / theme-breadth) can each be
@@ -11,11 +11,11 @@ from datetime import date as Date
 
 import pandas as pd
 
-from alpha.data.earnings import EarningsCalendarEntry, EarningsFact
-from alpha.data.float_shares import FloatFact
-from alpha.data.offerings import OfferingEvent
-from alpha.data.short_interest import ShortInterest
-from alpha.data.source import MarketDataSource
+from alpaca_kit.feeds.earnings import EarningsCalendarEntry, EarningsFact
+from alpaca_kit.feeds.float_shares import FloatFact
+from alpaca_kit.feeds.offerings import OfferingEvent
+from alpaca_kit.feeds.short_interest import ShortInterest
+from alpaca_kit.source import MarketDataSource
 
 # The routable units. `corp_actions` groups the three coupled corp methods so a corp-backend override
 # moves corporate_actions + _known + _available together: corp_actions_available() reports whether THAT

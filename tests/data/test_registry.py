@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-from alpha.data.alpaca import AlpacaSource
-from alpha.data.registry import _SOURCES, make_source
-from alpha.data.snapshot_source import SnapshotSource
+from alpaca_kit.alpaca import AlpacaSource
+from alpaca_kit.registry import _SOURCES, make_source
+from alpaca_kit.pit.snapshot_source import SnapshotSource
 
 
 @pytest.fixture
@@ -53,7 +53,7 @@ def test_snapshot_requires_pit_root(monkeypatch):
 
 
 def test_edgar_is_registered_earnings_backend(monkeypatch):
-    from alpha.data.edgar import EdgarSource
+    from alpaca_kit.feeds.edgar import EdgarSource
     monkeypatch.delenv("ALPHA_DATA_SOURCE", raising=False)
     assert "edgar" in _SOURCES
     assert isinstance(make_source("edgar"), EdgarSource)             # keyless construction (no network)
@@ -61,8 +61,8 @@ def test_edgar_is_registered_earnings_backend(monkeypatch):
 
 def test_composite_routes_earnings_to_edgar(apca, monkeypatch):
     # end-to-end env wiring: base=alpaca (bars/snapshot), earnings overridden to the EDGAR backend.
-    from alpha.data.composite import CompositeSource
-    from alpha.data.edgar import EdgarSource
+    from alpaca_kit.composite import CompositeSource
+    from alpaca_kit.feeds.edgar import EdgarSource
     monkeypatch.setenv("ALPHA_DATA_COMPOSITE", "earnings=edgar")
     comp = make_source("composite")
     assert isinstance(comp, CompositeSource)
@@ -71,8 +71,8 @@ def test_composite_routes_earnings_to_edgar(apca, monkeypatch):
 
 
 def test_finra_and_edgar_offerings_are_registered(monkeypatch):
-    from alpha.data.edgar import EdgarOfferingsSource
-    from alpha.data.finra import FinraSource
+    from alpaca_kit.feeds.edgar import EdgarOfferingsSource
+    from alpaca_kit.feeds.finra import FinraSource
     monkeypatch.delenv("ALPHA_DATA_SOURCE", raising=False)
     assert "finra" in _SOURCES and "edgar_offerings" in _SOURCES
     assert isinstance(make_source("finra"), FinraSource)                 # keyless construction (no network)
@@ -81,9 +81,9 @@ def test_finra_and_edgar_offerings_are_registered(monkeypatch):
 
 def test_composite_routes_p5b_feeds(apca, monkeypatch):
     # end-to-end env wiring: base=alpaca (bars/snapshot), short_interest -> finra, offerings -> edgar_offerings.
-    from alpha.data.composite import CompositeSource
-    from alpha.data.edgar import EdgarOfferingsSource
-    from alpha.data.finra import FinraSource
+    from alpaca_kit.composite import CompositeSource
+    from alpaca_kit.feeds.edgar import EdgarOfferingsSource
+    from alpaca_kit.feeds.finra import FinraSource
     monkeypatch.setenv("ALPHA_DATA_COMPOSITE", "short_interest=finra,offerings=edgar_offerings")
     comp = make_source("composite")
     assert isinstance(comp, CompositeSource)

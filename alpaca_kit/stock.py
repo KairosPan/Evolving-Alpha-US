@@ -1,4 +1,4 @@
-# alpha/universe/stock.py
+# alpaca_kit.stock.py
 from __future__ import annotations
 
 from typing import Literal

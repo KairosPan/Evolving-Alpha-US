@@ -1,9 +1,9 @@
-# alpha/universe/universe.py
+# alpaca_kit.universe.py
 from __future__ import annotations
 
 import os
 
-from alpha.universe.stock import StockSnapshot, StockStatus
+from alpaca_kit.stock import StockSnapshot, StockStatus
 
 
 class CandidateUniverse:
@@ -42,8 +42,8 @@ from datetime import date as Date
 
 import pandas as pd
 
-from alpha.features.runner import consecutive_up_days
-from alpha.features.short_squeeze import short_squeeze_signals
+from alpaca_kit.features.runner import consecutive_up_days
+from alpaca_kit.features.short_squeeze import short_squeeze_signals
 
 RUNNER_LOOKBACK = 30   # max consecutive-up-days probed (a run of n up-days needs n+1 closes)
 TREND_TEMPLATE_LOOKBACK = 300   # trailing trading days fetched per symbol for the Trend Template screen
@@ -84,7 +84,7 @@ def _runner_up_days(bars, day: Date, max_lookback: int = RUNNER_LOOKBACK) -> int
     independent, so a symbol can be screened from the day's snapshot yet lack a current-day bar
     (capture lag). We report tier 'unknown' rather than a stale-positive count ending one day early,
     matching the missing-current-day posture of `_trailing_rvol`. Otherwise delegates the count to
-    alpha.features.runner.consecutive_up_days (capped at max_lookback)."""
+    alpaca_kit.features.runner.consecutive_up_days (capped at max_lookback)."""
     if bars is None or getattr(bars, "empty", True) or "date" not in bars.columns:
         return None
     if day not in set(pd.to_datetime(bars["date"]).dt.date):
@@ -206,7 +206,7 @@ def build_trend_template_universe(source, day: Date, *,
     (one guard-safe end==day fetch per symbol), rank RS across the whole snapshot, then keep the
     passers. Symbols without enough history fail explicitly inside `trend_template_screen` (never
     silently pass). FIREWALL: bars are fetched with end==day (<=as_of); pass a GuardedSource."""
-    from alpha.features.trend_template import trend_template_screen
+    from alpaca_kit.features.trend_template import trend_template_screen
 
     snap = source.daily_snapshot(day)
     stocks: dict[str, StockSnapshot] = {}

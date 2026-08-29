@@ -1,7 +1,7 @@
 # tests/data/test_firewall.py
 from datetime import date
 import pytest
-from alpha.data.firewall import AsOfGuard, LookaheadError
+from alpaca_kit.firewall import AsOfGuard, LookaheadError
 
 
 def test_allows_past_and_equal_dates():
