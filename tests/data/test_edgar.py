@@ -112,6 +112,11 @@ def test_no_pre_filing_leak_at_any_as_of(monkeypatch):
         cal = src.earnings_calendar(asof)
         assert all(e.known_asof <= asof for e in cal), f"leak at {asof}"          # no known_asof in the future
         assert not any(e.known_asof == date(2026, 5, 20) for e in cal), f"5/20 leak at {asof}"
+        if asof == date(2026, 5, 10):
+            # POSITIVE side of the invariant: EPS-only (Revenues 404) still PRODUCES the cadence
+            # estimate off the last KNOWN filing — a silently-empty calendar must not pass this sweep.
+            est = [e for e in cal if not e.is_confirmed]
+            assert len(est) == 1 and est[0].expected_date == date(2026, 5, 12)   # 2/10 + 91d
     # before the first filing there is nothing to project from -> empty (not a fabricated future date)
     assert src.earnings_calendar(date(2026, 2, 9)) == []
 
