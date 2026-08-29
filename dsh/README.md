@@ -37,20 +37,42 @@ deferring. Every style-kairos SKILL.md carries that scope header at the top.
    variables in the home profile's env block. Neither file is loaded automatically, and
    neither is in git. `ALPHA_PIT_ROOT` is already in the template's env block (`data/pit/2yr`,
    relative to the server's `cwd`) — keep it: without it the snapshot-backed tools
-   (`market_snapshot`, `screen`, `breadth`) do not register at all.
+   (`market_snapshot`, `screen`, `breadth`) do not register at all. `data/` is gitignored, so a
+   fresh clone has NO bed — restore `data/pit/2yr` from the operator backup
+   (`alpha-us-backup-20260829`) or capture a new one with `scripts/capture_window.py`; the bed
+   windows and their out-of-window failure modes are in `AGENTS.md`.
 5. **Check what registered, before blaming dsh.** The toolset is a pure function of the
-   environment, so it is checkable without the harness — in the same shell and cwd the server
-   will run in:
+   environment, so it is checkable without the harness — but check it under the environment the
+   PROFILE gives the server, not whatever your shell happens to carry. dsh spawns the server with
+   the `cwd` and the `env:` block from `cordis.yml`, so reproduce both, with the same absolute
+   interpreter path you filled in at step 3:
    ```bash
-   python -c "from alpaca_kit.mcp.tools import build_tools; print(sorted(build_tools()))"
+   cd <ABSOLUTE PATH TO THIS REPO>
+   ALPHA_PIT_ROOT=data/pit/2yr /ABSOLUTE/PATH/TO/python \
+     -c "from alpaca_kit.mcp.tools import build_tools; print(sorted(build_tools()))"
    ```
-   Keys + bed gives all ten read-only tools (`account`, `breadth`, `calendar`, `corp_actions`,
-   `daily_bars`, `earnings`, `market_snapshot`, `orders`, `positions`, `screen`) and no order
-   tools. Only `earnings` means neither the keys nor `ALPHA_PIT_ROOT` reached the process.
-6. **The ORDERS flag lives ONLY in the home copy.** `ALPACA_KIT_ENABLE_ORDERS=1` is what
-   registers `place_order`/`cancel_order`. It stays commented out in the repo copy of
-   `cordis.yml` and is uncommented, if ever, only by the operator in the installed copy —
-   outside the agent's workspace, where the agent cannot edit it back on.
+   Read the result by which names are MISSING, since two different half-configured states both
+   print seven:
+   - **ten** — `account`, `breadth`, `calendar`, `corp_actions`, `daily_bars`, `earnings`,
+     `market_snapshot`, `orders`, `positions`, `screen`. Everything arrived; no order tools is
+     the correct, fully-configured result.
+   - **seven, no `market_snapshot`/`screen`/`breadth`** — `ALPHA_PIT_ROOT` did not reach the
+     process at all; the keys did.
+   - **seven, no `account`/`orders`/`positions`** — the bed arrived, the APCA keys did not.
+   - **only `earnings`** — neither reached the process.
+
+   Registration only asks whether `ALPHA_PIT_ROOT` is SET, never whether a bed is actually there,
+   so a wrong path still lists all ten. That failure shows up per call instead:
+   `screen` returns `ok=False, SnapshotMissingError`. Ten tools means the wiring is right; it does
+   not by itself mean the bed is.
+6. **The ORDERS flag lives ONLY in the home copy.** `place_order`/`cancel_order` register only
+   when `ALPACA_KIT_ENABLE_ORDERS=1` **and** the APCA keys are present — the flag alone registers
+   nothing (`alpaca_kit/mcp/tools.py` gates on `orders_on and has_keys`), which is the spec's
+   double gate. The flag stays commented out in the repo copy of `cordis.yml` and is uncommented,
+   if ever, only by the operator in the installed copy — outside the agent's workspace, where the
+   agent cannot edit it back on. Keep the template's
+   `permissions: always_ask: [place_order, cancel_order]` either way: it is a second, independent
+   layer, and the one that still holds if the flag is ever mis-set.
 7. **Re-check the key names.** dsh is a developer preview and states that there will be
    compatibility-breaking changes. The shape in `profile/cordis.yml` is indicative, pinned
    against a survey frozen 2026-08-22
