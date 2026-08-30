@@ -1,0 +1,757 @@
+<!-- @dsCard group="Observatory" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market — Observatory</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2305070b'/%3E%3Cpath d='M8 2 L11 8 L8 14 L5 8 Z' fill='%23c8a552'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&family=IBM+Plex+Mono:wght@400;500&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   OBSERVATORY · MARKET — the instrument window.
+   Terse. Engraved scales, luminous readings, raw beneath all.
+   ============================================================ */
+:root{
+  --ground:   #05070b;
+  --dome:     #0a0e15;
+  --dome-2:   #0d1219;
+  --line:     rgba(160,186,222,.10);
+  --line-2:   rgba(160,186,222,.18);
+  --groove-d: rgba(0,0,0,.62);
+  --groove-l: rgba(190,212,242,.09);
+
+  --fg:       #d9e2ee;
+  --fg-dim:   #94a1b4;
+  --faint:    #6b7a8f;
+
+  --brass:      #c8a552;
+  --brass-hi:   #e8cf8e;
+  --brass-dim:  #8f7433;
+  --brass-soft: rgba(200,165,82,.11);
+
+  --washout:      #6d9bd1;
+  --recovery:     #43c99b;
+  --ignition:     #e5aa45;
+  --trend:        #ee7048;
+  --distribution: #d873a1;
+  --flush:        #9b87ef;
+  --up:   var(--recovery);
+  --down: var(--trend);
+
+  --serif: "Fraunces", Georgia, "Times New Roman", serif;
+  --mono:  "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --sans:  "Archivo", "Helvetica Neue", Arial, sans-serif;
+}
+*{ box-sizing:border-box; }
+body{
+  margin:0; overflow-x:clip;
+  background:
+    radial-gradient(1100px 620px at 78% -10%, rgba(109,155,209,.05), transparent 60%),
+    var(--ground);
+  color:var(--fg);
+  font-family:var(--sans); font-size:14px; line-height:1.5;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+a{ color:inherit; text-decoration:none; }
+:focus-visible{ outline:2px solid var(--brass); outline-offset:2px; }
+.wrap{ max-width:1400px; margin:0 auto; padding:0 28px 64px; }
+.mono{ font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+/* ── masthead strip ───────────────────────────────────────── */
+.masthead{
+  position:sticky; top:0; z-index:9;
+  display:flex; align-items:center; gap:22px; flex-wrap:wrap;
+  padding:12px 0; margin-bottom:26px;
+  border-bottom:1px solid var(--line);
+  background:rgba(5,7,11,.86); backdrop-filter:blur(8px);
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--faint);
+}
+.brand{ display:flex; align-items:center; gap:10px; font-size:11px; letter-spacing:.22em; color:var(--fg-dim); }
+.brand .dia{ width:7px; height:7px; transform:rotate(45deg); background:var(--brass);
+  box-shadow:0 0 8px rgba(200,165,82,.55); }
+.brand b{ color:var(--fg); font-weight:500; }
+.masthead .seg b{ color:var(--fg-dim); font-weight:500; letter-spacing:.06em; }
+.masthead .spacer{ flex:1; }
+.seal{
+  display:inline-flex; align-items:center; gap:7px; padding:3px 10px;
+  border:1px solid var(--line-2); border-radius:2px; color:var(--fg-dim);
+}
+.seal::before{ content:"⊘"; color:var(--brass); }
+.stamp-sample{
+  font-family:var(--mono); font-size:8.5px; letter-spacing:.22em; color:var(--faint);
+  border:1px dotted var(--line-2); border-radius:2px; padding:1px 5px;
+}
+
+/* ── panels ───────────────────────────────────────────────── */
+.panel{
+  background:linear-gradient(180deg, rgba(255,255,255,.02), transparent 30%), var(--dome);
+  border:1px solid var(--line); border-radius:4px;
+  margin-bottom:22px;
+}
+.panel-head{
+  display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;
+  padding:14px 20px 12px; border-bottom:1px solid var(--line);
+}
+.panel-head h2{
+  margin:0; font-family:var(--serif); font-weight:440; font-size:21px; letter-spacing:.01em;
+}
+.panel-head .eyebrow{
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.26em; text-transform:uppercase;
+  color:var(--faint);
+}
+.panel-head .spacer{ flex:1; }
+.panel-body{ padding:18px 20px; }
+.panel-foot{
+  display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+  padding:9px 20px; border-top:1px solid var(--line);
+  font-family:var(--mono); font-size:10px; color:var(--faint); letter-spacing:.06em;
+}
+.panel-foot .spacer{ flex:1; }
+.raw{
+  font-family:var(--mono); font-size:10px; color:var(--faint); letter-spacing:.04em;
+  border-bottom:1px dotted var(--line-2); padding-bottom:1px; white-space:nowrap;
+}
+.raw::before{ content:"⌁ raw ▸ "; color:var(--brass-dim); }
+.raw:hover{ color:var(--brass); border-color:var(--brass-dim); }
+
+/* stat plaques */
+.plaques{ display:grid; gap:12px; }
+.plaque{
+  padding:13px 16px 12px; border:1px solid var(--line); border-radius:3px;
+  background:var(--dome-2);
+}
+.plaque .k{
+  font-family:var(--mono); font-size:9px; letter-spacing:.24em; text-transform:uppercase;
+  color:var(--faint); display:block; margin-bottom:7px;
+}
+.plaque .v{ font-family:var(--mono); font-size:23px; font-weight:500; line-height:1;
+  font-variant-numeric:tabular-nums; }
+.plaque .s{ font-family:var(--mono); font-size:10px; color:var(--faint); display:block; margin-top:6px; }
+.v.up{ color:var(--up); } .v.down{ color:var(--down); }
+
+/* layout grids */
+.deck{ display:grid; grid-template-columns:1fr 232px; gap:18px; align-items:start; }
+.b-grid{ display:grid; grid-template-columns:1.15fr 1fr 1fr; gap:22px; }
+.b-block .b-head{
+  display:flex; align-items:baseline; gap:10px; margin-bottom:8px;
+}
+.b-block .b-head .k{
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.2em; text-transform:uppercase;
+  color:var(--faint);
+}
+.b-block .b-head .v{ font-family:var(--mono); font-size:13px; color:var(--fg); margin-left:auto; }
+.b-block .b-sub{
+  font-family:var(--mono); font-size:9px; letter-spacing:.08em; color:var(--faint); margin-top:6px;
+}
+.chart{ width:100%; height:auto; display:block; }
+.chart text{ font-family:var(--mono); }
+.axis{ font-size:9.5px; fill:var(--faint); }
+.gridline{ stroke:rgba(160,186,222,.08); }
+.zeroline{ stroke:rgba(160,186,222,.22); }
+
+/* ── the breadth watch (danger forces disclosure) ─────────── */
+details.watch{
+  margin-top:18px; border:1px solid var(--line-2); border-radius:3px;
+  background:var(--dome-2);
+}
+details.watch[open]{
+  border-color:rgba(238,112,72,.4);
+  background:linear-gradient(180deg, rgba(238,112,72,.06), transparent 55%), var(--dome-2);
+}
+details.watch summary{
+  cursor:pointer; list-style:none; display:flex; align-items:center; gap:12px;
+  padding:11px 16px; font-family:var(--mono); font-size:11px; letter-spacing:.08em;
+  color:var(--fg-dim);
+}
+details.watch summary::-webkit-details-marker{ display:none; }
+details.watch summary .lamp{ width:8px; height:8px; border-radius:50%; background:var(--faint); flex:none; }
+details.watch[open] summary .lamp{ background:var(--down); box-shadow:0 0 9px var(--down);
+  animation:lamp 2.4s ease-in-out infinite; }
+@keyframes lamp{ 0%,100%{ opacity:1; } 50%{ opacity:.45; } }
+details.watch summary .word{ text-transform:uppercase; letter-spacing:.2em; font-size:9.5px; color:var(--faint); }
+details.watch[open] summary .word{ color:var(--down); }
+details.watch summary .caret{ margin-left:auto; color:var(--faint); font-size:10px; }
+details.watch .watch-body{ padding:4px 16px 14px; }
+table.wtab{ border-collapse:collapse; width:100%; max-width:520px; }
+table.wtab th, table.wtab td{
+  font-family:var(--mono); font-size:11px; text-align:right; padding:5px 12px 5px 0;
+  border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums;
+}
+table.wtab th{ font-size:8.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--faint); font-weight:400; }
+table.wtab td:first-child, table.wtab th:first-child{ text-align:left; }
+table.wtab td.neg{ color:var(--down); }
+.protocol{
+  margin:10px 0 0; font-family:var(--mono); font-size:9px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--faint);
+}
+
+/* ── screens table ────────────────────────────────────────── */
+.tabs{ display:flex; gap:8px; }
+.tab{
+  font-family:var(--sans); font-size:11px; font-weight:600; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--fg-dim);
+  background:transparent; border:1px solid var(--line-2); border-radius:2px;
+  padding:6px 14px; cursor:pointer; transition:color .15s, border-color .15s, background .15s;
+}
+.tab:hover{ color:var(--fg); border-color:var(--faint); }
+.tab[aria-selected="true"]{
+  color:var(--brass-hi); border-color:var(--brass-dim); background:var(--brass-soft);
+}
+.tab .n{ font-family:var(--mono); font-weight:400; color:var(--faint); margin-left:6px; }
+.tab[aria-selected="true"] .n{ color:var(--brass); }
+.screen-scroll{ overflow:auto; max-height:560px; }
+table.screen{ border-collapse:collapse; width:100%; }
+table.screen th{
+  position:sticky; top:0; z-index:2; background:var(--dome);
+  font-family:var(--mono); font-size:8.5px; letter-spacing:.2em; text-transform:uppercase;
+  color:var(--faint); font-weight:400; text-align:right; padding:9px 12px;
+  border-bottom:1px solid var(--line-2); white-space:nowrap;
+}
+table.screen th.l{ text-align:left; }
+table.screen td{
+  font-family:var(--mono); font-size:12px; font-variant-numeric:tabular-nums;
+  text-align:right; padding:6px 12px; border-bottom:1px solid var(--line);
+  white-space:nowrap; color:var(--fg-dim);
+}
+table.screen td.l{ text-align:left; }
+table.screen tr:hover td{ background:rgba(160,186,222,.03); }
+td .sym{ color:var(--fg); font-weight:500; letter-spacing:.04em; }
+td .null{ color:var(--faint); opacity:.7; }
+td .up{ color:var(--up); } td .down{ color:var(--down); }
+.chip{
+  display:inline-block; font-size:8.5px; letter-spacing:.16em; text-transform:uppercase;
+  padding:2px 8px; border-radius:2px; border:1px solid;
+}
+.chip-trend_template{ color:var(--washout); border-color:rgba(109,155,209,.35); background:rgba(109,155,209,.08); }
+.chip-gap_up{ color:var(--ignition); border-color:rgba(229,170,69,.35); background:rgba(229,170,69,.08); }
+.chip-gainer{ color:var(--recovery); border-color:rgba(67,201,155,.35); background:rgba(67,201,155,.08); }
+.chip-loser{ color:var(--trend); border-color:rgba(238,112,72,.35); background:rgba(238,112,72,.08); }
+.rs{ display:inline-flex; align-items:center; gap:8px; }
+.rs .track{ width:44px; height:3px; background:rgba(160,186,222,.12); border-radius:2px; overflow:hidden; }
+.rs .fill{ display:block; height:100%; background:var(--brass); }
+.spark{ display:block; }
+
+/* footer */
+.foot{
+  border-top:1px solid var(--line); padding-top:22px; margin-top:8px;
+  display:flex; flex-wrap:wrap; gap:10px 30px; align-items:baseline;
+  font-family:var(--mono); font-size:10px; letter-spacing:.08em; color:var(--faint);
+}
+.foot .spacer{ flex:1; }
+.foot b{ color:var(--fg-dim); font-weight:500; }
+
+@media (prefers-reduced-motion:reduce){
+  *{ animation:none !important; transition:none !important; }
+}
+@media (max-width:1100px){
+  .deck{ grid-template-columns:1fr; }
+  .plaques{ grid-template-columns:repeat(2,1fr); }
+  .b-grid{ grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <span class="brand"><span class="dia" aria-hidden="true"></span>KAIROS · <b>MARKET</b></span>
+    <span class="seg">as of <b id="h-asof">—</b></span>
+    <span class="seg">bed <b id="h-bed">—</b></span>
+    <span class="seg">window <b id="h-window">—</b></span>
+    <span class="seg"><b id="h-symbols">—</b> symbols</span>
+    <span class="seg"><b id="h-days">—</b> sessions</span>
+    <span class="spacer"></span>
+    <span class="seal" id="h-gate" title="orders_gate — read-only display">orders —</span>
+    <span class="stamp-sample" title="gate readout comes from account_mock, a labeled fabricated block">sample</span>
+  </header>
+
+  <!-- ═══ TAPE ═══ -->
+  <section class="panel">
+    <div class="panel-head">
+      <span class="eyebrow">Composite · 250 sessions</span>
+      <h2>The tape</h2>
+      <span class="spacer"></span>
+      <span class="eyebrow" id="tape-note">—</span>
+    </div>
+    <div class="panel-body deck">
+      <div>
+        <div id="tape-chart" role="img"
+             aria-label="Equal-weight tape composite, 250 sessions, indexed to 100 at the first plotted session"></div>
+        <div id="bed-rail" role="img" style="margin-top:14px"
+             aria-label="Bed timeline: warmup boundaries across the full capture window, with the charted span bracketed"></div>
+      </div>
+      <div class="plaques">
+        <div class="plaque"><span class="k">Level</span>
+          <span class="v" id="t-level">—</span><span class="s" id="t-n">—</span></div>
+        <div class="plaque"><span class="k">Span high</span>
+          <span class="v" id="t-high">—</span><span class="s" id="t-highd">—</span></div>
+        <div class="plaque"><span class="k">Off high</span>
+          <span class="v" id="t-off">—</span><span class="s">from the span high</span></div>
+        <div class="plaque"><span class="k">Over the span</span>
+          <span class="v" id="t-span">—</span><span class="s" id="t-spand">—</span></div>
+      </div>
+    </div>
+    <div class="panel-foot">
+      <a class="raw" href="#" id="tape-raw">—</a>
+      <span class="spacer"></span>
+      <span id="warmup-note">—</span>
+    </div>
+  </section>
+
+  <!-- ═══ BREADTH ═══ -->
+  <section class="panel">
+    <div class="panel-head">
+      <span class="eyebrow">Cross-section · 60 sessions</span>
+      <h2>Breadth</h2>
+      <span class="spacer"></span>
+      <span class="eyebrow" id="b-span">—</span>
+    </div>
+    <div class="panel-body">
+      <div class="b-grid">
+        <div class="b-block">
+          <div class="b-head"><span class="k">% above 200dma</span><span class="v" id="pa-last">—</span></div>
+          <div id="pa-chart" role="img" aria-label="Percent of symbols above their 200-day moving average, 60 sessions"></div>
+          <div class="b-sub" id="pa-mature">—</div>
+        </div>
+        <div class="b-block">
+          <div class="b-head"><span class="k">Net new highs</span><span class="v" id="nn-last">—</span></div>
+          <div id="nn-chart" role="img" aria-label="Net new 52-week highs per session, 60 sessions"></div>
+          <div class="b-sub" id="nn-sub">—</div>
+        </div>
+        <div class="b-block">
+          <div class="b-head"><span class="k">Advances / declines</span><span class="v" id="ad-last">—</span></div>
+          <div id="ad-chart" role="img" aria-label="Advancing symbols above the line, declining below, 60 sessions"></div>
+          <div class="b-sub" id="ad-sub">—</div>
+        </div>
+      </div>
+
+      <details class="watch" id="watch">
+        <summary>
+          <span class="lamp" aria-hidden="true"></span>
+          <span class="word" id="watch-word">breadth watch</span>
+          <span id="watch-line">—</span>
+          <span class="caret" aria-hidden="true">▾</span>
+        </summary>
+        <div class="watch-body">
+          <table class="wtab" id="watch-table"></table>
+          <p class="protocol">protocol · this fold opens itself when declines lead advances in ≥ 2 of the last 5 sessions — danger is never folded</p>
+        </div>
+      </details>
+    </div>
+    <div class="panel-foot">
+      <a class="raw" href="#" id="breadth-raw">—</a>
+    </div>
+  </section>
+
+  <!-- ═══ SCREENS ═══ -->
+  <section class="panel">
+    <div class="panel-head">
+      <span class="eyebrow">Daily screens</span>
+      <h2>Screens</h2>
+      <span class="spacer"></span>
+      <div class="tabs" role="tablist" aria-label="Screen selection">
+        <button class="tab" id="tab-tt" role="tab" aria-selected="true" aria-controls="pane-tt">
+          Trend template<span class="n" id="n-tt">—</span></button>
+        <button class="tab" id="tab-g" role="tab" aria-selected="false" aria-controls="pane-g">
+          Gainer<span class="n" id="n-g">—</span></button>
+      </div>
+    </div>
+    <div class="panel-body" style="padding:0">
+      <div class="screen-scroll" id="pane-tt" role="tabpanel" aria-labelledby="tab-tt"></div>
+      <div class="screen-scroll" id="pane-g" role="tabpanel" aria-labelledby="tab-g" hidden></div>
+    </div>
+    <div class="panel-foot">
+      <a class="raw" href="#" id="screen-raw">—</a>
+      <span class="spacer"></span>
+      <span>em-dash = no reading in this bed — absence is shown, never faked</span>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span>KAIROS · <b>Observatory</b> — round-1 face prototype, zero authority · read-only</span>
+    <span class="spacer"></span>
+    <span>intent · <b>Kairos-Design.md</b></span>
+    <span>mechanism · <b>the skeleton spec &amp; code</b></span>
+  </footer>
+
+</div>
+
+<script src="../data/market_mock.js"></script>
+<script>
+(function(){
+  "use strict";
+  var D = window.KAIROS_DATA || null;
+  if(!D) return; // every readout stays an em-dash: no reading, never fake
+  var $ = function(id){ return document.getElementById(id); };
+  function txt(id, s){ var el=$(id); if(el) el.textContent=s; }
+  function fmt(n, d){ if(n==null||!isFinite(n)) return "—";
+    return n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d}); }
+  function pct(n, d){ return n==null||!isFinite(n) ? "—" : (n>0?"+":"")+fmt(n,d)+"%"; }
+  function vol(n){
+    if(n==null||!isFinite(n)) return "—";
+    if(n>=1e9) return fmt(n/1e9,2)+"B";
+    if(n>=1e6) return fmt(n/1e6,2)+"M";
+    if(n>=1e3) return fmt(n/1e3,0)+"K";
+    return fmt(n,0);
+  }
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  var days = function(iso){ return Date.parse(iso)/86400000; };
+
+  /* null-safe line path — pen lifts across missing readings, no NaN artifacts */
+  function linePath(pts){
+    var d = "", pen = false;
+    for(var i=0;i<pts.length;i++){
+      var y = pts[i][1];
+      if(y==null || !isFinite(y)){ pen = false; continue; }
+      d += (pen?"L":"M") + pts[i][0].toFixed(1) + " " + y.toFixed(1);
+      pen = true;
+    }
+    return d;
+  }
+  /* immature-region renderer: hatches any part of the plotted date span that
+     precedes a warmup boundary. Immature ≠ missing — the hatch says so. */
+  function immatureRegion(dates, boundaryIso, x, x1, y0, h, label){
+    if(!boundaryIso || !dates.length) return "";
+    var b = days(boundaryIso);
+    if(days(dates[0]) >= b) return "";           // whole span mature: draw nothing
+    var i = 0;
+    while(i < dates.length && days(dates[i]) < b) i++;
+    var xEnd = i >= dates.length ? x1 : x(i);
+    var out = '<rect x="'+x(0).toFixed(1)+'" y="'+y0+'" width="'+(xEnd-x(0)).toFixed(1)+
+      '" height="'+h+'" fill="url(#hatch)" opacity=".8"/>' +
+      '<line x1="'+xEnd.toFixed(1)+'" y1="'+y0+'" x2="'+xEnd.toFixed(1)+'" y2="'+(y0+h)+
+      '" stroke="rgba(160,186,222,.35)" stroke-dasharray="2 3"/>';
+    if(label) out += '<text class="axis" x="'+(x(0)+4).toFixed(1)+'" y="'+(y0+12)+'">'+esc(label)+'</text>';
+    return out;
+  }
+  var HATCH = '<defs><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'+
+    '<line x1="0" y1="0" x2="0" y2="7" stroke="rgba(109,155,209,.28)" stroke-width="1.4"/></pattern></defs>';
+
+  /* ── masthead ── */
+  var bed = D.bed;
+  txt("h-asof", D.as_of);
+  txt("h-bed", bed.root);
+  txt("h-window", bed.window.start + " → " + bed.window.end);
+  txt("h-symbols", String(bed.symbols));
+  txt("h-days", String(bed.captured_days));
+  var gate = D.account_mock && D.account_mock.orders_gate;
+  if(gate){
+    $("h-gate").textContent = "orders " +
+      ((gate.gate1_registered||gate.gate2_validated) ? "partially armed" : "unarmed");
+    $("h-gate").title = "gate 1 registered: " + gate.gate1_registered +
+      " · gate 2 validated: " + gate.gate2_validated +
+      " — " + (gate.note||"") + " · readout from account_mock (fabricated block)";
+  }
+
+  /* ══ TAPE ══ */
+  var T = D.tape.series;
+  var levels = T.map(function(r){ return r.level; });
+  var lv = levels.filter(function(v){ return v!=null && isFinite(v); });
+  var lo = Math.min.apply(null, lv), hi = Math.max.apply(null, lv);
+  var last = T[T.length-1], hiIdx = levels.indexOf(hi);
+  txt("tape-note", "indexed · 100 = " + T[0].date);
+  txt("t-level", fmt(last.level,2));
+  txt("t-n", "eq-weight of " + last.n + " symbols");
+  txt("t-high", fmt(hi,2));
+  txt("t-highd", "on " + T[hiIdx].date);
+  var off = (last.level/hi - 1)*100;
+  var offEl = $("t-off"); offEl.textContent = pct(off,2);
+  offEl.classList.add(off < 0 ? "down" : "up");
+  var span = (last.level/T[0].level - 1)*100;
+  var spanEl = $("t-span"); spanEl.textContent = pct(span,2);
+  spanEl.classList.add(span < 0 ? "down" : "up");
+  txt("t-spand", T[0].date + " → " + last.date);
+  var trawEl = $("tape-raw"); trawEl.textContent = D.tape.raw; trawEl.title = D.tape.raw;
+
+  (function tapeChart(){
+    var W=940, H=310, L=52, R=14, TOP=16, B=34;
+    var pw = W-L-R, ph = H-TOP-B;
+    var y0 = 95, y1 = 142;
+    var X = function(i){ return L + pw * i/(T.length-1); };
+    var Y = function(v){ return TOP + ph * (1 - (v-y0)/(y1-y0)); };
+    var s = ['<svg class="chart" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg">', HATCH];
+    // engraved horizontal graduations
+    for(var g=100; g<=140; g+=10){
+      s.push('<line class="gridline" x1="'+L+'" x2="'+(W-R)+'" y1="'+Y(g).toFixed(1)+'" y2="'+Y(g).toFixed(1)+'"/>');
+      s.push('<text class="axis" x="'+(L-8)+'" y="'+(Y(g)+3).toFixed(1)+'" text-anchor="end">'+g+'</text>');
+    }
+    // fine y minor ticks on the left spine
+    s.push('<line x1="'+L+'" x2="'+L+'" y1="'+TOP+'" y2="'+(TOP+ph)+'" stroke="rgba(160,186,222,.22)"/>');
+    for(var m=y0; m<=y1; m+=1){
+      var big = m%5===0;
+      s.push('<line x1="'+(L-(big?5:3))+'" x2="'+L+'" y1="'+Y(m).toFixed(1)+'" y2="'+Y(m).toFixed(1)+
+        '" stroke="rgba(160,186,222,'+(big?'.3':'.14')+')"/>');
+    }
+    // x ticks every 50 sessions
+    for(var xi=0; xi<T.length; xi+=50){
+      s.push('<line x1="'+X(xi).toFixed(1)+'" x2="'+X(xi).toFixed(1)+'" y1="'+(TOP+ph)+'" y2="'+(TOP+ph+5)+'" stroke="rgba(160,186,222,.3)"/>');
+      s.push('<text class="axis" x="'+X(xi).toFixed(1)+'" y="'+(TOP+ph+18)+'" text-anchor="middle">'+T[xi].date+'</text>');
+    }
+    s.push('<line x1="'+X(T.length-1).toFixed(1)+'" x2="'+X(T.length-1).toFixed(1)+'" y1="'+(TOP+ph)+'" y2="'+(TOP+ph+5)+'" stroke="rgba(160,186,222,.3)"/>');
+    s.push('<text class="axis" x="'+X(T.length-1).toFixed(1)+'" y="'+(TOP+ph+18)+'" text-anchor="end">'+last.date+'</text>');
+    // immature hatch — with this bed the tape span is wholly past warmup, so this renders nothing
+    s.push(immatureRegion(T.map(function(r){return r.date;}), bed.warmup.sma200_valid_from,
+      X, W-R, TOP, ph, "immature · pre-"+bed.warmup.sma200_valid_from));
+    // area fill + luminous line
+    var pts = T.map(function(r,i){ return [X(i), r.level==null?null:Y(r.level)]; });
+    var lp = linePath(pts);
+    if(lp){
+      s.push('<path d="'+lp+' L'+X(T.length-1).toFixed(1)+' '+(TOP+ph)+' L'+X(0).toFixed(1)+' '+(TOP+ph)+
+        ' Z" fill="rgba(200,165,82,.07)" stroke="none"/>');
+      s.push('<path d="'+lp+'" fill="none" stroke="#c8a552" stroke-width="1.8" stroke-linejoin="round"'+
+        ' style="filter:drop-shadow(0 0 5px rgba(200,165,82,.45))"/>');
+    }
+    // span-high diamond + last-reading dot
+    s.push('<path d="M'+X(hiIdx).toFixed(1)+' '+(Y(hi)-7).toFixed(1)+' l4.5 4.5 l-4.5 4.5 l-4.5 -4.5 Z"'+
+      ' fill="none" stroke="#e8cf8e" stroke-width="1.2"/>');
+    s.push('<text class="axis" x="'+X(hiIdx).toFixed(1)+'" y="'+(Y(hi)-13).toFixed(1)+'" text-anchor="middle" fill="#e8cf8e">'+fmt(hi,2)+'</text>');
+    s.push('<circle cx="'+X(T.length-1).toFixed(1)+'" cy="'+Y(last.level).toFixed(1)+'" r="3.2" fill="#d9e2ee"'+
+      ' style="filter:drop-shadow(0 0 6px rgba(217,226,238,.8))"/>');
+    s.push('<text class="axis" x="'+(X(T.length-1)-8).toFixed(1)+'" y="'+(Y(last.level)-9).toFixed(1)+'" text-anchor="end" fill="#d9e2ee">'+fmt(last.level,2)+'</text>');
+    s.push('</svg>');
+    $("tape-chart").innerHTML = s.join("");
+  })();
+
+  /* ── the bed rail: warmup boundaries on the full capture window ── */
+  (function bedRail(){
+    var W=940, H=106, L=52, R=14;
+    var d0 = days(bed.window.start), d1 = days(bed.window.end);
+    var X = function(iso){ return L + (W-L-R) * (days(iso)-d0)/(d1-d0); };
+    var yTop=30, yBot=52, yMid=41;
+    var wu = bed.warmup;
+    var s = ['<svg class="chart" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg">', HATCH];
+    s.push('<text class="axis" x="'+L+'" y="14" letter-spacing="2">BED RAIL · '+bed.root+'</text>');
+    // spine
+    s.push('<line x1="'+L+'" x2="'+(W-R)+'" y1="'+yMid+'" y2="'+yMid+'" stroke="rgba(160,186,222,.25)"/>');
+    // immature bands: dense hatch until 200dma matures, light hatch until 52-wk matures
+    s.push('<rect x="'+X(bed.window.start).toFixed(1)+'" y="'+yTop+'" width="'+(X(wu.sma200_valid_from)-X(bed.window.start)).toFixed(1)+
+      '" height="'+(yBot-yTop)+'" fill="url(#hatch)" opacity=".95"/>');
+    s.push('<rect x="'+X(wu.sma200_valid_from).toFixed(1)+'" y="'+yTop+'" width="'+(X(wu.week52_valid_from)-X(wu.sma200_valid_from)).toFixed(1)+
+      '" height="'+(yBot-yTop)+'" fill="url(#hatch)" opacity=".45"/>');
+    // boundary ticks + labels
+    function bnd(iso, lbl, anchor){
+      var xb = X(iso), tx = anchor==="end" ? xb-5 : xb+5;
+      s.push('<line x1="'+xb.toFixed(1)+'" x2="'+xb.toFixed(1)+'" y1="'+(yTop-4)+'" y2="'+(yBot+4)+
+        '" stroke="rgba(160,186,222,.4)" stroke-dasharray="2 3"/>');
+      s.push('<text class="axis" x="'+tx.toFixed(1)+'" y="'+(yTop-8)+'" text-anchor="'+anchor+'">'+esc(lbl)+'</text>');
+    }
+    bnd(wu.sma200_valid_from, "200DMA matures "+wu.sma200_valid_from, "end");
+    bnd(wu.week52_valid_from, "52-WK "+wu.week52_valid_from+" · TT "+wu.trend_template_valid_from, "start");
+    // ends
+    s.push('<text class="axis" x="'+L+'" y="'+(yBot+16)+'">'+bed.window.start+'</text>');
+    s.push('<text class="axis" x="'+(W-R)+'" y="'+(yBot+16)+'" text-anchor="end">'+bed.window.end+'</text>');
+    // band captions inside the immature zones
+    s.push('<text class="axis" x="'+((X(bed.window.start)+X(wu.sma200_valid_from))/2).toFixed(1)+'" y="'+(yMid+3)+
+      '" text-anchor="middle" fill="#6d9bd1">IMMATURE — NOT MISSING</text>');
+    // the charted tape span, bracketed in brass
+    var t0 = T[0].date, t1 = T[T.length-1].date;
+    var bx0 = X(t0), bx1 = X(t1), by = yBot+20;
+    s.push('<path d="M'+bx0.toFixed(1)+' '+by+' v5 H'+bx1.toFixed(1)+' v-5" fill="none" stroke="#c8a552" stroke-width="1.3"/>');
+    s.push('<text class="axis" x="'+((bx0+bx1)/2).toFixed(1)+'" y="'+(by+18)+'" text-anchor="middle" fill="#c8a552">THE 250 SESSIONS CHARTED ABOVE — ENTIRELY PAST WARMUP</text>');
+    s.push('</svg>');
+    $("bed-rail").innerHTML = s.join("");
+    txt("warmup-note", "no warmup: " + bed.warmup.note);
+  })();
+
+  /* ══ BREADTH ══ */
+  var B = D.breadth.series;
+  var bDates = B.map(function(r){ return r.date; });
+  txt("b-span", B[0].date + " → " + B[B.length-1].date);
+  var brRaw = $("breadth-raw"); brRaw.textContent = D.breadth.raw; brRaw.title = D.breadth.raw;
+  var lastB = B[B.length-1];
+
+  var BW=380, BH=170, BL=38, BR=8, BT=10, BB=22;
+  function bx(i){ return BL + (BW-BL-BR) * i/(B.length-1); }
+  function bxBar(i){ return BL + (BW-BL-BR) * i/B.length; }
+  var barW = (BW-BL-BR)/B.length - 1.6;
+  function svgOpen(){ return ['<svg class="chart" viewBox="0 0 '+BW+' '+BH+'" xmlns="http://www.w3.org/2000/svg">', HATCH]; }
+  function xAxis(s, y){
+    s.push('<text class="axis" x="'+BL+'" y="'+(y+15)+'">'+B[0].date.slice(5)+'</text>');
+    s.push('<text class="axis" x="'+(BW-BR)+'" y="'+(y+15)+'" text-anchor="end">'+lastB.date.slice(5)+'</text>');
+  }
+
+  /* a) % above 200dma — a 200dma-dependent reading, so it declares its maturity */
+  (function paChart(){
+    var y0=0.50, y1=0.65, ph=BH-BT-BB;
+    var Y = function(v){ return BT + ph*(1-(v-y0)/(y1-y0)); };
+    var s = svgOpen();
+    for(var gp=52; gp<=64; gp+=4){
+      var g = gp/100;
+      s.push('<line class="gridline" x1="'+BL+'" x2="'+(BW-BR)+'" y1="'+Y(g).toFixed(1)+'" y2="'+Y(g).toFixed(1)+'"/>');
+      s.push('<text class="axis" x="'+(BL-5)+'" y="'+(Y(g)+3).toFixed(1)+'" text-anchor="end">'+gp+'%</text>');
+    }
+    s.push(immatureRegion(bDates, bed.warmup.sma200_valid_from, bx, BW-BR, BT, ph, "immature"));
+    var pts = B.map(function(r,i){ return [bx(i), r.pct_above_200dma==null?null:Y(r.pct_above_200dma)]; });
+    var lp = linePath(pts);
+    if(lp) s.push('<path d="'+lp+'" fill="none" stroke="#6d9bd1" stroke-width="1.6"'+
+      ' style="filter:drop-shadow(0 0 4px rgba(109,155,209,.5))"/>');
+    if(lastB.pct_above_200dma!=null)
+      s.push('<circle cx="'+bx(B.length-1).toFixed(1)+'" cy="'+Y(lastB.pct_above_200dma).toFixed(1)+'" r="2.8" fill="#d9e2ee"/>');
+    xAxis(s, BT+ph);
+    s.push('</svg>');
+    $("pa-chart").innerHTML = s.join("");
+    txt("pa-last", fmt(lastB.pct_above_200dma*100,1)+"%");
+    var mature = days(bDates[0]) >= days(bed.warmup.sma200_valid_from);
+    txt("pa-mature", mature
+      ? "200dma-dependent · span opens past the "+bed.warmup.sma200_valid_from+" warmup — mature"
+      : "200dma-dependent · hatched span precedes the "+bed.warmup.sma200_valid_from+" warmup — immature, not missing");
+  })();
+
+  /* b) net new highs — diverging bars, 52-week-dependent */
+  (function nnChart(){
+    var y0=-30, y1=110, ph=BH-BT-BB;
+    var Y = function(v){ return BT + ph*(1-(v-y0)/(y1-y0)); };
+    var s = svgOpen();
+    [0,50,100].forEach(function(g){
+      s.push('<line class="'+(g===0?'zeroline':'gridline')+'" x1="'+BL+'" x2="'+(BW-BR)+'" y1="'+Y(g).toFixed(1)+'" y2="'+Y(g).toFixed(1)+'"/>');
+      s.push('<text class="axis" x="'+(BL-5)+'" y="'+(Y(g)+3).toFixed(1)+'" text-anchor="end">'+(g>0?"+":"")+g+'</text>');
+    });
+    s.push(immatureRegion(bDates, bed.warmup.week52_valid_from, bx, BW-BR, BT, ph, "immature"));
+    var negDays = 0;
+    B.forEach(function(r,i){
+      var v = r.net_new_highs;
+      if(v==null || !isFinite(v)) return;      // no reading → no bar, never a zero
+      if(v<0) negDays++;
+      var yv = Y(v), yz = Y(0);
+      s.push('<rect x="'+bxBar(i).toFixed(1)+'" y="'+Math.min(yv,yz).toFixed(1)+'" width="'+barW.toFixed(1)+
+        '" height="'+Math.max(0.8, Math.abs(yz-yv)).toFixed(1)+'" fill="'+(v>=0?"#43c99b":"#ee7048")+'" opacity="'+(v>=0?0.75:0.95)+'"/>');
+    });
+    xAxis(s, BT+ph);
+    s.push('</svg>');
+    $("nn-chart").innerHTML = s.join("");
+    txt("nn-last", (lastB.net_new_highs>0?"+":"")+lastB.net_new_highs);
+    txt("nn-sub", "52-wk-dependent · "+negDays+" negative session"+(negDays===1?"":"s")+" in the span");
+  })();
+
+  /* c) advances / declines — mirrored around the spine */
+  (function adChart(){
+    var maxV = 700, ph=BH-BT-BB, mid = BT + ph/2;
+    var Y = function(v){ return mid - (v/maxV)*(ph/2); };   // advances up, declines down
+    var s = svgOpen();
+    s.push('<line class="zeroline" x1="'+BL+'" x2="'+(BW-BR)+'" y1="'+mid.toFixed(1)+'" y2="'+mid.toFixed(1)+'"/>');
+    [350,700].forEach(function(g){
+      s.push('<text class="axis" x="'+(BL-5)+'" y="'+(Y(g)+3).toFixed(1)+'" text-anchor="end">'+g+'</text>');
+      s.push('<text class="axis" x="'+(BL-5)+'" y="'+(Y(-g)+3).toFixed(1)+'" text-anchor="end">'+g+'</text>');
+    });
+    B.forEach(function(r,i){
+      var x = bxBar(i).toFixed(1);
+      if(r.advances!=null && isFinite(r.advances))
+        s.push('<rect x="'+x+'" y="'+Y(r.advances).toFixed(1)+'" width="'+barW.toFixed(1)+
+          '" height="'+(mid-Y(r.advances)).toFixed(1)+'" fill="#43c99b" opacity=".6"/>');
+      if(r.declines!=null && isFinite(r.declines))
+        s.push('<rect x="'+x+'" y="'+mid.toFixed(1)+'" width="'+barW.toFixed(1)+
+          '" height="'+Math.max(0, Y(-r.declines)-mid).toFixed(1)+'" fill="#ee7048" opacity=".6"/>');
+    });
+    s.push('<text class="axis" x="'+(BW-BR)+'" y="'+(BT+8)+'" text-anchor="end" fill="#43c99b">ADV ▲</text>');
+    s.push('<text class="axis" x="'+(BW-BR)+'" y="'+(BT+ph-2)+'" text-anchor="end" fill="#ee7048">DECL ▼</text>');
+    xAxis(s, BT+ph);
+    s.push('</svg>');
+    $("ad-chart").innerHTML = s.join("");
+    txt("ad-last", lastB.advances + " ▲ / " + lastB.declines + " ▼");
+    var worst = B.reduce(function(a,r){ return (r.advances-r.declines) < (a.advances-a.declines) ? r : a; }, B[0]);
+    txt("ad-sub", "worst session " + worst.date + " · " + worst.advances + " ▲ / " + worst.declines + " ▼");
+  })();
+
+  /* ── the watch: danger forces disclosure ── */
+  (function watch(){
+    var last5 = B.slice(-5);
+    var led = last5.filter(function(r){ return r.declines > r.advances; });
+    var crossed = led.length >= 2;
+    var w = $("watch");
+    if(crossed){
+      w.open = true;
+      txt("watch-word", "breadth watch · open");
+      txt("watch-line", "declines led advances in " + led.length + " of the last 5 sessions — tape " +
+        fmt((last.level/hi-1)*100,2) + "% off its span high");
+      var rows = led.map(function(r){
+        return '<tr><td>'+r.date+'</td><td>'+r.advances+'</td><td class="neg">'+r.declines+
+          '</td><td class="'+(r.net_new_highs<0?"neg":"")+'">'+(r.net_new_highs>0?"+":"")+r.net_new_highs+'</td></tr>';
+      }).join("");
+      $("watch-table").innerHTML =
+        '<tr><th>decline-led session</th><th>adv</th><th>decl</th><th>net new highs</th></tr>' + rows;
+    } else {
+      txt("watch-word", "breadth steady");
+      txt("watch-line", "no decline-led cluster in the last 5 sessions — fold stays closed");
+      $("watch-table").innerHTML = '<tr><th>nothing to disclose</th></tr>';
+    }
+  })();
+
+  /* ══ SCREENS ══ */
+  function sparkSVG(sp){
+    if(!sp || sp.length < 2) return '<span class="null">—</span>';
+    var vals = sp.filter(function(v){ return v!=null && isFinite(v); });
+    if(vals.length < 2) return '<span class="null">—</span>';
+    var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+    if(mx-mn < 1e-9){ mx = mn + 1; }
+    var W=118, H=24, P=2;
+    var pts = sp.map(function(v,i){
+      return [P + (W-2*P)*i/(sp.length-1),
+        v==null||!isFinite(v) ? null : P + (H-2*P)*(1-(v-mn)/(mx-mn))];
+    });
+    var lp = linePath(pts);
+    var first = vals[0], lastV = vals[vals.length-1];
+    var col = lastV >= first ? "#43c99b" : "#ee7048";
+    var dot = "";
+    for(var i=pts.length-1;i>=0;i--){
+      if(pts[i][1]!=null){ dot='<circle cx="'+pts[i][0].toFixed(1)+'" cy="'+pts[i][1].toFixed(1)+'" r="1.8" fill="'+col+'"/>'; break; }
+    }
+    return '<svg class="spark" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" aria-hidden="true">'+
+      '<path d="'+lp+'" fill="none" stroke="'+col+'" stroke-width="1.1" opacity=".85"/>'+dot+'</svg>';
+  }
+  function cell(v, fmtFn){ return v==null ? '<span class="null" title="no reading in this bed">—</span>' : fmtFn(v); }
+  function rsCell(v){
+    if(v==null) return '<span class="null" title="no reading in this bed">—</span>';
+    return '<span class="rs"><span class="track"><span class="fill" style="width:'+Math.round(v)+
+      '%"></span></span>'+fmt(v,1)+'</span>';
+  }
+  function buildTable(rows){
+    var h = ['<table class="screen"><thead><tr>',
+      '<th class="l">symbol</th><th class="l">status</th><th>close</th><th>Δ 1d</th><th>gap</th>',
+      '<th>volume</th><th>rvol</th><th>up days</th><th>rs pctl</th><th class="l">last 60 sessions</th>',
+      '</tr></thead><tbody>'];
+    rows.forEach(function(r){
+      var chg = r.pct_change;
+      h.push('<tr>',
+        '<td class="l"><span class="sym">'+esc(r.symbol)+'</span></td>',
+        '<td class="l"><span class="chip chip-'+esc(r.status)+'">'+esc(String(r.status).replace(/_/g," "))+'</span></td>',
+        '<td>'+cell(r.close, function(v){ return fmt(v,2); })+'</td>',
+        '<td>'+(chg==null ? '<span class="null">—</span>'
+          : '<span class="'+(chg>=0?"up":"down")+'">'+pct(chg,2)+'</span>')+'</td>',
+        '<td>'+cell(r.gap_pct, function(v){ return pct(v,2); })+'</td>',
+        '<td>'+cell(r.volume, vol)+'</td>',
+        '<td>'+cell(r.rvol, function(v){ return fmt(v,2)+"×"; })+'</td>',
+        '<td>'+cell(r.consecutive_up_days, function(v){ return String(v); })+'</td>',
+        '<td>'+rsCell(r.rs_percentile)+'</td>',
+        '<td class="l">'+sparkSVG(r.spark)+'</td>',
+        '</tr>');
+    });
+    h.push('</tbody></table>');
+    return h.join("");
+  }
+  var tt = D.screens.trend_template, gn = D.screens.gainer;
+  $("pane-tt").innerHTML = buildTable(tt.rows);
+  $("pane-g").innerHTML = buildTable(gn.rows);
+  txt("n-tt", String(tt.rows.length));
+  txt("n-g", String(gn.rows.length));
+
+  var rawEl = $("screen-raw");
+  function selectTab(which){
+    var isTT = which === "tt";
+    $("tab-tt").setAttribute("aria-selected", isTT ? "true" : "false");
+    $("tab-g").setAttribute("aria-selected", isTT ? "false" : "true");
+    $("pane-tt").hidden = !isTT;
+    $("pane-g").hidden = isTT;
+    var raw = isTT ? tt.raw : gn.raw;
+    rawEl.textContent = raw; rawEl.title = raw;
+  }
+  $("tab-tt").addEventListener("click", function(){ selectTab("tt"); });
+  $("tab-g").addEventListener("click", function(){ selectTab("g"); });
+  selectTab("tt");
+})();
+</script>
+</body>
+</html>

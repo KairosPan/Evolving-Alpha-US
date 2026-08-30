@@ -1,0 +1,689 @@
+<!-- @dsCard group="Field Ledger" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market — Field Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EDE4CE; --sheet:#F5EFDD; --sheet-2:#FAF6E9;
+  --ink:#2A2620; --ink-2:#5D5749; --ink-3:#8C8371;
+  --blue:#2A4A8B; --blue-deep:#1E3A73;
+  --oxide:#A63B22; --oxide-wash:rgba(166,59,34,.07);
+  --green:#3F6B4F;
+  --rule:#CFC4A9; --rule-2:#B5A98C;
+  --feint:rgba(88,124,154,.17); --margin-red:rgba(166,59,34,.42);
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --serif:"Spectral","Iowan Old Style",Palatino,"Book Antiqua",Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,sans-serif;
+  --press:0 1px 0 rgba(255,255,255,.55);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;color:var(--ink);font-family:var(--serif);font-size:15px;line-height:1.6;
+  background-color:var(--paper);
+  background-image:repeating-linear-gradient(to bottom, transparent 0 31px, var(--feint) 31px 32px);
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;
+}
+body::before{
+  content:"";position:fixed;top:0;bottom:0;left:0;width:120px;pointer-events:none;z-index:0;
+  background:linear-gradient(to right,
+    transparent 0 84px, var(--margin-red) 84px 85px,
+    transparent 85px 89px, var(--margin-red) 89px 90px, transparent 90px);
+}
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--oxide);outline-offset:3px}
+code,.mono{font-family:var(--mono)}
+.tick{color:var(--green);font-weight:600}
+.page{position:relative;z-index:1;margin:0 auto 0 clamp(104px,8vw,140px);max-width:1230px;padding:0 36px 80px 0}
+@media (max-width:980px){body::before{display:none}.page{margin:0 auto;padding:0 18px 60px}}
+
+/* stamps */
+.stamp{display:inline-block;font-family:var(--mono);font-weight:600;font-size:10px;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--oxide);
+  border:1.5px solid var(--oxide);border-radius:2px;padding:4px 9px 3px;
+  outline:1px solid var(--oxide);outline-offset:2px;opacity:.85;
+  transform:rotate(-2deg);background:var(--oxide-wash);white-space:nowrap}
+.stamp--blue{color:var(--blue);border-color:var(--blue);outline-color:var(--blue);background:rgba(42,74,139,.06)}
+.stamp--flat{transform:none}
+.stamp--sm{font-size:8.5px;padding:2px 6px;letter-spacing:.12em}
+
+/* masthead */
+.mast{display:flex;align-items:center;gap:22px;padding:26px 0 14px;border-bottom:3px double var(--rule-2);flex-wrap:wrap}
+.mast .book{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-2)}
+.mast .book b{color:var(--oxide);font-weight:600}
+.mast h1{font-family:var(--serif);font-weight:500;font-size:30px;margin:0;letter-spacing:.01em;text-shadow:var(--press)}
+.mast h1 small{font-weight:300;font-style:italic;font-size:19px;color:var(--ink-2);letter-spacing:0}
+.mast .sp{flex:1}
+.mast .stamps{display:flex;gap:18px;align-items:center}
+
+/* bed register */
+.register{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--rule-2);border-top:0;background:var(--sheet);
+  font-family:var(--mono);font-size:11px;color:var(--ink-2)}
+.register .cell{padding:9px 16px 8px;border-left:1px solid var(--rule);display:flex;flex-direction:column;gap:2px;min-width:0}
+.register .cell:first-child{border-left:0}
+.register .k{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+.register .v{white-space:nowrap}
+.register .v b{color:var(--ink);font-weight:600}
+.register .grow{flex:1;min-width:0}
+.register .grow .v{white-space:normal;font-size:10px;line-height:1.55}
+
+/* day heading */
+.dayhead{display:flex;align-items:baseline;gap:16px;margin:34px 0 0}
+.dayhead .day{font-family:var(--mono);font-weight:600;font-size:13px;letter-spacing:.18em;color:var(--blue);text-transform:uppercase}
+.dayhead .rule{flex:1;border-bottom:1px solid var(--rule-2);transform:translateY(-4px)}
+.dayhead .note{font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
+
+/* entry panels */
+.entry{background:var(--sheet);border:1px solid var(--rule-2);box-shadow:0 1px 3px rgba(42,38,32,.10);margin-top:26px}
+.entry-head{display:flex;align-items:baseline;gap:14px;padding:14px 20px 10px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.entry-head .no{font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:.14em;color:var(--oxide)}
+.entry-head h2{font-family:var(--serif);font-weight:600;font-size:20px;margin:0;text-shadow:var(--press)}
+.entry-head .sp{flex:1}
+.entry-head .note{font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
+.entry-body{padding:16px 20px 14px}
+.entry-foot{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding:10px 20px 12px;border-top:1px solid var(--rule);
+  font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
+.entry-foot .init{display:inline-block;border:1px solid var(--rule-2);border-radius:2px;padding:1px 6px;
+  color:var(--blue);font-weight:600;letter-spacing:.06em;transform:rotate(-1deg)}
+.entry-foot code{color:var(--ink-2);font-size:10.5px}
+.entry-foot .sp{flex:1}
+.rawlink{font-family:var(--mono);font-size:10.5px;color:var(--blue);border-bottom:1px dashed var(--blue);letter-spacing:.04em}
+.rawlink:hover{text-decoration:none;color:var(--blue-deep)}
+svg{display:block;width:100%;height:auto}
+.chartcap{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);line-height:1.7;margin:8px 2px 0}
+.chartcap q{color:var(--ink-2);font-style:italic;quotes:"\201C" "\201D"}
+
+/* breadth layout */
+.breadthgrid{display:grid;grid-template-columns:252px minmax(0,1fr);gap:26px;align-items:start}
+@media (max-width:980px){.breadthgrid{grid-template-columns:1fr}}
+.statrail{display:flex;flex-direction:column}
+.stat{padding:10px 2px 12px;border-bottom:1px solid var(--rule)}
+.stat:last-child{border-bottom:0}
+.stat .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+.stat .v{font-family:var(--mono);font-weight:600;font-size:27px;color:var(--ink);margin:2px 0 0;font-variant-numeric:tabular-nums}
+.stat .v small{font-size:14px;font-weight:400;color:var(--ink-3)}
+.stat .r{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:2px}
+.chartstack .lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-2);margin:10px 0 2px}
+.chartstack .lbl:first-child{margin-top:0}
+
+/* the flags fold */
+details.fold{margin-top:16px;border:1px solid var(--rule-2);background:var(--sheet-2)}
+details.fold.alert{border-color:var(--oxide);box-shadow:inset 3px 0 0 var(--oxide)}
+details.fold summary{list-style:none;cursor:pointer;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+  padding:10px 16px;font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}
+details.fold summary::-webkit-details-marker{display:none}
+details.fold summary .arrow{color:var(--ink-3);font-size:10px}
+details.fold[open] summary .arrow{transform:rotate(90deg);display:inline-block}
+details.fold summary b{color:var(--ink);font-weight:600}
+details.fold summary .flagct{color:var(--oxide);font-weight:600}
+details.fold summary .sp{flex:1}
+details.fold summary .rulenote{font-size:9.5px;color:var(--ink-3)}
+.foldbody{padding:4px 16px 14px;border-top:1px solid var(--rule)}
+.foldbody .honesty{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin:8px 0 10px}
+table.flags{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:11.5px}
+table.flags th{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:500;
+  text-align:right;padding:6px 10px;border-bottom:1px solid var(--rule-2)}
+table.flags th:first-child{text-align:left}
+table.flags td{padding:5px 10px;border-bottom:1px solid var(--rule);text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+table.flags td:first-child{text-align:left;color:var(--ink)}
+table.flags td .why{color:var(--oxide);font-weight:600}
+
+/* screens */
+.tabrow{display:flex;gap:8px;align-items:flex-end;padding:14px 20px 0}
+.tabbtn{font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--paper);
+  border:1px solid var(--rule-2);border-bottom:0;padding:8px 18px 7px;cursor:pointer;letter-spacing:.02em}
+.tabbtn .ct{font-family:var(--mono);font-weight:400;font-size:10.5px;color:var(--ink-3);margin-left:6px}
+.tabbtn[aria-selected="true"]{background:var(--sheet-2);color:var(--ink);position:relative;top:1px;
+  border-color:var(--rule-2)}
+.tabbtn:hover{color:var(--blue)}
+.tblwrap{overflow-x:auto;border-top:1px solid var(--rule-2);background:var(--sheet-2)}
+table.ledger{border-collapse:collapse;width:100%;min-width:980px;font-family:var(--mono);font-size:12px}
+table.ledger th{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:500;
+  text-align:right;padding:9px 10px;border-bottom:2px solid var(--rule-2);white-space:nowrap}
+table.ledger th.l{text-align:left}
+table.ledger td{padding:6px 10px;border-bottom:1px solid var(--rule);text-align:right;
+  font-variant-numeric:tabular-nums;color:var(--ink-2);white-space:nowrap}
+table.ledger td.l{text-align:left}
+table.ledger td.no{color:var(--ink-3);font-size:10.5px}
+table.ledger td.sym{color:var(--blue);font-weight:600}
+table.ledger td.up{color:var(--green)}
+table.ledger td.dn{color:var(--oxide)}
+table.ledger td.na{color:var(--ink-3)}
+table.ledger tr:hover td{background:rgba(42,74,139,.045)}
+.stag{display:inline-block;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);
+  border:1px dashed var(--rule-2);border-radius:2px;padding:1px 6px}
+.legend{font-family:var(--mono);font-size:10px;color:var(--ink-3);line-height:1.7;padding:10px 20px 0}
+
+/* colophon */
+.colophon{margin-top:60px;border-top:3px double var(--rule-2);padding-top:16px;
+  font-family:var(--mono);font-size:11px;color:var(--ink-3);line-height:2}
+.colophon b{color:var(--ink-2);font-weight:600}
+.gateline{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.gateline .gk{letter-spacing:.14em;text-transform:uppercase;font-size:9.5px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- masthead -->
+  <header class="mast">
+    <span class="book">KAIROS · <b>FIELD LEDGER</b></span>
+    <h1>Market <small>— the daily record</small></h1>
+    <span class="sp"></span>
+    <div class="stamps">
+      <span class="stamp stamp--blue">PIT · guarded</span>
+      <span class="stamp" id="asofstamp">as of ····-··-··</span>
+    </div>
+  </header>
+
+  <!-- bed register -->
+  <div class="register" id="register">
+    <div class="cell"><span class="k">Bed</span><span class="v" id="regbed">—</span></div>
+    <div class="cell"><span class="k">Window</span><span class="v" id="regwin">—</span></div>
+    <div class="cell"><span class="k">Cross-section</span><span class="v" id="regsym">—</span></div>
+    <div class="cell"><span class="k">Maturity dates</span><span class="v" id="regwarm">—</span></div>
+    <div class="cell grow"><span class="k">Raw record</span><span class="v" id="regraw">—</span></div>
+  </div>
+
+  <!-- day heading -->
+  <div class="dayhead">
+    <span class="day" id="dayno">Day ···</span>
+    <span class="rule"></span>
+    <span class="note">entries below are readings, not advice · read-only face</span>
+  </div>
+
+  <!-- ENTRY 1 · the tape -->
+  <section class="entry">
+    <div class="entry-head">
+      <span class="no" id="e1no">ENTRY ·.1</span>
+      <h2>The tape — equal-weight composite</h2>
+      <span class="sp"></span>
+      <span class="note" id="e1note"></span>
+    </div>
+    <div class="entry-body">
+      <svg id="calstrip" viewBox="0 0 1200 104" role="img" aria-label="Bed window with indicator maturity lanes"></svg>
+      <p class="chartcap" id="calcap"></p>
+      <svg id="tapechart" viewBox="0 0 1200 340" role="img" aria-label="Equal-weight tape composite, 250 sessions" style="margin-top:10px"></svg>
+      <p class="chartcap" id="tapecap"></p>
+    </div>
+    <div class="entry-foot" id="e1foot"></div>
+  </section>
+
+  <!-- ENTRY 2 · breadth -->
+  <section class="entry">
+    <div class="entry-head">
+      <span class="no" id="e2no">ENTRY ·.2</span>
+      <h2>Breadth — 60 sessions</h2>
+      <span class="sp"></span>
+      <span class="note" id="e2note"></span>
+    </div>
+    <div class="entry-body">
+      <div class="breadthgrid">
+        <div class="statrail" id="statrail"></div>
+        <div class="chartstack">
+          <p class="lbl">% of names above 200DMA</p>
+          <svg id="b1" viewBox="0 0 900 118" role="img" aria-label="Percent of names above their 200-day moving average"></svg>
+          <p class="lbl">Net new 52-week highs</p>
+          <svg id="b2" viewBox="0 0 900 118" role="img" aria-label="Net new 52-week highs"></svg>
+          <p class="lbl">Advances ↑ · declines ↓</p>
+          <svg id="b3" viewBox="0 0 900 132" role="img" aria-label="Advancing and declining names"></svg>
+        </div>
+      </div>
+      <details class="fold" id="flagfold">
+        <summary>
+          <span class="arrow">▶</span>
+          <b>Distribution flags</b>
+          <span id="flagsum">— of last 60 sessions</span>
+          <span class="sp"></span>
+          <span class="rulenote">flag = decliners ≥ 65% of movers, or net new highs ≤ −10</span>
+          <span id="flagstamp"></span>
+        </summary>
+        <div class="foldbody">
+          <p class="honesty">this fold opens itself when a flag lands in the last five sessions —
+            danger is never folded away; routine stays folded.</p>
+          <table class="flags">
+            <thead><tr><th>date</th><th>advances</th><th>declines</th><th>decliner share</th><th>net new highs</th><th>flag</th></tr></thead>
+            <tbody id="flagrows"></tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+    <div class="entry-foot" id="e2foot"></div>
+  </section>
+
+  <!-- ENTRY 3 · screens -->
+  <section class="entry">
+    <div class="entry-head">
+      <span class="no" id="e3no">ENTRY ·.3</span>
+      <h2>Screens — the day’s names</h2>
+      <span class="sp"></span>
+      <span class="note">candidates, dated and counted — never dropped silently</span>
+    </div>
+    <div class="tabrow" role="tablist" aria-label="Screen">
+      <button class="tabbtn" id="tab-tt" role="tab" aria-selected="true">Trend template<span class="ct" id="ct-tt"></span></button>
+      <button class="tabbtn" id="tab-g" role="tab" aria-selected="false">Gainer<span class="ct" id="ct-g"></span></button>
+    </div>
+    <div class="tblwrap">
+      <table class="ledger">
+        <thead><tr>
+          <th class="l">№</th><th class="l">symbol</th><th class="l">status</th>
+          <th>close</th><th>Δ day</th><th>gap</th><th>volume</th>
+          <th>rvol</th><th>up days</th><th>rs %ile</th><th class="l" style="padding-left:18px">last 60 sessions</th>
+        </tr></thead>
+        <tbody id="screenrows"></tbody>
+      </table>
+    </div>
+    <p class="legend">— = no reading in this bed for that cell; absence is recorded, never faked.
+      short interest · days-to-cover · free float · options flow · social sentiment are uncaptured
+      enrichments; rvol and up-day counts exist only on the gainer screen; rs percentile only on
+      trend template.</p>
+    <div class="entry-foot" id="e3foot"></div>
+  </section>
+
+  <!-- colophon -->
+  <footer class="colophon">
+    <div class="gateline" id="gateline"><span class="gk">Orders gate</span><span>—</span></div>
+    <b>A design prototype — zero authority.</b> Every reading above is bed-derived and links to
+    raw; this face narrates nothing and can write nothing.
+    · Field Ledger · direction b · face round 1
+  </footer>
+
+</div>
+
+<script src="../data/market_mock.js"></script>
+<script>
+(function(){
+"use strict";
+var D = window.KAIROS_DATA;
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function isNum(v){ return typeof v === 'number' && isFinite(v); }
+function dash(v, f){ return isNum(v) ? f(v) : '<span class="na">—</span>'; }
+function fx(v, d){ return v.toFixed(d); }
+function signed(v, d){ return (v > 0 ? '+' : '') + v.toFixed(d); }
+function thou(v){ return Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function dnum(s){ return Date.parse(s + 'T00:00:00Z'); }
+var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+if (!D || !D.bed) {
+  document.querySelectorAll('.entry-body').forEach(function(el){
+    el.innerHTML = '<p class="chartcap">no readings — <code>../data/market_mock.js</code> not loaded; this face renders only what the bed provides.</p>';
+  });
+  return;
+}
+
+var bed = D.bed, asof = D.as_of || bed.window.end;
+var warm = bed.warmup || {};
+var maturityMax = Math.max(dnum(warm.sma200_valid_from||bed.window.start),
+                           dnum(warm.week52_valid_from||bed.window.start),
+                           dnum(warm.trend_template_valid_from||bed.window.start));
+
+/* ---------- masthead + register ---------- */
+$('asofstamp').textContent = 'as of ' + asof;
+$('regbed').innerHTML = '<b>' + esc(bed.root) + '</b>';
+$('regwin').innerHTML = esc(bed.window.start) + ' → ' + esc(bed.window.end) + ' · no warmup';
+$('regsym').innerHTML = '<b>' + bed.symbols + '</b> symbols · <b>' + bed.captured_days + '</b> sessions';
+$('regwarm').innerHTML = '200DMA ' + esc(warm.sma200_valid_from||'—') + ' · 52-wk ' + esc(warm.week52_valid_from||'—') +
+  ' · t-t ' + esc(warm.trend_template_valid_from||'—');
+$('regraw').innerHTML = '<span class="tick">✓</span> ' + esc(bed.raw.snapshot) +
+  '<br><span class="tick">✓</span> ' + esc(bed.raw.calendar) +
+  ' &nbsp;·&nbsp; <span class="tick">✓</span> ' + esc(bed.raw.checksums);
+
+var dayNo = bed.captured_days;
+$('dayno').textContent = 'Day ' + dayNo + ' · ' + asof;
+$('e1no').textContent = 'ENTRY ' + dayNo + '.1';
+$('e2no').textContent = 'ENTRY ' + dayNo + '.2';
+$('e3no').textContent = 'ENTRY ' + dayNo + '.3';
+
+function footer(el, initials, producer, raw){
+  el.innerHTML = '<span class="init">⟦ ' + esc(initials) + ' ⟧</span>' +
+    '<span>entered &amp; initialed by <code>' + esc(producer) + '</code></span>' +
+    '<span class="sp"></span>' +
+    '<a class="rawlink" href="#" title="raw pointer: ' + esc(raw) + '" onclick="return false">raw ↗ ' + esc(raw) + '</a>';
+}
+
+/* ---------- ENTRY 1 · maturity strip ---------- */
+var tape = (D.tape && D.tape.series || []).filter(function(r){ return r && r.date; });
+var tapeVals = tape.filter(function(r){ return isNum(r.level); });
+
+(function calstrip(){
+  var W=1200,H=104,padL=112,padR=18;
+  var t0=dnum(bed.window.start), t1=dnum(bed.window.end);
+  function X(t){ return padL + (t-t0)/(t1-t0)*(W-padL-padR); }
+  var p=[];
+  p.push('<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+    '<line x1="0" y1="0" x2="0" y2="6" stroke="rgba(140,131,113,.55)" stroke-width="1.4"/></pattern></defs>');
+  function lane(y, h, label, bounds){
+    p.push('<text x="'+(padL-10)+'" y="'+(y+h/2+3)+'" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="9" letter-spacing="1" fill="#5D5749">'+label+'</text>');
+    p.push('<rect x="'+padL+'" y="'+y+'" width="'+(W-padL-padR)+'" height="'+h+'" fill="none" stroke="#B5A98C" stroke-width="1"/>');
+    var latest = Math.max.apply(null, bounds.map(function(b){ return dnum(b); }));
+    p.push('<rect x="'+padL+'" y="'+y+'" width="'+(X(latest)-padL)+'" height="'+h+'" fill="url(#hatch)"/>');
+    p.push('<rect x="'+X(latest)+'" y="'+y+'" width="'+(W-padR-X(latest))+'" height="'+h+'" fill="rgba(42,74,139,.10)"/>');
+    bounds.forEach(function(bd, i){
+      var x=X(dnum(bd));
+      p.push('<line x1="'+x+'" y1="'+(y-3)+'" x2="'+x+'" y2="'+(y+h+3)+'" stroke="#A63B22" stroke-width="1.2"'+(i?' stroke-dasharray="3 2"':'')+'/>');
+    });
+    p.push('<text x="'+(X(latest)+7)+'" y="'+(y+h/2+3)+'" font-family="IBM Plex Mono, monospace" font-size="8.5" letter-spacing="1" fill="#2A4A8B">MATURE FROM '+bounds.join(' / ')+'</text>');
+    p.push('<text x="'+(X(latest)-7)+'" y="'+(y+h/2+3)+'" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="8.5" letter-spacing="1" fill="#8C8371">IMMATURE — NOT MISSING</text>');
+  }
+  if (warm.sma200_valid_from) lane(14,18,'200DMA',[warm.sma200_valid_from]);
+  if (warm.week52_valid_from) lane(44,18,'52-WK / T-T',[warm.week52_valid_from, warm.trend_template_valid_from||warm.week52_valid_from]);
+  // extract bracket for the plotted 250 sessions
+  if (tape.length){
+    var bx0=X(dnum(tape[0].date)), bx1=X(t1), by=80;
+    p.push('<path d="M'+bx0+' '+(by-5)+' V'+by+' H'+bx1+' V'+(by-5)+'" fill="none" stroke="#2A2620" stroke-width="1"/>');
+    p.push('<text x="'+((bx0+bx1)/2)+'" y="'+(by+13)+'" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="8.5" letter-spacing="1" fill="#5D5749">THE '+tape.length+' SESSIONS PLOTTED BELOW</text>');
+  }
+  // as-of cursor
+  var xa=X(dnum(asof));
+  p.push('<line x1="'+xa+'" y1="6" x2="'+xa+'" y2="86" stroke="#A63B22" stroke-width="1.2" stroke-dasharray="4 3"/>');
+  p.push('<text x="'+(xa-6)+'" y="'+10+'" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="8.5" font-weight="600" letter-spacing="1" fill="#A63B22">AS OF</text>');
+  // window endpoints
+  p.push('<text x="'+padL+'" y="'+(H-3)+'" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8C8371">'+bed.window.start+'</text>');
+  p.push('<text x="'+(W-padR)+'" y="'+(H-3)+'" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8C8371">'+bed.window.end+'</text>');
+  $('calstrip').innerHTML = p.join('');
+
+  var allMature = tape.length && dnum(tape[0].date) >= maturityMax;
+  $('calcap').innerHTML = '⧉ hatched — indicator still maturing: <q>' + esc(warm.note||'') + '</q> ' +
+    '<span style="color:var(--ink-3)">(bed.warmup.note)</span> · ' +
+    (allMature
+      ? 'every plotted session below falls after every maturity date — the readings are mature.'
+      : '<b style="color:var(--oxide)">some plotted sessions precede a maturity date — those spans are hatched on the chart below.</b>');
+})();
+
+/* ---------- ENTRY 1 · tape chart ---------- */
+(function tapechart(){
+  if (!tapeVals.length){ $('tapechart').outerHTML='<p class="chartcap">tape: no readings in this bed.</p>'; return; }
+  var W=1200,H=340,padL=56,padR=76,padT=30,padB=36;
+  var n=tape.length;
+  var lv=tapeVals.map(function(r){return r.level;});
+  var lo=Math.min.apply(null,lv), hi=Math.max.apply(null,lv);
+  var span=(hi-lo)||1; lo-=span*.07; hi+=span*.07;
+  function X(i){ return padL + i/(n-1)*(W-padL-padR); }
+  function Y(v){ return padT + (1-(v-lo)/(hi-lo))*(H-padT-padB); }
+  var p=[];
+  // immature span (generic: hatch any plotted session before the latest maturity date)
+  var lastImmature=-1;
+  tape.forEach(function(r,i){ if (dnum(r.date)<maturityMax) lastImmature=i; });
+  if (lastImmature>=0){
+    p.push('<rect x="'+padL+'" y="'+padT+'" width="'+(X(lastImmature)-padL)+'" height="'+(H-padT-padB)+'" fill="url(#hatch2)"/>');
+    p.push('<text x="'+((padL+X(lastImmature))/2)+'" y="'+(padT+14)+'" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" letter-spacing="1" fill="#8C8371">IMMATURE — NOT MISSING</text>');
+  }
+  p.unshift('<defs><pattern id="hatch2" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+    '<line x1="0" y1="0" x2="0" y2="7" stroke="rgba(140,131,113,.4)" stroke-width="1.2"/></pattern></defs>');
+  // y ruling
+  [100,110,120,130,140].forEach(function(t){
+    if (t<=lo||t>=hi) return;
+    p.push('<line x1="'+padL+'" y1="'+Y(t)+'" x2="'+(W-padR)+'" y2="'+Y(t)+'" stroke="rgba(88,124,154,.28)" stroke-width="1"'+(t===100?' stroke-dasharray="3 3"':'')+'/>');
+    p.push('<text x="'+(padL-8)+'" y="'+(Y(t)+3.5)+'" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="10" fill="#8C8371">'+t+'</text>');
+  });
+  // month ticks
+  var pm='';
+  tape.forEach(function(r,i){
+    var m=r.date.slice(5,7);
+    if (i===0||m!==pm){
+      pm=m;
+      var lab=MON[+m-1]+((m==='01'||i===0)?' ’'+r.date.slice(2,4):'');
+      p.push('<line x1="'+X(i)+'" y1="'+(H-padB)+'" x2="'+X(i)+'" y2="'+(H-padB+5)+'" stroke="#B5A98C" stroke-width="1"/>');
+      p.push('<text x="'+X(i)+'" y="'+(H-padB+18)+'" text-anchor="'+(i===0?'start':'middle')+'" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="#8C8371">'+lab+'</text>');
+    }
+  });
+  // frame baseline
+  p.push('<line x1="'+padL+'" y1="'+(H-padB)+'" x2="'+(W-padR)+'" y2="'+(H-padB)+'" stroke="#B5A98C" stroke-width="1"/>');
+  // the line (null-safe segmenting)
+  var d='', pen=false;
+  tape.forEach(function(r,i){
+    if (!isNum(r.level)){ pen=false; return; }
+    d += (pen?'L':'M')+X(i).toFixed(1)+' '+Y(r.level).toFixed(1)+' ';
+    pen=true;
+  });
+  p.push('<path d="'+d+'" fill="none" stroke="#2A4A8B" stroke-width="1.8" stroke-linejoin="round"/>');
+  // window high
+  var hiV=Math.max.apply(null,lv);
+  var hiI=-1; tape.forEach(function(r,i){ if (r.level===hiV&&hiI<0) hiI=i; });
+  if (hiI>=0){
+    p.push('<circle cx="'+X(hiI)+'" cy="'+Y(hiV)+'" r="3" fill="none" stroke="#2A2620" stroke-width="1.1"/>');
+    p.push('<text x="'+X(hiI)+'" y="'+(Y(hiV)-9)+'" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="#5D5749">high '+hiV.toFixed(2)+' · '+tape[hiI].date+'</text>');
+  }
+  // as-of cursor + last reading
+  var li=n-1; while(li>=0&&!isNum(tape[li].level)) li--;
+  if (li>=0){
+    var lx=X(li), lyv=tape[li].level, ly=Y(lyv);
+    p.push('<line x1="'+lx+'" y1="'+padT+'" x2="'+lx+'" y2="'+(H-padB)+'" stroke="#A63B22" stroke-width="1.1" stroke-dasharray="4 3"/>');
+    p.push('<text x="'+(lx-7)+'" y="'+(padT-10)+'" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="9" font-weight="600" letter-spacing="1.5" fill="#A63B22">AS OF '+asof+'</text>');
+    p.push('<circle cx="'+lx+'" cy="'+ly+'" r="3.6" fill="none" stroke="#A63B22" stroke-width="1.5"/>');
+    p.push('<rect x="'+(lx+9)+'" y="'+(ly-11)+'" width="58" height="20" fill="#FAF6E9" stroke="#A63B22" stroke-width="1"/>');
+    p.push('<text x="'+(lx+38)+'" y="'+(ly+3.5)+'" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="#A63B22">'+lyv.toFixed(2)+'</text>');
+  }
+  $('tapechart').innerHTML=p.join('');
+  var dd = li>=0 ? (tape[li].level/hiV-1)*100 : null;
+  $('tapecap').innerHTML = esc(D.tape.note||'') + ' · dashed 100 = first plotted session · off the window high by ' +
+    (dd===null?'—':dd.toFixed(1)+'%') + ' at the as-of cursor.';
+  var ns=tape.map(function(r){return r.n;}).filter(isNum);
+  $('e1note').textContent = 'cross-section n ' + (ns.length? Math.min.apply(null,ns)+' → '+Math.max.apply(null,ns):'—') + ' names';
+})();
+footer($('e1foot'), 'ak', 'alpaca_kit — bed bars', (D.tape && D.tape.raw) || '—');
+
+/* ---------- ENTRY 2 · breadth ---------- */
+var br = (D.breadth && D.breadth.series || []).filter(function(r){ return r && r.date; });
+(function breadth(){
+  if (!br.length){ $('statrail').innerHTML='<p class="chartcap">breadth: no readings in this bed.</p>'; return; }
+  var last=br[br.length-1];
+  $('e2note').textContent = br[0].date + ' → ' + last.date;
+
+  function statHTML(k,v,r){ return '<div class="stat"><div class="k">'+k+'</div><div class="v">'+v+'</div><div class="r">'+r+'</div></div>'; }
+  var ps=br.map(function(r){return r.pct_above_200dma;}).filter(isNum);
+  var ns=br.map(function(r){return r.net_new_highs;}).filter(isNum);
+  var rail='';
+  rail+=statHTML('% above 200DMA',
+    isNum(last.pct_above_200dma)?(last.pct_above_200dma*100).toFixed(1)+'<small> %</small>':'—',
+    ps.length?'range '+(Math.min.apply(null,ps)*100).toFixed(1)+'–'+(Math.max.apply(null,ps)*100).toFixed(1)+'% over '+br.length+' sessions':'');
+  rail+=statHTML('Net new 52-wk highs',
+    isNum(last.net_new_highs)?signed(last.net_new_highs,0):'—',
+    ns.length?'range '+signed(Math.min.apply(null,ns),0)+' … '+signed(Math.max.apply(null,ns),0):'');
+  rail+=statHTML('Advances / declines',
+    (isNum(last.advances)?last.advances:'—')+'<small> / </small>'+(isNum(last.declines)?last.declines:'—'),
+    'on '+last.date);
+  $('statrail').innerHTML=rail;
+
+  var W=900,padL=46,padR=14;
+  function xs(i){ return padL + i/(br.length-1)*(W-padL-padR); }
+
+  // chart 1: % above 200DMA line
+  (function(){
+    var H=118,padT=12,padB=16;
+    var vals=ps.map(function(v){return v*100;});
+    if(!vals.length){ $('b1').outerHTML='<p class="chartcap">— no reading</p>'; return; }
+    var lo=Math.floor(Math.min.apply(null,vals))-1, hi=Math.ceil(Math.max.apply(null,vals))+1;
+    function Y(v){ return padT+(1-(v-lo)/(hi-lo))*(H-padT-padB); }
+    var p=[];
+    for(var t=Math.ceil(lo/2)*2;t<=hi;t+=2){
+      p.push('<line x1="'+padL+'" y1="'+Y(t)+'" x2="'+(W-padR)+'" y2="'+Y(t)+'" stroke="rgba(88,124,154,.22)" stroke-width="1"/>');
+      p.push('<text x="'+(padL-6)+'" y="'+(Y(t)+3)+'" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8C8371">'+t+'</text>');
+    }
+    if (lo<50&&hi>50) p.push('<line x1="'+padL+'" y1="'+Y(50)+'" x2="'+(W-padR)+'" y2="'+Y(50)+'" stroke="#A63B22" stroke-width="1" stroke-dasharray="3 3"/>');
+    var d='',pen=false;
+    br.forEach(function(r,i){
+      if(!isNum(r.pct_above_200dma)){pen=false;return;}
+      d+=(pen?'L':'M')+xs(i).toFixed(1)+' '+Y(r.pct_above_200dma*100).toFixed(1)+' ';pen=true;
+    });
+    p.push('<path d="'+d+'" fill="none" stroke="#2A4A8B" stroke-width="1.7" stroke-linejoin="round"/>');
+    if(isNum(last.pct_above_200dma)){
+      p.push('<circle cx="'+xs(br.length-1)+'" cy="'+Y(last.pct_above_200dma*100)+'" r="3" fill="none" stroke="#A63B22" stroke-width="1.4"/>');
+    }
+    $('b1').innerHTML=p.join('');
+  })();
+
+  // chart 2: net new highs bars
+  (function(){
+    var H=118,padT=12,padB=16;
+    if(!ns.length){ $('b2').outerHTML='<p class="chartcap">— no reading</p>'; return; }
+    var lo=Math.min(0,Math.min.apply(null,ns)), hi=Math.max(0,Math.max.apply(null,ns));
+    function Y(v){ return padT+(1-(v-lo)/((hi-lo)||1))*(H-padT-padB); }
+    var p=[], bw=Math.max(2,(W-padL-padR)/br.length*.62);
+    [hi, 0, lo].forEach(function(t){
+      p.push('<text x="'+(padL-6)+'" y="'+(Y(t)+3)+'" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8C8371">'+signed(t,0)+'</text>');
+    });
+    p.push('<line x1="'+padL+'" y1="'+Y(0)+'" x2="'+(W-padR)+'" y2="'+Y(0)+'" stroke="#B5A98C" stroke-width="1"/>');
+    br.forEach(function(r,i){
+      if(!isNum(r.net_new_highs)) return;
+      var v=r.net_new_highs,y0=Y(0),y1=Y(v);
+      p.push('<rect x="'+(xs(i)-bw/2)+'" y="'+Math.min(y0,y1)+'" width="'+bw+'" height="'+Math.max(1,Math.abs(y1-y0))+'" fill="'+(v<0?'#A63B22':'#2A4A8B')+'" opacity="'+(v<0?'0.85':'0.75')+'"/>');
+    });
+    $('b2').innerHTML=p.join('');
+  })();
+
+  // chart 3: advances up / declines down
+  (function(){
+    var H=132,padT=12,padB=26;
+    var mx=0;
+    br.forEach(function(r){ if(isNum(r.advances))mx=Math.max(mx,r.advances); if(isNum(r.declines))mx=Math.max(mx,r.declines); });
+    if(!mx){ $('b3').outerHTML='<p class="chartcap">— no reading</p>'; return; }
+    var mid=padT+(H-padT-padB)/2;
+    var half=(H-padT-padB)/2;
+    function up(v){ return mid - v/mx*half; }
+    function dn(v){ return mid + v/mx*half; }
+    var p=[], bw=Math.max(2,(W-padL-padR)/br.length*.62);
+    p.push('<line x1="'+padL+'" y1="'+mid+'" x2="'+(W-padR)+'" y2="'+mid+'" stroke="#B5A98C" stroke-width="1"/>');
+    p.push('<text x="'+(padL-6)+'" y="'+(up(mx)+3)+'" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8C8371">'+mx+'</text>');
+    p.push('<text x="'+(padL-6)+'" y="'+(dn(mx)+3)+'" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8C8371">'+mx+'</text>');
+    br.forEach(function(r,i){
+      if(isNum(r.advances))
+        p.push('<rect x="'+(xs(i)-bw/2)+'" y="'+up(r.advances)+'" width="'+bw+'" height="'+Math.max(1,mid-up(r.advances))+'" fill="#2A4A8B" opacity="0.7"/>');
+      if(isNum(r.declines))
+        p.push('<rect x="'+(xs(i)-bw/2)+'" y="'+mid+'" width="'+bw+'" height="'+Math.max(1,dn(r.declines)-mid)+'" fill="#A63B22" opacity="0.6"/>');
+    });
+    // month ticks along the shared axis (bottom chart only)
+    var pm='';
+    br.forEach(function(r,i){
+      var m=r.date.slice(5,7);
+      if(i===0||m!==pm){
+        pm=m;
+        p.push('<line x1="'+xs(i)+'" y1="'+(H-padB+2)+'" x2="'+xs(i)+'" y2="'+(H-padB+7)+'" stroke="#B5A98C" stroke-width="1"/>');
+        p.push('<text x="'+xs(i)+'" y="'+(H-padB+18)+'" text-anchor="'+(i===0?'start':'middle')+'" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8C8371">'+(i===0?r.date:MON[+m-1])+'</text>');
+      }
+    });
+    $('b3').innerHTML=p.join('');
+  })();
+
+  /* ---- distribution flags: danger forces disclosure ---- */
+  var flags=[];
+  br.forEach(function(r,i){
+    if(!isNum(r.advances)||!isNum(r.declines)) return;
+    var tot=r.advances+r.declines;
+    var share=tot?r.declines/tot:null;
+    var why=[];
+    if(share!==null&&share>=.65) why.push('decliners '+(share*100).toFixed(1)+'%');
+    if(isNum(r.net_new_highs)&&r.net_new_highs<=-10) why.push('net new highs '+signed(r.net_new_highs,0));
+    if(why.length) flags.push({r:r,share:share,why:why,idx:i});
+  });
+  var recent = flags.some(function(f){ return f.idx >= br.length-5; });
+  $('flagsum').textContent='';
+  $('flagsum').innerHTML='<span class="flagct">'+flags.length+'</span> of last '+br.length+' sessions';
+  if(flags.length){
+    $('flagrows').innerHTML = flags.map(function(f){
+      return '<tr><td>'+f.r.date+'</td><td>'+f.r.advances+'</td><td>'+f.r.declines+'</td>'+
+        '<td>'+(f.share===null?'—':(f.share*100).toFixed(1)+'%')+'</td>'+
+        '<td>'+(isNum(f.r.net_new_highs)?signed(f.r.net_new_highs,0):'—')+'</td>'+
+        '<td><span class="why">⚑ '+f.why.join(' · ')+'</span></td></tr>';
+    }).join('');
+  } else {
+    $('flagrows').innerHTML='<tr><td colspan="6">no flagged sessions in this window</td></tr>';
+  }
+  if(recent){
+    var fold=$('flagfold');
+    fold.open=true;
+    fold.classList.add('alert');
+    $('flagstamp').innerHTML='<span class="stamp stamp--sm stamp--flat">flag in last 5 sessions</span>';
+  }
+})();
+footer($('e2foot'), 'mb', 'alpaca_kit.features.breadth.market_breadth', (D.breadth && D.breadth.raw) || '—');
+
+/* ---------- ENTRY 3 · screens ---------- */
+(function screens(){
+  var sc=D.screens||{};
+  var defs={
+    tt:{label:'trend_template', block:sc.trend_template||{rows:[]}},
+    g:{label:'gainer', block:sc.gainer||{rows:[]}}
+  };
+  $('ct-tt').textContent=(defs.tt.block.rows||[]).length;
+  $('ct-g').textContent=(defs.g.block.rows||[]).length;
+
+  function spark(arr){
+    if(!Array.isArray(arr)) return '<span class="na">—</span>';
+    var vals=arr.filter(isNum);
+    if(!vals.length) return '<span class="na">—</span>';
+    var w=120,h=24,px=2,py=3;
+    var lo=Math.min.apply(null,vals),hi=Math.max.apply(null,vals);
+    var sp=(hi-lo)||1;
+    function X(i){ return px+i/(arr.length-1||1)*(w-2*px); }
+    function Y(v){ return py+(1-(v-lo)/sp)*(h-2*py); }
+    var p=[];
+    if(lo<1&&hi>1) p.push('<line x1="'+px+'" y1="'+Y(1)+'" x2="'+(w-px)+'" y2="'+Y(1)+'" stroke="rgba(140,131,113,.5)" stroke-width="1" stroke-dasharray="2 3"/>');
+    var d='',pen=false,lastV=null,lastI=-1;
+    arr.forEach(function(v,i){
+      if(!isNum(v)){pen=false;return;}
+      d+=(pen?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1)+' ';
+      pen=true;lastV=v;lastI=i;
+    });
+    p.push('<path d="'+d+'" fill="none" stroke="#2A4A8B" stroke-width="1.2" stroke-linejoin="round"/>');
+    if(lastI>=0) p.push('<circle cx="'+X(lastI)+'" cy="'+Y(lastV)+'" r="1.8" fill="'+(lastV>=1?'#2A4A8B':'#A63B22')+'"/>');
+    return '<svg viewBox="0 0 '+w+' '+h+'" style="width:'+w+'px;height:'+h+'px;display:inline-block;vertical-align:middle">'+p.join('')+'</svg>';
+  }
+
+  function render(which){
+    var blk=defs[which].block, rows=blk.rows||[];
+    $('screenrows').innerHTML = rows.map(function(r,i){
+      var chg=isNum(r.pct_change)?r.pct_change:null;
+      return '<tr>'+
+        '<td class="no">'+String(i+1).padStart(2,'0')+'</td>'+
+        '<td class="sym l">'+esc(r.symbol||'—')+'</td>'+
+        '<td class="l"><span class="stag">'+esc(r.status||'—')+'</span></td>'+
+        '<td>'+dash(r.close,function(v){return fx(v,2);})+'</td>'+
+        '<td class="'+(chg===null?'':(chg>=0?'up':'dn'))+'">'+dash(r.pct_change,function(v){return signed(v,2)+'%';})+'</td>'+
+        '<td>'+dash(r.gap_pct,function(v){return signed(v,2)+'%';})+'</td>'+
+        '<td>'+dash(r.volume,thou)+'</td>'+
+        '<td>'+dash(r.rvol,function(v){return fx(v,2);})+'</td>'+
+        '<td>'+dash(r.consecutive_up_days,function(v){return fx(v,0);})+'</td>'+
+        '<td>'+dash(r.rs_percentile,function(v){return fx(v,1);})+'</td>'+
+        '<td class="l" style="padding-left:18px">'+spark(r.spark)+'</td>'+
+        '</tr>';
+    }).join('') || '<tr><td colspan="11" class="l">no names passed this screen today — an empty screen is a reading, not an error.</td></tr>';
+    footer($('e3foot'), 'bu', 'alpaca_kit.universe.build_universe', blk.raw||'—');
+    $('tab-tt').setAttribute('aria-selected', which==='tt'?'true':'false');
+    $('tab-g').setAttribute('aria-selected', which==='g'?'true':'false');
+  }
+  $('tab-tt').addEventListener('click',function(){render('tt');});
+  $('tab-g').addEventListener('click',function(){render('g');});
+  render('tt');
+})();
+
+/* ---------- colophon · orders gate (read-only, from the SAMPLE block) ---------- */
+(function gate(){
+  var am=D.account_mock||{}, g=am.orders_gate||{};
+  var g1 = g.gate1_registered ? 'REGISTERED' : 'CLOSED — unregistered';
+  var g2 = g.gate2_validated ? 'validated' : 'unvalidated';
+  $('gateline').innerHTML =
+    '<span class="gk">Orders gate</span>'+
+    '<span>Gate 1 (registration): <b>'+g1+'</b> · Gate 2 (per-order human approval): <b>'+g2+'</b></span>'+
+    '<span>· '+esc(g.note||'')+'</span>'+
+    '<span class="stamp stamp--sm stamp--flat">sample · account_mock is fabricated shape-data</span>';
+})();
+
+})();
+</script>
+</body>
+</html>
