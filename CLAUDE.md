@@ -13,6 +13,7 @@ Harness (dsh), configured from the repo-side template + skill packs in `dsh/`. S
 ## Map
 | Where | What |
 |---|---|
+| `Kairos-Design.md` | the charter — intent and principles (five principles, the write map, debts, revisit triggers); on intent it outranks the spec, on mechanism the spec and code win |
 | `alpaca_kit/{source,firewall}.py` | MarketDataSource Protocol + FakeSource; the AsOfGuard/GuardedSource lookahead firewall (surfaces pinned by name in `tests/test_us0_firewall_surfaces.py`) |
 | `alpaca_kit/{alpaca,registry,composite,account}.py` | Alpaca REST + corp-action normalization · source selection · per-capability routing · the paper-pinned trading host |
 | `alpaca_kit/{pit,feeds,features}/` + `{replay,universe,integrity}.py` | PIT store/capture/CHECKSUMS · EDGAR + FINRA/float feeds · trend_template/gainer screens + breadth · backtest day iterator · daily screen · canonical hasher |
