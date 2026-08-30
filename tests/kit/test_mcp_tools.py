@@ -114,11 +114,38 @@ def test_market_snapshot_defaults_to_the_latest_trading_day_not_today(fake_sourc
     assert [r["symbol"] for r in out["rows"]] == ["RUN", "FLOP"]     # the 2026-06-12 snapshot
 
 
+def test_market_snapshot_default_skips_calendar_days_the_capture_never_reached(tmp_path):
+    # The shape of the SHIPPED beds: trading_calendar() outruns the capture, because the calendar
+    # is fetched whole while the capture stops at its own end date (2yr calendar reaches
+    # 2026-07-13 with snapshots to 2026-07-09). "Newest calendar day" would pick an empty day.
+    # PITStore path: resolved by has_snapshot.
+    store = PITStore(tmp_path)
+    store.put_calendar([date(2026, 6, 10), date(2026, 6, 11), date(2026, 6, 12)])
+    store.put_snapshot(date(2026, 6, 11), pd.DataFrame({
+        "symbol": ["RUN"], "name": ["Runner"], "open": [16.0], "high": [18.0], "low": [15.0],
+        "close": [17.0], "volume": [5e6], "prev_close": [14.0]}))
+    out = build_tools(env={"ALPHA_PIT_ROOT": str(tmp_path)})["market_snapshot"].fn()
+    assert out["ok"] is True and [r["symbol"] for r in out["rows"]] == ["RUN"]   # 06-11, not 06-12
+
+
+def test_market_snapshot_default_probes_back_on_a_source_without_a_store():
+    # Same shape over a source that exposes no PITStore: the bounded walk-back has to notice that
+    # the newest calendar day answers with an EMPTY frame (FakeSource never raises) and step back.
+    cal = [date(2026, 6, 10), date(2026, 6, 11), date(2026, 6, 12)]
+    src = FakeSource(calendar=cal, bars={}, corp_actions=pd.DataFrame(), snapshots={
+        cal[1]: pd.DataFrame({
+            "symbol": ["RUN"], "name": ["Runner"], "open": [16.0], "high": [18.0], "low": [15.0],
+            "close": [17.0], "volume": [5e6], "prev_close": [14.0]})})
+    tools = build_tools(env=dict(PIT), source_factory=lambda: src)
+    out = tools["market_snapshot"].fn()
+    assert out["ok"] is True and [r["symbol"] for r in out["rows"]] == ["RUN"]   # 06-11, not 06-12
+
+
 def test_market_snapshot_default_is_fail_soft_on_an_empty_calendar():
     empty = FakeSource(calendar=[], bars={}, snapshots={}, corp_actions=pd.DataFrame())
     tools = build_tools(env=dict(PIT), source_factory=lambda: empty)
     out = tools["market_snapshot"].fn()
-    assert out["ok"] is False and "calendar" in out["error"]
+    assert out["ok"] is False and "no captured snapshot" in out["error"]
 
 
 def test_pit_guard_blocks_future_as_of(fake_source):

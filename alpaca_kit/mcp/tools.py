@@ -84,6 +84,38 @@ def _guarded(source_factory, as_of: Date) -> GuardedSource:
     return GuardedSource(source_factory(), AsOfGuard(as_of))
 
 
+def _latest_captured_day(src, today: Date, *, max_probes: int = 10) -> Date | None:
+    """Newest day <= `today` the source actually HAS a cross-section for, or None.
+
+    Not answerable from the calendar alone: a captured bed's trading_calendar() OUTRUNS its
+    snapshots, because the calendar is fetched whole while the capture stops at its own end
+    date (2yr: calendar to 2026-07-13, snapshots to 2026-07-09; broad: calendar to 2026-06-22,
+    snapshots to 2026-03-27). "Newest calendar day" would therefore pick a day with no data on
+    both shipped beds.
+
+    Two paths. A PITStore-backed source answers by file existence, which is cheap enough to
+    walk the whole calendar - broad needs ~60 steps, so a small probe cap would not reach it.
+    Any other source is probed by CALLING daily_snapshot backwards from the newest candidate,
+    capped at `max_probes` so a source that never answers still terminates. A day is "captured"
+    only if the call neither raises nor returns an empty frame: FakeSource-style sources return
+    an empty frame instead of raising, and a default must not land on an empty cross-section.
+    """
+    days = sorted(d for d in src.trading_calendar() if d <= today)
+    # Duck-typed on purpose: covers the bed built here AND an injected SnapshotSource, without
+    # this module having to know which one it was handed.
+    store = getattr(src, "_store", None)
+    if hasattr(store, "has_snapshot"):
+        return next((d for d in reversed(days) if store.has_snapshot(d)), None)
+    for d in reversed(days[-max_probes:]):
+        try:
+            df = src.daily_snapshot(d)
+        except Exception:
+            continue
+        if df is not None and not df.empty:
+            return d
+    return None
+
+
 def build_tools(env=None, *, source_factory=None, trading_factory=None,
                 edgar_factory=None) -> dict[str, Tool]:
     env = os.environ if env is None else env
@@ -161,23 +193,23 @@ def build_tools(env=None, *, source_factory=None, trading_factory=None,
     if pit_root:
         def market_snapshot(date: str | None = None, as_of: str | None = None):
             today = Date.today()
-            # Spec section 4: the DEFAULT is the latest trading day, not today. Today is not a
-            # trading day every weekend and holiday, and a captured bed's calendar can end long
-            # before today - both cases used to fail soft with SnapshotMissingError on a bare
-            # call. The as_of cursor below still defaults to today, never to the resolved day.
+            # Spec section 4 asks for a "latest trading day" default because today is not a
+            # trading day on weekends and holidays. On these beds that is not enough: the
+            # calendar outruns the capture, so the default resolves to the newest day actually
+            # CAPTURED at or before today (see _latest_captured_day). The as_of cursor below
+            # still defaults to today, never to the resolved day.
             if date:
                 day = _d(date)
             else:
-                past = [d for d in snapshot_factory().trading_calendar() if d <= today]
-                if not past:
-                    return {"ok": False,
-                            "error": "no trading day on or before today in the bed's calendar"}
-                day = max(past)
+                day = _latest_captured_day(snapshot_factory(), today)
+                if day is None:
+                    return {"ok": False, "error": "no captured snapshot on or before today - "
+                                                  "check ALPHA_PIT_ROOT and the bed's window"}
             g = _guarded(snapshot_factory, _d(as_of) if as_of else today)
             return _frame(g.daily_snapshot(day))
         add("market_snapshot", "full-market daily cross-section for a date (offline PIT bed); "
-                               "date defaults to the latest trading day at or before today",
-            market_snapshot)
+                               "date defaults to the newest day with a captured snapshot at or "
+                               "before today", market_snapshot)
 
         def screen(date: str, kind: str = "gainer", as_of: str | None = None):
             from alpaca_kit.universe import build_universe
