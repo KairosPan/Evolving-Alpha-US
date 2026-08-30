@@ -1,0 +1,134 @@
+{
+  "note": "FABRICATED for the face prototypes - every block here is invented shape-data and must render under a SAMPLE marking. Field shapes mirror the real strategies/_template contract - status.yaml lifecycle, THESIS sections, dated backtest JSONs under backtests/, journal.md - and the five honest-eval rules of docs/backtest-rules.md: delisting mid-hold is a terminal loss counted at -1.0 and never dropped, returns are gross, missing data is discarded AND counted, entries fill t+1 open, the PIT channel is replay_days only.",
+  "as_of": "2026-07-09",
+  "strategies": {
+    "fabricated": true,
+    "raw": "strategies/<name>/{status.yaml,THESIS.md,journal.md,backtests/}",
+    "lifecycle": ["idea", "researching", "validated", "paper", "retired"],
+    "rows": [
+      {
+        "name": "tt-breakout",
+        "status": "paper",
+        "created": "2026-04-02",
+        "updated": "2026-07-08",
+        "thesis": "Trend-template leaders breaking a 4-week base on >1.5x volume continue for weeks; buy the pivot, not the chase.",
+        "falsification": "win rate < 40% or avg win/loss < 1.2 over any 60-trade window",
+        "journal_entries": 31,
+        "journal_last": "2026-07-08",
+        "journal_tail": "07-08 breadth flag day - stood aside per doctrine; two pivots triggered but declines led 575/221.",
+        "backtest": {
+          "file": "backtests/2026-07-01-tt-breakout-2yr.json",
+          "window": {"start": "2025-06-05", "end": "2026-07-09", "note": "starts at trend_template maturity, not bed start"},
+          "trades": 87, "win_rate": 0.47, "avg_win_pct": 11.2, "avg_loss_pct": -4.8,
+          "gross_return_pct": 38.6, "max_drawdown_pct": -13.4,
+          "delistings_hit": 1, "delisting_treatment": "terminal -1.0, counted",
+          "discarded_days": 3, "discarded_treatment": "missing snapshot reads discarded and counted",
+          "equity_spark": [1.0, 1.01, 0.99, 1.03, 1.06, 1.05, 1.09, 1.08, 1.12, 1.10, 1.15, 1.13, 1.18, 1.16, 1.14, 1.19, 1.23, 1.21, 1.26, 1.24, 1.28, 1.25, 1.22, 1.27, 1.31, 1.29, 1.34, 1.32, 1.36, 1.39]
+        }
+      },
+      {
+        "name": "gap-go-follow",
+        "status": "researching",
+        "created": "2026-05-19",
+        "updated": "2026-07-06",
+        "thesis": "Gainers that gap up and hold the open drift higher into the close and the next two sessions - the weak-to-strong daily proxy.",
+        "falsification": "follow-through edge < 1% avg over 100 signals after costs proxy",
+        "journal_entries": 12,
+        "journal_last": "2026-07-06",
+        "journal_tail": "07-06 rvol is null in this bed - edge test needs the broad bed's richer capture or a live shadow window.",
+        "backtest": {
+          "file": "backtests/2026-06-28-gap-go-90d.json",
+          "window": {"start": "2026-03-02", "end": "2026-06-26", "note": "short probe window - not evidence, a shape check"},
+          "trades": 41, "win_rate": 0.51, "avg_win_pct": 5.3, "avg_loss_pct": -3.9,
+          "gross_return_pct": 9.8, "max_drawdown_pct": -7.2,
+          "delistings_hit": 0, "delisting_treatment": "terminal -1.0, counted",
+          "discarded_days": 6, "discarded_treatment": "missing snapshot reads discarded and counted",
+          "equity_spark": [1.0, 1.02, 1.01, 1.04, 1.02, 1.05, 1.03, 1.06, 1.08, 1.06, 1.09, 1.07, 1.10, 1.08, 1.10]
+        }
+      },
+      {
+        "name": "squeeze-float",
+        "status": "idea",
+        "created": "2026-06-30",
+        "updated": "2026-06-30",
+        "thesis": "Low-float names with high short interest and a fresh catalyst squeeze hardest; float participation sizes the bet.",
+        "falsification": "unwritten - blocked on FINRA short-interest feed coverage in the bed",
+        "journal_entries": 2,
+        "journal_last": "2026-06-30",
+        "journal_tail": "06-30 short_interest and free_float are null across the 2yr bed - idea parked until the feed lands.",
+        "backtest": null
+      },
+      {
+        "name": "earnings-drift",
+        "status": "validated",
+        "created": "2026-03-11",
+        "updated": "2026-06-20",
+        "thesis": "Beat-and-raise names in leading sectors drift up for 3-8 weeks post-print; enter t+1 open after the gap holds.",
+        "falsification": "drift < 2% avg at 20 sessions over 80 events, or edge concentrated in <3 tickers",
+        "journal_entries": 24,
+        "journal_last": "2026-06-20",
+        "journal_tail": "06-20 validated on the 2yr bed - 92 events, drift 4.1% avg at 20 sessions; paper trial gated on operator sign-off.",
+        "backtest": {
+          "file": "backtests/2026-06-18-earnings-drift-2yr.json",
+          "window": {"start": "2025-06-04", "end": "2026-07-09", "note": "starts at 52-week maturity"},
+          "trades": 92, "win_rate": 0.58, "avg_win_pct": 8.6, "avg_loss_pct": -3.4,
+          "gross_return_pct": 46.2, "max_drawdown_pct": -9.8,
+          "delistings_hit": 0, "delisting_treatment": "terminal -1.0, counted",
+          "discarded_days": 2, "discarded_treatment": "missing snapshot reads discarded and counted",
+          "equity_spark": [1.0, 1.02, 1.05, 1.04, 1.08, 1.11, 1.09, 1.13, 1.16, 1.15, 1.19, 1.22, 1.20, 1.25, 1.28, 1.27, 1.31, 1.30, 1.34, 1.33, 1.37, 1.40, 1.38, 1.43, 1.46]
+        }
+      },
+      {
+        "name": "momo-legacy",
+        "status": "retired",
+        "created": "2026-01-14",
+        "updated": "2026-05-02",
+        "thesis": "Pure daily momentum rotation from the CN playbook, translated symbol-for-symbol.",
+        "falsification": "met 2026-05-02: win rate 31% over 64 trades, avg win/loss 0.9 - thesis wrong for this tape",
+        "journal_entries": 40,
+        "journal_last": "2026-05-02",
+        "journal_tail": "05-02 retired. Lesson kept: US momentum decays intraday without the limit-up magnet; crash tail is the new left tail.",
+        "backtest": {
+          "file": "backtests/2026-05-01-momo-legacy-2yr.json",
+          "window": {"start": "2025-03-20", "end": "2026-04-30", "note": "starts at 200DMA maturity"},
+          "trades": 64, "win_rate": 0.31, "avg_win_pct": 4.1, "avg_loss_pct": -4.6,
+          "gross_return_pct": -18.9, "max_drawdown_pct": -24.7,
+          "delistings_hit": 2, "delisting_treatment": "terminal -1.0, counted",
+          "discarded_days": 4, "discarded_treatment": "missing snapshot reads discarded and counted",
+          "equity_spark": [1.0, 0.98, 1.01, 0.97, 0.99, 0.95, 0.97, 0.93, 0.95, 0.91, 0.93, 0.89, 0.91, 0.87, 0.88, 0.85, 0.86, 0.83, 0.84, 0.81]
+        }
+      }
+    ]
+  },
+  "account": {
+    "fabricated": true,
+    "raw": "alpaca_kit.account.TradingClient - paper-api.alpaca.markets only, pinned by _require_paper",
+    "host": "paper-api.alpaca.markets",
+    "status": "ACTIVE",
+    "equity": 102437.55,
+    "cash": 61210.10,
+    "buying_power": 122420.20,
+    "long_exposure_pct": 0.402,
+    "equity_spark": [100.0, 100.4, 99.8, 100.9, 101.2, 100.7, 101.8, 101.4, 102.3, 101.9, 102.8, 102.2, 101.6, 102.5, 103.1, 102.6, 103.4, 102.9, 103.7, 103.2, 102.4, 103.0, 103.8, 103.3, 104.1, 103.6, 102.8, 103.5, 102.9, 102.4],
+    "positions": [
+      {"symbol": "NVDA", "qty": 40, "avg_entry": 171.20, "market_value": 7492.00, "unrealized_plpc": 0.094, "strategy": "tt-breakout", "opened": "2026-06-24"},
+      {"symbol": "PLTR", "qty": 120, "avg_entry": 148.33, "market_value": 16652.40, "unrealized_plpc": -0.064, "strategy": "tt-breakout", "opened": "2026-07-01"},
+      {"symbol": "CRWD", "qty": 18, "avg_entry": 512.60, "market_value": 9930.60, "unrealized_plpc": 0.077, "strategy": "earnings-drift", "opened": "2026-06-12"}
+    ],
+    "closed_trades": [
+      {"symbol": "AMD", "strategy": "tt-breakout", "opened": "2026-05-28", "closed": "2026-06-20", "gross_pl_pct": 14.2, "exit": "trail stop"},
+      {"symbol": "ANET", "strategy": "earnings-drift", "opened": "2026-05-19", "closed": "2026-06-17", "gross_pl_pct": 9.1, "exit": "time stop 20d"},
+      {"symbol": "ASND", "strategy": "tt-breakout", "opened": "2026-06-02", "closed": "2026-06-09", "gross_pl_pct": -4.4, "exit": "hard stop"},
+      {"symbol": "SMCI", "strategy": "gap-go-follow", "opened": "2026-06-05", "closed": "2026-06-06", "gross_pl_pct": 3.8, "exit": "next-close probe"},
+      {"symbol": "BIIB", "strategy": "earnings-drift", "opened": "2026-05-12", "closed": "2026-06-02", "gross_pl_pct": -3.1, "exit": "thesis break"},
+      {"symbol": "ALAB", "strategy": "tt-breakout", "opened": "2026-04-30", "closed": "2026-05-27", "gross_pl_pct": 18.7, "exit": "trail stop"}
+    ],
+    "orders_gate": {
+      "gate1_registered": false,
+      "gate1_rule": "place_order and cancel_order register only when ALPACA_KIT_ENABLE_ORDERS=1 AND the APCA keys are present - the flag lives outside the agent's workspace",
+      "gate2_validated": false,
+      "gate2_rule": "per-order human approval in the harness - INTENT until a live order call is confirmed to prompt",
+      "paper_pin": "hostname == paper-api.alpaca.markets enforced in code on place and cancel"
+    }
+  }
+}

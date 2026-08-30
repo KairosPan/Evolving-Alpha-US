@@ -1,0 +1,578 @@
+<!-- @dsCard group="R2 - Account" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KAIROS · ACCOUNT — R2</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2305070b'/%3E%3Cpath d='M8 2 L11 8 L8 14 L5 8 Z' fill='%23c8a552'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="shell.css">
+<style>
+/* ============================================================
+   ACCOUNT — page-local styles only. All chrome, tokens and
+   graft components come from shell.css.
+   ============================================================ */
+
+/* ── the account instrument ─────────────────────────────────── */
+.acct-grid{ display:grid; grid-template-columns:.92fr 1.08fr; gap:26px; align-items:stretch; }
+.acct-left{ display:flex; flex-direction:column; }
+.acct-plaques{ grid-template-columns:1fr 1fr; }
+.hostpin{
+  margin-top:14px; display:flex; align-items:baseline; gap:6px 14px; flex-wrap:wrap;
+  padding:11px 16px 10px; border:1px solid var(--line-2); border-radius:3px;
+  background:linear-gradient(180deg, rgba(0,0,0,.46), rgba(0,0,0,.1)), var(--dome-2);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.62), 0 1px 0 var(--groove-l);
+}
+.hostpin .k{
+  font-family:var(--mono); font-size:9px; letter-spacing:.24em; text-transform:uppercase;
+  color:var(--faint);
+}
+.hostpin b{
+  font-family:var(--mono); font-size:12.5px; font-weight:500; letter-spacing:.05em;
+  color:var(--brass); text-shadow:0 1px 0 rgba(0,0,0,.9);
+}
+.hostpin .s{ font-family:var(--mono); font-size:9.5px; color:var(--faint); letter-spacing:.04em; }
+.eq-cap{
+  margin-top:9px; display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;
+}
+/* equity spark strokes — direction classes set by JS */
+.eq-line{ fill:none; stroke:var(--recovery); stroke-width:1.8; }
+.eq-line.down{ stroke:var(--trend); }
+.eq-fill{ fill:rgba(67,201,155,.07); }
+.eq-fill.down{ fill:rgba(238,112,72,.07); }
+.eq-dot{ fill:var(--recovery); }
+.eq-dot.down{ fill:var(--trend); }
+.eq-last{ font-size:11px; fill:var(--fg); }
+.eq-base{ stroke:rgba(160,186,222,.22); stroke-dasharray:3 4; }
+
+/* ── grouped positions ledger ───────────────────────────────── */
+table.ledger tr.grp td{
+  background:rgba(160,186,222,.035); border-bottom:1px solid var(--line-2);
+  padding-top:9px; padding-bottom:8px;
+}
+table.ledger tr.grp td .chip{ margin-left:10px; vertical-align:1px; }
+table.ledger tr.grp td .gn{ color:var(--faint); font-size:10px; letter-spacing:.14em; text-transform:uppercase; }
+
+/* ── the double order gate ──────────────────────────────────── */
+.gatepath{ display:flex; align-items:center; padding:20px 4px 6px; }
+.gp-node{
+  flex:none; display:flex; flex-direction:column; gap:5px; max-width:190px;
+  padding:13px 17px 12px; border:1px solid var(--line-2); border-radius:3px;
+  background:linear-gradient(180deg, rgba(0,0,0,.42), rgba(0,0,0,.08)), var(--dome-2);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.6), 0 1px 0 var(--groove-l);
+}
+.gp-node .k{
+  font-family:var(--mono); font-size:8.5px; letter-spacing:.26em; text-transform:uppercase;
+  color:var(--faint);
+}
+.gp-node .v{ font-family:var(--mono); font-size:11.5px; color:var(--fg-dim); letter-spacing:.04em; }
+.gp-node.host{ max-width:240px; }
+.gp-node.host .v{ color:var(--brass); font-weight:500; white-space:nowrap; }
+.gp-rail{
+  flex:1; height:2px; min-width:34px; position:relative;
+  background:linear-gradient(180deg, var(--groove-d) 0 50%, var(--groove-l) 50% 100%);
+}
+.gp-rail.cut{
+  height:0; border-top:1px dashed var(--line-2); background:none; opacity:.8;
+}
+.gp-rail.cut::after{
+  content:"⊘"; position:absolute; left:50%; top:50%; transform:translate(-50%,-54%);
+  color:var(--brass-dim); font-size:12px; background:var(--dome); padding:0 7px;
+}
+.gp-seal{
+  flex:none; width:138px; height:138px; border-radius:50%; margin:0 20px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  border:1px solid var(--line-2);
+  background:radial-gradient(circle at 50% 32%, rgba(255,255,255,.035), transparent 58%), var(--dome-2);
+  box-shadow:inset 0 0 0 5px var(--ground), inset 0 0 0 6px var(--line),
+             inset 0 0 28px rgba(0,0,0,.58), 0 1px 0 var(--groove-l);
+}
+.gp-seal .idx{ font-family:var(--mono); font-size:9px; letter-spacing:.28em; color:var(--brass); }
+.gp-seal .glyph{
+  font-size:27px; line-height:1.15; color:var(--brass-dim);
+  text-shadow:0 1px 0 rgba(0,0,0,.9);
+}
+.gp-seal .state{
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--fg-dim);
+}
+.gp-seal .sub{ font-family:var(--mono); font-size:8px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); }
+.gp-cap{
+  margin-top:16px; font-family:var(--mono); font-size:10px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--faint); text-align:center;
+}
+.dockets{ margin-top:20px; display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+.docket{ padding:14px 16px 13px; border:1px solid var(--line); border-radius:3px; background:var(--dome-2); }
+.docket .dk{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+.docket .dt{
+  font-family:var(--mono); font-size:9px; letter-spacing:.24em; text-transform:uppercase;
+  color:var(--brass);
+}
+.docket p{ margin:0; font-family:var(--mono); font-size:10.5px; line-height:1.75; color:var(--fg-dim); letter-spacing:.02em; }
+.intent-plate{
+  display:inline-block; font-family:var(--mono); font-size:8.5px; letter-spacing:.24em;
+  text-transform:uppercase; color:var(--ignition);
+  border:1px dotted rgba(229,170,69,.5); border-radius:2px; padding:2px 8px 1px;
+  white-space:nowrap;
+}
+
+@media (max-width:1100px){
+  .acct-grid{ grid-template-columns:1fr; }
+  .dockets{ grid-template-columns:1fr; }
+  .gatepath{ flex-wrap:wrap; row-gap:18px; justify-content:center; }
+}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap mast-top">
+    <a class="wordmark" href="landing.html"><span class="dia" aria-hidden="true"></span>KAIROS</a>
+    <span class="facename">ACCOUNT</span>
+    <span class="spacer"></span>
+    <span class="seg">as of <b id="k-asof" class="mono">—</b></span>
+    <span class="seg">bed <b id="k-bed" class="mono">—</b></span>
+    <span class="seg">window <b id="k-window" class="mono">—</b></span>
+    <span class="seg"><b id="k-symbols" class="mono">—</b> sym · <b id="k-days" class="mono">—</b> sessions</span>
+    <span class="seal" id="k-gate" title="orders_gate — read-only display">orders —</span>
+    <span class="stamp-sample" title="gate readout comes from account_mock, a labeled fabricated block">sample</span>
+  </div>
+  <nav class="wrap mast-nav" aria-label="Faces">
+    <a class="nav-link" href="market.html"><span class="nav-idx">01</span>Market</a>
+    <a class="nav-link" href="strategy.html"><span class="nav-idx">02</span>Strategy</a>
+    <a class="nav-link" href="account.html" aria-current="page"><span class="nav-idx">03</span>Account</a>
+    <span class="spacer"></span>
+    <span class="gem" aria-hidden="true" title="the six-phase thermal spectrum — washout · recovery · ignition · trend · distribution · flush"><i style="background:var(--washout)"></i><i style="background:var(--recovery)"></i><i style="background:var(--ignition)"></i><i style="background:var(--trend)"></i><i style="background:var(--distribution)"></i><i style="background:var(--flush)"></i></span>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <!-- E .1 — the account instrument -->
+  <section class="panel settle">
+    <header class="panel-head">
+      <span class="entry-no" data-entry>E —.—</span>
+      <span class="eyebrow">account · paper</span>
+      <h2>The account instrument.</h2>
+      <span class="stamp-plate">sample — fabricated shape</span>
+      <span class="spacer"></span>
+      <span class="eyebrow">status <b id="a-status" class="mono">—</b></span>
+    </header>
+    <div class="panel-body">
+      <div class="acct-grid">
+        <div class="acct-left">
+          <div class="plaques acct-plaques">
+            <div class="plaque"><span class="k">equity</span><span class="v" id="a-equity">—</span><span class="s">USD · paper account</span></div>
+            <div class="plaque"><span class="k">cash</span><span class="v" id="a-cash">—</span><span class="s">USD · unencumbered</span></div>
+            <div class="plaque"><span class="k">buying power</span><span class="v" id="a-bp">—</span><span class="s">USD · as reported</span></div>
+            <div class="plaque"><span class="k">long exposure</span><span class="v" id="a-exp">—</span><span class="s">of equity · long only</span></div>
+          </div>
+          <div class="hostpin" title="the trading host is pinned in code — not a setting, not a toggle">
+            <span class="k">host · pinned</span>
+            <b id="a-host" class="mono">—</b>
+            <span class="s">_require_paper — enforced in code on place &amp; cancel</span>
+          </div>
+        </div>
+        <div>
+          <div id="eq-mount"></div>
+          <div class="eq-cap">
+            <span class="eyebrow">equity — 30 sessions · indexed · 100 = series start</span>
+            <span class="spacer"></span>
+            <span class="eyebrow" id="eq-note">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <footer class="panel-foot">
+      <a class="sig" href="#" onclick="return false" id="sig-acct" title="raw ▸ —">
+        <span class="sig-mono" aria-hidden="true">TC</span>
+        <span class="sig-body">
+          <span class="sig-fn">alpaca_kit.account.TradingClient</span>
+          <span class="sig-raw" id="sig-acct-raw">—</span>
+        </span>
+      </a>
+      <span class="spacer"></span>
+      <span class="foot-note">every readout on this face is fabricated shape-data — SAMPLE stands</span>
+    </footer>
+  </section>
+
+  <!-- E .2 — open positions, grouped by owning strategy -->
+  <section class="panel settle d1">
+    <header class="panel-head">
+      <span class="entry-no" data-entry>E —.—</span>
+      <span class="eyebrow">positions · open</span>
+      <h2>Open positions, by strategy.</h2>
+      <span class="stamp-plate">sample — fabricated shape</span>
+      <span class="spacer"></span>
+      <span class="eyebrow" id="p-count">—</span>
+    </header>
+    <div class="panel-body">
+      <div class="table-scroll">
+        <table class="ledger">
+          <thead>
+            <tr>
+              <th class="l">symbol</th>
+              <th>qty</th>
+              <th>avg entry</th>
+              <th>market value</th>
+              <th>unrealized p/l</th>
+              <th>opened</th>
+            </tr>
+          </thead>
+          <tbody id="pos-body">
+            <tr><td class="l" colspan="6"><span class="null" title="no reading">—</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <footer class="panel-foot">
+      <a class="sig" href="#" onclick="return false" id="sig-pos" title="raw ▸ —">
+        <span class="sig-mono" aria-hidden="true">TC</span>
+        <span class="sig-body">
+          <span class="sig-fn">alpaca_kit.account.TradingClient</span>
+          <span class="sig-raw" id="sig-pos-raw">—</span>
+        </span>
+      </a>
+      <span class="spacer"></span>
+      <span class="foot-note">strategy tags mirror the shelf's one-way lifecycle — grouping is display, not netting</span>
+    </footer>
+  </section>
+
+  <!-- E .3 — the closed-trades ledger -->
+  <section class="panel settle d2">
+    <header class="panel-head">
+      <span class="entry-no" data-entry>E —.—</span>
+      <span class="eyebrow">trades · closed</span>
+      <h2>The closed-trades ledger.</h2>
+      <span class="stamp-plate">sample — fabricated shape</span>
+      <span class="spacer"></span>
+      <span class="eyebrow">gross returns — no cost model</span>
+    </header>
+    <div class="panel-body">
+      <div class="table-scroll">
+        <table class="ledger">
+          <thead>
+            <tr>
+              <th class="l">symbol</th>
+              <th class="l">strategy</th>
+              <th>opened</th>
+              <th>closed</th>
+              <th>held</th>
+              <th>gross p/l</th>
+              <th class="l">exit</th>
+            </tr>
+          </thead>
+          <tbody id="ct-body">
+            <tr><td class="l" colspan="7"><span class="null" title="no reading">—</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <footer class="panel-foot">
+      <a class="sig" href="#" onclick="return false" id="sig-ct" title="raw ▸ —">
+        <span class="sig-mono" aria-hidden="true">TC</span>
+        <span class="sig-body">
+          <span class="sig-fn">alpaca_kit.account.TradingClient</span>
+          <span class="sig-raw" id="sig-ct-raw">—</span>
+        </span>
+      </a>
+      <span class="spacer"></span>
+      <span class="foot-note" id="ct-note">gross per the gross-returns rule — commissions and slippage are not modeled</span>
+    </footer>
+  </section>
+
+  <!-- E .4 — the double order gate (set-piece) -->
+  <section class="panel settle d3">
+    <header class="panel-head">
+      <span class="entry-no" data-entry>E —.—</span>
+      <span class="eyebrow">control · the order path</span>
+      <h2>The double order gate.</h2>
+      <span class="stamp-plate">sample — fabricated shape</span>
+      <span class="spacer"></span>
+      <span class="eyebrow">display only — nothing here operates</span>
+    </header>
+    <div class="panel-body">
+      <div class="gatepath" role="img" aria-label="The order path: intent from the arena, through gate one registration and gate two human approval, to the pinned paper host. Both gates are shut; the path is severed.">
+        <div class="gp-node">
+          <span class="k">order intent</span>
+          <span class="v">from the arena</span>
+        </div>
+        <div class="gp-rail"></div>
+        <div class="gp-seal">
+          <span class="idx">GATE·1</span>
+          <span class="glyph" id="g1-glyph">⊘</span>
+          <span class="state" id="g1-state">—</span>
+          <span class="sub">registration</span>
+        </div>
+        <div class="gp-rail cut" id="rail-2"></div>
+        <div class="gp-seal">
+          <span class="idx">GATE·2</span>
+          <span class="glyph" id="g2-glyph">⊘</span>
+          <span class="state" id="g2-state">—</span>
+          <span class="sub">human approval</span>
+        </div>
+        <div class="gp-rail cut" id="rail-3"></div>
+        <div class="gp-node host">
+          <span class="k">pinned host</span>
+          <span class="v" id="gp-host">—</span>
+        </div>
+      </div>
+      <p class="gp-cap" id="gp-cap">—</p>
+      <hr class="rule" style="margin:18px 0 0">
+      <div class="dockets">
+        <div class="docket">
+          <div class="dk"><span class="dt">gate·1 — registration</span></div>
+          <p id="g1-rule"><span class="null" title="no reading">—</span></p>
+        </div>
+        <div class="docket">
+          <div class="dk"><span class="dt">gate·2 — human approval</span><span class="intent-plate" title="the mechanism is designed; a live order call has not yet been confirmed to prompt">intent · until validated</span></div>
+          <p id="g2-rule"><span class="null" title="no reading">—</span></p>
+        </div>
+        <div class="docket">
+          <div class="dk"><span class="dt">the paper pin</span></div>
+          <p id="pin-rule"><span class="null" title="no reading">—</span></p>
+        </div>
+      </div>
+    </div>
+    <footer class="panel-foot">
+      <a class="sig" href="#" onclick="return false" title="raw ▸ alpaca_kit/account.py — order tools register only under ALPACA_KIT_ENABLE_ORDERS=1; host pinned by _require_paper">
+        <span class="sig-mono" aria-hidden="true">OG</span>
+        <span class="sig-body">
+          <span class="sig-fn">orders_gate — alpaca_kit.account</span>
+          <span class="sig-raw">alpaca_kit/account.py · registration flag + _require_paper pin</span>
+        </span>
+      </a>
+      <span class="spacer"></span>
+      <span class="foot-note">the gates display; no toggle exists on this face — the flag lives outside the agent's workspace</span>
+    </footer>
+  </section>
+
+</main>
+
+<footer class="foot-band">
+  <div class="wrap foot">
+    <span>KAIROS · <b>ACCOUNT</b> — round-2 face prototype · zero authority · read-only</span>
+    <span class="spacer"></span>
+    <span>intent · <b>Kairos-Design.md</b></span>
+    <span>mechanism · <b>the skeleton spec &amp; code</b></span>
+  </div>
+</footer>
+
+<script src="../data/market_mock.js"></script>
+<script src="../data/workbench_mock.js"></script>
+<script>
+/* ── shell fill — shared across all R2 faces ── */
+(function(){
+  "use strict";
+  var D = window.KAIROS_DATA || null;
+  if(!D) return; // dashes stand: no reading, never fake
+  function t(id, s){ var el = document.getElementById(id); if(el) el.textContent = s; }
+  t("k-asof", D.as_of);
+  t("k-bed", D.bed.root);
+  t("k-window", D.bed.window.start + " → " + D.bed.window.end);
+  t("k-symbols", String(D.bed.symbols));
+  t("k-days", String(D.bed.captured_days));
+  var g = D.account_mock && D.account_mock.orders_gate;
+  var gateEl = document.getElementById("k-gate");
+  if(g && gateEl){
+    gateEl.textContent = "orders " + ((g.gate1_registered || g.gate2_validated) ? "partially armed" : "unarmed");
+    gateEl.title = "gate 1 registered: " + g.gate1_registered + " · gate 2 validated: " + g.gate2_validated +
+      " — read-only display · readout from account_mock (fabricated block)";
+  }
+  document.querySelectorAll("[data-entry]").forEach(function(el, i){
+    el.textContent = "E " + D.bed.captured_days + "." + (i + 1);
+  });
+})();
+
+/* ── page: the paper-account face ── */
+(function(){
+  "use strict";
+  var F = window.KAIROS_FACES || null;
+  var acct = F && F.account;
+  if(!acct) return; // no data → dashes stand, never fake
+
+  var ND = '<span class="null" title="no reading">—</span>';
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  function num(n, d){
+    if(n == null || !isFinite(n)) return null;
+    return n.toLocaleString("en-US", {minimumFractionDigits:d, maximumFractionDigits:d});
+  }
+  function usd(n){ var s = num(n, 2); return s == null ? ND : "$" + s; }
+  function fracPct(n, d){ /* 0.402 → 40.2% */
+    if(n == null || !isFinite(n)) return ND;
+    return num(n * 100, d) + "%";
+  }
+  function signedFracPct(n, d){ /* 0.094 → +9.4% */
+    if(n == null || !isFinite(n)) return ND;
+    var v = n * 100;
+    return '<span class="' + (v >= 0 ? "up" : "down") + '">' + (v > 0 ? "+" : "") + v.toFixed(d) + "%</span>";
+  }
+  function signedPct(n, d){ /* already in % units: 14.2 → +14.2% */
+    if(n == null || !isFinite(n)) return ND;
+    return '<span class="' + (n >= 0 ? "up" : "down") + '">' + (n > 0 ? "+" : "") + n.toFixed(d) + "%</span>";
+  }
+  function heldDays(a, b){
+    var d = (new Date(b) - new Date(a)) / 864e5;
+    return isFinite(d) ? Math.round(d) + "d" : "—";
+  }
+  function put(id, html){ var el = $(id); if(el) el.innerHTML = html; }
+  function putText(id, s){ var el = $(id); if(el) el.textContent = s; }
+
+  /* signatures — the raw pointer comes from the data */
+  if(acct.raw){
+    ["sig-acct", "sig-pos", "sig-ct"].forEach(function(id){
+      var a = $(id); if(a) a.title = "raw ▸ " + acct.raw;
+    });
+    ["sig-acct-raw", "sig-pos-raw", "sig-ct-raw"].forEach(function(id){ putText(id, acct.raw); });
+  }
+
+  /* ── E .1 — the instrument ── */
+  putText("a-status", acct.status == null ? "—" : String(acct.status));
+  put("a-equity", usd(acct.equity));
+  put("a-cash", usd(acct.cash));
+  put("a-bp", usd(acct.buying_power));
+  put("a-exp", fracPct(acct.long_exposure_pct, 1));
+  putText("a-host", acct.host == null ? "—" : String(acct.host));
+
+  /* the 30-point equity spark — hand-rolled, pen lifts on null */
+  (function(){
+    var A = acct.equity_spark;
+    if(!A || !A.length) return; // mount stays empty, caption dashes stand
+    var vals = A.filter(function(v){ return v != null && isFinite(v); });
+    if(!vals.length) return;
+    var W = 660, H = 236, L = 54, R = 18, T = 16, B = 30;
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    var pad = (hi - lo) * .14 || 1; lo -= pad; hi += pad;
+    var iw = W - L - R, ih = H - T - B;
+    function X(i){ return L + iw * i / (A.length - 1); }
+    function Y(v){ return T + ih * (1 - (v - lo) / (hi - lo)); }
+    var first = null, last = null, lastIdx = -1;
+    A.forEach(function(v, i){ if(v != null && isFinite(v)){ if(first == null) first = v; last = v; lastIdx = i; } });
+    var dirDown = last < first;
+    var s = [];
+    s.push('<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Equity curve, last 30 sessions, indexed to 100 at series start">');
+    /* gridlines + left scale */
+    for(var g = 0; g <= 3; g++){
+      var gv = lo + (hi - lo) * g / 3, gy = Y(gv);
+      s.push('<line class="gridline" x1="' + L + '" y1="' + gy.toFixed(1) + '" x2="' + (W - R) + '" y2="' + gy.toFixed(1) + '"/>');
+      s.push('<text class="axis" x="' + (L - 8) + '" y="' + (gy + 3).toFixed(1) + '" text-anchor="end">' + gv.toFixed(1) + '</text>');
+    }
+    /* the 100 baseline — the series start index */
+    if(100 >= lo && 100 <= hi){
+      var by = Y(100);
+      s.push('<line class="eq-base" x1="' + L + '" y1="' + by.toFixed(1) + '" x2="' + (W - R) + '" y2="' + by.toFixed(1) + '"/>');
+    }
+    /* area + line — the pen lifts on a null reading */
+    var dLine = [], dArea = [], run = [];
+    function flush(){
+      if(run.length > 1){
+        var seg = run.map(function(p, j){ return (j ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1); }).join(" ");
+        dLine.push(seg);
+        dArea.push(seg + " L" + run[run.length - 1][0].toFixed(1) + " " + (T + ih).toFixed(1) +
+                   " L" + run[0][0].toFixed(1) + " " + (T + ih).toFixed(1) + " Z");
+      }
+      run = [];
+    }
+    A.forEach(function(v, i){
+      if(v == null || !isFinite(v)){ flush(); return; }
+      run.push([X(i), Y(v)]);
+    });
+    flush();
+    if(dArea.length) s.push('<path class="eq-fill' + (dirDown ? " down" : "") + '" d="' + dArea.join(" ") + '"/>');
+    if(dLine.length) s.push('<path class="eq-line' + (dirDown ? " down" : "") + '" d="' + dLine.join(" ") + '"/>');
+    if(lastIdx >= 0){
+      s.push('<circle class="eq-dot' + (dirDown ? " down" : "") + '" cx="' + X(lastIdx).toFixed(1) + '" cy="' + Y(last).toFixed(1) + '" r="3"/>');
+      s.push('<text class="eq-last" x="' + Math.min(X(lastIdx) + 8, W - R).toFixed(1) + '" y="' + (Y(last) - 8).toFixed(1) + '" text-anchor="end">' + last.toFixed(1) + '</text>');
+    }
+    /* x extremes */
+    s.push('<text class="axis" x="' + L + '" y="' + (H - 8) + '" text-anchor="start">t−' + (A.length - 1) + '</text>');
+    s.push('<text class="axis" x="' + (W - R) + '" y="' + (H - 8) + '" text-anchor="end">as of ' + esc(F.as_of || "—") + '</text>');
+    s.push('</svg>');
+    $("eq-mount").innerHTML = s.join("");
+    var delta = (last / first - 1) * 100;
+    putText("eq-note", (delta > 0 ? "+" : "") + delta.toFixed(1) + "% over the span");
+  })();
+
+  /* ── E .2 — positions, grouped by owning strategy ── */
+  (function(){
+    var P = acct.positions;
+    if(!P || !P.length) return; // the em-dash row stands
+    var lifecycle = {};
+    ((F.strategies && F.strategies.rows) || []).forEach(function(r){ lifecycle[r.name] = r.status; });
+    var order = [], groups = {};
+    P.forEach(function(p){
+      var k = p.strategy == null ? "—" : p.strategy;
+      if(!groups[k]){ groups[k] = []; order.push(k); }
+      groups[k].push(p);
+    });
+    var rows = [];
+    order.forEach(function(k){
+      var g = groups[k];
+      var mv = g.reduce(function(a, p){ return (p.market_value != null && isFinite(p.market_value)) ? a + p.market_value : a; }, 0);
+      var lc = lifecycle[k];
+      rows.push('<tr class="grp"><td class="l" colspan="3"><span class="sym">' + esc(k) + '</span>' +
+        (lc ? '<span class="chip chip-' + esc(lc) + '">' + esc(lc) + '</span>' : '') +
+        '</td><td>Σ ' + usd(mv) + '</td><td colspan="2"><span class="gn">' + g.length + ' open</span></td></tr>');
+      g.forEach(function(p){
+        rows.push('<tr>' +
+          '<td class="l"><span class="sym">' + esc(p.symbol == null ? "—" : p.symbol) + '</span></td>' +
+          '<td>' + (p.qty == null || !isFinite(p.qty) ? ND : num(p.qty, 0)) + '</td>' +
+          '<td>' + usd(p.avg_entry) + '</td>' +
+          '<td>' + usd(p.market_value) + '</td>' +
+          '<td>' + signedFracPct(p.unrealized_plpc, 1) + '</td>' +
+          '<td>' + (p.opened == null ? ND : esc(p.opened)) + '</td>' +
+          '</tr>');
+      });
+    });
+    put("pos-body", rows.join(""));
+    putText("p-count", P.length + " open · " + order.length + " strategies");
+  })();
+
+  /* ── E .3 — the closed-trades ledger ── */
+  (function(){
+    var C = acct.closed_trades;
+    if(!C || !C.length) return; // the em-dash row stands
+    var rows = [], up = 0, down = 0;
+    C.forEach(function(c){
+      if(c.gross_pl_pct != null && isFinite(c.gross_pl_pct)){ if(c.gross_pl_pct >= 0) up++; else down++; }
+      rows.push('<tr>' +
+        '<td class="l"><span class="sym">' + esc(c.symbol == null ? "—" : c.symbol) + '</span></td>' +
+        '<td class="l">' + (c.strategy == null ? ND : esc(c.strategy)) + '</td>' +
+        '<td>' + (c.opened == null ? ND : esc(c.opened)) + '</td>' +
+        '<td>' + (c.closed == null ? ND : esc(c.closed)) + '</td>' +
+        '<td>' + ((c.opened && c.closed) ? heldDays(c.opened, c.closed) : ND) + '</td>' +
+        '<td>' + signedPct(c.gross_pl_pct, 1) + '</td>' +
+        '<td class="l">' + (c.exit == null ? ND : esc(c.exit)) + '</td>' +
+        '</tr>');
+    });
+    put("ct-body", rows.join(""));
+    putText("ct-note", C.length + " closed · " + up + " up · " + down +
+      " down — gross per the gross-returns rule; commissions and slippage are not modeled");
+  })();
+
+  /* ── E .4 — the double order gate ── */
+  (function(){
+    var G = acct.orders_gate;
+    if(!G) return; // dashes stand
+    var g1 = !!G.gate1_registered, g2 = !!G.gate2_validated;
+    putText("g1-state", g1 ? "registered" : "unregistered");
+    putText("g2-state", g2 ? "validated" : "unvalidated");
+    putText("g1-glyph", g1 ? "◈" : "⊘");
+    putText("g2-glyph", g2 ? "◈" : "⊘");
+    putText("gp-host", acct.host == null ? "—" : String(acct.host));
+    /* a shut gate severs everything downstream of it */
+    $("rail-2").className = "gp-rail" + (g1 ? "" : " cut");
+    $("rail-3").className = "gp-rail" + ((g1 && g2) ? "" : " cut");
+    putText("gp-cap",
+      (!g1 && !g2) ? "both gates shut — the path is severed before the host" :
+      (g1 && g2) ? "both gates open — orders would reach the pinned paper host" :
+      "one gate shut — the path is severed");
+    if(G.gate1_rule) putText("g1-rule", G.gate1_rule);
+    if(G.gate2_rule) putText("g2-rule", G.gate2_rule);
+    if(G.paper_pin) putText("pin-rule", G.paper_pin);
+  })();
+})();
+</script>
+</body>
+</html>

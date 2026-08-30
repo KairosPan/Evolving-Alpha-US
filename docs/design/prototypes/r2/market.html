@@ -1,0 +1,630 @@
+<!-- @dsCard group="R2 - Market" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KAIROS · MARKET — R2</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2305070b'/%3E%3Cpath d='M8 2 L11 8 L8 14 L5 8 Z' fill='%23c8a552'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="shell.css">
+<style>
+/* ============================================================
+   MARKET — page-local styles only: this face's chart/table
+   layout. All chrome, tokens and graft components: shell.css.
+   ============================================================ */
+
+/* tape deck: chart column + plaque rail */
+.deck{ display:grid; grid-template-columns:1fr 232px; gap:18px; align-items:start; }
+.aux-raws{
+  margin-top:12px; display:flex; gap:10px 26px; flex-wrap:wrap; align-items:baseline;
+}
+.aux-raws .k{
+  font-family:var(--mono); font-size:9px; letter-spacing:.22em; text-transform:uppercase;
+  color:var(--faint);
+}
+
+/* breadth trio */
+.b-grid{ display:grid; grid-template-columns:1.15fr 1fr 1fr; gap:22px; }
+.b-block .b-head{ display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+.b-block .b-head .k{
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.2em; text-transform:uppercase;
+  color:var(--faint);
+}
+.b-block .b-head .v{ font-family:var(--mono); font-size:13px; color:var(--fg); margin-left:auto; }
+.b-block .b-sub{
+  font-family:var(--mono); font-size:9px; letter-spacing:.08em; color:var(--faint); margin-top:6px;
+}
+
+/* the fold sits below the trio; margin lives on this slot, not the shell component */
+.fold-slot{ margin-top:18px; }
+table.wtab{ border-collapse:collapse; width:100%; max-width:520px; }
+table.wtab th, table.wtab td{
+  font-family:var(--mono); font-size:11px; text-align:right; padding:5px 12px 5px 0;
+  border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; color:var(--fg-dim);
+}
+table.wtab th{
+  font-size:8.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--faint); font-weight:400;
+}
+table.wtab td:first-child, table.wtab th:first-child{ text-align:left; }
+table.wtab td.neg{ color:var(--down); }
+.protocol{
+  margin:10px 0 0; font-family:var(--mono); font-size:9px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--faint);
+}
+
+/* rs-percentile meter inside the ledger table */
+.rs{ display:inline-flex; align-items:center; gap:8px; }
+.rs .track{ width:44px; height:3px; background:rgba(160,186,222,.12); border-radius:2px; overflow:hidden; }
+.rs .fill{ display:block; height:100%; background:var(--brass); }
+
+@media (max-width:1100px){
+  .deck{ grid-template-columns:1fr; }
+  .b-grid{ grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap mast-top">
+    <a class="wordmark" href="landing.html"><span class="dia" aria-hidden="true"></span>KAIROS</a>
+    <span class="facename">MARKET</span>
+    <span class="spacer"></span>
+    <span class="seg">as of <b id="k-asof" class="mono">—</b></span>
+    <span class="seg">bed <b id="k-bed" class="mono">—</b></span>
+    <span class="seg">window <b id="k-window" class="mono">—</b></span>
+    <span class="seg"><b id="k-symbols" class="mono">—</b> sym · <b id="k-days" class="mono">—</b> sessions</span>
+    <span class="seal" id="k-gate" title="orders_gate — read-only display">orders —</span>
+    <span class="stamp-sample" title="gate readout comes from account_mock, a labeled fabricated block">sample</span>
+  </div>
+  <nav class="wrap mast-nav" aria-label="Faces">
+    <a class="nav-link" href="market.html" aria-current="page"><span class="nav-idx">01</span>Market</a>
+    <a class="nav-link" href="strategy.html"><span class="nav-idx">02</span>Strategy</a>
+    <a class="nav-link" href="account.html"><span class="nav-idx">03</span>Account</a>
+    <span class="spacer"></span>
+    <span class="gem" aria-hidden="true" title="the six-phase thermal spectrum — washout · recovery · ignition · trend · distribution · flush"><i style="background:var(--washout)"></i><i style="background:var(--recovery)"></i><i style="background:var(--ignition)"></i><i style="background:var(--trend)"></i><i style="background:var(--distribution)"></i><i style="background:var(--flush)"></i></span>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <!-- ═══ ENTRY · THE TAPE ═══ -->
+  <section class="panel settle">
+    <header class="panel-head">
+      <span class="entry-no" data-entry>E —.—</span>
+      <span class="eyebrow">Composite · 250 sessions</span>
+      <h2>The tape</h2>
+      <span class="spacer"></span>
+      <span class="eyebrow" id="tape-note">—</span>
+    </header>
+    <div class="panel-body deck">
+      <div>
+        <div id="tape-chart" role="img"
+             aria-label="Equal-weight tape composite, 250 sessions, indexed to 100 at the first plotted session"></div>
+        <div id="bed-rail" role="img" style="margin-top:14px"
+             aria-label="Bed timeline: warmup boundaries across the full capture window, with the charted span bracketed"></div>
+        <div class="aux-raws">
+          <span class="k">bed files</span>
+          <a class="raw" href="#" onclick="return false" id="aux-calendar">—</a>
+          <a class="raw" href="#" onclick="return false" id="aux-checksums">—</a>
+        </div>
+      </div>
+      <div class="plaques">
+        <div class="plaque"><span class="k">Level</span>
+          <span class="v" id="t-level">—</span><span class="s" id="t-n">—</span></div>
+        <div class="plaque"><span class="k">Span high</span>
+          <span class="v" id="t-high">—</span><span class="s" id="t-highd">—</span></div>
+        <div class="plaque"><span class="k">Off high</span>
+          <span class="v" id="t-off">—</span><span class="s">from the span high</span></div>
+        <div class="plaque"><span class="k">Over the span</span>
+          <span class="v" id="t-span">—</span><span class="s" id="t-spand">—</span></div>
+      </div>
+    </div>
+    <footer class="panel-foot">
+      <a class="sig" href="#" onclick="return false" id="tape-sig" title="raw ▸ —">
+        <span class="sig-mono" aria-hidden="true">AK</span>
+        <span class="sig-body">
+          <span class="sig-fn">alpaca_kit — bed bars</span>
+          <span class="sig-raw" id="tape-sig-raw">—</span>
+        </span>
+      </a>
+      <span class="spacer"></span>
+      <span class="foot-note" id="warmup-note">—</span>
+    </footer>
+  </section>
+
+  <!-- ═══ ENTRY · BREADTH ═══ -->
+  <section class="panel settle d1">
+    <header class="panel-head">
+      <span class="entry-no" data-entry>E —.—</span>
+      <span class="eyebrow">Cross-section · 60 sessions</span>
+      <h2>Breadth</h2>
+      <span class="spacer"></span>
+      <span class="eyebrow" id="b-span">—</span>
+    </header>
+    <div class="panel-body">
+      <div class="b-grid">
+        <div class="b-block">
+          <div class="b-head"><span class="k">% above 200dma</span><span class="v" id="pa-last">—</span></div>
+          <div id="pa-chart" role="img" aria-label="Percent of symbols above their 200-day moving average, 60 sessions"></div>
+          <div class="b-sub" id="pa-mature">—</div>
+        </div>
+        <div class="b-block">
+          <div class="b-head"><span class="k">Net new highs</span><span class="v" id="nn-last">—</span></div>
+          <div id="nn-chart" role="img" aria-label="Net new 52-week highs per session, 60 sessions"></div>
+          <div class="b-sub" id="nn-sub">—</div>
+        </div>
+        <div class="b-block">
+          <div class="b-head"><span class="k">Advances / declines</span><span class="v" id="ad-last">—</span></div>
+          <div id="ad-chart" role="img" aria-label="Advancing symbols above the line, declining below, 60 sessions"></div>
+          <div class="b-sub" id="ad-sub">—</div>
+        </div>
+      </div>
+
+      <div class="fold-slot">
+        <details class="fold" id="watch-fold">
+          <summary>
+            <span class="lamp" aria-hidden="true"></span>
+            <span class="word" id="watch-word">breadth watch</span>
+            <span id="watch-line">—</span>
+            <span class="caret" aria-hidden="true">▾</span>
+          </summary>
+          <div class="fold-body">
+            <table class="wtab" id="watch-table"></table>
+            <p class="protocol">protocol · this fold opens itself when declines lead advances in ≥ 2 of the last 5 sessions — danger is never folded</p>
+          </div>
+        </details>
+      </div>
+    </div>
+    <footer class="panel-foot">
+      <a class="sig" href="#" onclick="return false" id="breadth-sig" title="raw ▸ —">
+        <span class="sig-mono" aria-hidden="true">MB</span>
+        <span class="sig-body">
+          <span class="sig-fn">market_breadth</span>
+          <span class="sig-raw" id="breadth-sig-raw">—</span>
+        </span>
+      </a>
+      <span class="spacer"></span>
+      <span class="foot-note" id="breadth-note">—</span>
+    </footer>
+  </section>
+
+  <!-- ═══ ENTRY · SCREENS ═══ -->
+  <section class="panel settle d2">
+    <header class="panel-head">
+      <span class="entry-no" data-entry>E —.—</span>
+      <span class="eyebrow">Daily screens</span>
+      <h2>Screens</h2>
+      <span class="spacer"></span>
+      <div class="tabs" role="tablist" aria-label="Screen selection">
+        <button class="tab" id="tab-tt" role="tab" aria-selected="true" aria-controls="pane-tt">
+          Trend template<span class="n" id="n-tt">—</span></button>
+        <button class="tab" id="tab-g" role="tab" aria-selected="false" aria-controls="pane-g">
+          Gainer<span class="n" id="n-g">—</span></button>
+      </div>
+    </header>
+    <div class="panel-body" style="padding:0">
+      <div class="table-scroll" id="pane-tt" role="tabpanel" aria-labelledby="tab-tt"></div>
+      <div class="table-scroll" id="pane-g" role="tabpanel" aria-labelledby="tab-g" hidden></div>
+    </div>
+    <footer class="panel-foot">
+      <a class="sig" href="#" onclick="return false" id="screen-sig" title="raw ▸ —">
+        <span class="sig-mono" aria-hidden="true">BU</span>
+        <span class="sig-body">
+          <span class="sig-fn">build_universe</span>
+          <span class="sig-raw" id="screen-sig-raw">—</span>
+        </span>
+      </a>
+      <span class="spacer"></span>
+      <span class="foot-note">em-dash = no reading in this bed — absence is shown, never faked</span>
+    </footer>
+  </section>
+
+</main>
+
+<footer class="foot-band">
+  <div class="wrap foot">
+    <span>KAIROS · <b>MARKET</b> — round-2 face prototype · zero authority · read-only</span>
+    <span class="spacer"></span>
+    <span>intent · <b>Kairos-Design.md</b></span>
+    <span>mechanism · <b>the skeleton spec &amp; code</b></span>
+  </div>
+</footer>
+
+<script src="../data/market_mock.js"></script>
+<script>
+/* ── shell fill — shared across all R2 faces ── */
+(function(){
+  "use strict";
+  var D = window.KAIROS_DATA || null;
+  if(!D) return; // dashes stand: no reading, never fake
+  function t(id, s){ var el = document.getElementById(id); if(el) el.textContent = s; }
+  t("k-asof", D.as_of);
+  t("k-bed", D.bed.root);
+  t("k-window", D.bed.window.start + " → " + D.bed.window.end);
+  t("k-symbols", String(D.bed.symbols));
+  t("k-days", String(D.bed.captured_days));
+  var g = D.account_mock && D.account_mock.orders_gate;
+  var gateEl = document.getElementById("k-gate");
+  if(g && gateEl){
+    gateEl.textContent = "orders " + ((g.gate1_registered || g.gate2_validated) ? "partially armed" : "unarmed");
+    gateEl.title = "gate 1 registered: " + g.gate1_registered + " · gate 2 validated: " + g.gate2_validated +
+      " — read-only display · readout from account_mock (fabricated block)";
+  }
+  document.querySelectorAll("[data-entry]").forEach(function(el, i){
+    el.textContent = "E " + D.bed.captured_days + "." + (i + 1);
+  });
+})();
+
+/* ── page: the three entries ── */
+(function(){
+  "use strict";
+  var D = window.KAIROS_DATA || null;
+  if(!D) return; // every readout stays an em-dash: no reading, never fake
+  var $ = function(id){ return document.getElementById(id); };
+  function txt(id, s){ var el=$(id); if(el) el.textContent=s; }
+  function fmt(n, d){ if(n==null||!isFinite(n)) return "—";
+    return n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d}); }
+  function pct(n, d){ return n==null||!isFinite(n) ? "—" : (n>0?"+":"")+fmt(n,d)+"%"; }
+  function vol(n){
+    if(n==null||!isFinite(n)) return "—";
+    if(n>=1e9) return fmt(n/1e9,2)+"B";
+    if(n>=1e6) return fmt(n/1e6,2)+"M";
+    if(n>=1e3) return fmt(n/1e3,0)+"K";
+    return fmt(n,0);
+  }
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  var days = function(iso){ return Date.parse(iso)/86400000; };
+
+  /* the signature carries the raw pointer — fill body text + title together */
+  function sign(id, raw){
+    var a = $(id); if(!a) return;
+    var r = $(id + "-raw"); if(r) r.textContent = raw;
+    a.title = "raw ▸ " + raw;
+  }
+
+  /* null-safe line path — pen lifts across missing readings, no NaN artifacts */
+  function linePath(pts){
+    var d = "", pen = false;
+    for(var i=0;i<pts.length;i++){
+      var y = pts[i][1];
+      if(y==null || !isFinite(y)){ pen = false; continue; }
+      d += (pen?"L":"M") + pts[i][0].toFixed(1) + " " + y.toFixed(1);
+      pen = true;
+    }
+    return d;
+  }
+  /* per-SVG hatch defs — ids are unique per chart, per the shell idiom */
+  function hatchDefs(id){
+    return '<defs><pattern id="'+id+'" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'+
+      '<line x1="0" y1="0" x2="0" y2="7" stroke="rgba(109,155,209,.28)" stroke-width="1.4"/></pattern></defs>';
+  }
+  /* immature-region renderer: hatches any part of the plotted date span that
+     precedes a warmup boundary. Immature ≠ missing — the hatch says so. */
+  function immatureRegion(patId, dates, boundaryIso, x, x1, y0, h, label){
+    if(!boundaryIso || !dates.length) return "";
+    var b = days(boundaryIso);
+    if(days(dates[0]) >= b) return "";           // whole span mature: draw nothing
+    var i = 0;
+    while(i < dates.length && days(dates[i]) < b) i++;
+    var xEnd = i >= dates.length ? x1 : x(i);
+    var out = '<rect x="'+x(0).toFixed(1)+'" y="'+y0+'" width="'+(xEnd-x(0)).toFixed(1)+
+      '" height="'+h+'" fill="url(#'+patId+')" opacity=".8"/>' +
+      '<line x1="'+xEnd.toFixed(1)+'" y1="'+y0+'" x2="'+xEnd.toFixed(1)+'" y2="'+(y0+h)+
+      '" stroke="rgba(160,186,222,.35)" stroke-dasharray="2 3"/>';
+    if(label) out += '<text class="axis" x="'+(x(0)+4).toFixed(1)+'" y="'+(y0+12)+'">'+esc(label)+'</text>';
+    return out;
+  }
+
+  var bed = D.bed;
+
+  /* ══ E .1 — THE TAPE ══ */
+  var T = D.tape.series;
+  var levels = T.map(function(r){ return r.level; });
+  var lv = levels.filter(function(v){ return v!=null && isFinite(v); });
+  var hi = Math.max.apply(null, lv);
+  var last = T[T.length-1], hiIdx = levels.indexOf(hi);
+  txt("tape-note", "indexed · 100 = " + T[0].date);
+  txt("t-level", fmt(last.level,2));
+  txt("t-n", "eq-weight of " + last.n + " symbols");
+  txt("t-high", fmt(hi,2));
+  txt("t-highd", "on " + T[hiIdx].date);
+  var off = (last.level/hi - 1)*100;
+  var offEl = $("t-off"); offEl.textContent = pct(off,2);
+  offEl.classList.add(off < 0 ? "down" : "up");
+  var span = (last.level/T[0].level - 1)*100;
+  var spanEl = $("t-span"); spanEl.textContent = pct(span,2);
+  spanEl.classList.add(span < 0 ? "down" : "up");
+  txt("t-spand", T[0].date + " → " + last.date);
+  sign("tape-sig", D.tape.raw);
+  var auxC = $("aux-calendar"); auxC.textContent = bed.raw.calendar; auxC.title = bed.raw.calendar;
+  var auxK = $("aux-checksums"); auxK.textContent = bed.raw.checksums; auxK.title = bed.raw.checksums;
+
+  (function tapeChart(){
+    var W=940, H=310, L=52, R=14, TOP=16, B=34;
+    var pw = W-L-R, ph = H-TOP-B;
+    var y0 = 95, y1 = 142;
+    var X = function(i){ return L + pw * i/(T.length-1); };
+    var Y = function(v){ return TOP + ph * (1 - (v-y0)/(y1-y0)); };
+    var s = ['<svg class="chart" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg">', hatchDefs("hatch-tape")];
+    // engraved horizontal graduations
+    for(var g=100; g<=140; g+=10){
+      s.push('<line class="gridline" x1="'+L+'" x2="'+(W-R)+'" y1="'+Y(g).toFixed(1)+'" y2="'+Y(g).toFixed(1)+'"/>');
+      s.push('<text class="axis" x="'+(L-8)+'" y="'+(Y(g)+3).toFixed(1)+'" text-anchor="end">'+g+'</text>');
+    }
+    // fine y minor ticks on the left spine
+    s.push('<line x1="'+L+'" x2="'+L+'" y1="'+TOP+'" y2="'+(TOP+ph)+'" stroke="rgba(160,186,222,.22)"/>');
+    for(var m=y0; m<=y1; m+=1){
+      var big = m%5===0;
+      s.push('<line x1="'+(L-(big?5:3))+'" x2="'+L+'" y1="'+Y(m).toFixed(1)+'" y2="'+Y(m).toFixed(1)+
+        '" stroke="rgba(160,186,222,'+(big?'.3':'.14')+')"/>');
+    }
+    // x ticks every 50 sessions
+    for(var xi=0; xi<T.length; xi+=50){
+      s.push('<line x1="'+X(xi).toFixed(1)+'" x2="'+X(xi).toFixed(1)+'" y1="'+(TOP+ph)+'" y2="'+(TOP+ph+5)+'" stroke="rgba(160,186,222,.3)"/>');
+      s.push('<text class="axis" x="'+X(xi).toFixed(1)+'" y="'+(TOP+ph+18)+'" text-anchor="middle">'+T[xi].date+'</text>');
+    }
+    s.push('<line x1="'+X(T.length-1).toFixed(1)+'" x2="'+X(T.length-1).toFixed(1)+'" y1="'+(TOP+ph)+'" y2="'+(TOP+ph+5)+'" stroke="rgba(160,186,222,.3)"/>');
+    s.push('<text class="axis" x="'+X(T.length-1).toFixed(1)+'" y="'+(TOP+ph+18)+'" text-anchor="end">'+last.date+'</text>');
+    // immature hatch — with this bed the tape span is wholly past warmup, so this renders nothing
+    s.push(immatureRegion("hatch-tape", T.map(function(r){return r.date;}), bed.warmup.sma200_valid_from,
+      X, W-R, TOP, ph, "immature · pre-"+bed.warmup.sma200_valid_from));
+    // area fill + luminous line
+    var pts = T.map(function(r,i){ return [X(i), r.level==null?null:Y(r.level)]; });
+    var lp = linePath(pts);
+    if(lp){
+      s.push('<path d="'+lp+' L'+X(T.length-1).toFixed(1)+' '+(TOP+ph)+' L'+X(0).toFixed(1)+' '+(TOP+ph)+
+        ' Z" fill="rgba(200,165,82,.07)" stroke="none"/>');
+      s.push('<path d="'+lp+'" fill="none" stroke="var(--brass)" stroke-width="1.8" stroke-linejoin="round"'+
+        ' style="filter:drop-shadow(0 0 5px rgba(200,165,82,.45))"/>');
+    }
+    // span-high diamond + last-reading dot
+    s.push('<path d="M'+X(hiIdx).toFixed(1)+' '+(Y(hi)-7).toFixed(1)+' l4.5 4.5 l-4.5 4.5 l-4.5 -4.5 Z"'+
+      ' fill="none" stroke="var(--brass-hi)" stroke-width="1.2"/>');
+    s.push('<text class="axis" x="'+X(hiIdx).toFixed(1)+'" y="'+(Y(hi)-13).toFixed(1)+'" text-anchor="middle" fill="var(--brass-hi)">'+fmt(hi,2)+'</text>');
+    s.push('<circle cx="'+X(T.length-1).toFixed(1)+'" cy="'+Y(last.level).toFixed(1)+'" r="3.2" fill="var(--fg)"'+
+      ' style="filter:drop-shadow(0 0 6px rgba(217,226,238,.8))"/>');
+    s.push('<text class="axis" x="'+(X(T.length-1)-8).toFixed(1)+'" y="'+(Y(last.level)-9).toFixed(1)+'" text-anchor="end" fill="var(--fg)">'+fmt(last.level,2)+'</text>');
+    s.push('</svg>');
+    $("tape-chart").innerHTML = s.join("");
+  })();
+
+  /* the bed rail: warmup boundaries on the full capture window */
+  (function bedRail(){
+    var W=940, H=106, L=52, R=14;
+    var d0 = days(bed.window.start), d1 = days(bed.window.end);
+    var X = function(iso){ return L + (W-L-R) * (days(iso)-d0)/(d1-d0); };
+    var yTop=30, yBot=52, yMid=41;
+    var wu = bed.warmup;
+    var s = ['<svg class="chart" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg">', hatchDefs("hatch-rail")];
+    s.push('<text class="axis" x="'+L+'" y="14" letter-spacing="2">BED RAIL · '+esc(bed.root)+'</text>');
+    // spine
+    s.push('<line x1="'+L+'" x2="'+(W-R)+'" y1="'+yMid+'" y2="'+yMid+'" stroke="rgba(160,186,222,.25)"/>');
+    // immature bands: dense hatch until 200dma matures, light hatch until 52-wk matures
+    s.push('<rect x="'+X(bed.window.start).toFixed(1)+'" y="'+yTop+'" width="'+(X(wu.sma200_valid_from)-X(bed.window.start)).toFixed(1)+
+      '" height="'+(yBot-yTop)+'" fill="url(#hatch-rail)" opacity=".95"/>');
+    s.push('<rect x="'+X(wu.sma200_valid_from).toFixed(1)+'" y="'+yTop+'" width="'+(X(wu.week52_valid_from)-X(wu.sma200_valid_from)).toFixed(1)+
+      '" height="'+(yBot-yTop)+'" fill="url(#hatch-rail)" opacity=".45"/>');
+    // boundary ticks + labels
+    function bnd(iso, lbl, anchor){
+      var xb = X(iso), tx = anchor==="end" ? xb-5 : xb+5;
+      s.push('<line x1="'+xb.toFixed(1)+'" x2="'+xb.toFixed(1)+'" y1="'+(yTop-4)+'" y2="'+(yBot+4)+
+        '" stroke="rgba(160,186,222,.4)" stroke-dasharray="2 3"/>');
+      s.push('<text class="axis" x="'+tx.toFixed(1)+'" y="'+(yTop-8)+'" text-anchor="'+anchor+'">'+esc(lbl)+'</text>');
+    }
+    bnd(wu.sma200_valid_from, "200DMA matures "+wu.sma200_valid_from, "end");
+    bnd(wu.week52_valid_from, "52-WK "+wu.week52_valid_from+" · TT "+wu.trend_template_valid_from, "start");
+    // ends
+    s.push('<text class="axis" x="'+L+'" y="'+(yBot+16)+'">'+bed.window.start+'</text>');
+    s.push('<text class="axis" x="'+(W-R)+'" y="'+(yBot+16)+'" text-anchor="end">'+bed.window.end+'</text>');
+    // band caption inside the immature zone
+    s.push('<text class="axis" x="'+((X(bed.window.start)+X(wu.sma200_valid_from))/2).toFixed(1)+'" y="'+(yMid+3)+
+      '" text-anchor="middle" fill="var(--washout)">IMMATURE — NOT MISSING</text>');
+    // the charted tape span, bracketed in brass
+    var t0 = T[0].date, t1 = T[T.length-1].date;
+    var bx0 = X(t0), bx1 = X(t1), by = yBot+20;
+    s.push('<path d="M'+bx0.toFixed(1)+' '+by+' v5 H'+bx1.toFixed(1)+' v-5" fill="none" stroke="var(--brass)" stroke-width="1.3"/>');
+    s.push('<text class="axis" x="'+((bx0+bx1)/2).toFixed(1)+'" y="'+(by+18)+'" text-anchor="middle" fill="var(--brass)">THE 250 SESSIONS CHARTED ABOVE — ENTIRELY PAST WARMUP</text>');
+    s.push('</svg>');
+    $("bed-rail").innerHTML = s.join("");
+    txt("warmup-note", "no warmup: " + bed.warmup.note);
+  })();
+
+  /* ══ E .2 — BREADTH ══ */
+  var B = D.breadth.series;
+  var bDates = B.map(function(r){ return r.date; });
+  txt("b-span", B[0].date + " → " + B[B.length-1].date);
+  sign("breadth-sig", D.breadth.raw);
+  txt("breadth-note", "cross-section of all " + bed.symbols + " bed symbols, each session");
+  var lastB = B[B.length-1];
+
+  var BW=380, BH=170, BL=38, BR=8, BT=10, BB=22;
+  function bx(i){ return BL + (BW-BL-BR) * i/(B.length-1); }
+  function bxBar(i){ return BL + (BW-BL-BR) * i/B.length; }
+  var barW = (BW-BL-BR)/B.length - 1.6;
+  function svgOpen(patId){ return ['<svg class="chart" viewBox="0 0 '+BW+' '+BH+'" xmlns="http://www.w3.org/2000/svg">', hatchDefs(patId)]; }
+  function xAxis(s, y){
+    s.push('<text class="axis" x="'+BL+'" y="'+(y+15)+'">'+B[0].date.slice(5)+'</text>');
+    s.push('<text class="axis" x="'+(BW-BR)+'" y="'+(y+15)+'" text-anchor="end">'+lastB.date.slice(5)+'</text>');
+  }
+
+  /* a) % above 200dma — a 200dma-dependent reading, so it declares its maturity */
+  (function paChart(){
+    var y0=0.50, y1=0.65, ph=BH-BT-BB;
+    var Y = function(v){ return BT + ph*(1-(v-y0)/(y1-y0)); };
+    var s = svgOpen("hatch-pa");
+    for(var gp=52; gp<=64; gp+=4){
+      var g = gp/100;
+      s.push('<line class="gridline" x1="'+BL+'" x2="'+(BW-BR)+'" y1="'+Y(g).toFixed(1)+'" y2="'+Y(g).toFixed(1)+'"/>');
+      s.push('<text class="axis" x="'+(BL-5)+'" y="'+(Y(g)+3).toFixed(1)+'" text-anchor="end">'+gp+'%</text>');
+    }
+    s.push(immatureRegion("hatch-pa", bDates, bed.warmup.sma200_valid_from, bx, BW-BR, BT, ph, "immature"));
+    var pts = B.map(function(r,i){ return [bx(i), r.pct_above_200dma==null?null:Y(r.pct_above_200dma)]; });
+    var lp = linePath(pts);
+    if(lp) s.push('<path d="'+lp+'" fill="none" stroke="var(--washout)" stroke-width="1.6"'+
+      ' style="filter:drop-shadow(0 0 4px rgba(109,155,209,.5))"/>');
+    if(lastB.pct_above_200dma!=null)
+      s.push('<circle cx="'+bx(B.length-1).toFixed(1)+'" cy="'+Y(lastB.pct_above_200dma).toFixed(1)+'" r="2.8" fill="var(--fg)"/>');
+    xAxis(s, BT+ph);
+    s.push('</svg>');
+    $("pa-chart").innerHTML = s.join("");
+    txt("pa-last", lastB.pct_above_200dma==null ? "—" : fmt(lastB.pct_above_200dma*100,1)+"%");
+    var mature = days(bDates[0]) >= days(bed.warmup.sma200_valid_from);
+    txt("pa-mature", mature
+      ? "200dma-dependent · span opens past the "+bed.warmup.sma200_valid_from+" warmup — mature"
+      : "200dma-dependent · hatched span precedes the "+bed.warmup.sma200_valid_from+" warmup — immature, not missing");
+  })();
+
+  /* b) net new highs — diverging bars, 52-week-dependent */
+  (function nnChart(){
+    var y0=-30, y1=110, ph=BH-BT-BB;
+    var Y = function(v){ return BT + ph*(1-(v-y0)/(y1-y0)); };
+    var s = svgOpen("hatch-nn");
+    [0,50,100].forEach(function(g){
+      s.push('<line class="'+(g===0?'zeroline':'gridline')+'" x1="'+BL+'" x2="'+(BW-BR)+'" y1="'+Y(g).toFixed(1)+'" y2="'+Y(g).toFixed(1)+'"/>');
+      s.push('<text class="axis" x="'+(BL-5)+'" y="'+(Y(g)+3).toFixed(1)+'" text-anchor="end">'+(g>0?"+":"")+g+'</text>');
+    });
+    s.push(immatureRegion("hatch-nn", bDates, bed.warmup.week52_valid_from, bx, BW-BR, BT, ph, "immature"));
+    var negDays = 0;
+    B.forEach(function(r,i){
+      var v = r.net_new_highs;
+      if(v==null || !isFinite(v)) return;      // no reading → no bar, never a zero
+      if(v<0) negDays++;
+      var yv = Y(v), yz = Y(0);
+      s.push('<rect x="'+bxBar(i).toFixed(1)+'" y="'+Math.min(yv,yz).toFixed(1)+'" width="'+barW.toFixed(1)+
+        '" height="'+Math.max(0.8, Math.abs(yz-yv)).toFixed(1)+'" fill="'+(v>=0?"var(--up)":"var(--down)")+'" opacity="'+(v>=0?0.75:0.95)+'"/>');
+    });
+    xAxis(s, BT+ph);
+    s.push('</svg>');
+    $("nn-chart").innerHTML = s.join("");
+    txt("nn-last", lastB.net_new_highs==null ? "—" : (lastB.net_new_highs>0?"+":"")+lastB.net_new_highs);
+    txt("nn-sub", "52-wk-dependent · "+negDays+" negative session"+(negDays===1?"":"s")+" in the span");
+  })();
+
+  /* c) advances / declines — mirrored around the spine */
+  (function adChart(){
+    var maxV = 700, ph=BH-BT-BB, mid = BT + ph/2;
+    var Y = function(v){ return mid - (v/maxV)*(ph/2); };   // advances up, declines down
+    var s = svgOpen("hatch-ad");
+    s.push('<line class="zeroline" x1="'+BL+'" x2="'+(BW-BR)+'" y1="'+mid.toFixed(1)+'" y2="'+mid.toFixed(1)+'"/>');
+    [350,700].forEach(function(g){
+      s.push('<text class="axis" x="'+(BL-5)+'" y="'+(Y(g)+3).toFixed(1)+'" text-anchor="end">'+g+'</text>');
+      s.push('<text class="axis" x="'+(BL-5)+'" y="'+(Y(-g)+3).toFixed(1)+'" text-anchor="end">'+g+'</text>');
+    });
+    B.forEach(function(r,i){
+      var x = bxBar(i).toFixed(1);
+      if(r.advances!=null && isFinite(r.advances))
+        s.push('<rect x="'+x+'" y="'+Y(r.advances).toFixed(1)+'" width="'+barW.toFixed(1)+
+          '" height="'+(mid-Y(r.advances)).toFixed(1)+'" fill="var(--up)" opacity=".6"/>');
+      if(r.declines!=null && isFinite(r.declines))
+        s.push('<rect x="'+x+'" y="'+mid.toFixed(1)+'" width="'+barW.toFixed(1)+
+          '" height="'+Math.max(0, Y(-r.declines)-mid).toFixed(1)+'" fill="var(--down)" opacity=".6"/>');
+    });
+    s.push('<text class="axis" x="'+(BW-BR)+'" y="'+(BT+8)+'" text-anchor="end" fill="var(--up)">ADV ▲</text>');
+    s.push('<text class="axis" x="'+(BW-BR)+'" y="'+(BT+ph-2)+'" text-anchor="end" fill="var(--down)">DECL ▼</text>');
+    xAxis(s, BT+ph);
+    s.push('</svg>');
+    $("ad-chart").innerHTML = s.join("");
+    txt("ad-last", lastB.advances + " ▲ / " + lastB.declines + " ▼");
+    var worst = B.reduce(function(a,r){ return (r.advances-r.declines) < (a.advances-a.declines) ? r : a; }, B[0]);
+    txt("ad-sub", "worst session " + worst.date + " · " + worst.advances + " ▲ / " + worst.declines + " ▼");
+  })();
+
+  /* the watch: danger forces disclosure — severity class + open together */
+  (function watch(){
+    var last5 = B.slice(-5);
+    var led = last5.filter(function(r){ return r.declines > r.advances; });
+    var crossed = led.length >= 2;
+    var w = $("watch-fold");
+    if(crossed){
+      w.classList.add("danger");
+      w.open = true;                       // danger is never rendered closed
+      txt("watch-word", "breadth watch · open");
+      txt("watch-line", "declines led advances in " + led.length + " of the last 5 sessions — tape " +
+        fmt((last.level/hi-1)*100,2) + "% off its span high");
+      var rows = led.map(function(r){
+        return '<tr><td>'+r.date+'</td><td>'+r.advances+'</td><td class="neg">'+r.declines+
+          '</td><td class="'+(r.net_new_highs<0?"neg":"")+'">'+(r.net_new_highs>0?"+":"")+r.net_new_highs+'</td></tr>';
+      }).join("");
+      $("watch-table").innerHTML =
+        '<tr><th>decline-led session</th><th>adv</th><th>decl</th><th>net new highs</th></tr>' + rows;
+    } else {
+      txt("watch-word", "breadth steady");
+      txt("watch-line", "no decline-led cluster in the last 5 sessions — fold stays closed");
+      $("watch-table").innerHTML = '<tr><th>nothing to disclose</th></tr>';
+    }
+  })();
+
+  /* ══ E .3 — SCREENS ══ */
+  function sparkSVG(sp){
+    if(!sp || sp.length < 2) return '<span class="null" title="no reading in this bed">—</span>';
+    var vals = sp.filter(function(v){ return v!=null && isFinite(v); });
+    if(vals.length < 2) return '<span class="null" title="no reading in this bed">—</span>';
+    var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+    if(mx-mn < 1e-9){ mx = mn + 1; }
+    var W=118, H=24, P=2;
+    var pts = sp.map(function(v,i){
+      return [P + (W-2*P)*i/(sp.length-1),
+        v==null||!isFinite(v) ? null : P + (H-2*P)*(1-(v-mn)/(mx-mn))];
+    });
+    var lp = linePath(pts);
+    var first = vals[0], lastV = vals[vals.length-1];
+    var col = lastV >= first ? "var(--up)" : "var(--down)";
+    var dot = "";
+    for(var i=pts.length-1;i>=0;i--){
+      if(pts[i][1]!=null){ dot='<circle cx="'+pts[i][0].toFixed(1)+'" cy="'+pts[i][1].toFixed(1)+'" r="1.8" fill="'+col+'"/>'; break; }
+    }
+    return '<svg class="spark" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" aria-hidden="true">'+
+      '<path d="'+lp+'" fill="none" stroke="'+col+'" stroke-width="1.1" opacity=".85"/>'+dot+'</svg>';
+  }
+  function cell(v, fmtFn){ return v==null ? '<span class="null" title="no reading in this bed">—</span>' : fmtFn(v); }
+  function rsCell(v){
+    if(v==null) return '<span class="null" title="no reading in this bed">—</span>';
+    return '<span class="rs"><span class="track"><span class="fill" style="width:'+Math.round(v)+
+      '%"></span></span>'+fmt(v,1)+'</span>';
+  }
+  function buildTable(rows){
+    var h = ['<table class="ledger"><thead><tr>',
+      '<th class="l">symbol</th><th class="l">status</th><th>close</th><th>Δ 1d</th><th>gap</th>',
+      '<th>volume</th><th>rvol</th><th>up days</th><th>rs pctl</th><th class="l">last 60 sessions</th>',
+      '</tr></thead><tbody>'];
+    rows.forEach(function(r){
+      var chg = r.pct_change;
+      h.push('<tr>',
+        '<td class="l"><span class="sym">'+esc(r.symbol)+'</span></td>',
+        '<td class="l"><span class="chip chip-'+esc(r.status)+'">'+esc(String(r.status).replace(/_/g," "))+'</span></td>',
+        '<td>'+cell(r.close, function(v){ return fmt(v,2); })+'</td>',
+        '<td>'+(chg==null ? '<span class="null" title="no reading in this bed">—</span>'
+          : '<span class="'+(chg>=0?"up":"down")+'">'+pct(chg,2)+'</span>')+'</td>',
+        '<td>'+cell(r.gap_pct, function(v){ return pct(v,2); })+'</td>',
+        '<td>'+cell(r.volume, vol)+'</td>',
+        '<td>'+cell(r.rvol, function(v){ return fmt(v,2)+"×"; })+'</td>',
+        '<td>'+cell(r.consecutive_up_days, function(v){ return String(v); })+'</td>',
+        '<td>'+rsCell(r.rs_percentile)+'</td>',
+        '<td class="l">'+sparkSVG(r.spark)+'</td>',
+        '</tr>');
+    });
+    h.push('</tbody></table>');
+    return h.join("");
+  }
+  var tt = D.screens.trend_template, gn = D.screens.gainer;
+  $("pane-tt").innerHTML = buildTable(tt.rows);
+  $("pane-g").innerHTML = buildTable(gn.rows);
+  txt("n-tt", String(tt.rows.length));
+  txt("n-g", String(gn.rows.length));
+
+  function selectTab(which){
+    var isTT = which === "tt";
+    $("tab-tt").setAttribute("aria-selected", isTT ? "true" : "false");
+    $("tab-g").setAttribute("aria-selected", isTT ? "false" : "true");
+    $("pane-tt").hidden = !isTT;
+    $("pane-g").hidden = isTT;
+    sign("screen-sig", isTT ? tt.raw : gn.raw);   // the signature follows the visible screen
+  }
+  $("tab-tt").addEventListener("click", function(){ selectTab("tt"); });
+  $("tab-g").addEventListener("click", function(){ selectTab("g"); });
+  selectTab("tt");
+})();
+</script>
+</body>
+</html>

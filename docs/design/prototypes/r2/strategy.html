@@ -1,0 +1,673 @@
+<!-- @dsCard group="R2 - Strategy" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KAIROS · STRATEGY — R2</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2305070b'/%3E%3Cpath d='M8 2 L11 8 L8 14 L5 8 Z' fill='%23c8a552'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="shell.css">
+<style>
+/* ============================================================
+   STRATEGY — page-local styles only. All chrome, tokens and
+   graft components come from shell.css.
+   ============================================================ */
+
+/* ── the lifecycle rail ───────────────────────────────────── */
+.rail{ display:flex; align-items:stretch; gap:10px; padding:4px 0 2px; }
+.station{
+  flex:1; min-width:0; display:flex; flex-direction:column;
+  border:1px solid var(--line); border-radius:3px; background:var(--dome-2);
+  padding:12px 12px 11px;
+}
+.st-idea{ --c:var(--washout); }
+.st-researching{ --c:var(--ignition); }
+.st-validated{ --c:var(--recovery); }
+.st-paper{ --c:var(--brass-hi); }
+.st-retired{ --c:var(--faint); }
+.st-head{ display:flex; align-items:center; gap:8px; margin-bottom:11px; }
+.st-dia{ width:6px; height:6px; transform:rotate(45deg); flex:none;
+  background:var(--c); box-shadow:0 0 7px var(--c); }
+.st-retired .st-dia{ box-shadow:none; }
+.st-name{ font-family:var(--mono); font-size:9.5px; letter-spacing:.24em;
+  text-transform:uppercase; color:var(--c); white-space:nowrap; }
+.st-count{ margin-left:auto; font-family:var(--mono); font-size:10px; color:var(--faint); }
+.st-slots{ display:flex; flex-direction:column; gap:6px; min-height:30px; }
+.s-plate{
+  display:block; font-family:var(--mono); font-size:11px; letter-spacing:.05em;
+  color:var(--fg-dim); padding:5px 9px; border:1px solid var(--line-2); border-radius:2px;
+  background:linear-gradient(180deg, rgba(0,0,0,.42), rgba(0,0,0,.1)), var(--dome);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.55), 0 1px 0 var(--groove-l);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.s-plate:hover{ color:var(--brass-hi); border-color:var(--brass-dim); }
+.st-retired .s-plate{ color:var(--faint); }
+.rail-arrow{ align-self:center; flex:none; font-family:var(--mono); font-size:12px;
+  color:var(--faint); }
+.rail-cap{
+  margin:12px 0 16px; font-family:var(--mono); font-size:9.5px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--faint);
+}
+.rules-list{ margin:0; padding:0; list-style:none; }
+.rules-list li{
+  font-family:var(--mono); font-size:11px; color:var(--fg-dim); letter-spacing:.03em;
+  padding:5px 0; border-bottom:1px solid var(--line);
+}
+.rules-list li:last-child{ border-bottom:0; }
+.rules-list li b{ color:var(--fg); font-weight:500; }
+.rules-list .rn{ color:var(--brass); margin-right:10px; }
+
+/* ── per-strategy entry layout ────────────────────────────── */
+.entry-grid{ display:grid; grid-template-columns:1fr 1.08fr; gap:10px 34px; }
+.entry-grid > div{ min-width:0; }
+.lbl{ display:block; margin:0 0 8px; }
+
+.thesis{
+  margin:0 0 18px; font-family:var(--serif); font-weight:350; font-size:17px;
+  line-height:1.58; color:var(--fg); max-width:56ch;
+}
+
+/* the falsification plate — the kill-line, engraved with weight */
+.falsify{
+  border:1px solid var(--line-2); border-left:3px solid var(--ignition);
+  border-radius:2px; padding:11px 14px 10px; margin:0 0 18px;
+  background:linear-gradient(180deg, rgba(0,0,0,.42), rgba(0,0,0,.08)), var(--dome-2);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.55), 0 1px 0 var(--groove-l);
+}
+.falsify .f-label{
+  display:block; margin-bottom:6px; font-family:var(--mono); font-size:8.5px;
+  letter-spacing:.28em; text-transform:uppercase; color:var(--ignition);
+  text-shadow:0 1px 0 rgba(0,0,0,.85);
+}
+.falsify .f-line{
+  margin:0; font-family:var(--mono); font-size:12.5px; line-height:1.6; color:var(--fg);
+  letter-spacing:.01em;
+}
+.falsify.met{ border-left-color:var(--danger); }
+.falsify.met .f-label{ color:var(--danger); }
+.falsify.unwritten{ border-style:dashed; border-left-style:solid; border-left-color:var(--warn); }
+.falsify.unwritten .f-label{ color:var(--warn); }
+.falsify.unwritten .f-line{ color:var(--fg-dim); }
+
+/* journal tail inside the fold */
+.j-tail{ margin:6px 0 4px; font-family:var(--mono); font-size:11.5px; line-height:1.7;
+  color:var(--fg-dim); }
+.j-tail::before{ content:"tail ▸ "; color:var(--brass-dim); }
+
+/* the retired lesson — first-class, never buried */
+.lesson{
+  border:1px solid var(--brass-dim); border-radius:2px; padding:12px 15px 11px;
+  background:linear-gradient(180deg, rgba(0,0,0,.35), transparent 60%), var(--dome-2);
+  box-shadow:inset 0 0 0 3px var(--dome-2), inset 0 0 0 4px rgba(143,116,51,.35);
+}
+.lesson .l-label{
+  display:block; margin-bottom:7px; font-family:var(--mono); font-size:8.5px;
+  letter-spacing:.28em; text-transform:uppercase; color:var(--brass);
+}
+.lesson .l-line{ margin:0 0 8px; font-family:var(--serif); font-style:italic;
+  font-weight:350; font-size:15px; line-height:1.6; color:var(--fg); }
+.lesson .l-meta{ font-family:var(--mono); font-size:10px; color:var(--faint);
+  letter-spacing:.06em; }
+
+/* ── the backtest instrument ──────────────────────────────── */
+.bt-head{ display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:10px; }
+.bt-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:12px; }
+.bt-grid .plaque{ padding:11px 13px 10px; }
+.bt-grid .plaque .v{ font-size:20px; }
+.bt-window{
+  margin-top:12px; font-family:var(--mono); font-size:10.5px; letter-spacing:.05em;
+  color:var(--fg-dim); line-height:1.7;
+}
+.bt-window b{ color:var(--fg); font-weight:500; }
+.bt-window .note{ color:var(--faint); }
+.bt-window .note::before{ content:" — "; }
+
+/* honest absence — the empty socket */
+.bt-absent{
+  border:1px dashed var(--line-2); border-radius:3px; padding:34px 20px 30px;
+  text-align:center; background:var(--dome-2);
+}
+.bt-absent .big{ display:block; font-family:var(--mono); font-size:34px; line-height:1;
+  margin-bottom:12px; }
+.bt-absent .ab-line{ margin:0 0 6px; font-family:var(--mono); font-size:12px;
+  letter-spacing:.16em; text-transform:uppercase; color:var(--fg-dim); }
+.bt-absent .ab-sub{ margin:0; font-family:var(--mono); font-size:10.5px; line-height:1.7;
+  color:var(--faint); }
+.bt-absent .ab-sub b{ color:var(--fg-dim); font-weight:500; }
+
+@media (max-width:1100px){
+  .entry-grid{ grid-template-columns:1fr; }
+  .rail{ flex-wrap:wrap; }
+  .station{ flex:1 1 40%; }
+  .bt-grid{ grid-template-columns:repeat(2,1fr); }
+}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap mast-top">
+    <a class="wordmark" href="landing.html"><span class="dia" aria-hidden="true"></span>KAIROS</a>
+    <span class="facename">STRATEGY</span>
+    <span class="spacer"></span>
+    <span class="seg">as of <b id="k-asof" class="mono">—</b></span>
+    <span class="seg">bed <b id="k-bed" class="mono">—</b></span>
+    <span class="seg">window <b id="k-window" class="mono">—</b></span>
+    <span class="seg"><b id="k-symbols" class="mono">—</b> sym · <b id="k-days" class="mono">—</b> sessions</span>
+    <span class="seal" id="k-gate" title="orders_gate — read-only display">orders —</span>
+    <span class="stamp-sample" title="gate readout comes from account_mock, a labeled fabricated block">sample</span>
+  </div>
+  <nav class="wrap mast-nav" aria-label="Faces">
+    <a class="nav-link" href="market.html"><span class="nav-idx">01</span>Market</a>
+    <a class="nav-link" href="strategy.html" aria-current="page"><span class="nav-idx">02</span>Strategy</a>
+    <a class="nav-link" href="account.html"><span class="nav-idx">03</span>Account</a>
+    <span class="spacer"></span>
+    <span class="gem" aria-hidden="true" title="the six-phase thermal spectrum — washout · recovery · ignition · trend · distribution · flush"><i style="background:var(--washout)"></i><i style="background:var(--recovery)"></i><i style="background:var(--ignition)"></i><i style="background:var(--trend)"></i><i style="background:var(--distribution)"></i><i style="background:var(--flush)"></i></span>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <!-- E .1 — the lifecycle rail -->
+  <section class="panel settle">
+    <header class="panel-head">
+      <span class="entry-no" data-entry>E —.—</span>
+      <span class="eyebrow">lifecycle · one-way</span>
+      <h2>The shelf.</h2>
+      <span class="spacer"></span>
+      <span class="stamp-plate">sample — fabricated shape</span>
+      <span class="eyebrow" id="rail-count">— on the shelf</span>
+    </header>
+    <div class="panel-body">
+      <div class="rail" id="rail" role="list" aria-label="Lifecycle rail: idea to researching to validated to paper to retired, one-way">
+        <div class="station st-idea" role="listitem">
+          <div class="st-head"><span class="st-dia" aria-hidden="true"></span><span class="st-name">idea</span><span class="st-count" data-st-count="idea">—</span></div>
+          <div class="st-slots" data-st-slots="idea"></div>
+        </div>
+        <span class="rail-arrow" aria-hidden="true">→</span>
+        <div class="station st-researching" role="listitem">
+          <div class="st-head"><span class="st-dia" aria-hidden="true"></span><span class="st-name">researching</span><span class="st-count" data-st-count="researching">—</span></div>
+          <div class="st-slots" data-st-slots="researching"></div>
+        </div>
+        <span class="rail-arrow" aria-hidden="true">→</span>
+        <div class="station st-validated" role="listitem">
+          <div class="st-head"><span class="st-dia" aria-hidden="true"></span><span class="st-name">validated</span><span class="st-count" data-st-count="validated">—</span></div>
+          <div class="st-slots" data-st-slots="validated"></div>
+        </div>
+        <span class="rail-arrow" aria-hidden="true">→</span>
+        <div class="station st-paper" role="listitem">
+          <div class="st-head"><span class="st-dia" aria-hidden="true"></span><span class="st-name">paper</span><span class="st-count" data-st-count="paper">—</span></div>
+          <div class="st-slots" data-st-slots="paper"></div>
+        </div>
+        <span class="rail-arrow" aria-hidden="true">→</span>
+        <div class="station st-retired" role="listitem">
+          <div class="st-head"><span class="st-dia" aria-hidden="true"></span><span class="st-name">retired</span><span class="st-count" data-st-count="retired">—</span></div>
+          <div class="st-slots" data-st-slots="retired"></div>
+        </div>
+      </div>
+      <p class="rail-cap">one-way — a strategy never moves left · retired is terminal, kept on the shelf, never hidden</p>
+      <details class="fold" id="rules-fold">
+        <summary>
+          <span class="lamp" aria-hidden="true"></span>
+          <span class="word">scored under</span>
+          <span>the five honest-eval rules · docs/backtest-rules.md</span>
+          <span class="caret" aria-hidden="true">▾</span>
+        </summary>
+        <div class="fold-body">
+          <ol class="rules-list">
+            <li><span class="rn">I</span>a delisting mid-hold is a <b>terminal loss at −1.0</b> — counted, never dropped</li>
+            <li><span class="rn">II</span>returns are <b>gross</b> — no cost model is claimed</li>
+            <li><span class="rn">III</span>missing data is <b>discarded AND counted</b> — never fabricated</li>
+            <li><span class="rn">IV</span>entries fill at the <b>t+1 open</b></li>
+            <li><span class="rn">V</span>the PIT channel is <b>replay_days only</b></li>
+          </ol>
+        </div>
+      </details>
+    </div>
+    <footer class="panel-foot">
+      <a class="sig" href="#" onclick="return false" id="rail-sig" title="raw ▸ —">
+        <span class="sig-mono" aria-hidden="true">SY</span>
+        <span class="sig-body">
+          <span class="sig-fn">status.yaml — per strategy</span>
+          <span class="sig-raw" id="rail-sig-raw">—</span>
+        </span>
+      </a>
+      <span class="spacer"></span>
+      <span class="foot-note">plates link to the entries below · lifecycle is read from each strategy's own status.yaml</span>
+    </footer>
+  </section>
+
+  <!-- E .2 — tt-breakout · paper -->
+  <section class="panel settle d1" data-strategy="tt-breakout" id="st-tt-breakout">
+    <header class="panel-head">
+      <span class="entry-no" data-entry>E —.—</span>
+      <span class="eyebrow">strategy</span>
+      <h2>tt-breakout</h2>
+      <span class="chip chip-dim" data-f="chip">—</span>
+      <span class="spacer"></span>
+      <span class="stamp-plate">sample — fabricated shape</span>
+      <span class="eyebrow" data-f="dates">—</span>
+    </header>
+    <div class="panel-body entry-grid">
+      <div>
+        <span class="eyebrow lbl">thesis — argued, read critically</span>
+        <p class="thesis" data-f="thesis"><span class="null" title="no reading">—</span></p>
+        <div class="falsify" data-f="falsify">
+          <span class="f-label" data-f="f-label">falsified when</span>
+          <p class="f-line" data-f="f-line"><span class="null" title="no reading">—</span></p>
+        </div>
+        <div data-f="journal"></div>
+      </div>
+      <div>
+        <div class="bt-head"><span class="eyebrow">backtest — honest instrument</span><span class="spacer"></span><span class="raw" data-f="bt-file">—</span></div>
+        <div data-f="bt"></div>
+      </div>
+    </div>
+    <footer class="panel-foot">
+      <a class="sig" href="#" onclick="return false" data-f="sig" title="raw ▸ —">
+        <span class="sig-mono" aria-hidden="true">TT</span>
+        <span class="sig-body">
+          <span class="sig-fn">strategies/tt-breakout</span>
+          <span class="sig-raw" data-f="sig-raw">—</span>
+        </span>
+      </a>
+      <span class="spacer"></span>
+      <span class="foot-note" data-f="footnote">—</span>
+    </footer>
+  </section>
+
+  <!-- E .3 — earnings-drift · validated -->
+  <section class="panel settle d1" data-strategy="earnings-drift" id="st-earnings-drift">
+    <header class="panel-head">
+      <span class="entry-no" data-entry>E —.—</span>
+      <span class="eyebrow">strategy</span>
+      <h2>earnings-drift</h2>
+      <span class="chip chip-dim" data-f="chip">—</span>
+      <span class="spacer"></span>
+      <span class="stamp-plate">sample — fabricated shape</span>
+      <span class="eyebrow" data-f="dates">—</span>
+    </header>
+    <div class="panel-body entry-grid">
+      <div>
+        <span class="eyebrow lbl">thesis — argued, read critically</span>
+        <p class="thesis" data-f="thesis"><span class="null" title="no reading">—</span></p>
+        <div class="falsify" data-f="falsify">
+          <span class="f-label" data-f="f-label">falsified when</span>
+          <p class="f-line" data-f="f-line"><span class="null" title="no reading">—</span></p>
+        </div>
+        <div data-f="journal"></div>
+      </div>
+      <div>
+        <div class="bt-head"><span class="eyebrow">backtest — honest instrument</span><span class="spacer"></span><span class="raw" data-f="bt-file">—</span></div>
+        <div data-f="bt"></div>
+      </div>
+    </div>
+    <footer class="panel-foot">
+      <a class="sig" href="#" onclick="return false" data-f="sig" title="raw ▸ —">
+        <span class="sig-mono" aria-hidden="true">ED</span>
+        <span class="sig-body">
+          <span class="sig-fn">strategies/earnings-drift</span>
+          <span class="sig-raw" data-f="sig-raw">—</span>
+        </span>
+      </a>
+      <span class="spacer"></span>
+      <span class="foot-note" data-f="footnote">—</span>
+    </footer>
+  </section>
+
+  <!-- E .4 — gap-go-follow · researching -->
+  <section class="panel settle d2" data-strategy="gap-go-follow" id="st-gap-go-follow">
+    <header class="panel-head">
+      <span class="entry-no" data-entry>E —.—</span>
+      <span class="eyebrow">strategy</span>
+      <h2>gap-go-follow</h2>
+      <span class="chip chip-dim" data-f="chip">—</span>
+      <span class="spacer"></span>
+      <span class="stamp-plate">sample — fabricated shape</span>
+      <span class="eyebrow" data-f="dates">—</span>
+    </header>
+    <div class="panel-body entry-grid">
+      <div>
+        <span class="eyebrow lbl">thesis — argued, read critically</span>
+        <p class="thesis" data-f="thesis"><span class="null" title="no reading">—</span></p>
+        <div class="falsify" data-f="falsify">
+          <span class="f-label" data-f="f-label">falsified when</span>
+          <p class="f-line" data-f="f-line"><span class="null" title="no reading">—</span></p>
+        </div>
+        <div data-f="journal"></div>
+      </div>
+      <div>
+        <div class="bt-head"><span class="eyebrow">backtest — honest instrument</span><span class="spacer"></span><span class="raw" data-f="bt-file">—</span></div>
+        <div data-f="bt"></div>
+      </div>
+    </div>
+    <footer class="panel-foot">
+      <a class="sig" href="#" onclick="return false" data-f="sig" title="raw ▸ —">
+        <span class="sig-mono" aria-hidden="true">GG</span>
+        <span class="sig-body">
+          <span class="sig-fn">strategies/gap-go-follow</span>
+          <span class="sig-raw" data-f="sig-raw">—</span>
+        </span>
+      </a>
+      <span class="spacer"></span>
+      <span class="foot-note" data-f="footnote">—</span>
+    </footer>
+  </section>
+
+  <!-- E .5 — squeeze-float · idea, backtest null -->
+  <section class="panel settle d2" data-strategy="squeeze-float" id="st-squeeze-float">
+    <header class="panel-head">
+      <span class="entry-no" data-entry>E —.—</span>
+      <span class="eyebrow">strategy</span>
+      <h2>squeeze-float</h2>
+      <span class="chip chip-dim" data-f="chip">—</span>
+      <span class="spacer"></span>
+      <span class="stamp-plate">sample — fabricated shape</span>
+      <span class="eyebrow" data-f="dates">—</span>
+    </header>
+    <div class="panel-body entry-grid">
+      <div>
+        <span class="eyebrow lbl">thesis — argued, read critically</span>
+        <p class="thesis" data-f="thesis"><span class="null" title="no reading">—</span></p>
+        <div class="falsify" data-f="falsify">
+          <span class="f-label" data-f="f-label">falsified when</span>
+          <p class="f-line" data-f="f-line"><span class="null" title="no reading">—</span></p>
+        </div>
+        <div data-f="journal"></div>
+      </div>
+      <div>
+        <div class="bt-head"><span class="eyebrow">backtest — honest instrument</span></div>
+        <div data-f="bt"></div>
+      </div>
+    </div>
+    <footer class="panel-foot">
+      <a class="sig" href="#" onclick="return false" data-f="sig" title="raw ▸ —">
+        <span class="sig-mono" aria-hidden="true">SF</span>
+        <span class="sig-body">
+          <span class="sig-fn">strategies/squeeze-float</span>
+          <span class="sig-raw" data-f="sig-raw">—</span>
+        </span>
+      </a>
+      <span class="spacer"></span>
+      <span class="foot-note" data-f="footnote">—</span>
+    </footer>
+  </section>
+
+  <!-- E .6 — momo-legacy · retired, honored terminal state -->
+  <section class="panel settle d3" data-strategy="momo-legacy" id="st-momo-legacy">
+    <header class="panel-head">
+      <span class="entry-no" data-entry>E —.—</span>
+      <span class="eyebrow">strategy</span>
+      <h2>momo-legacy</h2>
+      <span class="chip chip-dim" data-f="chip">—</span>
+      <span class="spacer"></span>
+      <span class="stamp-plate">sample — fabricated shape</span>
+      <span class="eyebrow" data-f="dates">—</span>
+    </header>
+    <div class="panel-body entry-grid">
+      <div>
+        <span class="eyebrow lbl">thesis — argued, read critically</span>
+        <p class="thesis" data-f="thesis"><span class="null" title="no reading">—</span></p>
+        <div class="falsify" data-f="falsify">
+          <span class="f-label" data-f="f-label">falsified when</span>
+          <p class="f-line" data-f="f-line"><span class="null" title="no reading">—</span></p>
+        </div>
+        <div data-f="journal"></div>
+      </div>
+      <div>
+        <div class="bt-head"><span class="eyebrow">backtest — honest instrument</span><span class="spacer"></span><span class="raw" data-f="bt-file">—</span></div>
+        <div data-f="bt"></div>
+      </div>
+    </div>
+    <footer class="panel-foot">
+      <a class="sig" href="#" onclick="return false" data-f="sig" title="raw ▸ —">
+        <span class="sig-mono" aria-hidden="true">ML</span>
+        <span class="sig-body">
+          <span class="sig-fn">strategies/momo-legacy</span>
+          <span class="sig-raw" data-f="sig-raw">—</span>
+        </span>
+      </a>
+      <span class="spacer"></span>
+      <span class="foot-note" data-f="footnote">—</span>
+    </footer>
+  </section>
+
+</main>
+
+<footer class="foot-band">
+  <div class="wrap foot">
+    <span>KAIROS · <b>STRATEGY</b> — round-2 face prototype · zero authority · read-only</span>
+    <span class="spacer"></span>
+    <span>intent · <b>Kairos-Design.md</b></span>
+    <span>mechanism · <b>the skeleton spec &amp; code</b></span>
+  </div>
+</footer>
+
+<script src="../data/market_mock.js"></script>
+<script src="../data/workbench_mock.js"></script>
+<script>
+/* ── shell fill — shared across all R2 faces ── */
+(function(){
+  "use strict";
+  var D = window.KAIROS_DATA || null;
+  if(!D) return; // dashes stand: no reading, never fake
+  function t(id, s){ var el = document.getElementById(id); if(el) el.textContent = s; }
+  t("k-asof", D.as_of);
+  t("k-bed", D.bed.root);
+  t("k-window", D.bed.window.start + " → " + D.bed.window.end);
+  t("k-symbols", String(D.bed.symbols));
+  t("k-days", String(D.bed.captured_days));
+  var g = D.account_mock && D.account_mock.orders_gate;
+  var gateEl = document.getElementById("k-gate");
+  if(g && gateEl){
+    gateEl.textContent = "orders " + ((g.gate1_registered || g.gate2_validated) ? "partially armed" : "unarmed");
+    gateEl.title = "gate 1 registered: " + g.gate1_registered + " · gate 2 validated: " + g.gate2_validated +
+      " — read-only display · readout from account_mock (fabricated block)";
+  }
+  document.querySelectorAll("[data-entry]").forEach(function(el, i){
+    el.textContent = "E " + D.bed.captured_days + "." + (i + 1);
+  });
+})();
+
+/* ── page: the shelf — rail placement + per-strategy entries ── */
+(function(){
+  "use strict";
+  var F = window.KAIROS_FACES || null;
+  if(!F || !F.strategies || !F.strategies.rows) return; // dashes stand
+  var S = F.strategies, asof = F.as_of || null;
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); }
+  function fmt(n, d){ if(n==null || !isFinite(n)) return "—";
+    return n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d}); }
+  function signed(n, d){ if(n==null || !isFinite(n)) return "—";
+    return (n>0?"+":"") + fmt(n,d).replace("-","−"); }
+  function pct(n){ if(n==null || !isFinite(n)) return "—"; return fmt(n*100,0)+"%"; }
+  function daysSince(dateStr){
+    if(!asof || !dateStr) return null;
+    var d = (Date.parse(asof) - Date.parse(dateStr)) / 864e5;
+    return isFinite(d) ? Math.round(d) : null;
+  }
+  var NULLSPAN = '<span class="null" title="no reading">—</span>';
+
+  /* ── the rail ── */
+  var counts = {idea:0, researching:0, validated:0, paper:0, retired:0};
+  S.rows.forEach(function(r){
+    if(!(r.status in counts)) return;
+    counts[r.status]++;
+    var slot = document.querySelector('[data-st-slots="'+r.status+'"]');
+    if(slot){
+      var a = document.createElement("a");
+      a.className = "s-plate"; a.href = "#st-"+r.name; a.textContent = r.name;
+      a.title = r.name + " · " + r.status + " · updated " + r.updated;
+      slot.appendChild(a);
+    }
+  });
+  (S.lifecycle || Object.keys(counts)).forEach(function(st){
+    var c = document.querySelector('[data-st-count="'+st+'"]');
+    if(c) c.textContent = "· " + counts[st];
+    if(counts[st] === 0){
+      var slot = document.querySelector('[data-st-slots="'+st+'"]');
+      if(slot) slot.innerHTML = '<span class="null" title="no strategy at this station">—</span>';
+    }
+  });
+  var rc = document.getElementById("rail-count");
+  if(rc) rc.textContent = S.rows.length + " on the shelf";
+  var rs = document.getElementById("rail-sig"), rsr = document.getElementById("rail-sig-raw");
+  if(rsr) rsr.textContent = S.raw;
+  if(rs) rs.title = "raw ▸ " + S.raw;
+
+  /* ── spark: equity curve, baseline 1.0, pen honesty ── */
+  function sparkSVG(vals){
+    if(!vals || vals.length < 2) return "";
+    var W=460, H=112, pl=40, pr=52, pt=12, pb=16;
+    var lo = Math.min.apply(null, vals.concat([1])), hi = Math.max.apply(null, vals.concat([1]));
+    if(hi === lo){ hi = lo + 1e-9; }
+    function x(i){ return pl + i*(W-pl-pr)/(vals.length-1); }
+    function y(v){ return pt + (hi - v)*(H-pt-pb)/(hi - lo); }
+    var up = vals[vals.length-1] >= 1;
+    var col = up ? "var(--recovery)" : "var(--trend)";
+    var pts = vals.map(function(v,i){ return x(i).toFixed(1)+","+y(v).toFixed(1); }).join(" ");
+    var lx = x(vals.length-1), ly = y(vals[vals.length-1]);
+    var s = [];
+    s.push('<svg class="chart" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Equity curve, normalized, baseline 1.0, sequential order">');
+    s.push('<line class="gridline" x1="'+pl+'" y1="'+pt+'" x2="'+(W-pr)+'" y2="'+pt+'"/>');
+    s.push('<line class="gridline" x1="'+pl+'" y1="'+(H-pb)+'" x2="'+(W-pr)+'" y2="'+(H-pb)+'"/>');
+    s.push('<line class="zeroline" x1="'+pl+'" y1="'+y(1).toFixed(1)+'" x2="'+(W-pr)+'" y2="'+y(1).toFixed(1)+'" stroke-dasharray="3 4"/>');
+    s.push('<text class="axis" x="'+(pl-6)+'" y="'+(y(1)+3).toFixed(1)+'" text-anchor="end">1.00</text>');
+    if(Math.abs(y(hi) - y(1)) > 11)
+      s.push('<text class="axis" x="'+(pl-6)+'" y="'+(pt+4)+'" text-anchor="end">'+fmt(hi,2)+'</text>');
+    if(Math.abs(y(lo) - y(1)) > 11)
+      s.push('<text class="axis" x="'+(pl-6)+'" y="'+(H-pb+3)+'" text-anchor="end">'+fmt(lo,2)+'</text>');
+    s.push('<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="1.8" stroke-linejoin="round" opacity=".92"/>');
+    s.push('<circle cx="'+lx.toFixed(1)+'" cy="'+ly.toFixed(1)+'" r="2.6" fill="'+col+'"/>');
+    s.push('<text class="axis" x="'+(lx+8).toFixed(1)+'" y="'+(ly+3.5).toFixed(1)+'" fill="'+col+'">'+fmt(vals[vals.length-1],2)+'×</text>');
+    s.push('</svg>');
+    return s.join("");
+  }
+
+  function plaque(k, v, s, vcls, title){
+    return '<div class="plaque"'+(title ? ' title="'+esc(title)+'"' : '')+'>'+
+      '<span class="k">'+esc(k)+'</span>'+
+      '<span class="v'+(vcls ? " "+vcls : "")+'">'+v+'</span>'+
+      (s ? '<span class="s">'+s+'</span>' : '')+'</div>';
+  }
+
+  /* ── per-strategy entries ── */
+  S.rows.forEach(function(r){
+    var root = document.querySelector('[data-strategy="'+r.name+'"]');
+    if(!root) return;
+    function q(f){ return root.querySelector('[data-f="'+f+'"]'); }
+    function set(f, s){ var el=q(f); if(el) el.textContent = s; }
+    function setH(f, s){ var el=q(f); if(el) el.innerHTML = s; }
+
+    /* head */
+    var chip = q("chip");
+    if(chip){ chip.className = "chip chip-"+r.status; chip.textContent = r.status;
+      if(r.status === "retired"){
+        var dc = document.createElement("span");
+        dc.className = "chip chip-danger"; dc.textContent = "falsified";
+        dc.title = "falsification met — see the kill-line below";
+        chip.after(dc);
+      }
+    }
+    set("dates", "created " + r.created + " · updated " + r.updated);
+
+    /* thesis + falsification */
+    if(r.thesis) set("thesis", r.thesis);
+    var fal = q("falsify"), met = /^met\b/i.test(r.falsification || ""),
+        unwritten = /^unwritten\b/i.test(r.falsification || "");
+    if(fal && r.falsification){
+      if(met){ fal.classList.add("met"); set("f-label", "falsification — met"); }
+      else if(unwritten){ fal.classList.add("unwritten"); set("f-label", "falsification — unwritten"); }
+      set("f-line", r.falsification);
+    }
+
+    /* journal — freshness folded when routine; the retired lesson is never folded */
+    var jm = q("journal");
+    if(jm){
+      var d = daysSince(r.journal_last);
+      if(r.status === "retired"){
+        jm.innerHTML =
+          '<div class="lesson"><span class="l-label">lesson — kept on retirement</span>'+
+          '<p class="l-line">'+esc(r.journal_tail || "—")+'</p>'+
+          '<span class="l-meta">journal closed · '+esc(String(r.journal_entries))+' entries · last '+esc(r.journal_last)+'</span></div>';
+      } else {
+        var stale = d != null && d > 14;
+        var line = esc(String(r.journal_entries)) + " entries · last " + esc(r.journal_last) +
+          (d != null ? " · " + d + "d before as-of" : "") + (stale ? " · quiet" : "");
+        jm.innerHTML =
+          '<details class="fold" id="j-'+esc(r.name)+'"><summary>'+
+          '<span class="lamp" aria-hidden="true"></span>'+
+          '<span class="word">journal</span>'+
+          '<span>'+line+'</span>'+
+          '<span class="caret" aria-hidden="true">▾</span></summary>'+
+          '<div class="fold-body"><p class="j-tail">'+esc(r.journal_tail || "—")+'</p></div></details>';
+        if(stale){
+          var fold = document.getElementById("j-"+r.name);
+          if(fold){ fold.classList.add("warn"); fold.open = true; }
+        }
+      }
+    }
+
+    /* backtest — honest instrument or honest absence */
+    var bt = r.backtest, btm = q("bt");
+    if(btm){
+      if(!bt){
+        btm.innerHTML =
+          '<div class="bt-absent">'+
+          '<span class="null big" title="backtest: null — no reading">—</span>'+
+          '<p class="ab-line">no backtest on file</p>'+
+          '<p class="ab-sub">status carries <b>backtest:&nbsp;null</b> — nothing measured, nothing rendered</p>'+
+          '</div>';
+      } else {
+        var wl = (bt.avg_win_pct != null && bt.avg_loss_pct) ?
+          bt.avg_win_pct / Math.abs(bt.avg_loss_pct) : null;
+        var g = bt.gross_return_pct;
+        var html = sparkSVG(bt.equity_spark);
+        html += '<div class="bt-grid">';
+        html += plaque("trades", bt.trades != null ? fmt(bt.trades,0) : NULLSPAN, null, null, null);
+        html += plaque("win rate", bt.win_rate != null ? pct(bt.win_rate) : NULLSPAN,
+          null, null, null);
+        html += plaque("avg w / l", wl != null ? fmt(wl,2)+"×" : NULLSPAN,
+          esc(signed(bt.avg_win_pct,1)) + "% / " + esc(signed(bt.avg_loss_pct,1)) + "%", null, null);
+        html += plaque("gross return", g != null ? signed(g,1)+"%" : NULLSPAN, "gross — no cost model",
+          g != null ? (g >= 0 ? "up" : "down") : null, null);
+        html += plaque("max drawdown", bt.max_drawdown_pct != null ? signed(bt.max_drawdown_pct,1)+"%" : NULLSPAN,
+          "peak-to-trough", bt.max_drawdown_pct != null ? "down" : null, null);
+        html += plaque("delistings hit", bt.delistings_hit != null ? fmt(bt.delistings_hit,0) : NULLSPAN,
+          "terminal −1.0 · counted",
+          bt.delistings_hit > 0 ? "flag" : null, bt.delisting_treatment);
+        html += plaque("discarded days", bt.discarded_days != null ? fmt(bt.discarded_days,0) : NULLSPAN,
+          "discarded · counted", null, bt.discarded_treatment);
+        html += '</div>';
+        html += '<p class="bt-window">window <b>' + esc(bt.window.start) + " → " + esc(bt.window.end) +
+          '</b><span class="note">' + esc(bt.window.note) + '</span></p>';
+        btm.innerHTML = html;
+        var fileEl = q("bt-file");
+        if(fileEl){ fileEl.textContent = bt.file; fileEl.title = "raw ▸ strategies/"+r.name+"/"+bt.file; }
+      }
+    }
+
+    /* signature = the raw linkback: the strategy's own files */
+    var files = "status.yaml · THESIS.md · journal.md" + (bt ? " · " + bt.file : "");
+    var sig = q("sig");
+    setH("sig-raw", esc(files));
+    if(sig) sig.title = "raw ▸ strategies/" + r.name + "/{" + files.split(" · ").join(",") + "}";
+
+    /* foot note */
+    var fn = r.status === "retired" ?
+        "terminal state — retired " + r.updated + " · the lesson stays on the shelf" :
+      bt ? "scored under the five honest-eval rules · docs/backtest-rules.md" :
+        "no backtest on file — nothing measured, nothing claimed";
+    set("footnote", fn);
+  });
+
+  /* delisting flag color — an honest eye-pull, tokens only */
+  document.querySelectorAll(".plaque .v.flag").forEach(function(el){
+    el.style.color = "var(--ignition)";
+  });
+})();
+</script>
+</body>
+</html>

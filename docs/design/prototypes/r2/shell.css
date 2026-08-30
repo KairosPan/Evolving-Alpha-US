@@ -1,0 +1,368 @@
+/* ═══════════════════════════════════════════════════════════════
+   KAIROS · R2 SHARED SHELL — Observatory grafted with the Ledger's
+   bookkeeping skeleton. Dark precision instrument: engraved scales,
+   luminous data on near-black, brass chrome; every panel a numbered
+   entry signed by its producing function.
+
+   Faces load this via <link rel="stylesheet" href="shell.css">.
+   Faces may ADD page-local CSS for their own charts/tables; they may
+   NOT restyle these components or fork these tokens. See SHELL-NOTES.md.
+   ═══════════════════════════════════════════════════════════════ */
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&family=IBM+Plex+Mono:wght@400;500&family=Archivo:wght@400;500;600&display=swap");
+
+/* ── tokens ───────────────────────────────────────────────────── */
+:root{
+  --ground:   #05070b;            /* the night ground */
+  --dome:     #0a0e15;            /* panel body */
+  --dome-2:   #0d1219;            /* inner plaque */
+  --line:     rgba(160,186,222,.10);
+  --line-2:   rgba(160,186,222,.18);
+  --groove-d: rgba(0,0,0,.62);    /* engraved groove: dark cut… */
+  --groove-l: rgba(190,212,242,.09); /* …light lower edge */
+
+  --fg:       #d9e2ee;
+  --fg-dim:   #94a1b4;
+  --faint:    #6b7a8f;
+
+  --brass:      #c8a552;          /* interactive chrome */
+  --brass-hi:   #e8cf8e;
+  --brass-dim:  #8f7433;
+  --brass-soft: rgba(200,165,82,.11);
+
+  /* the thermal phase spectrum — luminous on the dark ground */
+  --washout:      #6d9bd1;
+  --recovery:     #43c99b;
+  --ignition:     #e5aa45;
+  --trend:        #ee7048;
+  --distribution: #d873a1;
+  --flush:        #9b87ef;
+  --up:   var(--recovery);
+  --down: var(--trend);
+  --warn:   var(--ignition);
+  --danger: var(--trend);
+
+  --serif: "Fraunces", Georgia, "Times New Roman", serif;
+  --mono:  "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --sans:  "Archivo", "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ── base ─────────────────────────────────────────────────────── */
+*{ box-sizing:border-box; }
+html{ scroll-behavior:smooth; }
+body{
+  margin:0; overflow-x:clip;
+  background:
+    radial-gradient(1100px 620px at 78% -10%, rgba(109,155,209,.05), transparent 60%),
+    radial-gradient(900px 640px at -8% 22%, rgba(155,135,239,.035), transparent 58%),
+    var(--ground);
+  color:var(--fg);
+  font-family:var(--sans); font-size:14px; line-height:1.5;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+a{ color:inherit; text-decoration:none; }
+:focus-visible{ outline:2px solid var(--brass); outline-offset:2px; }
+::selection{ background:rgba(200,165,82,.28); }
+
+.wrap{ max-width:1400px; margin:0 auto; padding-left:28px; padding-right:28px; }
+main.wrap{ padding-top:26px; }
+.spacer{ flex:1; }
+.mono{ font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.eyebrow{
+  margin:0; font-family:var(--mono); font-size:9.5px; letter-spacing:.26em;
+  text-transform:uppercase; color:var(--faint);
+}
+/* engraved groove — a dark cut with a light lower edge */
+.rule{ height:2px; border:0; margin:0;
+  background:linear-gradient(180deg, var(--groove-d) 0 50%, var(--groove-l) 50% 100%); }
+.null{ color:var(--faint); opacity:.7; }
+.up{ color:var(--up); } .down{ color:var(--down); }
+
+/* ── masthead ─────────────────────────────────────────────────── */
+.masthead{
+  position:sticky; top:0; z-index:50;
+  background:rgba(5,7,11,.88); backdrop-filter:blur(9px);
+  border-bottom:1px solid var(--line);
+}
+.mast-top{
+  display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+  padding-top:11px; padding-bottom:11px;
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--faint);
+}
+.wordmark{
+  display:inline-flex; align-items:center; gap:10px;
+  font-family:var(--mono); font-size:12.5px; letter-spacing:.3em; color:var(--fg);
+}
+.wordmark .dia{
+  width:7px; height:7px; transform:rotate(45deg); background:var(--brass);
+  box-shadow:0 0 8px rgba(200,165,82,.55); flex:none;
+}
+.wordmark:hover{ color:var(--brass-hi); }
+.facename{
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.26em; color:var(--brass);
+  border-left:1px solid var(--line-2); padding-left:16px;
+}
+.mast-top .seg b{ color:var(--fg-dim); font-weight:500; letter-spacing:.06em; }
+.seal{
+  display:inline-flex; align-items:center; gap:7px; padding:3px 10px;
+  border:1px solid var(--line-2); border-radius:2px; color:var(--fg-dim);
+}
+.seal::before{ content:"⊘"; color:var(--brass); }
+
+.mast-nav{
+  display:flex; align-items:center; gap:28px;
+  border-top:1px solid var(--line);
+}
+.nav-link{
+  position:relative; display:inline-flex; align-items:baseline; gap:8px;
+  padding:10px 2px 9px;
+  font-family:var(--sans); font-size:11px; font-weight:600;
+  letter-spacing:.2em; text-transform:uppercase; color:var(--fg-dim);
+}
+.nav-link .nav-idx{
+  font-family:var(--mono); font-weight:400; font-size:9px;
+  letter-spacing:.18em; color:var(--faint);
+}
+.nav-link::after{
+  content:""; position:absolute; left:0; right:0; bottom:-1px; height:2px;
+  background:transparent;
+}
+.nav-link:hover{ color:var(--fg); }
+.nav-link[aria-current="page"]{ color:var(--brass-hi); }
+.nav-link[aria-current="page"] .nav-idx{ color:var(--brass-dim); }
+.nav-link[aria-current="page"]::after{
+  background:var(--brass); box-shadow:0 0 7px rgba(200,165,82,.5);
+}
+.gem{ display:inline-flex; gap:5px; }
+.gem i{ width:5px; height:5px; transform:rotate(45deg); display:inline-block; }
+
+/* ── footer ───────────────────────────────────────────────────── */
+.foot-band{ border-top:1px solid var(--line); margin-top:64px; }
+.foot{
+  display:flex; flex-wrap:wrap; gap:10px 30px; align-items:baseline;
+  padding-top:24px; padding-bottom:44px;
+  font-family:var(--mono); font-size:10px; letter-spacing:.08em; color:var(--faint);
+}
+.foot b{ color:var(--fg-dim); font-weight:500; }
+
+/* ── panel chrome ─────────────────────────────────────────────── */
+.panel{
+  background:linear-gradient(180deg, rgba(255,255,255,.02), transparent 30%), var(--dome);
+  border:1px solid var(--line); border-radius:4px;
+  margin-bottom:22px;
+}
+.panel-head{
+  display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;
+  padding:14px 20px 12px; border-bottom:1px solid var(--line);
+}
+.panel-head h2{
+  margin:0; font-family:var(--serif); font-weight:440; font-size:21px; letter-spacing:.01em;
+}
+.panel-body{ padding:18px 20px; }
+.panel-foot{
+  display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+  padding:10px 20px; border-top:1px solid var(--line);
+  font-family:var(--mono); font-size:10px; color:var(--faint); letter-spacing:.06em;
+}
+.foot-note{ font-family:var(--mono); font-size:10px; color:var(--faint); letter-spacing:.06em; }
+
+/* ── the entry plate (graft) ──────────────────────────────────── */
+/* engraved entry number — "E 526.1": 526 = the bed session count,
+   the day-number of record; sub-index per page in DOM order. */
+.entry-no{
+  display:inline-block; align-self:center;
+  font-family:var(--mono); font-size:10.5px; font-weight:500;
+  letter-spacing:.18em; font-variant-numeric:tabular-nums;
+  color:var(--brass); text-shadow:0 1px 0 rgba(0,0,0,.9);
+  padding:3px 10px 2px; border:1px solid var(--line-2); border-radius:2px;
+  background:linear-gradient(180deg, rgba(0,0,0,.5), rgba(0,0,0,.12)), var(--dome-2);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.65), 0 1px 0 var(--groove-l);
+  white-space:nowrap;
+}
+
+/* ── the producer signature (graft) ───────────────────────────── */
+/* engraved monogram + producing function/file. This IS the raw-linkback
+   affordance: the whole signature is the anchor; title carries the pointer. */
+.sig{ display:inline-flex; align-items:center; gap:11px; min-width:0; }
+.sig-mono{
+  flex:none; width:27px; height:27px; border-radius:50%;
+  border:1px solid var(--line-2);
+  box-shadow:inset 0 0 0 3px var(--ground), inset 0 0 0 4px var(--line);
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--mono); font-size:9px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--brass);
+  text-shadow:0 1px 0 rgba(0,0,0,.9);
+}
+.sig-body{ display:flex; flex-direction:column; gap:1px; min-width:0; }
+.sig-fn{
+  font-family:var(--mono); font-size:11px; color:var(--fg-dim); letter-spacing:.04em;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.sig-fn::before{
+  content:"signed · "; font-size:8.5px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--faint);
+}
+.sig-raw{
+  font-family:var(--mono); font-size:9.5px; color:var(--faint); letter-spacing:.03em;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.sig-raw::before{ content:"⌁ raw ▸ "; color:var(--brass-dim); }
+.sig:hover .sig-fn{ color:var(--brass-hi); }
+.sig:hover .sig-raw{ color:var(--fg-dim); }
+.sig:hover .sig-mono{
+  border-color:var(--brass-dim);
+  box-shadow:inset 0 0 0 3px var(--ground), inset 0 0 0 4px var(--line),
+             0 0 9px rgba(200,165,82,.35);
+}
+
+/* auxiliary inline raw pointer — for secondary pointers inside a body
+   (bed files, checksums). The panel's OWN reading is signed via .sig. */
+.raw{
+  font-family:var(--mono); font-size:10px; color:var(--faint); letter-spacing:.04em;
+  border-bottom:1px dotted var(--line-2); padding-bottom:1px; white-space:nowrap;
+}
+.raw::before{ content:"⌁ raw ▸ "; color:var(--brass-dim); }
+.raw:hover{ color:var(--brass); border-color:var(--brass-dim); }
+
+/* ── SAMPLE stamps (engraved voice) ───────────────────────────── */
+/* inline — beside any single fabricated readout */
+.stamp-sample{
+  font-family:var(--mono); font-size:8.5px; letter-spacing:.22em; text-transform:uppercase;
+  color:var(--faint); border:1px dotted var(--line-2); border-radius:2px;
+  padding:1px 5px; vertical-align:1px; white-space:nowrap;
+}
+/* plate — in the panel-head of a wholly fabricated panel */
+.stamp-plate{
+  display:inline-block; align-self:center;
+  font-family:var(--mono); font-size:9px; letter-spacing:.3em; text-transform:uppercase;
+  color:var(--brass-dim); text-shadow:0 1px 0 rgba(0,0,0,.8);
+  padding:5px 13px 4px; border:1px solid var(--brass-dim); border-radius:2px;
+  box-shadow:inset 0 0 0 3px var(--dome), inset 0 0 0 4px rgba(143,116,51,.45);
+  white-space:nowrap;
+}
+
+/* ── stat plaques ─────────────────────────────────────────────── */
+.plaques{ display:grid; gap:12px; }
+.plaques--row{ grid-template-columns:repeat(4,1fr); }
+.plaque{
+  padding:13px 16px 12px; border:1px solid var(--line); border-radius:3px;
+  background:var(--dome-2);
+}
+.plaque .k{
+  font-family:var(--mono); font-size:9px; letter-spacing:.24em; text-transform:uppercase;
+  color:var(--faint); display:block; margin-bottom:7px;
+}
+.plaque .v{
+  font-family:var(--mono); font-size:23px; font-weight:500; line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.plaque .s{ font-family:var(--mono); font-size:10px; color:var(--faint); display:block; margin-top:6px; }
+.v.up{ color:var(--up); } .v.down{ color:var(--down); }
+
+/* ── chips ────────────────────────────────────────────────────── */
+.chip{
+  display:inline-block; font-family:var(--sans); font-size:8.5px; font-weight:600;
+  letter-spacing:.16em; text-transform:uppercase;
+  padding:2px 8px; border-radius:2px; border:1px solid; white-space:nowrap;
+}
+/* screen statuses */
+.chip-trend_template{ color:var(--washout); border-color:rgba(109,155,209,.35); background:rgba(109,155,209,.08); }
+.chip-gap_up{ color:var(--ignition); border-color:rgba(229,170,69,.35); background:rgba(229,170,69,.08); }
+.chip-gainer{ color:var(--recovery); border-color:rgba(67,201,155,.35); background:rgba(67,201,155,.08); }
+.chip-loser{ color:var(--trend); border-color:rgba(238,112,72,.35); background:rgba(238,112,72,.08); }
+/* strategy lifecycle — one-way rail; retired is honored, quiet, never hidden */
+.chip-idea{ color:var(--washout); border-color:rgba(109,155,209,.35); background:rgba(109,155,209,.08); }
+.chip-researching{ color:var(--ignition); border-color:rgba(229,170,69,.35); background:rgba(229,170,69,.08); }
+.chip-validated{ color:var(--recovery); border-color:rgba(67,201,155,.35); background:rgba(67,201,155,.08); }
+.chip-paper{ color:var(--brass-hi); border-color:var(--brass-dim); background:var(--brass-soft); }
+.chip-retired{ color:var(--faint); border-color:var(--line-2); background:rgba(160,186,222,.05); }
+/* generic */
+.chip-dim{ color:var(--faint); border-color:var(--line-2); background:rgba(160,186,222,.05); }
+.chip-danger{ color:var(--danger); border-color:rgba(238,112,72,.4); background:rgba(238,112,72,.09); }
+.chip-warn{ color:var(--warn); border-color:rgba(229,170,69,.4); background:rgba(229,170,69,.09); }
+
+/* ── disclosure fold (danger forces disclosure) ───────────────── */
+details.fold{ border:1px solid var(--line-2); border-radius:3px; background:var(--dome-2); }
+details.fold summary{
+  cursor:pointer; list-style:none; display:flex; align-items:center; gap:12px;
+  padding:11px 16px; font-family:var(--mono); font-size:11px; letter-spacing:.08em;
+  color:var(--fg-dim);
+}
+details.fold summary::-webkit-details-marker{ display:none; }
+details.fold summary .lamp{ width:8px; height:8px; border-radius:50%; background:var(--faint); flex:none; }
+details.fold summary .word{
+  text-transform:uppercase; letter-spacing:.2em; font-size:9.5px; color:var(--faint);
+  white-space:nowrap;
+}
+details.fold summary .caret{ margin-left:auto; color:var(--faint); font-size:10px; flex:none; }
+details.fold .fold-body{ padding:4px 16px 14px; }
+/* severity states — set by JS with the condition, alongside el.open = true */
+details.fold.warn{ border-color:rgba(229,170,69,.45); }
+details.fold.warn summary .lamp{ background:var(--warn); box-shadow:0 0 9px var(--warn);
+  animation:shell-lamp 2.4s ease-in-out infinite; }
+details.fold.warn summary .word{ color:var(--warn); }
+details.fold.warn[open]{
+  background:linear-gradient(180deg, rgba(229,170,69,.06), transparent 55%), var(--dome-2); }
+details.fold.danger{ border-color:rgba(238,112,72,.45); }
+details.fold.danger summary .lamp{ background:var(--danger); box-shadow:0 0 9px var(--danger);
+  animation:shell-lamp 2.4s ease-in-out infinite; }
+details.fold.danger summary .word{ color:var(--danger); }
+details.fold.danger[open]{
+  background:linear-gradient(180deg, rgba(238,112,72,.06), transparent 55%), var(--dome-2); }
+@keyframes shell-lamp{ 0%,100%{ opacity:1; } 50%{ opacity:.45; } }
+
+/* ── tabs ─────────────────────────────────────────────────────── */
+.tabs{ display:flex; gap:8px; }
+.tab{
+  font-family:var(--sans); font-size:11px; font-weight:600; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--fg-dim);
+  background:transparent; border:1px solid var(--line-2); border-radius:2px;
+  padding:6px 14px; cursor:pointer; transition:color .15s, border-color .15s, background .15s;
+}
+.tab:hover{ color:var(--fg); border-color:var(--faint); }
+.tab[aria-selected="true"]{
+  color:var(--brass-hi); border-color:var(--brass-dim); background:var(--brass-soft);
+}
+.tab .n{ font-family:var(--mono); font-weight:400; color:var(--faint); margin-left:6px; }
+.tab[aria-selected="true"] .n{ color:var(--brass); }
+
+/* ── ledger table ─────────────────────────────────────────────── */
+.table-scroll{ overflow:auto; max-height:560px; }
+table.ledger{ border-collapse:collapse; width:100%; }
+table.ledger th{
+  position:sticky; top:0; z-index:2; background:var(--dome);
+  font-family:var(--mono); font-size:8.5px; letter-spacing:.2em; text-transform:uppercase;
+  color:var(--faint); font-weight:400; text-align:right; padding:9px 12px;
+  border-bottom:1px solid var(--line-2); white-space:nowrap;
+}
+table.ledger th.l{ text-align:left; }
+table.ledger td{
+  font-family:var(--mono); font-size:12px; font-variant-numeric:tabular-nums;
+  text-align:right; padding:6px 12px; border-bottom:1px solid var(--line);
+  white-space:nowrap; color:var(--fg-dim);
+}
+table.ledger td.l{ text-align:left; }
+table.ledger tr:hover td{ background:rgba(160,186,222,.03); }
+table.ledger td .sym{ color:var(--fg); font-weight:500; letter-spacing:.04em; }
+
+/* ── chart helpers ────────────────────────────────────────────── */
+.chart{ width:100%; height:auto; display:block; }
+.chart text{ font-family:var(--mono); }
+.axis{ font-size:9.5px; fill:var(--faint); }
+.gridline{ stroke:rgba(160,186,222,.08); }
+.zeroline{ stroke:rgba(160,186,222,.22); }
+.spark{ display:block; }
+
+/* ── motion ───────────────────────────────────────────────────── */
+@keyframes settle{ from{ opacity:0; transform:translateY(12px);} to{ opacity:1; transform:none;} }
+.settle{ animation:settle .7s cubic-bezier(.2,.7,.2,1) both; }
+.settle.d1{ animation-delay:.08s; } .settle.d2{ animation-delay:.16s; } .settle.d3{ animation-delay:.24s; }
+@media (prefers-reduced-motion:reduce){
+  *{ animation:none !important; transition:none !important; scroll-behavior:auto; }
+}
+
+/* ── narrow fallback (design target is 1280–1440) ─────────────── */
+@media (max-width:1100px){
+  .plaques--row{ grid-template-columns:repeat(2,1fr); }
+  .facename{ border-left:0; padding-left:0; }
+}

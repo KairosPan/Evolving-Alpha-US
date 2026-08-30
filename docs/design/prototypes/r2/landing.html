@@ -1,0 +1,497 @@
+<!-- @dsCard group="R2 - Observatory Shell" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KAIROS · LANDING — R2</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2305070b'/%3E%3Cpath d='M8 2 L11 8 L8 14 L5 8 Z' fill='%23c8a552'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="shell.css">
+<style>
+/* ============================================================
+   LANDING — page-local styles only. All chrome, tokens and
+   graft components come from shell.css.
+   ============================================================ */
+.kicker{
+  margin:0 0 12px; font-family:var(--mono); font-size:10px; letter-spacing:.3em;
+  text-transform:uppercase; color:var(--faint);
+  display:flex; align-items:center; gap:14px;
+}
+
+/* ── hero ─────────────────────────────────────────────────── */
+.hero{
+  display:grid; grid-template-columns:1.04fr .96fr; gap:56px; align-items:center;
+  padding:64px 0 58px;
+}
+.nameplate h1{
+  margin:6px 0 0; font-family:var(--serif); font-weight:300;
+  font-size:clamp(84px, 9.4vw, 136px); line-height:.94; letter-spacing:.085em;
+  background:linear-gradient(180deg, #f2f0e8 0%, #cfd8e6 46%, #77839a 100%);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.plate-rule{ display:flex; align-items:center; gap:14px; margin:26px 0 24px; }
+.plate-rule .rule{ flex:1; }
+.plate-rule .dia{ width:8px; height:8px; transform:rotate(45deg);
+  background:var(--brass); box-shadow:0 0 10px rgba(200,165,82,.5); }
+.lede{
+  margin:0; font-family:var(--serif); font-size:19.5px; line-height:1.62;
+  font-weight:340; color:var(--fg-dim); max-width:54ch;
+}
+.lede em{ font-style:italic; color:var(--fg); }
+.deck-line{
+  margin-top:22px; font-family:var(--mono); font-size:11px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--faint); line-height:2;
+}
+.deck-line b{ color:var(--brass); font-weight:500; }
+
+/* the dial */
+.dialwrap{ display:flex; flex-direction:column; align-items:center; gap:14px; min-width:0; }
+.dial{ width:100%; max-width:520px; display:block; }
+.dial svg{ width:100%; height:auto; display:block; }
+.dial .tick{ stroke:rgba(160,186,222,.22); }
+.dial .tick.major{ stroke:rgba(200,214,236,.38); }
+.dial .ring{ fill:none; stroke:var(--line); }
+.dial .gnum{ font-family:var(--mono); font-size:10px; fill:var(--faint); }
+.dial .gend{ font-family:var(--mono); font-size:10.5px; fill:var(--fg-dim); }
+.dial .c-eyebrow{ font-family:var(--mono); font-size:10px; letter-spacing:.3em; fill:var(--faint); }
+.dial .c-level{ font-family:var(--mono); font-size:47px; fill:var(--fg); }
+.dial .c-asof{ font-family:var(--mono); font-size:11px; letter-spacing:.14em; fill:var(--brass); }
+.dial .c-sub{ font-family:var(--mono); font-size:10px; fill:var(--faint); }
+.dial-caption{
+  font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--faint); text-align:center; line-height:1.9;
+  display:flex; flex-direction:column; align-items:center; gap:9px;
+}
+.dial-caption .cap-row{ display:flex; align-items:center; gap:12px; }
+
+/* ── sections ─────────────────────────────────────────────── */
+.section{ padding:52px 0 8px; }
+.section-head h2{
+  margin:0; font-family:var(--serif); font-weight:350; font-size:40px;
+  letter-spacing:.01em; line-height:1.1;
+}
+.signed-rule{ display:flex; align-items:center; gap:24px; margin-top:36px; }
+.signed-rule .rule{ flex:1; }
+
+/* principles */
+.principles{ margin-top:38px; display:grid; grid-template-columns:64px 1fr; column-gap:0; }
+.scale-rail{ position:relative; }
+.scale-rail::before{ content:""; position:absolute; top:8px; bottom:8px; left:31px; width:2px;
+  background:linear-gradient(90deg, var(--groove-d), var(--groove-l)); }
+.plist{ display:grid; gap:0; }
+.principle{
+  position:relative; display:grid; grid-template-columns:120px 1fr; gap:26px;
+  padding:26px 0 26px 34px; border-bottom:1px solid var(--line); align-items:baseline;
+}
+.principle:last-child{ border-bottom:0; }
+.principle::before{ content:""; position:absolute; left:-36px; top:38px; width:22px; height:1px;
+  background:var(--line-2); }
+.principle::after{ content:""; position:absolute; left:-38px; top:35px; width:7px; height:7px;
+  transform:rotate(45deg); background:var(--ground); border:1px solid var(--brass-dim); }
+.principle .num{ font-family:var(--mono); font-size:11px; letter-spacing:.24em; color:var(--brass); }
+.principle .num small{ display:block; margin-top:6px; color:var(--faint); letter-spacing:.18em; font-size:9px; }
+.principle h3{
+  margin:0 0 8px; font-family:var(--serif); font-weight:480; font-size:22.5px;
+  letter-spacing:.008em; color:var(--fg);
+}
+.principle p{ margin:0; font-family:var(--serif); color:var(--fg-dim); font-size:16px;
+  max-width:66ch; font-weight:340; }
+.principle p b{ color:var(--fg); font-weight:520; }
+
+/* ── deck tiles ───────────────────────────────────────────── */
+.decks{ margin-top:38px; display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+.deck-tile{
+  position:relative; display:block; padding:26px 26px 22px;
+  background:linear-gradient(180deg, rgba(255,255,255,.022), transparent 34%), var(--dome);
+  border:1px solid var(--line); border-radius:4px;
+  transition:border-color .18s, transform .18s;
+}
+.deck-tile:hover{ border-color:var(--brass-dim); transform:translateY(-2px); }
+.deck-tile .port{
+  width:38px; height:38px; border-radius:50%; border:1px solid var(--line-2);
+  display:flex; align-items:center; justify-content:center; margin-bottom:18px;
+  box-shadow:inset 0 0 0 4px var(--ground), inset 0 0 0 5px var(--line);
+}
+.deck-tile .port i{ width:8px; height:8px; transform:rotate(45deg);
+  background:var(--c,var(--brass)); box-shadow:0 0 9px var(--c,var(--brass)); }
+.deck-tile .idx{
+  position:absolute; top:22px; right:24px; font-family:var(--mono); font-size:10px;
+  letter-spacing:.2em; color:var(--faint);
+}
+.deck-tile h3{ margin:0 0 8px; font-family:var(--serif); font-weight:460; font-size:24px;
+  letter-spacing:.01em; }
+.deck-tile .desc{ margin:0; font-family:var(--serif); color:var(--fg-dim); font-size:14.5px;
+  font-weight:340; min-height:66px; }
+.deck-tile .status{
+  margin-top:18px; padding-top:13px; border-top:1px solid var(--line);
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--faint); line-height:1.9;
+}
+.deck-tile .status b{ color:var(--fg-dim); font-weight:500; }
+.deck-tile .enter{
+  margin-top:14px; font-family:var(--sans); font-size:11px; font-weight:600;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--brass);
+}
+.deck-tile .enter::after{ content:" →"; }
+.t-market{ --c:var(--washout); }
+.t-strategy{ --c:var(--ignition); }
+.t-account{ --c:var(--flush); }
+
+/* spectrum legend strip */
+.spectrum{
+  margin-top:54px; display:flex; align-items:center; gap:0; border:1px solid var(--line);
+  border-radius:3px; overflow:hidden;
+}
+.spectrum .band{ flex:1; height:34px; position:relative; opacity:.85; }
+.spectrum .band span{
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-family:var(--mono); font-size:8.5px; letter-spacing:.24em; text-transform:uppercase;
+  color:rgba(5,7,11,.88); font-weight:500;
+}
+.spectrum-cap{
+  margin-top:10px; font-family:var(--mono); font-size:9.5px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--faint); text-align:center;
+}
+
+@media (max-width:1080px){
+  .hero{ grid-template-columns:1fr; gap:44px; }
+  .decks{ grid-template-columns:1fr; }
+  .principle{ grid-template-columns:1fr; gap:8px; }
+}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap mast-top">
+    <a class="wordmark" href="landing.html"><span class="dia" aria-hidden="true"></span>KAIROS</a>
+    <span class="facename">LANDING</span>
+    <span class="spacer"></span>
+    <span class="seg">as of <b id="k-asof" class="mono">—</b></span>
+    <span class="seg">bed <b id="k-bed" class="mono">—</b></span>
+    <span class="seg">window <b id="k-window" class="mono">—</b></span>
+    <span class="seg"><b id="k-symbols" class="mono">—</b> sym · <b id="k-days" class="mono">—</b> sessions</span>
+    <span class="seal" id="k-gate" title="orders_gate — read-only display">orders —</span>
+    <span class="stamp-sample" title="gate readout comes from account_mock, a labeled fabricated block">sample</span>
+  </div>
+  <nav class="wrap mast-nav" aria-label="Faces">
+    <a class="nav-link" href="market.html"><span class="nav-idx">01</span>Market</a>
+    <a class="nav-link" href="strategy.html"><span class="nav-idx">02</span>Strategy</a>
+    <a class="nav-link" href="account.html"><span class="nav-idx">03</span>Account</a>
+    <span class="spacer"></span>
+    <span class="gem" aria-hidden="true" title="the six-phase thermal spectrum — washout · recovery · ignition · trend · distribution · flush"><i style="background:var(--washout)"></i><i style="background:var(--recovery)"></i><i style="background:var(--ignition)"></i><i style="background:var(--trend)"></i><i style="background:var(--distribution)"></i><i style="background:var(--flush)"></i></span>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <section class="hero">
+    <div class="nameplate settle">
+      <p class="kicker">A single-operator trading-research observatory</p>
+      <h1>KAIROS</h1>
+      <div class="plate-rule" aria-hidden="true"><hr class="rule"><span class="dia"></span><hr class="rule"></div>
+      <p class="lede">One agent at the instruments; one operator holding every key.
+      Kairos works a three-deck bench — <em>point-in-time market data</em>, a <em>strategy
+      arena under git</em>, and a <em>paper account behind two gates</em> — researching what
+      the operator then judges. Every panel on this bench is a numbered entry, signed by the
+      function that produced it.</p>
+      <p class="deck-line">market + account · <b>alpaca_kit</b> — one package, two faces<br>
+      strategy · <b>the arena</b> — on DeepSeek Harness</p>
+    </div>
+
+    <div class="dialwrap settle d1">
+      <div id="dial-mount" class="dial" role="img"
+           aria-label="Bearing dial: the equal-weight tape's position within its 250-session range"></div>
+      <div class="dial-caption">
+        <div class="cap-row">
+          <span class="entry-no" data-entry>E —.—</span>
+          <span>position within the 250-session range <span id="d-range" class="mono">—</span></span>
+        </div>
+        <a class="sig" href="#" onclick="return false" id="d-sig" title="raw ▸ —">
+          <span class="sig-mono" aria-hidden="true">AK</span>
+          <span class="sig-body">
+            <span class="sig-fn">alpaca_kit — bed bars</span>
+            <span class="sig-raw" id="d-sig-raw">—</span>
+          </span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head settle">
+      <p class="kicker"><span class="entry-no" data-entry>E —.—</span> the charter</p>
+      <h2>Five principles, engraved.</h2>
+    </div>
+    <div class="principles settle d1">
+      <div class="scale-rail" aria-hidden="true"></div>
+      <div class="plist">
+        <article class="principle">
+          <div class="num">P·I<small>placement</small></div>
+          <div><h3>Wide hands, no self-keys.</h3>
+          <p>The action space is deliberately large — shell, code, market tools, the whole
+          arena. Authority over its own runtime: <b>zero</b>. Enforced by placement, not by
+          rules: profile, credentials and gate flags live outside the workspace.</p></div>
+        </article>
+        <article class="principle">
+          <div class="num">P·II<small>teaching</small></div>
+          <div><h3>The operator is the only teacher.</h3>
+          <p>Trading style lives in an operator-owned pack. When research conflicts with a
+          style entry, Kairos <b>reports the conflict</b> — never silently defers, never
+          silently overrides.</p></div>
+        </article>
+        <article class="principle">
+          <div class="num">P·III<small>lookahead</small></div>
+          <div><h3>Point-in-time honesty, enforced in code.</h3>
+          <p>Every dated market read passes a lookahead guard, its surfaces pinned by name in
+          tests. A backtest that cannot be honest <b>fails loudly</b> rather than succeeding
+          approximately.</p></div>
+        </article>
+        <article class="principle">
+          <div class="num">P·IV<small>evidence</small></div>
+          <div><h3>Honest evaluation.</h3>
+          <p>Five backtest rules bind every experiment. A delisting mid-hold is a terminal
+          loss; missing data is <b>discarded and counted, never fabricated</b>; every cited
+          number states what was actually measured.</p></div>
+        </article>
+        <article class="principle">
+          <div class="num">P·V<small>steady state</small></div>
+          <div><h3>The human is the steady state.</h3>
+          <p>No autonomy ladder, no graduation criteria. Operator attention is the system's
+          <b>binding rate limit</b> — economized everywhere, designed away nowhere.</p></div>
+        </article>
+      </div>
+    </div>
+    <div class="signed-rule settle d2">
+      <hr class="rule">
+      <a class="sig" href="#" onclick="return false" title="raw ▸ Kairos-Design.md">
+        <span class="sig-mono" aria-hidden="true">KD</span>
+        <span class="sig-body">
+          <span class="sig-fn">Kairos-Design.md</span>
+          <span class="sig-raw">the charter — on intent it outranks the spec</span>
+        </span>
+      </a>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head settle">
+      <p class="kicker"><span class="entry-no" data-entry>E —.—</span> three decks</p>
+      <h2>The faces.</h2>
+    </div>
+    <nav class="decks settle d1" aria-label="Face tiles">
+      <a class="deck-tile t-market" href="market.html">
+        <span class="idx">DECK·01</span>
+        <span class="port" aria-hidden="true"><i></i></span>
+        <h3>Market</h3>
+        <p class="desc">Point-in-time US equities — Alpaca and EDGAR behind the lookahead
+        firewall. Tape, breadth, screens; every entry signed, raw beneath every reading.</p>
+        <p class="status" id="s-market">tape — · breadth —</p>
+        <span class="enter">Open instrument</span>
+      </a>
+      <a class="deck-tile t-strategy" href="strategy.html">
+        <span class="idx">DECK·02</span>
+        <span class="port" aria-hidden="true"><i></i></span>
+        <h3>Strategy</h3>
+        <p class="desc">The shelf. Each strategy a git-versioned directory: a thesis with a
+        falsification line, honest backtests, a journal, a one-way lifecycle.</p>
+        <p class="status">idea → researching → validated → paper → retired<br>readings — · on the shelf</p>
+        <span class="enter">Open shelf</span>
+      </a>
+      <a class="deck-tile t-account" href="account.html">
+        <span class="idx">DECK·03</span>
+        <span class="port" aria-hidden="true"><i></i></span>
+        <h3>Account</h3>
+        <p class="desc">An Alpaca paper account, read-only today. Order capability exists in
+        code and is double-gated; no gate opens from inside.</p>
+        <p class="status" id="s-account">gate — <span class="stamp-sample">sample</span></p>
+        <span class="enter">Open ledger</span>
+      </a>
+    </nav>
+
+    <div class="spectrum" role="img" aria-label="The six-phase thermal spectrum: washout, recovery, ignition, trend, distribution, flush">
+      <div class="band" style="background:var(--washout)"><span>washout</span></div>
+      <div class="band" style="background:var(--recovery)"><span>recovery</span></div>
+      <div class="band" style="background:var(--ignition)"><span>ignition</span></div>
+      <div class="band" style="background:var(--trend)"><span>trend</span></div>
+      <div class="band" style="background:var(--distribution)"><span>distribution</span></div>
+      <div class="band" style="background:var(--flush)"><span>flush</span></div>
+    </div>
+    <p class="spectrum-cap">colour is a phase spectrum, not an accent — inherited from the retired regime instrument</p>
+
+    <div class="signed-rule settle d2">
+      <hr class="rule">
+      <a class="sig" href="#" onclick="return false" id="f-sig" title="raw ▸ —">
+        <span class="sig-mono" aria-hidden="true">AK</span>
+        <span class="sig-body">
+          <span class="sig-fn">alpaca_kit — bed extract</span>
+          <span class="sig-raw" id="f-sig-raw">—</span>
+        </span>
+      </a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot-band">
+  <div class="wrap foot">
+    <span>KAIROS · <b>LANDING</b> — round-2 face prototype · zero authority · read-only</span>
+    <span class="spacer"></span>
+    <span>intent · <b>Kairos-Design.md</b></span>
+    <span>mechanism · <b>the skeleton spec &amp; code</b></span>
+  </div>
+</footer>
+
+<script src="../data/market_mock.js"></script>
+<script>
+/* ── shell fill — shared across all R2 faces ── */
+(function(){
+  "use strict";
+  var D = window.KAIROS_DATA || null;
+  if(!D) return; // dashes stand: no reading, never fake
+  function t(id, s){ var el = document.getElementById(id); if(el) el.textContent = s; }
+  t("k-asof", D.as_of);
+  t("k-bed", D.bed.root);
+  t("k-window", D.bed.window.start + " → " + D.bed.window.end);
+  t("k-symbols", String(D.bed.symbols));
+  t("k-days", String(D.bed.captured_days));
+  var g = D.account_mock && D.account_mock.orders_gate;
+  var gateEl = document.getElementById("k-gate");
+  if(g && gateEl){
+    gateEl.textContent = "orders " + ((g.gate1_registered || g.gate2_validated) ? "partially armed" : "unarmed");
+    gateEl.title = "gate 1 registered: " + g.gate1_registered + " · gate 2 validated: " + g.gate2_validated +
+      " — read-only display · readout from account_mock (fabricated block)";
+  }
+  document.querySelectorAll("[data-entry]").forEach(function(el, i){
+    el.textContent = "E " + D.bed.captured_days + "." + (i + 1);
+  });
+})();
+
+/* ── page: signatures, tile readouts, the bearing dial ── */
+(function(){
+  "use strict";
+  var D = window.KAIROS_DATA || null;
+  if(!D) return; // no data → the dial mount stays empty, dashes stand
+  var $ = function(id){ return document.getElementById(id); };
+  function txt(id, s){ var el=$(id); if(el) el.textContent=s; }
+  function fmt(n, d){ if(n==null||!isFinite(n)) return "—";
+    return n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d}); }
+
+  /* signatures fill from the data's raw pointers */
+  txt("d-sig-raw", D.tape.raw);
+  $("d-sig").title = "raw ▸ " + D.tape.raw;
+  txt("f-sig-raw", D.bed.raw.snapshot);
+  $("f-sig").title = "raw ▸ " + D.bed.raw.snapshot;
+
+  /* deck tile readouts */
+  var tape = D.tape.series, br = D.breadth.series;
+  var last = tape[tape.length-1], lastB = br[br.length-1];
+  $("s-market").innerHTML = "tape <b>" + fmt(last.level,2) + "</b> · <b>" +
+    fmt(lastB.pct_above_200dma*100,1) + "%</b> above 200dma";
+  var gate = D.account_mock && D.account_mock.orders_gate;
+  if(gate){
+    $("s-account").innerHTML = "gate 1 <b>" + (gate.gate1_registered?"registered":"unregistered") +
+      "</b> · gate 2 <b>" + (gate.gate2_validated?"validated":"unvalidated") +
+      "</b> <span class=\"stamp-sample\" title=\"from account_mock, a labeled fabricated block\">sample</span>";
+  }
+
+  /* ── the bearing dial ── */
+  var levels = tape.map(function(r){ return r.level; });
+  var lo = Math.min.apply(null, levels), hi = Math.max.apply(null, levels);
+  var hiDate = tape[levels.indexOf(hi)].date;
+  var t = (last.level - lo) / (hi - lo);           // honest: position in the plotted range
+  var offHigh = (last.level/hi - 1) * 100;
+
+  txt("d-range", fmt(lo,2) + " – " + fmt(hi,2));
+
+  var C = 280, A0 = -120, A1 = 120, SWEEP = A1 - A0;
+  function polar(r, aDeg){
+    var a = (aDeg - 90) * Math.PI / 180;
+    return [C + r*Math.cos(a), C + r*Math.sin(a)];
+  }
+  function seg(r, a0, a1, col, op, w){
+    var p0 = polar(r,a0), p1 = polar(r,a1);
+    var large = (a1-a0) > 180 ? 1 : 0;
+    return '<path d="M'+p0[0].toFixed(2)+' '+p0[1].toFixed(2)+' A'+r+' '+r+' 0 '+large+
+      ' 1 '+p1[0].toFixed(2)+' '+p1[1].toFixed(2)+'" fill="none" stroke="'+col+
+      '" stroke-width="'+w+'" opacity="'+op+'" stroke-linecap="butt"/>';
+  }
+  function tick(rIn, rOut, aDeg, cls){
+    var p0 = polar(rIn,aDeg), p1 = polar(rOut,aDeg);
+    return '<line class="tick '+(cls||'')+'" x1="'+p0[0].toFixed(1)+'" y1="'+p0[1].toFixed(1)+
+      '" x2="'+p1[0].toFixed(1)+'" y2="'+p1[1].toFixed(1)+'"/>';
+  }
+  /* thermal ramp cold→hot along the gauge */
+  var stops = [[0,0x6d,0x9b,0xd1],[0.34,0x43,0xc9,0x9b],[0.67,0xe5,0xaa,0x45],[1,0xee,0x70,0x48]];
+  function ramp(u){
+    var i = 1; while(i < stops.length-1 && stops[i][0] < u) i++;
+    var a = stops[i-1], b = stops[i];
+    var k = (u - a[0]) / (b[0] - a[0]); k = Math.max(0, Math.min(1, k));
+    function ch(j){ return Math.round(a[j] + (b[j]-a[j])*k); }
+    return "rgb(" + ch(1) + "," + ch(2) + "," + ch(3) + ")";
+  }
+
+  var s = [];
+  s.push('<svg viewBox="0 0 560 560" xmlns="http://www.w3.org/2000/svg">');
+  /* outer engraved graduation — full circle, pure chrome */
+  s.push('<circle class="ring" cx="280" cy="280" r="262" stroke-width="1"/>');
+  s.push('<circle class="ring" cx="280" cy="280" r="236" stroke-width="1"/>');
+  for(var a=0; a<360; a+=3){
+    s.push(tick(a%15===0 ? 250 : 255, 262, a, a%15===0 ? "major" : ""));
+  }
+  /* gauge band — 60 lit-to-value thermal segments over 240° */
+  var NSEG = 60;
+  for(var i=0; i<NSEG; i++){
+    var u0 = i/NSEG, u1 = (i+1)/NSEG;
+    var lit = u0 < t;
+    s.push(seg(200, A0 + SWEEP*u0, A0 + SWEEP*u1 + 0.4, ramp((u0+u1)/2), lit ? 0.9 : 0.16, 11));
+  }
+  /* gauge graduation + numerals */
+  for(var g2=0; g2<=20; g2++){
+    var ga = A0 + SWEEP * g2/20;
+    s.push(tick(212, g2%5===0 ? 226 : 220, ga, g2%5===0 ? "major" : ""));
+    if(g2%5===0){
+      var pn = polar(172, ga);
+      s.push('<text class="gnum" x="'+pn[0].toFixed(1)+'" y="'+pn[1].toFixed(1)+
+        '" text-anchor="middle" dominant-baseline="middle">'+(g2*5)+'</text>');
+    }
+  }
+  /* range end labels — the honest min / max of the plotted span */
+  var pe0 = polar(242, A0), pe1 = polar(242, A1);
+  s.push('<text class="gend" x="'+pe0[0].toFixed(1)+'" y="'+(pe0[1]+14).toFixed(1)+'" text-anchor="middle">'+fmt(lo,2)+'</text>');
+  s.push('<text class="gend" x="'+pe1[0].toFixed(1)+'" y="'+(pe1[1]+14).toFixed(1)+'" text-anchor="middle">'+fmt(hi,2)+'</text>');
+  /* needle group — rotated by JS sweep */
+  s.push('<g id="needle" transform="rotate('+A0+' 280 280)">');
+  s.push('<line x1="280" y1="152" x2="280" y2="92" stroke="#c8a552" stroke-width="2.5"/>');
+  s.push('<path d="M280 84 L285 94 L280 91 L275 94 Z" fill="#e8cf8e"/>');
+  s.push('<circle cx="280" cy="80" r="3.4" fill="none" stroke="#c8a552" stroke-width="1.4" opacity=".85"/>');
+  s.push('</g>');
+  /* centre readout */
+  s.push('<text class="c-eyebrow" x="280" y="238" text-anchor="middle">EQ-WEIGHT TAPE</text>');
+  s.push('<text class="c-level" x="280" y="291" text-anchor="middle">'+fmt(last.level,2)+'</text>');
+  s.push('<text class="c-asof" x="280" y="318" text-anchor="middle">AS OF '+D.as_of+'</text>');
+  s.push('<text class="c-sub" x="280" y="344" text-anchor="middle">'+
+    (offHigh>=0 ? "at" : fmt(offHigh,2)+"% off") + " the " + hiDate + " high</text>");
+  s.push('</svg>');
+  $("dial-mount").innerHTML = s.join("");
+
+  /* needle sweep — one orchestrated moment, honest destination */
+  var needle = document.getElementById("needle");
+  var target = A0 + SWEEP * t;
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(reduce){ needle.setAttribute("transform", "rotate("+target+" 280 280)"); }
+  else{
+    var t0 = null, DUR = 1400;
+    function frame(ts){
+      if(t0===null) t0 = ts;
+      var k = Math.min(1, (ts-t0)/DUR);
+      var e = 1 - Math.pow(1-k, 3);
+      needle.setAttribute("transform", "rotate("+(A0 + (target-A0)*e)+" 280 280)");
+      if(k<1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+})();
+</script>
+</body>
+</html>
