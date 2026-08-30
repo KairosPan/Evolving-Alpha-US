@@ -1,9 +1,5 @@
 {
   "permissions": {
-    "deny": [
-      "Edit(//Users/pan/Desktop/self-evolve/Sonia-Kairos/**)",
-      "Write(//Users/pan/Desktop/self-evolve/Sonia-Kairos/**)",
-      "NotebookEdit(//Users/pan/Desktop/self-evolve/Sonia-Kairos/**)"
-    ]
+    "deny": []
   }
 }
