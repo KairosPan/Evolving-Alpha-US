@@ -19,3 +19,19 @@ test("overlay inserts exactly the five host rows with loopback config", () => {
   assert.equal(byId.get("directory-picker")!.name, "@deepseek-ai/dsh-host-directory-picker-auto");
   assert.equal(byId.get("cordis-host-runner")!.name, "@deepseek-ai/dsh-cordis-host-runner");
 });
+
+// The absences are load-bearing, so they are asserted rather than assumed.
+// dsh-web-app's connection row carries `inject: [webRuntime]`, but webRuntime is
+// provided by the dsh-web-app row the face does NOT mount — inheriting that
+// inject would leave the row unresolved forever, and the face never binds
+// off-loopback anyway. The other three rows take the plugins' own defaults;
+// an empty `config: {}` is not the same thing to a patch, which replaces the
+// targeted row's whole config.
+test("the overlay carries no inject and no config it does not own", () => {
+  const rows = faceOverlay(3090)[0].insert!;
+  const byId = new Map(rows.map(r => [r.id, r]));
+  assert.ok(!("inject" in byId.get("connection")!), "connection row must not inject");
+  for (const id of ["directory-picker", "api-gateway", "cordis-host-runner"]) {
+    assert.equal(byId.get(id)!.config, undefined, `${id} must carry no config`);
+  }
+});
