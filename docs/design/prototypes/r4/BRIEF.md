@@ -60,3 +60,13 @@ docs/design/prototypes/r4/
   BRIEF.md  chat.css  chat.js
   chat-light.html  chat-dark.html
 ```
+
+---
+
+## Verdict (2026-08-30, operator)
+
+**`chat-light` chosen.** The light minimal chat is the v1 definition of the Strategy face.
+The dark variant stays as the record of the palette question; the R2/R3 instrument grammar
+remains the add-later reservoir. Next: the implementation brainstorm — the wiring question
+(our face driving dsh headless vs. coexisting with dsh's own UI) is now unavoidable, since
+the chosen face carries a live composer by intent.
