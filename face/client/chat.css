@@ -612,11 +612,13 @@ body {
 /* ---------- the gate strip (/account): the double order gate as a circuit
 
    Read left to right — order intent → GATE 1 → GATE 2 → the trading host: four
-   chips joined by three wires, and a wire downstream of a gate that is not
-   passable is drawn severed. Deliberately quiet: no motion, no alarm ink, no
-   size. A face that dramatizes its own safety interlocks teaches the operator
-   to read them as decoration, and the page writes each gate's state in words
-   underneath anyway — nothing here is the only carrier of a meaning. */
+   chips joined by three wires. A wire is drawn intact only when both gates it
+   touches are passed, so an unpassed gate leaves no intact wire on any path
+   through it — the one leading INTO it included. Deliberately quiet: no motion,
+   no alarm ink, no size. A face that dramatizes its own safety interlocks
+   teaches the operator to read them as decoration, and the page writes each
+   gate's state in words underneath anyway — nothing here is the only carrier of
+   a meaning. */
 
 .inst-circuit {
   display: flex;

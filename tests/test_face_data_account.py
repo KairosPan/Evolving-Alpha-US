@@ -35,6 +35,10 @@ def cache_dir(tmp_path, monkeypatch):
 
 
 class _FakeClient:
+    # The real TradingClient always has one (it defaults to PAPER_HOST); account_payload
+    # parses it for the payload's `host`.
+    base_url = "https://paper-api.alpaca.markets"
+
     def __init__(self):
         self.order_status = []          # what account_payload asked /v2/orders for
 
@@ -55,10 +59,14 @@ class _FakeClient:
 # ── account_payload ────────────────────────────────────────────────────────────────────────────
 
 def test_no_keys_is_honest_absence_and_never_builds_a_client():
+    """...and the gate goes out even here. The equality against `gate_state({})` IS the
+    fence: the keyless view must carry the gate this module computes, so no consumer ever
+    has to reconstruct one from mirrored strings that can drift from this function."""
     calls = []
     payload = account_payload(lambda: calls.append(1), env={})
     assert payload == {"ok": True, "available": False,
-                       "reason": "no APCA keys in the environment"}
+                       "reason": "no APCA keys in the environment",
+                       "orders_gate": gate_state({})}
     assert calls == []
 
 
@@ -69,6 +77,17 @@ def test_with_keys_assembles_read_only_payload():
     assert payload["positions"][0]["symbol"] == "AAA"
     assert len(payload["orders"]) <= 50
     assert payload["orders_gate"]["gate1_registered"] is False  # flag unset
+
+
+def test_host_is_the_parsed_hostname_of_the_client_that_was_read():
+    """The page states the host as a READING. It must be the parsed hostname, never the raw
+    URL: userinfo can carry a decoy authority, the same reason _require_paper compares
+    hostnames (alpaca_kit/account.py:76-80)."""
+    class _Decoy(_FakeClient):
+        base_url = "https://paper-api.alpaca.markets@api.alpaca.markets"
+
+    assert account_payload(_FakeClient, env=KEYS)["host"] == "paper-api.alpaca.markets"
+    assert account_payload(_Decoy, env=KEYS)["host"] == "api.alpaca.markets"
 
 
 def test_orders_are_asked_for_by_status_all_not_the_open_only_default():

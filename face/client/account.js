@@ -1,4 +1,4 @@
-/** `/account` — the paper account, read-only. Data: `/data/account.json`.
+/** `/account` — the trading account, read-only. Data: `/data/account.json`.
  *
  * The sibling instrument to market.js, and the same machine: no state, no
  * timer, no harness call. Every reading is a field of the last fetch and a
@@ -6,9 +6,12 @@
  * ABOUT:
  *
  *   1. Absence is not failure. No APCA keys in the face's environment makes the
- *      producer answer `ok: true, available: false` with a reason. That is a
- *      real reading of a real configuration, so it renders as the reason plus
- *      the gate strip — never as an empty account, and never as an error.
+ *      producer answer `ok: true, available: false` with a reason AND the gate
+ *      block it can still compute from that same environment. That is a real
+ *      reading of a real configuration, so it renders as the reason plus the
+ *      gate strip — never as an empty account, and never as an error. Both
+ *      branches take the SAME path through {@link gateCard}: this page holds no
+ *      copy of the producer's gate rule, so it has none that can drift from it.
  *   2. ONE clock, not two. Unlike `/market` there is no producer disk cache and
  *      no `assembled_at`: an account payload is read from the broker on the
  *      spawn that served it, so `generated_at` IS the reading's time. `stale:
@@ -21,14 +24,17 @@
  *      page characterising a scope it never measured. No note in the payload
  *      means no claim on the page.
  *   4. The two order gates are drawn from the payload's COMPUTED state as a
- *      series circuit — order intent → GATE 1 → GATE 2 → the trading host — and
- *      the wire downstream of an unpassed gate is drawn severed. A flag that is
- *      not a boolean reads as unknown and leaves the wire cut: the strip may
- *      never draw a closed circuit it cannot prove.
- *   5. No host is stamped. The payload carries no base URL, and the paper pin
- *      in `alpaca_kit.account` guards MUTATING calls only, so the circuit's
- *      terminal is labelled generically and the pin is quoted from the
- *      payload's own `paper_pin` rather than asserted as this session's host.
+ *      series circuit — order intent → GATE 1 → GATE 2 → the trading host. A
+ *      wire is drawn intact only when BOTH gates it touches (the one before it
+ *      and the one after it) are passed, so an unpassed gate cuts every path
+ *      through it rather than only the span behind it. A flag that is not a
+ *      boolean reads as unknown and leaves those wires cut: the strip may never
+ *      draw a closed circuit it cannot prove.
+ *   5. The host is a READING, not a claim: `data.host` is the parsed hostname
+ *      the producer's own reads went to. It is NOT the paper pin — that pin
+ *      guards MUTATING calls in `alpaca_kit.account` — so the two appear
+ *      separately: the host on the summary, the pin quoted from the gate
+ *      block's `paper_pin` beneath the circuit.
  *
  * No framework, no imports: the DOM API, same as chat.js and market.js. The few
  * helpers shared in spirit with market.js (`el`, `stat`, `note`, `put`,
@@ -81,31 +87,51 @@ function stamp(s) {
   return Number.isNaN(t) ? s : `${new Date(t).toISOString().replace("T", " ").slice(0, 19)}Z`;
 }
 
-/** A number the broker sent as a STRING (Alpaca quotes every money field), or
- * the em-dash. The finite check is the load-bearing half: `Number("")` is 0 and
- * `Number("n/a")` is NaN, and both would otherwise print — as `$0.00`, a
- * balance nobody reported, and as `$NaN`, a balance that cannot exist. */
-function money(v) {
+/**
+ * A number the broker sent as a STRING (Alpaca quotes every money field), in the
+ * account's own currency, or the em-dash.
+ *
+ * The finite check is one load-bearing half: `Number("")` is 0 and
+ * `Number("n/a")` is NaN, and both would otherwise print — as `$0.00`, a balance
+ * nobody reported, and as `$NaN`, a balance that cannot exist.
+ *
+ * The currency is the other. `$` is written ONLY for a USD account (or one whose
+ * payload named no currency at all, which is the only case where the default
+ * carries no assertion); anything else gets its ISO code spelled out in front of
+ * the amount. Printing a EUR balance with a dollar sign would be a wrong
+ * reading, and knowing the symbol for every code on earth is not this page's
+ * business.
+ * @param v - the amount, as the broker sent it.
+ * @param currency - the ACCOUNT's `currency` field; positions and orders carry
+ * none of their own, so the account's is the only currency in the payload.
+ */
+function money(v, currency) {
   if (v === null || v === undefined || v === "") return EM;
   const n = Number(v);
-  return Number.isFinite(n)
-    ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    : EM;
+  if (!Number.isFinite(n)) return EM;
+  const amount = n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const code = typeof currency === "string" ? currency.trim().toUpperCase() : "";
+  return code === "" || code === "USD" ? `$${amount}` : `${code} ${amount}`;
 }
 
-/** A fraction rendered as a signed percentage. Same guard as {@link money}, and
- * the sign is always explicit so a loss never reads as a gain at a glance. */
+/** A fraction rendered as a percentage. Same guards as {@link money}. A gain
+ * carries an explicit `+` so a loss never reads as a gain at a glance — but a
+ * flat position gets NO sign and no color: zero is neither, and dressing it as a
+ * gain would be a reading nobody took. */
 function pct(v) {
   if (v === null || v === undefined || v === "") return EM;
   const n = Number(v);
-  return Number.isFinite(n) ? `${n >= 0 ? "+" : ""}${(n * 100).toFixed(2)}%` : EM;
+  if (!Number.isFinite(n)) return EM;
+  return `${n > 0 ? "+" : ""}${(n * 100).toFixed(2)}%`;
 }
 
-/** Green/red only where the sign is a real reading; anything else gets neither. */
+/** Green/red only where the sign is a real, non-zero reading; anything else —
+ * absent, unparseable, or exactly flat — gets neither. */
 function sign(v) {
   if (v === null || v === undefined || v === "") return "";
   const n = Number(v);
-  return Number.isFinite(n) ? (n >= 0 ? "pos" : "neg") : "";
+  if (!Number.isFinite(n) || n === 0) return "";
+  return n > 0 ? "pos" : "neg";
 }
 
 /** A field the payload may not carry, as text. */
@@ -113,17 +139,20 @@ const text = (v) => (v === null || v === undefined || v === "" ? EM : String(v))
 
 /* ── the cards ───────────────────────────────────────────────────────────── */
 
-function summaryCard(account, raw) {
+function summaryCard(account, host, raw) {
   const card = el("section", "inst-card");
   const grid = el("div", "inst-grid");
-  grid.append(stat("equity", money(account.equity)),
-              stat("cash", money(account.cash)),
-              stat("buying power", money(account.buying_power)));
+  grid.append(stat("equity", money(account.equity, account.currency)),
+              stat("cash", money(account.cash, account.currency)),
+              stat("buying power", money(account.buying_power, account.currency)));
   return put(card,
-             el("h2", "inst-card-title", "Paper account"),
-             /* Status and currency are the broker's own fields. The base URL is
-              * NOT in the payload, so no host is named here — see rule 5. */
-             el("div", "inst-note", `status ${text(account.status)} · currency ${text(account.currency)}`),
+             el("h2", "inst-card-title", "Account"),
+             /* The host the producer's OWN reads went to, parsed by it from the
+              * client's base URL — a reading, like the balances, and the em-dash
+              * when the payload did not carry one. The heading says "Account"
+              * rather than "Paper account" for the same reason: paper-ness is
+              * whatever this host is, not a word chosen here. */
+             el("div", "inst-note", `host · ${text(host)} · status ${text(account.status)} · currency ${text(account.currency)}`),
              grid,
              note(`raw · ${text(raw)}`, "inst-note inst-raw"));
 }
@@ -168,13 +197,20 @@ function tableCard(title, subnote, rows, cols, empty) {
  *
  * The state under each chip is also written in WORDS, from the payload's own
  * `gate1_rule` / `gate2_note` — the strip's shape carries no meaning a
- * text-only reading would lose.
+ * text-only reading would lose. A rule the payload did not carry is simply not
+ * quoted: the state word stands alone rather than trailing an em-dash at a
+ * caveat that was never made.
+ *
+ * The SAME function serves both payload branches — keyed and keyless. The
+ * producer computes `orders_gate` from the environment either way, so this page
+ * holds no copy of that rule and cannot drift from it.
  * @param gate - the payload's `orders_gate` block.
- * @param provenance - said when the block was not in the payload at all.
  */
-function gateCard(gate, provenance) {
+function gateCard(gate) {
   const card = el("section", "inst-card");
   card.append(el("h2", "inst-card-title", "The order gates"));
+  /* Both branches of a current producer carry the block; an older one that does
+   * not says so rather than getting a strip this page invented. */
   if (gate === null || typeof gate !== "object") {
     card.append(el("p", "inst-note", "gate state absent from this payload"));
     return card;
@@ -194,9 +230,16 @@ function gateCard(gate, provenance) {
     if (typeof why === "string" && why !== "") n.title = why;
     return n;
   };
-  /* A break anywhere upstream cuts everything after it: this is one series
-   * circuit, not three independent links. */
-  const wire = (severed) => el("div", `inst-gate-wire${severed ? " severed" : ""}`, severed ? "⊘" : "");
+  /* One series circuit, not three independent links: a wire is intact only when
+   * the gates on BOTH sides of it are passed, so an unpassed gate leaves no
+   * intact wire on any path through it — including the one that leads into it. */
+  const wire = (severed) => {
+    const w = el("div", `inst-gate-wire${severed ? " severed" : ""}`, severed ? "⊘" : "");
+    if (severed) w.setAttribute("aria-hidden", "true");   // decorative, like the chip glyph
+    return w;
+  };
+  /* The state word stands alone when the payload carried no rule to quote. */
+  const clause = (rule) => (typeof rule === "string" && rule !== "" ? ` — ${rule}` : "");
 
   const strip = el("div", "inst-circuit");
   strip.append(el("div", "inst-gate-node src", "order intent"),
@@ -209,32 +252,9 @@ function gateCard(gate, provenance) {
 
   return put(card,
              strip,
-             el("div", "inst-note", `gate 1 · ${said(gate.gate1_registered, "registered", "not registered")} — ${text(gate.gate1_rule)}`),
-             el("div", "inst-note", `gate 2 · ${said(gate.gate2_validated, "validated", "not validated")} — ${text(gate.gate2_note)}`),
-             note(provenance),
+             el("div", "inst-note", `gate 1 · ${said(gate.gate1_registered, "registered", "not registered")}${clause(gate.gate1_rule)}`),
+             el("div", "inst-note", `gate 2 · ${said(gate.gate2_validated, "validated", "not validated")}${clause(gate.gate2_note)}`),
              note(`raw · ${text(gate.paper_pin)}`, "inst-note inst-raw"));
-}
-
-/** The gate as it must read when the producer never computed one.
- *
- * A keyless payload (`available: false`) carries no `orders_gate`, but its
- * gate state is not unknown: `gate_state` in scripts/face_data.py (lines
- * 162-171) computes gate 1 as `ALPACA_KIT_ENABLE_ORDERS == "1" AND both APCA
- * keys present`, so no keys means gate 1 CANNOT be registered, and gate 2 is
- * hard-coded False there until the drill passes. The strings below are that
- * function's, quoted verbatim, and {@link gateCard} is told to SAY on the page
- * that this block was reconstructed here rather than served — a page-authored
- * gate that presented itself as a producer reading would be the one lie this
- * instrument exists to prevent.
- */
-function keylessGate() {
-  return {
-    gate1_registered: false,
-    gate1_rule: "ALPACA_KIT_ENABLE_ORDERS=1 AND APCA keys present",
-    gate2_validated: false,
-    gate2_note: "per-order human approval - intent until the drill in face/README.md passes on a live face",
-    paper_pin: "hostname == paper-api.alpaca.markets enforced in code",
-  };
 }
 
 /* ── the fetch ───────────────────────────────────────────────────────────── */
@@ -277,22 +297,29 @@ async function load() {
     $("#stamp").textContent = `${data.stale ? "STALE · " : ""}served ${stamp(data.generated_at)}`;
     $("#stamp").classList.toggle("inst-stale", Boolean(data.stale));
 
+    /* The keyless view: the producer's reason, and its gate — computed from the
+     * same environment that made the account unreadable, so it is served here
+     * exactly as it is on the keyed branch. */
     if (data.available === false) {
       root.replaceChildren(
         el("p", "inst-note", `not available — ${text(data.reason)}`),
-        gateCard(keylessGate(), "reconstructed on this page: a keyless payload carries no gate block, and the producer's own rule cannot register gate 1 without keys"),
+        gateCard(data.orders_gate),
       );
       return;
     }
     const positions = Array.isArray(data.positions) ? data.positions : [];
     const orders = Array.isArray(data.orders) ? data.orders : [];
+    const account = data.account ?? {};
+    /* Positions carry no currency of their own; the account's is the payload's
+     * only one, so every money cell on the page is denominated by it. */
+    const cur = account.currency;
     root.replaceChildren(
-      summaryCard(data.account ?? {}, data.raw),
+      summaryCard(account, data.host, data.raw),
       tableCard("Positions", undefined, positions, [
         ["symbol", (r) => text(r.symbol)],
         ["qty", (r) => text(r.qty)],
-        ["avg entry", (r) => money(r.avg_entry_price)],
-        ["value", (r) => money(r.market_value)],
+        ["avg entry", (r) => money(r.avg_entry_price, cur)],
+        ["value", (r) => money(r.market_value, cur)],
         ["unrl %", (r) => pct(r.unrealized_plpc), (r) => sign(r.unrealized_plpc)],
       ], "no open positions"),
       /* The heading is a noun; the scope claim under it is the producer's

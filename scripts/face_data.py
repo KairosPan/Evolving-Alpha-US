@@ -24,6 +24,7 @@ import tempfile
 from datetime import date as Date
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pandas as pd
 
@@ -178,8 +179,14 @@ def account_payload(client_factory, env) -> dict:
     dressing a broken read up as an empty account."""
     has_keys = bool(env.get("APCA_API_KEY_ID")) and bool(env.get("APCA_API_SECRET_KEY"))
     if not has_keys:
+        # The gate goes out on the KEYLESS branch too. `gate_state` reads the environment
+        # and nothing else, so it is computable without a client - and on a keyless env it
+        # truthfully computes gate1_registered False. Emitting it here is what keeps the
+        # face from having to reconstruct a gate block it cannot see: truth belongs where
+        # it can be computed, not mirrored into a page that will drift from this function.
         return {"ok": True, "available": False,
-                "reason": "no APCA keys in the environment"}
+                "reason": "no APCA keys in the environment",
+                "orders_gate": gate_state(env)}
     client = client_factory()
     # status="all", never the default: Alpaca's /v2/orders defaults to OPEN orders only, so a
     # settled account would render an empty table under a "recent orders" heading.
@@ -187,6 +194,13 @@ def account_payload(client_factory, env) -> dict:
     return {
         "ok": True,
         "available": True,
+        # The PARSED hostname of the host these reads actually went to, never the raw URL:
+        # a URL's userinfo can carry a decoy authority ("https://paper-api.alpaca.markets@
+        # api.alpaca.markets" reads as api.alpaca.markets), which is exactly why
+        # TradingClient._require_paper compares hostnames rather than substrings
+        # (alpaca_kit/account.py:76-80). The page renders this as a reading; the paper pin
+        # in gate_state stays what it is - a statement about the code's mutation guard.
+        "host": urlsplit(client.base_url).hostname,
         "account": client.get_account() or {},
         "positions": client.get_positions() or [],
         "orders": orders[:ORDERS_CAP],
