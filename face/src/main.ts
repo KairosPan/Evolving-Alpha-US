@@ -32,7 +32,30 @@ const profileName = process.env.FACE_PROFILE || "face";
 /* Resolved from this module, never from the working directory: `npm start` runs
  * in face/, but the entry must find its own sibling client/ wherever it is
  * launched from. */
-const clientDir = join(dirname(fileURLToPath(import.meta.url)), "..", "client");
+const moduleDir = dirname(fileURLToPath(import.meta.url));
+const clientDir = join(moduleDir, "..", "client");
+
+/* The workbench repo root: this file is face/src/main.ts, so up two.
+ *
+ * Anchor the PROCESS here, before `bootFace` below, because two things the face
+ * never configures follow the working directory and nothing else. The pinned
+ * `ApiProxyService` hardcodes `cwd: process.cwd()` with no config key to
+ * override (dsh-host-apiproxy 0.1.1-rc.2, lib/index.js:5534), so that is the
+ * project directory every `session.create` without an explicit project inherits
+ * — and the sandbox's workspace root is that same directory. Left at the cwd of
+ * `cd face && npm start`, both would be `face/`, which is wrong in BOTH
+ * directions: the agent could rewrite the face's own source un-asked while a
+ * write to `strategies/` — its actual arena — needed a Gate-2 escalation. Spec
+ * section 3.2 commits `cwd` = the workbench repo root; this is where that
+ * commitment is kept.
+ *
+ * Safe against the other cwd reader in the boot path: `loadLayeredEnv` reads
+ * `<cwd>/.env`, and no `.env` exists at either face/ or the repo root (the
+ * repo's keys live in the differently-named `.env.deepseek` / `.env.alpaca`,
+ * which are sourced by the operator, never auto-loaded). Every other path the
+ * face resolves — `clientDir` above, boot.ts's `INSTALL_ANCHOR` — is
+ * module-relative and does not move with this. */
+process.chdir(join(moduleDir, "..", ".."));
 
 /** The booted tree's disposer, once there is a tree. Left `undefined` until
  * then so the failure handlers below can be installed BEFORE the boot they

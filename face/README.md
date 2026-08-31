@@ -22,6 +22,12 @@ and the first prompt fails with a missing-credential error from the LLM route.
 `DEEPSEEK_API_KEY` in `$DSH_HOME/.env` — `bootFace` runs dsh's layered env load
 before composing, so the harness home's `.env` reaches the tree too.
 
+A session's project directory is the **workbench repo root**, not `face/`: the
+entry `chdir`s there before booting (spec section 3.2), because the pinned
+`ApiProxyService` takes that default from `process.cwd()` and offers no config
+key. It is also the sandbox's workspace root — so "outside the session
+workspace" below means outside the whole repo.
+
 | Env | Default | What |
 |---|---|---|
 | `FACE_PORT` | `3090` | webserver port. `0` asks the OS for a free one |
@@ -172,8 +178,9 @@ closed with nothing on screen saying why.
 **The drill**, with the face live and a session open:
 
 1. Prompt Kairos to write a file OUTSIDE the session's workspace — the path
-   shown on the session's sidebar row — and to escalate when the sandbox denies
-   it. `touch ~/face-gate2-drill` from the bash tool does it, unless the session
+   shown on the session's sidebar row, the workbench repo root unless you gave
+   the session a project of its own — and to escalate when the sandbox denies
+   it. `touch ~/face-gate2-drill` from the bash tool does it, unless that
    workspace IS your home directory, in which case pick any path outside it. Do
    NOT use `/tmp`: `workspace-write` already permits the platform temp areas, so
    a write there is allowed and asks nobody.
