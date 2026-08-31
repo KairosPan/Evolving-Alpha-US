@@ -24,8 +24,8 @@ const frames: unknown[] = readFileSync(
 const views = frames.map((frame) => mapFrame(frame));
 
 test("fixture file and view list stay aligned", () => {
-  assert.equal(frames.length, 15);
-  assert.equal(views.length, 15);
+  assert.equal(frames.length, 17);
+  assert.equal(views.length, 17);
 });
 
 test("message events become bubbles, attributed by role", () => {
@@ -109,6 +109,44 @@ test("a bubble reports who produced the message", () => {
   assert.equal(views[0].source, "user");
   assert.equal(views[13].kind, "bubble");
   assert.equal(views[13].source, "plugin");
+});
+
+test("a surface replacement carries its shadow instruction through", () => {
+  // Compaction writes its checkpoint as a user/message whose surfaceOp replaces
+  // the range it summarized (dsh-compaction-basic/lib/index.js:604-616). A
+  // renderer that never sees this shows the summary AND everything it summarized.
+  assert.equal(views[15].kind, "bubble");
+  assert.equal(views[15].source, "plugin");
+  assert.deepEqual(views[15].surfaceOp, { op: "replace", start: 4, end: 11 });
+});
+
+test("every other rendered event says plainly that it appends", () => {
+  assert.equal(views[0].surfaceOp, "append", "explicit append survives");
+  assert.equal(views[3].surfaceOp, "append", "tool/result");
+  // Surface metadata is forbidden on log-only events, tool/call included, so an
+  // absent op must read as append rather than as undefined.
+  assert.equal(views[2].surfaceOp, "append", "tool/call carries no surfaceOp of its own");
+  assert.equal(views[11].surfaceOp, "append", "history entry");
+
+  const malformed = mapFrame({
+    type: "session/event",
+    sessionId: "s1",
+    event: {
+      type: "user/message", seq: 1, surfaceOp: { op: "replace", start: "4" },
+      data: { content: [{ type: "text", text: "hi" }] },
+    },
+  });
+  assert.equal(malformed.surfaceOp, "append", "a replace missing its range is not obeyed");
+});
+
+test("an interrupted answer is never presented as a complete one", () => {
+  assert.equal(views[16].kind, "bubble");
+  assert.equal(views[16].role, "kairos");
+  assert.equal(views[16].text, "The first pivot looks like");
+  assert.equal(views[16].interrupted, true);
+  // The flag is present-and-false on whole messages, so a renderer reads one field.
+  assert.equal(views[1].interrupted, false);
+  assert.equal(views[0].interrupted, false, "an operator prompt is never a prefix");
 });
 
 test("null-safe: unrecognized input never throws, it ignores", () => {

@@ -103,14 +103,25 @@ export async function respond(rpcId, value) {
  * (events.d.ts:44-61). What it does NOT replay is conversation: `since` is
  * unimplemented at this pin, and the documented recovery is "reopen the stream
  * and refetch history" — which is what `onOpen` is for.
+ *
+ * `close()` is honoured at every moment of the cycle, the reconnect WAIT
+ * included: a pending timer is cleared and `connect` refuses to run once
+ * closed, so a closed stream can never resurrect itself into a second socket
+ * that keeps delivering frames to a listener that stopped listening.
  * @param {(frame: unknown) => void} onFrame - receives each parsed frame; pass it to `mapFrame`.
- * @param {() => void} [onOpen] - called on every successful connect, first one included.
- * @returns {{close: () => void}} closes the stream and stops reconnecting.
+ * @param {{onOpen?: () => void, reconnectMs?: number}} [options] - `onOpen` fires on every
+ *   successful connect, the first included. `reconnectMs` overrides the reconnect wait;
+ *   it exists so tests can exercise the reconnect window without sleeping through it.
+ * @returns {{close: () => void}} closes the stream and stops reconnecting, for good.
  */
-export function openMux(onFrame, onOpen) {
+export function openMux(onFrame, options = {}) {
+  const { onOpen, reconnectMs = RECONNECT_MS } = options;
   let socket = null;
   let closed = false;
+  let retry = null;
   const connect = () => {
+    retry = null;
+    if (closed) return;
     const scheme = location.protocol === "https:" ? "wss:" : "ws:";
     socket = new WebSocket(`${scheme}//${location.host}/api/events.mux`);
     socket.onopen = () => onOpen?.();
@@ -128,14 +139,16 @@ export function openMux(onFrame, onOpen) {
     };
     socket.onclose = () => {
       if (closed) return;
-      console.warn(`face: mux stream closed, reconnecting in ${RECONNECT_MS}ms`);
-      setTimeout(connect, RECONNECT_MS);
+      console.warn(`face: mux stream closed, reconnecting in ${reconnectMs}ms`);
+      retry = setTimeout(connect, reconnectMs);
     };
   };
   connect();
   return {
     close: () => {
       closed = true;
+      if (retry !== null) clearTimeout(retry);
+      retry = null;
       socket?.close();
     },
   };

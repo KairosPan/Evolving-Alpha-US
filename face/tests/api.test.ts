@@ -6,12 +6,13 @@
  * unanswered approval, which is exactly the class of bug a browser-only file
  * would hide until the live drill.
  *
- * `openMux` is deliberately absent: it needs a real WebSocket server, and the
- * live drill is its test.
+ * `openMux`'s happy path needs a real WebSocket server and the live drill is its
+ * test, but its LIFECYCLE does not: a fake WebSocket class records constructions,
+ * which is enough to pin that a closed stream stays closed.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rpc, respond } from "../client/api.js";
+import { rpc, respond, openMux } from "../client/api.js";
 
 interface Sent {
   url: string;
@@ -125,4 +126,78 @@ test("respond refuses to pass off a rejected receipt as success", async () => {
       await assert.rejects(() => respond("stale-1", {}), /not-pending/);
     },
   );
+});
+
+/** A WebSocket that connects to nothing and records every construction. */
+class FakeSocket {
+  static built: FakeSocket[] = [];
+  onopen: (() => void) | null = null;
+  onmessage: ((message: { data: string }) => void) | null = null;
+  onclose: (() => void) | null = null;
+  closedByClient = false;
+  constructor(readonly url: string) {
+    FakeSocket.built.push(this);
+  }
+  close(): void {
+    this.closedByClient = true;
+  }
+  /** The socket dropping on its own — what triggers a reconnect. */
+  drop(): void {
+    this.onclose?.();
+  }
+}
+
+/** Run `fn` with WebSocket and location faked; both are restored afterwards. */
+async function withFakeSocket(fn: () => Promise<void>): Promise<void> {
+  const scope = globalThis as Record<string, unknown>;
+  const realSocket = scope.WebSocket;
+  const realLocation = scope.location;
+  FakeSocket.built = [];
+  scope.WebSocket = FakeSocket;
+  scope.location = { protocol: "http:", host: "127.0.0.1:3090" };
+  try {
+    await fn();
+  } finally {
+    scope.WebSocket = realSocket;
+    scope.location = realLocation;
+  }
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test("openMux dials the mux path with the page's own scheme and host", async () => {
+  await withFakeSocket(async () => {
+    const opened: number[] = [];
+    const stream = openMux(() => {}, { onOpen: () => opened.push(1) });
+    assert.equal(FakeSocket.built.length, 1);
+    assert.equal(FakeSocket.built[0]?.url, "ws://127.0.0.1:3090/api/events.mux");
+    FakeSocket.built[0]?.onopen?.();
+    assert.equal(opened.length, 1, "onOpen fires on the first connect too");
+    stream.close();
+    assert.equal(FakeSocket.built[0]?.closedByClient, true);
+  });
+});
+
+test("a dropped socket reconnects", async () => {
+  await withFakeSocket(async () => {
+    const stream = openMux(() => {}, { reconnectMs: 5 });
+    FakeSocket.built[0]?.drop();
+    await sleep(40);
+    assert.equal(FakeSocket.built.length, 2, "the stream came back");
+    stream.close();
+  });
+});
+
+test("close() inside the reconnect window is honoured: no second socket, ever", async () => {
+  await withFakeSocket(async () => {
+    const frames: unknown[] = [];
+    const stream = openMux((frame) => frames.push(frame), { reconnectMs: 20 });
+    FakeSocket.built[0]?.drop();
+    // Closing now lands between the drop and the scheduled reconnect: the timer
+    // must be cancelled, not merely ignored on arrival.
+    stream.close();
+    await sleep(60);
+    assert.equal(FakeSocket.built.length, 1, "a closed stream must not resurrect itself");
+    assert.equal(frames.length, 0);
+  });
 });

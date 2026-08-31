@@ -29,6 +29,12 @@
  */
 
 /**
+ * How a surface event entered the transcript: appended to the tail, or
+ * replacing an inclusive seq range that must stop being shown.
+ * @typedef {"append"|{op: "replace", start: number, end: number}} SurfaceOpView
+ */
+
+/**
  * A completed or pending tool call, as one card.
  * @typedef {object} ToolCardView
  * @property {"call"|"result"} phase - `call` announces the invocation, `result` completes it.
@@ -48,8 +54,12 @@
  * @property {"bubble"|"card"|"approval"|"question"|"ignore"} kind
  * @property {number} [seq] - the session event's seq; the renderer's dedupe key across backfill and stream.
  * @property {string} [sessionId] - which session this belongs to (absent on a history entry that carries none).
+ * @property {SurfaceOpView} [surfaceOp] - on every rendered session event: `append`, or a
+ *   replace instruction the renderer MUST honour by dropping the shadowed range.
  * @property {"operator"|"kairos"} [role] - bubble side.
  * @property {string} [text] - bubble text.
+ * @property {boolean} [interrupted] - bubbles: the turn was cancelled mid-stream and this is
+ *   only the prefix that had arrived. Never render a partial answer as a complete one.
  * @property {string} [source] - who produced a bubble's message: `user`, `plugin`, `model`, `tool`.
  * @property {ToolCardView} [card] - the card body.
  * @property {string} [id] - answerable frames: the rpcId `/api/respond` echoes.
@@ -87,21 +97,55 @@ function blocksText(blocks) {
 }
 
 /**
+ * Where a surface event sits in the transcript.
+ *
+ * `surfaceOp` lives on the session EVENT, not on the mux frame, and only on the
+ * three surface types (`SessionEvent`'s conditional member,
+ * dsh-session types.d.ts:425-457; the op union at :393-397). Absent means
+ * `append` — which is also what every log-only event and every `tool/call` is,
+ * since surface metadata is forbidden on them (types.d.ts:398-411).
+ *
+ * A `replace` is not cosmetic: compaction (mounted in this tree) writes its
+ * checkpoint as a `user/message` carrying `{op:'replace', start, end}`
+ * (dsh-compaction-basic/lib/index.js:604-616), and a renderer that ignores it
+ * shows the summary AND everything it summarized.
+ * @param {Record<string, unknown>} event - the session event.
+ * @returns {SurfaceOpView} the normalized op; malformed input reads as `append`.
+ */
+function surfaceOpOf(event) {
+  const op = event.surfaceOp;
+  if (isObject(op) && op.op === "replace" && typeof op.start === "number" && typeof op.end === "number") {
+    return { op: "replace", start: op.start, end: op.end };
+  }
+  return "append";
+}
+
+/**
  * One message as a bubble, or nothing when it has no text. A textless message
  * is real and normal — an assistant message that exists only to host usage or
  * tool calls (session types.d.ts:269-285) — and an empty bubble would be a lie
- * about what was said. v1 limitation: an image-only message drops the same way;
- * the face has no attachment path yet.
+ * about what was said. v1 limitations that share this drop: an image-only
+ * message (the face has no attachment path yet), and — only in theory, since
+ * every producer of one frames a summary — a textless REPLACE node, whose
+ * shadow instruction would be dropped with it.
  * @param {"operator"|"kairos"} role - which side of the flow.
  * @param {unknown} message - the LLM Message wrapper.
- * @param {FrameView} base - seq/sessionId already read off the event.
+ * @param {FrameView} base - seq/sessionId/surfaceOp already read off the event.
+ * @param {boolean} interrupted - whether this is a cancelled turn's prefix.
  * @returns {FrameView}
  */
-function bubble(role, message, base) {
+function bubble(role, message, base, interrupted) {
   const text = isObject(message) ? blocksText(message.content) : "";
   if (text === "") return ignore();
   const source = isObject(message) && isObject(message.source) ? message.source.kind : undefined;
-  return { ...base, kind: "bubble", role, text, source: typeof source === "string" ? source : undefined };
+  return {
+    ...base,
+    kind: "bubble",
+    role,
+    text,
+    interrupted,
+    source: typeof source === "string" ? source : undefined,
+  };
 }
 
 /**
@@ -130,14 +174,18 @@ function mapSessionEvent(frame) {
     kind: "ignore",
     seq: typeof event.seq === "number" ? event.seq : undefined,
     sessionId: typeof frame.sessionId === "string" ? frame.sessionId : undefined,
+    surfaceOp: surfaceOpOf(event),
   };
 
   switch (event.type) {
     case "user/message":
       // The event data IS the message here (SessionEventMap['user/message'] = UserMessage).
-      return bubble("operator", data, base);
+      // An operator prompt is committed the moment it is logged: never interrupted.
+      return bubble("operator", data, base, false);
     case "assistant/message":
-      return bubble("kairos", data.message, base);
+      // interrupted marks a turn cancelled mid-stream: what follows is the
+      // delivered PREFIX, not the answer (session types.d.ts:269-285).
+      return bubble("kairos", data.message, base, data.interrupted === true);
     case "tool/call": {
       const view = renderIntent(frame.view, "call");
       return { ...base, kind: "card", card: {
