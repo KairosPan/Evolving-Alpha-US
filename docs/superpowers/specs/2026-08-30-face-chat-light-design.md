@@ -176,3 +176,25 @@ it; the write map gains one row: `face/` is normal workspace code. The face is n
 "presentation only" (it hosts the loop) — recorded here as the successor posture, replacing
 the v1-era faces principle for this surface. Revisit trigger: if dsh ships a stable (≥1.0)
 contract or an official custom-frontend API, re-evaluate the vendored composition.
+
+---
+
+## Post-build amendments (2026-08-31, from the final whole-branch review)
+
+As-built truths the sections above predate:
+
+1. **§3.2 apiproxy:** at the pin there is no `cwd`/`defaultModelSelection` config key —
+   `ApiProxyService` hardcodes `cwd: process.cwd()`, which is why `main.ts` chdirs to the
+   workbench repo root before boot (the session project dir and the sandbox workspace root
+   follow the process cwd).
+2. **§3 file map, as built:** `src/{version,overlay,setup,boot,static,main}.ts` +
+   `client/{index.html,chat.css,api.js,mapper.js,chat.js}` — no `server.ts`, no `stream.js`
+   (the mapper is the pure tested half; the renderer lives in `chat.js`). The overlay also
+   mounts the storage chain (`storage`/`storage-json`/`storage-domain`/`workspace` — the
+   api-gateway injects `workspaceRegistry`) and disables `hmr`.
+3. **§7 drill premise:** dsh-base marks no tool `approval: ask`; the card-raising seam at
+   this pin is SANDBOX ESCALATION. The drill of record lives in `face/README.md`.
+4. **§4 pinning:** `@deepseek-ai/cordis` rides its own 4.x track (pinned 4.0.2; 0.1.1-rc.2
+   does not exist) — two pins, `DSH_PIN` + `CORDIS_PIN`, bumped together; five
+   `cordis-plugin-*` packages float on caret ranges held by the lockfile.
+5. **Cosmetic:** the boot label is `kairos-face`, not `dsh` (verified diagnostic-only).

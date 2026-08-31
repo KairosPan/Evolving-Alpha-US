@@ -116,3 +116,30 @@ Python-from-Node coupling (interpreter discovery via `FACE_PYTHON`, import failu
 as the 503 JSON — the README documents the `pip install -e .` prerequisite) · bed staleness
 (the bed ends 2026-07-09; the page shows `as_of`, no pretense of live market data) · account
 mode inherits whatever env the operator started with (documented; keys never logged).
+
+---
+
+## Post-build amendments (2026-08-31, from the final whole-branch review)
+
+The build is the authority on these; the sections above read as designed, this block records
+as-built truth:
+
+1. **§3.1 timeouts/caching:** the 30 s spawn cap became per-mode budgets — market 600 000 ms,
+   account 30 000 ms — because a cold market assembly measures ~284 s. The producer itself
+   caches under `data/.face_cache/market-<pit-root-hash>-<code-hash>-<as-of>.json` (outside
+   the bed: `write_checksums` walks the bed root, and a display cache must not enter the
+   bed's integrity identity). The code-hash key self-invalidates on producer edits.
+2. **§3.1 spawner:** `Spawner = (argv, timeoutMs) => …`; the script path and spawn cwd are
+   module-anchored to the repo root, not process-cwd-derived.
+3. **§2 payload additions:** account — `orders_gate` also on the keyless branch (real
+   `gate_state(env)` reading; the equality test is the drift fence), `host` (PARSED hostname
+   of the client's base URL, never the raw URL), `orders_note` ("Alpaca's most recent 50
+   orders, all statuses" — `get_orders(status="all")`), `raw`. Market — `assembled_at`
+   (producer-cache write time) beside `generated_at`, measured `bed.symbols`/`captured_days`,
+   survivorship `note` fields on breadth/tape, tape membership = symbols with a bar ON the
+   window start day, `warmup_note` replacing the warmup block on foreign beds.
+4. **§3.2 account page:** the heading is "Account" and the page states the actual parsed
+   host as a reading — "paper host stated" as designed was an unprovable claim.
+5. **§3.2 market page:** the two screens render as stacked sections, not tabs.
+6. **Backlog:** a jsdom/light-DOM test rung for the two client renderers is the one coverage
+   class the build's probes cannot regression-fence.
