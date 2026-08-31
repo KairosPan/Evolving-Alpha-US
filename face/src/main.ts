@@ -13,6 +13,7 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { bootFace } from "./boot.ts";
+import { registerDataRoutes } from "./data.ts";
 import { registerStatic } from "./static.ts";
 
 /** Diagnostic label, the same string boot.ts uses for `BIN`. Not imported
@@ -96,6 +97,11 @@ process.on("unhandledRejection", (reason) => {
 const booted = await bootFace({ profileName, port });
 dispose = booted.dispose;
 registerStatic(booted.ctx.webServer, clientDir);
+/* The instruments' data, on the same webserver as the page that reads it. Left
+ * at its defaults on purpose: the producer is spawned with `$FACE_PYTHON` (else
+ * `python3`) from the repo root this process just chdir'd to, and no injection
+ * seam belongs on the entry point — `spawn`/`now` exist for the tests. */
+registerDataRoutes(booted.ctx.webServer);
 /* The URL line belongs to the shell, not to the webserver plugin (which states
  * outright that it never prints). This is that shell. Host and port are read
  * back off the service rather than off the config, so an OS-assigned port
