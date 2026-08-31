@@ -24,7 +24,8 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,10 +33,12 @@ import { request } from "node:http";
 import { setupFaceProfile } from "../src/setup.ts";
 import { bootFace } from "../src/boot.ts";
 import { registerStatic } from "../src/static.ts";
+import { registerDataRoutes } from "../src/data.ts";
 
 const gated = process.env.FACE_SMOKE !== "1";
 
-/** One RPC envelope POSTed with a chosen `Host` header, via `node:http`.
+/** One request sent with a chosen `Host` header, via `node:http`. POST when a
+ * body is given (the `/api` envelope), GET when it is not (a `/data` read).
  *
  * `fetch` cannot do this and does not say so: undici silently DROPS a `host`
  * entry in `headers` and writes the connect authority instead (measured on
@@ -47,18 +50,20 @@ const gated = process.env.FACE_SMOKE !== "1";
  * @param port - the face's bound port; the socket always goes to 127.0.0.1.
  * @param path - request path, e.g. `/api/session.list`.
  * @param host - the `Host` header value to put on the wire, verbatim.
- * @param body - the request body, already serialized.
+ * @param body - the request body, already serialized; omitted for a GET.
  * @returns the response status code.
  */
-function postWithHost(port: number, path: string, host: string, body: string): Promise<number> {
+function sendWithHost(port: number, path: string, host: string, body?: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const req = request(
       {
         host: "127.0.0.1",
         port,
         path,
-        method: "POST",
-        headers: { "content-type": "application/json", host, "content-length": Buffer.byteLength(body) },
+        method: body === undefined ? "GET" : "POST",
+        headers: body === undefined
+          ? { host }
+          : { "content-type": "application/json", host, "content-length": Buffer.byteLength(body) },
       },
       (res) => {
         res.resume(); // drain, or the socket keeps the process alive
@@ -70,7 +75,7 @@ function postWithHost(port: number, path: string, host: string, body: string): P
   });
 }
 
-test("boot smoke: face serves /, /api answers, fence holds", { skip: gated && "set FACE_SMOKE=1" }, async () => {
+test("boot smoke: face serves its pages, /api and /data answer, both fences hold", { skip: gated && "set FACE_SMOKE=1" }, async () => {
   const home = mkdtempSync(join(tmpdir(), "face-smoke-"));
   setupFaceProfile(home);
   const { ctx, dispose } = await bootFace({ profileName: "face", port: 0, dshHome: home });
@@ -117,13 +122,52 @@ test("boot smoke: face serves /, /api answers, fence holds", { skip: gated && "s
     // cannot forge - and the reason the face binds 127.0.0.1 with an empty
     // `trustedHosts`. 200 here would mean any page on the internet can drive
     // the harness through the operator's own browser.
-    const forged = await postWithHost(
+    const forged = await sendWithHost(
       ctx.webServer.port,
       "/api/session.list",
       "evil.example.com",
       JSON.stringify({ type: "client-request", rpcId: "2", method: "session.list", payload: {} }),
     );
     assert.equal(forged, 403);
+
+    // The other two pages registerStatic mounts. Static documents, so what is
+    // proven here is the MOUNT — an exact route answering with the right file —
+    // and not what they render, which is the client's own to test.
+    for (const path of ["/market", "/account"]) {
+      const page = await fetch(`${base}${path}`);
+      assert.equal(page.status, 200, path);
+      assert.match(await page.text(), /KAIROS/);
+    }
+
+    // The data plumbing, end to end through a STUB producer: route → cache →
+    // spawn → JSON on the wire, with everything but Python real. The producer
+    // itself is exercised by the python suite; running it here would make the
+    // smoke depend on a captured bed and pay a bed walk.
+    //
+    // Registered HERE and nowhere else in this file: `registerDataRoutes`
+    // throws on a duplicate (kind, path), which is the guard, so the smoke
+    // must claim the two `/data` paths exactly once.
+    const stub = join(home, "stub.sh");
+    writeFileSync(stub, `#!/bin/sh\necho '{"ok":true,"stub":true,"generated_at":"x"}'\n`, { mode: 0o755 });
+    registerDataRoutes(ctx.webServer, {
+      // The injected seam's real shape: `argv` arrives as [script, mode] with
+      // the script path fixed by the route, so only the mode word is passed
+      // on, and `timeoutMs` is honoured rather than dropped.
+      spawn: (argv, timeoutMs) => new Promise((resolve, reject) => {
+        execFile(stub, argv.slice(1), { timeout: timeoutMs }, (err, stdout) =>
+          err ? reject(err) : resolve({ stdout: String(stdout), code: 0 }));
+      }),
+    });
+    const dataRes = await fetch(`${base}/data/market.json`);
+    assert.equal(dataRes.status, 200);
+    assert.equal(((await dataRes.json()) as { stub?: boolean }).stub, true);
+
+    // And the SAME fence over `/data`. It is a second implementation
+    // (data.ts's own `isLoopbackHost`, not dsh-client-connection's) guarding a
+    // route that carries the operator's positions and orders, so it is drilled
+    // separately rather than assumed to ride along with the `/api` one above.
+    const forgedData = await sendWithHost(ctx.webServer.port, "/data/market.json", "evil.example.com");
+    assert.equal(forgedData, 403);
   } finally {
     await dispose();
   }

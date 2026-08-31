@@ -20,7 +20,14 @@
       <button id="new-session" class="side-new" type="button" title="start a new conversation">+ new</button>
     </div>
     <div id="conv-list" class="conv-list"></div>
-    <div class="side-foot">live · loopback only</div>
+    <!-- The way into the two instruments. Plain hrefs, not chat state: each is
+         its own document served by its own exact route, and both link back
+         here through their wordmark. -->
+    <div class="side-foot">
+      <a class="inst-link" href="/market">Market</a> ·
+      <a class="inst-link" href="/account">Account</a><br>
+      live · loopback only
+    </div>
   </aside>
 
   <main class="main">

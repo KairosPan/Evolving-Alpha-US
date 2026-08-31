@@ -2,9 +2,10 @@
 
 One Node 22 process. It boots the DeepSeek Harness from the `face` profile
 (bundles: `@deepseek-ai/dsh-base` only), inserts its own host rows on top, and
-serves the operator's chat UI at http://127.0.0.1:3090/. No build step — `tsx`
-runs the TypeScript directly. Spec:
-`../docs/superpowers/specs/2026-08-30-face-chat-light-design.md`.
+serves the operator's chat UI — and the two read-only instrument pages below —
+at http://127.0.0.1:3090/. No build step — `tsx` runs the TypeScript directly.
+Specs: `../docs/superpowers/specs/2026-08-30-face-chat-light-design.md` and
+`../docs/superpowers/specs/2026-08-31-face-instruments-design.md`.
 
 ## Run
 
@@ -78,6 +79,72 @@ Two things about that directory are NOT yours:
   `src/overlay.ts`. The same warning is in the patch file's own header, which is
   where an operator would actually look.
 
+## Instruments
+
+Two read-only pages beside the chat, reached from the sidebar footer and from
+each other: **`/market`** — the composite tape, the bed's maturity rail,
+breadth, and both screens — and **`/account`** — balances, positions, Alpaca's
+most recent 50 orders (all statuses, not just the open ones), and the
+order-gate strip. The only interaction on either page is `refresh`: nothing
+here places, cancels, or changes anything, and the gate strip DISPLAYS what the
+two order gates compute to rather than operating them.
+
+Each page fetches one endpoint — `/data/market.json`, `/data/account.json` —
+and each endpoint is a thin cache in front of ONE producer: `scripts/face_data.py`,
+spawned with no shell and a FIXED argv (the script path and a mode word; no
+request data ever reaches the child). Those routes carry the same loopback
+`Host` fence the harness applies to `/api`, restated in `src/data.ts` because
+that one covers `/api` only and `/data/account.json` carries the operator's
+positions.
+
+| Env | Default | What |
+|---|---|---|
+| `FACE_PYTHON` | `python3` | the producer's interpreter — it must be able to `import alpaca_kit`, so `pip install -e .` at the repo root, in whichever environment this names |
+| `ALPHA_PIT_ROOT` | `data/pit/2yr` | the PIT bed `/market` is assembled from |
+| `APCA_API_KEY_ID` / `APCA_API_SECRET_KEY` | — | `/account`'s paper credentials: `source ../.env.alpaca` BEFORE `npm start` |
+
+The account keys are inherited by the face process, not read per request — the
+same trust posture as the dsh MCP mount. Without them `/account` is not an
+error page: the producer answers `available: false` with the reason AND the
+real computed gate strip, because the gate reads the environment and stays
+computable with no broker client at all. `ALPACA_KIT_ENABLE_ORDERS` stays
+unset, so Gate 1 reads unregistered; Gate 2 reads not-validated and points at
+the drill below — the strip states that intent rather than claiming a
+validation only a live run can give.
+
+**Timings.** A COLD `/market` — the first assembly ever, or the first after the
+cache is invalidated — walks the whole bed: **~284 s, measured**. Warm it is a
+file read, **under a second**. The spawn budgets are sized for exactly that:
+market gets 10 minutes, account 30 s (a few REST calls, plus the market stack's
+import cost on every spawn). So a cold first request SITS for minutes rather
+than failing, and a budget short enough to kill it would fail forever — a
+killed run never writes the cache that would have made the next one fast.
+
+**The cache** is the producer's own, on disk under `data/.face_cache`
+(gitignored, and deliberately outside any bed, whose identity is its
+`CHECKSUMS` manifest). One file per bed + producer version + as-of day: the key
+hashes the RESOLVED bed path AND the source of `face_data.py`, so editing the
+assembler invalidates every cached payload instead of serving one built by code
+that no longer exists. Delete the directory to force a full reassembly — and
+budget the ~284 s again. In front of it each endpoint holds the last good
+payload in memory for its own TTL: **market 15 minutes, account 60 seconds**.
+
+**Stale.** Once an endpoint has served a good payload, a later producer failure
+re-serves THAT payload flagged `stale: true` rather than blanking the
+instrument, and the page stamps it `STALE`. With nothing to fall back on the
+endpoint answers 503 carrying the producer's own `{ok:false,error}` JSON, and
+the page says `no reading — <error>`. Either way an honest state, never a
+half-drawn one. `/market` carries two stamps because a payload can be older
+than its serve: `assembled` is when the bed walk ran, `served` is when this
+process handed it over.
+
+**The maturity rail** on `/market` renders the shipped 2yr bed's warmup
+boundaries (200DMA from 2025-03-20, 52-week from 2025-06-04, trend_template
+names from 2025-06-05 — the CLAUDE.md gotcha, drawn). Point `ALPHA_PIT_ROOT` at
+any other bed and the rail is replaced by "warmup boundaries unknown for this
+bed": those dates describe THAT capture, and drawing them over a different one
+would be a lie.
+
 ## Tests
 
 ```bash
@@ -95,7 +162,11 @@ serves the client, `/client/chat.css` is served with the right content type,
 reached the session store behind it), a plain `GET /api/events.mux` answers 426
 with an `upgrade: websocket` hint, and the same request with a forged
 `Host: evil.example.com` answers 403 — the DNS-rebinding fence, drilled rather
-than assumed.
+than assumed. Then the instruments: `/market` and `/account` serve, and
+`/data/market.json` answers a STUB producer's payload through the real
+route/cache/spawn chain (no Python, no bed — the producer has its own suite),
+with a forged `Host` on that route drilled to 403 as well, because `/data` is
+fenced by its own predicate rather than by the harness's.
 
 ## Upgrading dsh — TWO pins, not one
 

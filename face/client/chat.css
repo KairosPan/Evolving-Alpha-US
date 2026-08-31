@@ -476,6 +476,10 @@ body {
 .inst-title { font-weight: 600; font-size: 15px; }
 .inst-link { font: 11px var(--mono); color: var(--dim); text-decoration: none; }
 .inst-link:hover { color: var(--accent); }
+/* The same quiet link, reused for the chat sidebar's way IN to the instruments.
+   Only the size is re-inherited, so the two links sit on the footer's own
+   10.5px line instead of half a pixel above it. */
+.side-foot .inst-link { font-size: inherit; }
 
 .inst-note { font: 11px/1.6 var(--mono); color: var(--dim); overflow-wrap: break-word; }
 .inst-card > .inst-note { margin-top: 6px; }

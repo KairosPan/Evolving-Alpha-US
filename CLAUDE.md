@@ -20,7 +20,7 @@ Harness (dsh), configured from the repo-side template + skill packs in `dsh/`. S
 | `alpaca_kit/mcp/` | the read-only MCP tool surface; order tools live in `account.py` and register only under `ALPACA_KIT_ENABLE_ORDERS=1` |
 | `strategies/` · `data/pit/` · `scripts/` | one directory per strategy (`_template` is the copy source) · offline PIT beds, gitignored · capture_window/capture_broad/smoke_alpaca |
 | `dsh/` | the harness config the operator installs: `profile/cordis.yml` template + `skills/mechanics` (neutral: backtest rules, alpaca-kit guide) and `skills/style-kairos` (operator style: doctrine/signals/lessons, generated from the retired seeds_v2 packs by `scripts/convert_seeds.py`) |
-| `face/` | the operator's chat face: a Node 22 process hosting dsh in-process from profile `face` (bundles dsh-base only), serving chat-light at 127.0.0.1:3090; the Gate-2 approval surface — run + drill instructions in `face/README.md` |
+| `face/` | the operator's chat face: a Node 22 process hosting dsh in-process from profile `face` (bundles dsh-base only), serving chat-light + the read-only `/market` and `/account` instruments (fed by `scripts/face_data.py`) at 127.0.0.1:3090; the Gate-2 approval surface — run, instrument and drill instructions in `face/README.md` |
 
 ## Commands
 ```bash
