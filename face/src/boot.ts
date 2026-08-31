@@ -15,12 +15,31 @@
  * - no HMR / `watchUserPatches` reload of the patch layers — a face restart is
  *   the reload. dsh-base's `hmr` row is disabled here for the same reason the
  *   shipped mode bundles disable it: see {@link HMR_ROW_ID};
- * - no `installFailLoud` and no bounded process-shutdown controller: the face
- *   is a library booted by `main.ts`, which owns signals and exit codes;
+ * - no `installFailLoud`: that is the CLI's `unhandledRejection` handler, which
+ *   turns a late plugin-init rejection into one labelled diagnostic and
+ *   `exit(1)` after giving a terminal-owning surface a bounded chance to hand
+ *   the terminal back. Nothing here installs one, so ownership of unhandled
+ *   rejections passes to the face's entry point (`main.ts`, Task 5); until it
+ *   takes that up, a late rejection surfaces as Node's default. The CLI's
+ *   bounded process-shutdown controller is dropped with it (see `bootFace`);
  * - no shipped agent-presets root graft: that root ships beside the CLI's own
  *   app package, which is not in the face's dependency tree at all;
  * - {@link INSTALL_ANCHOR} is the FACE's package.json, not the CLI's — see there.
  * The telemetry opt-out is honored exactly as the CLI honors it.
+ *
+ * LAYERING, and the one place the face inverts the CLI's: {@link faceOverlay}
+ * composes LAST, after the profile's `cordis.patch.yml` and the home layer. In
+ * the CLI the user's layers are the outermost word on every row. Here they are
+ * not, for the rows the face owns — its host rows are its contract, not a
+ * default, and loopback-only binding surviving an operator patch is the point
+ * (spec section 3.2). The cost is real and was measured: an operator patch
+ * aimed at `webserver` (or any other overlay-owned row) is silently overridden
+ * — the face's `port` wins, and NOTHING is printed. The operator is warned
+ * where they would actually look, in the patch file's own header
+ * (`setup.ts` PATCH_HEADER). Note also that {@link composedRowIds} deliberately
+ * composes the three layers BELOW the overlay only: the row-presence switches
+ * ask "did the profile bring this row?", which is a question about the tree the
+ * face is patching, not about the face's own rows.
  * @module
  */
 import { writeFileSync } from "node:fs";
@@ -146,8 +165,12 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
   const homePatches = loadOptionalPatches(BIN, join(home, PROFILE_PATCH_FILENAME)) ?? [];
   const patches: FacePatchList = [...bundlePatches, ...profile.patches, ...homePatches];
   /* Both switches below are guarded on the row actually being in the composed
-   * tree: a patch that matches nothing is inert AND warns at boot, so a profile
-   * that never mounts the row must not be told to patch it. */
+   * tree. A patch that matches nothing is inert and — measured, not assumed —
+   * SILENT: the include plugin does call a warn sink for it, but nothing
+   * reaches stdout or stderr in a booted face tree, so an unguarded switch
+   * would look like it had taken effect while doing nothing at all. The guard
+   * is what keeps "telemetry disabled" from being a lie on a profile that
+   * never mounted the row. */
   const rows = composedRowIds([bundlePatches, profile.patches, homePatches]);
   const telemetry = resolveTelemetryPatch(process.env.DSH_TELEMETRY_DISABLED, rows.has(TELEMETRY_ROW_ID));
   if (telemetry !== undefined) patches.push(telemetry);
@@ -157,8 +180,12 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
 }
 
 /** Services the face's Gate 2 (spec section 3.2) routes every tool decision
- * through. dsh-base mounts both; a profile that dropped them would still boot,
- * and every approval would then fail closed with nothing on screen saying why. */
+ * through. Belt and braces, not a live failure mode: dsh-base mounts both, and
+ * today's row set injects them transitively, so a tree missing either would
+ * already have failed to activate before this check ran. It is here for the
+ * profile the face does NOT control — an operator patch that disables a row,
+ * or a future bundle swap — where the tree would come up healthy and every
+ * approval would then fail closed with nothing on screen saying why. */
 const GATE_2_SERVICES = ["approval", "userQuestions"] as const;
 
 /**

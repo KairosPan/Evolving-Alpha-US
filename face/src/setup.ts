@@ -33,6 +33,13 @@ const PATCH_HEADER = `# face profile patch layer. The face's own host rows (webs
 # api gateway, connection) are inserted programmatically by kairos-face at
 # boot - do NOT add them here. This file is the operator's: mount the
 # alpaca_kit MCP server and skill roots here per dsh/README.md steps 3-6.
+#
+# Face-owned rows are applied AFTER this file and win over it, silently: a
+# patch here targeting webserver, connection, api-gateway, directory-picker,
+# cordis-host-runner, the storage chain (storage, storage-json,
+# storage-domain, workspace), or the hmr / session-telemetry-otel switches is
+# accepted, overridden, and never reported. Change those in kairos-face's
+# overlay, not here.
 []
 `;
 
