@@ -105,8 +105,10 @@ configurable TTLs · dark skin (the Observatory grammar stays in the design rese
 - Face: `data.ts` unit tests with an injected fake spawner (TTL expiry, single-flight,
   stale-on-error, 503-no-cache, timeout). Existing suites stay green.
 - Smoke (`FACE_SMOKE=1`) extends: `/market` and `/account` pages serve 200; the data
-  endpoints answer (real Python spawn in the scratch boot — market may legitimately return
-  the no-bed error JSON in a scratch home: assert the honest-error shape, not success).
+  plumbing is exercised through a STUB producer (a scratch shell script injected via the
+  spawner seam) — deterministic and fast, no Python/bed dependency in the smoke. The real
+  producer's error paths are covered by its own Python tests; the real end-to-end fetch is
+  an operator probe.
 
 ## 6. Risks
 
