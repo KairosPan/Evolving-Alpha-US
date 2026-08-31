@@ -1,0 +1,327 @@
+<!-- @dsCard group="R3 - Conversation Page" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KAIROS · STRATEGY — R3 PAGE</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2305070b'/%3E%3Cpath d='M8 2 L11 8 L8 14 L5 8 Z' fill='%23c8a552'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="../r2/shell.css">
+<link rel="stylesheet" href="timeline.css">
+<style>
+/* ── page-local: breadcrumb band, dossier strip, timeline measure ──
+   Layout only — shell components used as-is, all colors/fonts are
+   var(--…) tokens; the only literals are neutral black shadow tints
+   (the shell's own engraving license). Nothing targets .tl-*. */
+
+/* breadcrumb band — full-bleed groove under the masthead */
+.crumbs{ border-bottom:1px solid var(--line); background:var(--dome); }
+.crumbs .wrap{
+  display:flex; align-items:baseline; gap:10px;
+  padding-top:9px; padding-bottom:9px;
+  font-family:var(--sans); font-size:11px; letter-spacing:.06em; color:var(--fg-dim);
+}
+a.crumb{ color:var(--fg-dim); text-decoration:none; border-bottom:1px solid var(--line-2); padding-bottom:1px; }
+a.crumb:hover{ color:var(--brass-hi); border-bottom-color:var(--brass-dim); }
+.crumb-sep{ color:var(--faint); font-family:var(--mono); font-size:10px; }
+.crumb-here{ color:var(--fg); }
+.crumb-here .mono{ font-size:10.5px; letter-spacing:.08em; color:var(--brass); }
+
+/* dossier strip — one horizontal collapsible band; the sediment, one fold away */
+.dstrip{
+  border:1px solid var(--line); border-radius:4px;
+  background:linear-gradient(180deg, rgba(255,255,255,.02), transparent 30%), var(--dome);
+  margin:0 0 28px;
+}
+.dstrip-sum{
+  list-style:none; display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  padding:11px 18px 10px; cursor:pointer; min-width:0;
+}
+.dstrip-sum::-webkit-details-marker{ display:none; }
+.dstrip-line{
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.06em;
+  color:var(--fg-dim); font-variant-numeric:tabular-nums;
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.dstrip[open] .dstrip-line{ display:none; }
+.dstrip-caret{ font-size:9px; color:var(--faint); transition:transform .25s ease; }
+.dstrip[open] .dstrip-caret{ transform:rotate(180deg); }
+@media (prefers-reduced-motion:reduce){ .dstrip-caret{ transition:none; } }
+.dstrip-body{
+  display:grid; grid-template-columns:minmax(0,1.55fr) minmax(0,1.15fr) 216px;
+  gap:14px 20px; padding:13px 18px 14px; border-top:1px solid var(--line);
+}
+.dstrip-cell{ min-width:0; }
+.dstrip-cell > .eyebrow{ display:block; margin:0 0 7px; }
+.dstrip-thesis p{
+  margin:0; font-family:var(--serif); font-weight:350; font-size:15px;
+  line-height:1.62; color:var(--fg);
+}
+.dstrip-kill{
+  border:1px solid var(--line); border-left:3px solid var(--flush); border-radius:2px;
+  background:var(--dome-2); padding:9px 12px 8px; align-self:start;
+}
+.dstrip-kill .k{
+  display:block; margin-bottom:5px; font-family:var(--mono); font-size:8.5px;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--flush);
+}
+.dstrip-kill .r{
+  font-family:var(--mono); font-size:11px; line-height:1.6; color:var(--fg);
+  letter-spacing:.03em; overflow-wrap:anywhere;
+}
+.dstrip-span2{ grid-column:1 / span 2; }
+.dstrip-sparkcell{ grid-column:3; grid-row:1 / span 2; display:flex; flex-direction:column; }
+.dspark{ width:100%; height:auto; margin-top:2px; }
+.dspark-line{ fill:none; stroke:var(--brass); stroke-width:1.6; }
+.dspark-base{ stroke:var(--line-2); stroke-width:1; stroke-dasharray:3 3; }
+.dspark-cap{
+  display:flex; align-items:baseline; gap:9px; margin-top:6px;
+  font-family:var(--mono); font-size:10px; color:var(--faint); letter-spacing:.06em;
+  min-width:0;
+}
+.dspark-end{ color:var(--brass); font-size:11.5px; font-variant-numeric:tabular-nums; }
+.dstrip-sparkcell .raw{
+  display:block; margin-top:6px; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.dstrip-foot{
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding:10px 18px 11px; border-top:1px solid var(--line);
+}
+
+/* the conversation — full measure, generous and centered */
+.convo-inner{ max-width:840px; margin:0 auto; }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap mast-top">
+    <a class="wordmark" href="../r2/landing.html"><span class="dia" aria-hidden="true"></span>KAIROS</a>
+    <span class="facename">STRATEGY</span>
+    <span class="spacer"></span>
+    <span class="seg">as of <b id="k-asof" class="mono">—</b></span>
+    <span class="seg">bed <b id="k-bed" class="mono">—</b></span>
+    <span class="seg">window <b id="k-window" class="mono">—</b></span>
+    <span class="seg"><b id="k-symbols" class="mono">—</b> sym · <b id="k-days" class="mono">—</b> sessions</span>
+    <span class="seal" id="k-gate" title="orders_gate — read-only display">orders —</span>
+    <span class="stamp-sample" title="gate readout comes from account_mock, a labeled fabricated block">sample</span>
+  </div>
+  <nav class="wrap mast-nav" aria-label="Faces">
+    <a class="nav-link" href="../r2/market.html"><span class="nav-idx">01</span>Market</a>
+    <a class="nav-link" href="../r2/strategy.html" aria-current="page"><span class="nav-idx">02</span>Strategy</a>
+    <a class="nav-link" href="../r2/account.html"><span class="nav-idx">03</span>Account</a>
+    <span class="spacer"></span>
+    <span class="gem" aria-hidden="true" title="the six-phase thermal spectrum — washout · recovery · ignition · trend · distribution · flush"><i style="background:var(--washout)"></i><i style="background:var(--recovery)"></i><i style="background:var(--ignition)"></i><i style="background:var(--trend)"></i><i style="background:var(--distribution)"></i><i style="background:var(--flush)"></i></span>
+  </nav>
+</header>
+
+<div class="crumbs settle" aria-label="Breadcrumb">
+  <div class="wrap">
+    <a class="crumb" href="../r2/strategy.html">Strategy shelf</a>
+    <span class="crumb-sep">/</span>
+    <span class="crumb">tt-breakout</span>
+    <span class="crumb-sep">/</span>
+    <span class="crumb-here">session <b class="mono">dsh-s_9f2c41</b></span>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <!-- ── the dossier strip: compressed instruments, one fold away ── -->
+  <details class="dstrip settle d1" id="dstrip" open>
+    <summary class="dstrip-sum">
+      <span class="entry-no" data-entry>E —.—</span>
+      <span class="eyebrow">dossier · <b id="d-name">—</b></span>
+      <span class="chip chip-dim" id="d-chip">—</span>
+      <span class="stamp-plate" title="dossier readouts come from KAIROS_FACES.strategies, a labeled fabricated block">sample — fabricated shape</span>
+      <span class="dstrip-line" id="d-line"></span>
+      <span class="spacer"></span>
+      <span class="eyebrow" id="d-updated">updated <span class="null" title="no reading in this bed">—</span></span>
+      <span class="dstrip-caret" aria-hidden="true">▾</span>
+    </summary>
+    <div class="dstrip-body">
+      <div class="dstrip-cell dstrip-thesis">
+        <span class="eyebrow">thesis</span>
+        <p id="d-thesis"><span class="null" title="no reading in this bed">—</span></p>
+      </div>
+      <div class="dstrip-cell dstrip-kill">
+        <span class="k">kill-line ▸ falsification</span>
+        <span class="r" id="d-kill"><span class="null" title="no reading in this bed">—</span></span>
+      </div>
+      <div class="dstrip-cell dstrip-sparkcell">
+        <span class="eyebrow">equity · backtest</span>
+        <svg id="d-spark" class="spark dspark" viewBox="0 0 200 46" role="img" aria-label="backtest equity curve"></svg>
+        <div class="dspark-cap">
+          <span class="dspark-end null" id="d-sparkend" title="no reading in this bed">—</span>
+          <span id="d-trades" class="null" title="no reading in this bed">—</span>
+        </div>
+        <span class="raw" id="d-rawfile" title="backtest artifact">—</span>
+      </div>
+      <div class="plaques plaques--row dstrip-span2">
+        <div class="plaque">
+          <span class="k">win rate</span>
+          <span class="v null" id="d-wr" title="no reading in this bed">—</span>
+          <span class="s" id="d-wrs">—</span>
+        </div>
+        <div class="plaque">
+          <span class="k">gross return</span>
+          <span class="v null" id="d-gross" title="no reading in this bed">—</span>
+          <span class="s">whole window</span>
+        </div>
+        <div class="plaque">
+          <span class="k">max drawdown</span>
+          <span class="v null" id="d-dd" title="no reading in this bed">—</span>
+          <span class="s">peak → trough</span>
+        </div>
+        <div class="plaque">
+          <span class="k">delistings hit</span>
+          <span class="v null" id="d-del" title="no reading in this bed">—</span>
+          <span class="s" id="d-dels">—</span>
+        </div>
+      </div>
+    </div>
+    <footer class="dstrip-foot">
+      <a class="sig" href="#" onclick="return false" id="d-sig" title="raw ▸ strategies/&lt;name&gt;/{status.yaml,THESIS.md,journal.md,backtests/}">
+        <span class="sig-mono" aria-hidden="true">SY</span>
+        <span class="sig-body">
+          <span class="sig-fn">status.yaml · THESIS.md · backtests/</span>
+          <span class="sig-raw" id="d-sigraw">strategies/&lt;name&gt;/{status.yaml,THESIS.md,journal.md,backtests/}</span>
+        </span>
+      </a>
+      <span class="spacer"></span>
+      <span class="foot-note null" id="d-winnote" title="no reading in this bed">—</span>
+    </footer>
+  </details>
+
+  <!-- ── the conversation: the work itself, full measure ── -->
+  <section class="settle d2">
+    <div id="timeline" class="convo-inner"></div>
+  </section>
+
+</main>
+
+<footer class="foot-band">
+  <div class="wrap foot">
+    <span>KAIROS · <b>STRATEGY</b> — round-3 face prototype · zero authority · read-only</span>
+    <span class="spacer"></span>
+    <span>intent · <b>Kairos-Design.md</b></span>
+    <span>mechanism · <b>the skeleton spec &amp; code</b></span>
+  </div>
+</footer>
+
+<script src="../data/market_mock.js"></script>
+<script src="../data/workbench_mock.js"></script>
+<script src="../data/session_mock.js"></script>
+<script src="timeline.js"></script>
+<script>
+/* ── shell fill — shared across all R2 faces ── */
+(function(){
+  "use strict";
+  var D = window.KAIROS_DATA || null;
+  if(!D) return; // dashes stand: no reading, never fake
+  function t(id, s){ var el = document.getElementById(id); if(el) el.textContent = s; }
+  t("k-asof", D.as_of);
+  t("k-bed", D.bed.root);
+  t("k-window", D.bed.window.start + " → " + D.bed.window.end);
+  t("k-symbols", String(D.bed.symbols));
+  t("k-days", String(D.bed.captured_days));
+  var g = D.account_mock && D.account_mock.orders_gate;
+  var gateEl = document.getElementById("k-gate");
+  if(g && gateEl){
+    gateEl.textContent = "orders " + ((g.gate1_registered || g.gate2_validated) ? "partially armed" : "unarmed");
+    gateEl.title = "gate 1 registered: " + g.gate1_registered + " · gate 2 validated: " + g.gate2_validated +
+      " — read-only display · readout from account_mock (fabricated block)";
+  }
+  document.querySelectorAll("[data-entry]").forEach(function(el, i){
+    el.textContent = "E " + D.bed.captured_days + "." + (i + 1);
+  });
+})();
+
+/* ── dossier strip fill — reads KAIROS_FACES.strategies (tt-breakout only);
+      missing data leaves the em-dashes standing, never a fake reading ── */
+(function(){
+  "use strict";
+  var F = window.KAIROS_FACES || null;
+  var S = F && F.strategies;
+  var rows = (S && S.rows) || [];
+  var row = null;
+  for(var i = 0; i < rows.length; i++){ if(rows[i].name === "tt-breakout"){ row = rows[i]; break; } }
+  if(!row) return; // dashes stand
+  function el(id){ return document.getElementById(id); }
+  function t(id, s){
+    var e = el(id);
+    if(!e || s == null) return;
+    e.textContent = s; e.classList.remove("null"); e.removeAttribute("title");
+  }
+  function pct(v, d){
+    if(v == null || isNaN(v)) return null;
+    return (v > 0 ? "+" : "") + v.toFixed(d).replace("-", "−") + "%";
+  }
+
+  t("d-name", row.name);
+  var chip = el("d-chip");
+  if(chip && row.status){ chip.textContent = row.status; chip.className = "chip chip-" + row.status; }
+  if(row.updated) el("d-updated").textContent = "updated " + row.updated;
+  t("d-thesis", row.thesis);
+  t("d-kill", row.falsification);
+
+  var b = row.backtest || null;
+  if(b){
+    var wr = (b.win_rate == null) ? null : Math.round(b.win_rate * 100) + "%";
+    t("d-wr", wr);
+    if(b.trades != null) t("d-wrs", b.trades + " trades");
+    var gr = pct(b.gross_return_pct, 1);
+    t("d-gross", gr);
+    if(b.gross_return_pct > 0) el("d-gross").classList.add("up");
+    else if(b.gross_return_pct < 0) el("d-gross").classList.add("down");
+    var dd = pct(b.max_drawdown_pct, 1);
+    t("d-dd", dd);
+    if(b.max_drawdown_pct < 0) el("d-dd").classList.add("down");
+    if(b.delistings_hit != null) t("d-del", String(b.delistings_hit));
+    if(b.delisting_treatment)
+      t("d-dels", b.delisting_treatment.replace("-1.0", "−1.0").replace(/,\s*/g, " · "));
+    if(b.file){ t("d-rawfile", b.file); el("d-rawfile").title = "raw ▸ " + b.file; }
+    if(b.window && b.window.start){
+      var note = b.window.note ? " — " + b.window.note : "";
+      t("d-winnote", "window " + b.window.start + " → " + b.window.end + note);
+    }
+    if(b.trades != null && wr && gr && dd)
+      t("d-line", "wr " + wr + " · gross " + gr + " · maxDD " + dd + " · " + b.trades + " trades");
+
+    var arr = b.equity_spark;
+    var svg = el("d-spark");
+    if(svg && arr && arr.length > 1){
+      var NS = "http://www.w3.org/2000/svg", W = 200, H = 46, P = 3;
+      var mn = Math.min.apply(null, arr), mx = Math.max.apply(null, arr);
+      var sp = (mx - mn) || 1;
+      function X(i){ return P + i * (W - 2 * P) / (arr.length - 1); }
+      function Y(v){ return P + (mx - v) * (H - 2 * P) / sp; }
+      if(mn <= 1 && mx >= 1){
+        var bl = document.createElementNS(NS, "line");
+        bl.setAttribute("x1", P); bl.setAttribute("x2", W - P);
+        bl.setAttribute("y1", Y(1).toFixed(1)); bl.setAttribute("y2", Y(1).toFixed(1));
+        bl.setAttribute("class", "dspark-base");
+        svg.appendChild(bl);
+      }
+      var pl = document.createElementNS(NS, "polyline");
+      pl.setAttribute("points", arr.map(function(v, i){ return X(i).toFixed(1) + "," + Y(v).toFixed(1); }).join(" "));
+      pl.setAttribute("class", "dspark-line");
+      svg.appendChild(pl);
+      t("d-sparkend", "×" + arr[arr.length - 1].toFixed(2));
+      t("d-trades", "start = 1.00");
+    }
+  }
+
+  if(S.raw){
+    var raw = S.raw.replace("<name>", row.name);
+    t("d-sigraw", raw);
+    el("d-sig").title = "raw ▸ " + raw;
+  }
+})();
+
+/* ── the conversation ledger — the kit renders everything inside ── */
+renderSessionTimeline(document.getElementById("timeline"));
+</script>
+</body>
+</html>

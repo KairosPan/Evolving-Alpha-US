@@ -1,0 +1,110 @@
+{
+  "note": "FABRICATED research-session transcript for the conversational Strategy face prototypes - render under SAMPLE marking. The tool-card payloads embed REAL readings copied from market_mock.json (the 2026-07-08 breadth flag day) so the instruments in the timeline are honest; the dialogue itself is invented. Voice registers: operator turns are Chinese in the operator sans voice; Kairos turns are English argued serif; tool cards are machine mono, signed by their producer.",
+  "session": {
+    "id": "dsh-s_9f2c41",
+    "strategy": "tt-breakout",
+    "date": "2026-07-08",
+    "attendance": "interactive",
+    "attendance_note": "attendance stamp is always visible and never blurred - a scheduled session's view renders read-only",
+    "runtime": "DeepSeek Harness - profile cordis",
+    "raw": "dsh session log dsh-s_9f2c41 - every card links back to its producing call"
+  },
+  "turns": [
+    {
+      "n": 1, "role": "operator", "t": "09:41",
+      "text": "两个 pivot 今早都触发了（ALAB、ANET），但看盘面感觉不对。先给我今天的 breadth。"
+    },
+    {
+      "n": 2, "role": "tool", "t": "09:41", "kind": "breadth",
+      "producer": "market_breadth", "monogram": "MB",
+      "raw": "alpaca_kit.features.breadth.market_breadth - real reading, 2026-07-08",
+      "payload": {
+        "date": "2026-07-08",
+        "pct_above_200dma": 0.575, "net_new_highs": -3, "advances": 221, "declines": 575,
+        "prev": {"date": "2026-07-07", "pct_above_200dma": 0.596, "net_new_highs": 23, "advances": 339, "declines": 456}
+      },
+      "danger": true,
+      "danger_rule": "declines led advances in 2 of the last 5 sessions; net new highs negative"
+    },
+    {
+      "n": 3, "role": "kairos", "t": "09:42",
+      "text": "Both pivots are technically valid - ALAB and ANET cleared their bases on volume. But the tape disagrees with the setup: decliners led 575 to 221 today after 456 to 339 yesterday, and net new highs just went negative for the first time in this window. The doctrine's risk-off signal is two decline-led sessions inside five; we are there. The kill-line on this strategy is a win-rate floor, and entering breakouts into deteriorating breadth is exactly how that floor gets tested. My read: stand aside today, keep both names on the watch list, and let the follow-through day rule re-arm us."
+    },
+    {
+      "n": 4, "role": "operator", "t": "09:44",
+      "text": "同意，今天站开。记到 journal，两个名字挂到 watch。"
+    },
+    {
+      "n": 5, "role": "tool", "t": "09:44", "kind": "arena_write",
+      "producer": "strategies/tt-breakout/journal.md", "monogram": "TT",
+      "raw": "git 1f3a9e2 - the arena is Kairos's to write; git is the record, not a gate",
+      "payload": {
+        "file": "journal.md",
+        "commit": "1f3a9e2",
+        "diff_add": [
+          "## 2026-07-08 - stood aside",
+          "Breadth flag day: declines 575/221, NNH -3 (first negative print of the window).",
+          "ALAB + ANET pivots triggered and were NOT taken per risk-off doctrine.",
+          "Watch: re-enter on follow-through day if bases hold."
+        ]
+      }
+    },
+    {
+      "n": 6, "role": "operator", "t": "09:47",
+      "text": "回测一下：过去两年，这类 flag 日如果照常进场，胜率掉多少？"
+    },
+    {
+      "n": 7, "role": "tool", "t": "09:49", "kind": "backtest",
+      "producer": "replay_days", "monogram": "RD",
+      "raw": "backtests/2026-07-08-flagday-probe.json - alpaca_kit.replay.replay_days, window starts at trend_template maturity",
+      "payload": {
+        "window": {"start": "2025-06-05", "end": "2026-07-09", "note": "starts at trend_template maturity"},
+        "arms": [
+          {"name": "baseline - all entries", "trades": 87, "win_rate": 0.47, "gross_return_pct": 38.6, "max_drawdown_pct": -13.4},
+          {"name": "flag-day entries only", "trades": 14, "win_rate": 0.29, "gross_return_pct": -6.2, "max_drawdown_pct": -11.8}
+        ],
+        "delistings_hit": 1, "delisting_treatment": "terminal -1.0, counted",
+        "discarded_days": 3, "discarded_treatment": "missing snapshot reads discarded and counted",
+        "caveat": "14 trades is a thin arm - direction of the effect, not its size"
+      }
+    },
+    {
+      "n": 8, "role": "kairos", "t": "09:50",
+      "text": "Flag-day entries ran a 29 percent win rate against the 47 percent baseline - negative gross even before costs. Fourteen trades is thin, so treat this as the direction of the effect rather than its size. It is consistent enough with this morning's call that I would codify it: add a breadth veto to the entry rules - no new entries when declines led in two of the last five sessions. That is a THESIS.md rules change, so it is yours to judge. Draft below."
+    },
+    {
+      "n": 9, "role": "tool", "t": "09:50", "kind": "proposal",
+      "producer": "strategies/tt-breakout/THESIS.md", "monogram": "TT",
+      "raw": "draft diff - not committed; the operator is the only teacher",
+      "payload": {
+        "file": "THESIS.md",
+        "status": "draft - awaiting operator judgment",
+        "diff_add": [
+          "- Entry veto: no new entries when declines led advances in >=2 of the last 5 sessions",
+          "  (breadth flag; probe 2026-07-08: flag-day arm 29% win rate vs 47% baseline, n=14, thin)"
+        ]
+      }
+    },
+    {
+      "n": 10, "role": "operator", "t": "09:53",
+      "text": "方向认，但 n=14 太薄，先不动 THESIS。放 journal 里作为待验假设，等 broad 床或者 paper 期攒够样本再说。"
+    },
+    {
+      "n": 11, "role": "tool", "t": "09:53", "kind": "arena_write",
+      "producer": "strategies/tt-breakout/journal.md", "monogram": "TT",
+      "raw": "git 8c07d51",
+      "payload": {
+        "file": "journal.md",
+        "commit": "8c07d51",
+        "diff_add": [
+          "Hypothesis parked (operator call): breadth veto on entries - flag-day arm 29% vs 47%,",
+          "n=14 too thin to codify. Re-test when the paper window has >=40 flag-day samples."
+        ]
+      }
+    },
+    {
+      "n": 12, "role": "kairos", "t": "09:54",
+      "text": "Parked and journaled. Watch list carries ALAB and ANET with their pivot levels; I will flag the next follow-through day against this window. Nothing else is actionable today under the veto we just declined to codify - which is the correct kind of irony."
+    }
+  ]
+}

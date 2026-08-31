@@ -1,0 +1,362 @@
+<!-- @dsCard group="R3 - 3-Pane Workbench" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KAIROS · STRATEGY — R3 3PANE</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2305070b'/%3E%3Cpath d='M8 2 L11 8 L8 14 L5 8 Z' fill='%23c8a552'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="../r2/shell.css">
+<link rel="stylesheet" href="timeline.css">
+<style>
+/* ── page-local: the three-pane bench (layout only — kit + shell components untouched) ── */
+.bench{ display:grid; grid-template-columns:210px minmax(0,1fr) 296px; gap:22px; align-items:start; }
+.rail{ position:sticky; top:18px; align-self:start; max-height:calc(100vh - 36px);
+       overflow-y:auto; overscroll-behavior:contain; min-width:0; }
+#timeline{ min-width:0; }
+@media (max-width:1100px){
+  .bench{ grid-template-columns:1fr; }
+  .rail{ position:static; max-height:none; overflow:visible; }
+}
+
+/* left rail — the lifecycle switcher */
+.sw{ display:block; }
+.sw ul{ list-style:none; margin:0; padding:0; }
+.sw-stage{ font-family:var(--mono); font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
+           color:var(--faint); margin:12px 0 5px; display:flex; align-items:baseline; gap:6px; }
+.sw-stage:first-child{ margin-top:0; }
+.sw-stage .no{ color:var(--brass-dim); }
+.sw-item{ display:flex; align-items:center; gap:8px; padding:7px 8px; min-width:0;
+          border:1px solid transparent; border-left:3px solid transparent;
+          text-decoration:none; color:var(--fg-dim); font-family:var(--mono); font-size:12px; }
+.sw-item:hover{ border-color:var(--line); }
+.sw-item[aria-current]{ background:var(--dome-2); border-color:var(--line-2);
+                        border-left-color:var(--brass); color:var(--fg); }
+.sw-name{ flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sw-live{ font-family:var(--mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase;
+          color:var(--brass-hi); }
+
+/* right rail — dossier furniture */
+.stage-rail{ display:flex; flex-wrap:wrap; align-items:baseline; gap:5px;
+             font-family:var(--mono); font-size:10px; color:var(--faint); margin-top:9px; }
+.stage-rail .cur{ color:var(--brass-hi); }
+.stage-rail .arrow{ color:var(--line-2); }
+.dz-thesis{ font-family:var(--serif); font-size:14.5px; line-height:1.5; color:var(--fg);
+            margin:0 0 12px; font-style:italic; }
+.kill-plate{ border:1px solid var(--line); border-left:3px solid var(--danger);
+             background:var(--dome-2); padding:8px 10px; margin:0 0 4px; }
+.kill-plate .kp-label{ display:block; font-family:var(--mono); font-size:9px; letter-spacing:.16em;
+                       text-transform:uppercase; color:var(--danger); margin-bottom:5px; }
+.kill-plate .kp-rule{ font-family:var(--mono); font-size:11px; line-height:1.5; color:var(--fg); }
+.dz-cols2{ grid-template-columns:repeat(2,1fr); }
+.dz-meta{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.dz-caption{ display:flex; gap:8px; align-items:baseline; font-family:var(--mono);
+             font-size:10px; color:var(--fg-dim); margin-top:6px; }
+.dz-note{ font-family:var(--mono); font-size:10px; color:var(--faint); margin-top:4px; }
+.dz-journal-line{ font-family:var(--mono); font-size:11px; color:var(--fg-dim); margin:0 0 8px; }
+.dz-tail{ font-family:var(--serif); font-size:12.5px; font-style:italic; line-height:1.5;
+          color:var(--fg-dim); margin:0; border-left:2px solid var(--line-2); padding-left:9px; }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap mast-top">
+    <a class="wordmark" href="../r2/landing.html"><span class="dia" aria-hidden="true"></span>KAIROS</a>
+    <span class="facename">STRATEGY</span>
+    <span class="spacer"></span>
+    <span class="seg">as of <b id="k-asof" class="mono">—</b></span>
+    <span class="seg">bed <b id="k-bed" class="mono">—</b></span>
+    <span class="seg">window <b id="k-window" class="mono">—</b></span>
+    <span class="seg"><b id="k-symbols" class="mono">—</b> sym · <b id="k-days" class="mono">—</b> sessions</span>
+    <span class="seal" id="k-gate" title="orders_gate — read-only display">orders —</span>
+    <span class="stamp-sample" title="gate readout comes from account_mock, a labeled fabricated block">sample</span>
+  </div>
+  <nav class="wrap mast-nav" aria-label="Faces">
+    <a class="nav-link" href="../r2/market.html"><span class="nav-idx">01</span>Market</a>
+    <a class="nav-link" href="../r2/strategy.html" aria-current="page"><span class="nav-idx">02</span>Strategy</a>
+    <a class="nav-link" href="../r2/account.html"><span class="nav-idx">03</span>Account</a>
+    <span class="spacer"></span>
+    <span class="gem" aria-hidden="true" title="the six-phase thermal spectrum — washout · recovery · ignition · trend · distribution · flush"><i style="background:var(--washout)"></i><i style="background:var(--recovery)"></i><i style="background:var(--ignition)"></i><i style="background:var(--trend)"></i><i style="background:var(--distribution)"></i><i style="background:var(--flush)"></i></span>
+  </nav>
+</header>
+
+<main class="wrap">
+  <div class="bench">
+
+    <!-- ── left rail · the strategy switcher ─────────────────────────── -->
+    <aside class="rail settle d1">
+      <section class="panel">
+        <header class="panel-head">
+          <span class="entry-no" data-entry>E —.—</span>
+          <span class="eyebrow">switcher · lifecycle</span>
+          <h2>Strategies</h2>
+          <span class="stamp-plate">sample — fabricated shape</span>
+        </header>
+        <div class="panel-body">
+          <nav class="sw" aria-label="Strategy switcher">
+            <ul id="sw-list">
+              <li><span class="null" title="no reading in this bed">—</span></li>
+            </ul>
+          </nav>
+        </div>
+        <footer class="panel-foot">
+          <a class="sig" href="#" onclick="return false" title="raw ▸ strategies/&lt;name&gt;/status.yaml">
+            <span class="sig-mono" aria-hidden="true">SY</span>
+            <span class="sig-body">
+              <span class="sig-fn">status.yaml</span>
+              <span class="sig-raw">strategies/&lt;name&gt;/status.yaml</span>
+            </span>
+          </a>
+          <span class="spacer"></span>
+          <span class="foot-note">others inert — prototype</span>
+        </footer>
+      </section>
+    </aside>
+
+    <!-- ── center · the conversation ledger (rendered whole by the kit) ── -->
+    <div id="timeline"></div>
+
+    <!-- ── right rail · the live dossier of the strategy in session ────── -->
+    <aside class="rail settle d2">
+
+      <section class="panel">
+        <header class="panel-head">
+          <span class="entry-no" data-entry>E —.—</span>
+          <span class="eyebrow">dossier · in session</span>
+          <h2 id="dz-name">tt-breakout</h2>
+          <span class="stamp-plate">sample — fabricated shape</span>
+        </header>
+        <div class="panel-body">
+          <div class="dz-meta">
+            <span id="dz-status" class="chip chip-dim">—</span>
+            <span class="eyebrow">updated <b id="dz-updated" class="mono">—</b></span>
+          </div>
+          <div class="stage-rail" id="dz-stage-rail" title="lifecycle position — a one-way rail; retired is quiet, never hidden">
+            <span class="null" title="no reading in this bed">—</span>
+          </div>
+          <hr class="rule">
+          <p class="dz-thesis" id="dz-thesis"><span class="null" title="no reading in this bed">—</span></p>
+          <div class="kill-plate">
+            <span class="kp-label">kill-line · falsification</span>
+            <code class="kp-rule" id="dz-kill"><span class="null" title="no reading in this bed">—</span></code>
+          </div>
+        </div>
+        <footer class="panel-foot">
+          <a class="sig" href="#" onclick="return false" title="raw ▸ strategies/tt-breakout/{status.yaml,THESIS.md}">
+            <span class="sig-mono" aria-hidden="true">SY</span>
+            <span class="sig-body">
+              <span class="sig-fn">status.yaml · THESIS.md</span>
+              <span class="sig-raw">strategies/tt-breakout/{status.yaml,THESIS.md}</span>
+            </span>
+          </a>
+        </footer>
+      </section>
+
+      <section class="panel">
+        <header class="panel-head">
+          <span class="entry-no" data-entry>E —.—</span>
+          <span class="eyebrow">backtest · 2yr bed</span>
+          <h2>Instruments</h2>
+          <span class="stamp-plate">sample — fabricated shape</span>
+        </header>
+        <div class="panel-body">
+          <div class="plaques dz-cols2">
+            <div class="plaque"><span class="k">trades</span><span class="v" id="dz-trades"><span class="null" title="no reading in this bed">—</span></span></div>
+            <div class="plaque"><span class="k">win rate</span><span class="v" id="dz-win"><span class="null" title="no reading in this bed">—</span></span><span class="s" id="dz-win-s">avg W/L —</span></div>
+            <div class="plaque"><span class="k">gross</span><span class="v" id="dz-gross"><span class="null" title="no reading in this bed">—</span></span></div>
+            <div class="plaque"><span class="k">max drawdown</span><span class="v" id="dz-dd"><span class="null" title="no reading in this bed">—</span></span></div>
+            <div class="plaque"><span class="k">delistings hit</span><span class="v" id="dz-del"><span class="null" title="no reading in this bed">—</span></span><span class="s">terminal −1.0 · counted</span></div>
+            <div class="plaque"><span class="k">discarded days</span><span class="v" id="dz-disc"><span class="null" title="no reading in this bed">—</span></span><span class="s">counted</span></div>
+          </div>
+          <hr class="rule">
+          <svg id="dz-spark" class="chart" viewBox="0 0 260 56" preserveAspectRatio="none" role="img" aria-label="equity curve, fabricated sample"></svg>
+          <div class="dz-caption"><span id="dz-spark-range">×— → ×—</span><span class="spacer"></span><span id="dz-window">—</span></div>
+          <div class="dz-note" id="dz-window-note">—</div>
+        </div>
+        <footer class="panel-foot">
+          <a class="sig" href="#" onclick="return false" title="raw ▸ strategies/tt-breakout/backtests/" id="dz-bt-sig">
+            <span class="sig-mono" aria-hidden="true">BT</span>
+            <span class="sig-body">
+              <span class="sig-fn">backtest record</span>
+              <span class="sig-raw" id="dz-bt-raw">strategies/tt-breakout/backtests/</span>
+            </span>
+          </a>
+        </footer>
+      </section>
+
+      <section class="panel">
+        <header class="panel-head">
+          <span class="entry-no" data-entry>E —.—</span>
+          <span class="eyebrow">journal · freshness</span>
+          <h2>Journal</h2>
+          <span class="stamp-plate">sample — fabricated shape</span>
+        </header>
+        <div class="panel-body">
+          <p class="dz-journal-line"><b id="dz-jn" class="mono">—</b> entries · last <b id="dz-jlast" class="mono">—</b></p>
+          <p class="dz-tail" id="dz-jtail"><span class="null" title="no reading in this bed">—</span></p>
+        </div>
+        <footer class="panel-foot">
+          <a class="sig" href="#" onclick="return false" title="raw ▸ strategies/tt-breakout/journal.md">
+            <span class="sig-mono" aria-hidden="true">JR</span>
+            <span class="sig-body">
+              <span class="sig-fn">journal.md</span>
+              <span class="sig-raw">strategies/tt-breakout/journal.md</span>
+            </span>
+          </a>
+        </footer>
+      </section>
+
+    </aside>
+  </div>
+</main>
+
+<footer class="foot-band">
+  <div class="wrap foot">
+    <span>KAIROS · <b>STRATEGY</b> — round-3 face prototype · zero authority · read-only</span>
+    <span class="spacer"></span>
+    <span>intent · <b>Kairos-Design.md</b></span>
+    <span>mechanism · <b>the skeleton spec &amp; code</b></span>
+  </div>
+</footer>
+
+<script src="../data/market_mock.js"></script>
+<script src="../data/workbench_mock.js"></script>
+<script src="../data/session_mock.js"></script>
+<script src="timeline.js"></script>
+<script>
+/* ── shell fill — shared across all R2 faces ── */
+(function(){
+  "use strict";
+  var D = window.KAIROS_DATA || null;
+  if(!D) return; // dashes stand: no reading, never fake
+  function t(id, s){ var el = document.getElementById(id); if(el) el.textContent = s; }
+  t("k-asof", D.as_of);
+  t("k-bed", D.bed.root);
+  t("k-window", D.bed.window.start + " → " + D.bed.window.end);
+  t("k-symbols", String(D.bed.symbols));
+  t("k-days", String(D.bed.captured_days));
+  var g = D.account_mock && D.account_mock.orders_gate;
+  var gateEl = document.getElementById("k-gate");
+  if(g && gateEl){
+    gateEl.textContent = "orders " + ((g.gate1_registered || g.gate2_validated) ? "partially armed" : "unarmed");
+    gateEl.title = "gate 1 registered: " + g.gate1_registered + " · gate 2 validated: " + g.gate2_validated +
+      " — read-only display · readout from account_mock (fabricated block)";
+  }
+  document.querySelectorAll("[data-entry]").forEach(function(el, i){
+    el.textContent = "E " + D.bed.captured_days + "." + (i + 1);
+  });
+})();
+
+/* ── the one kit call — the whole conversation ledger ── */
+renderSessionTimeline(document.getElementById("timeline"));
+
+/* ── page fill: switcher + dossier (reads KAIROS_FACES only, never the session) ── */
+(function(){
+  "use strict";
+  var F = window.KAIROS_FACES || null;
+  var S = F && F.strategies;
+  if(!S || !S.rows) return; // dashes stand
+  var MINUS = "−";
+  function neg(s){ return String(s).replace(/-/g, MINUS); }
+  function t(id, s){ var el = document.getElementById(id); if(el) el.textContent = s; }
+  function esc(s){ var d = document.createElement("span"); d.textContent = s; return d.innerHTML; }
+
+  /* left rail: lifecycle-ordered switcher */
+  var order = S.lifecycle || ["idea","researching","validated","paper","retired"];
+  var rows = S.rows.slice().sort(function(a,b){
+    return order.indexOf(a.status) - order.indexOf(b.status);
+  });
+  var list = document.getElementById("sw-list");
+  if(list){
+    var html = "", lastStage = null;
+    rows.forEach(function(r){
+      if(r.status !== lastStage){
+        lastStage = r.status;
+        var idx = order.indexOf(r.status) + 1;
+        html += '<li class="sw-stage"><span class="no">' + idx + '</span>' + esc(r.status) + '</li>';
+      }
+      var cur = r.name === "tt-breakout";
+      html += '<li><a class="sw-item" href="#"' +
+        (cur ? ' aria-current="true"' : ' onclick="return false" title="inert — prototype, not wired"') + '>' +
+        '<span class="sw-name">' + esc(r.name) + '</span>' +
+        (cur ? '<span class="sw-live">in session</span>' : '') +
+        '<span class="chip chip-' + esc(r.status) + '">' + esc(r.status) + '</span></a></li>';
+    });
+    list.innerHTML = html;
+  }
+
+  /* right rail: the dossier of rows[0] = tt-breakout */
+  var r = S.rows[0];
+  if(!r || r.name !== "tt-breakout") return;
+  t("dz-name", r.name);
+  var st = document.getElementById("dz-status");
+  if(st){ st.textContent = r.status; st.className = "chip chip-" + r.status; }
+  t("dz-updated", r.updated || "—");
+  var rail = document.getElementById("dz-stage-rail");
+  if(rail){
+    rail.innerHTML = order.map(function(s){
+      return '<span class="' + (s === r.status ? "cur" : "") + '">' + esc(s) + '</span>';
+    }).join('<span class="arrow" aria-hidden="true">→</span>');
+  }
+  t("dz-thesis", r.thesis);
+  t("dz-kill", r.falsification);
+
+  var b = r.backtest;
+  if(b){
+    t("dz-trades", String(b.trades));
+    t("dz-win", Math.round(b.win_rate * 100) + "%");
+    t("dz-win-s", "avg W/L " + neg(b.avg_win_pct.toFixed(1)) + " / " + neg(b.avg_loss_pct.toFixed(1)));
+    var gr = document.getElementById("dz-gross");
+    if(gr){ gr.textContent = (b.gross_return_pct > 0 ? "+" : "") + neg(b.gross_return_pct.toFixed(1)) + "%";
+            gr.classList.add(b.gross_return_pct >= 0 ? "up" : "down"); }
+    var dd = document.getElementById("dz-dd");
+    if(dd){ dd.textContent = neg(b.max_drawdown_pct.toFixed(1)) + "%"; dd.classList.add("down"); }
+    t("dz-del", String(b.delistings_hit));
+    t("dz-disc", String(b.discarded_days));
+    if(b.window){
+      t("dz-window", b.window.start + " → " + b.window.end);
+      t("dz-window-note", b.window.note || "—");
+    }
+    t("dz-bt-raw", "strategies/tt-breakout/" + (b.file || "backtests/"));
+    var sig = document.getElementById("dz-bt-sig");
+    if(sig && b.file) sig.title = "raw ▸ strategies/tt-breakout/" + b.file;
+
+    /* equity spark — pen lifts on nulls; baseline engraved at ×1.00 */
+    var eq = b.equity_spark;
+    var svg = document.getElementById("dz-spark");
+    if(svg && eq && eq.length > 1){
+      var W = 260, H = 56, P = 4;
+      var vals = eq.filter(function(v){ return v != null; });
+      var mn = Math.min.apply(null, vals.concat([1])), mx = Math.max.apply(null, vals.concat([1]));
+      function x(i){ return P + i / (eq.length - 1) * (W - 2 * P); }
+      function y(v){ return P + (mx - v) / (mx - mn) * (H - 2 * P); }
+      var segs = [], run = [];
+      eq.forEach(function(v, i){
+        if(v == null){ if(run.length) segs.push(run); run = []; return; }
+        run.push(x(i).toFixed(1) + "," + y(v).toFixed(1));
+      });
+      if(run.length) segs.push(run);
+      var out = '<line x1="' + P + '" y1="' + y(1).toFixed(1) + '" x2="' + (W - P) + '" y2="' + y(1).toFixed(1) +
+        '" style="stroke:var(--line-2);stroke-width:1;stroke-dasharray:3 3"/>';
+      segs.forEach(function(seg){
+        out += '<polyline points="' + seg.join(" ") + '" style="fill:none;stroke:var(--brass);stroke-width:1.5"/>';
+      });
+      var lastIdx = -1;
+      for(var i = eq.length - 1; i >= 0; i--){ if(eq[i] != null){ lastIdx = i; break; } }
+      if(lastIdx >= 0){
+        out += '<circle cx="' + x(lastIdx).toFixed(1) + '" cy="' + y(eq[lastIdx]).toFixed(1) +
+          '" r="2" style="fill:var(--brass-hi)"/>';
+        t("dz-spark-range", "×" + Number(eq[0]).toFixed(2) + " → ×" + Number(eq[lastIdx]).toFixed(2));
+      }
+      svg.innerHTML = out;
+    }
+  }
+
+  t("dz-jn", String(r.journal_entries));
+  t("dz-jlast", r.journal_last || "—");
+  t("dz-jtail", "“" + r.journal_tail + "”");
+})();
+</script>
+</body>
+</html>

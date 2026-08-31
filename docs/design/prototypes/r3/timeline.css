@@ -1,0 +1,254 @@
+/* ═══════════════════════════════════════════════════════════════
+   KAIROS · R3 — SESSION TIMELINE KIT (shared)
+   The conversation ledger: numbered turn entries in three voice
+   registers (operator sans · kairos serif · tool mono instrument
+   cards), a session header with the attendance stamp, and the one
+   inert composer. Everything is styled in shell vocabulary — every
+   color/font is a var(--…) token from ../r2/shell.css; the only
+   literal colors are neutral black/white shadow tints, same as the
+   shell's own engraving. No token forks, no shell restyling: shell
+   classes used inside (.sig, .raw, .fold, .ledger, .stamp-plate,
+   .null, .eyebrow, .spacer, .foot-note, .table-scroll) are as-is.
+
+   Contract: layout variants place and size the CONTAINER; they may
+   not style anything under .tl- or inside the rendered subtree.
+   See TIMELINE-NOTES.md. Designed width-fluid 560–900px.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── root ─────────────────────────────────────────────────────── */
+.tl{ width:100%; min-width:0; }
+.tl-empty{
+  margin:0; font-family:var(--mono); font-size:11px; letter-spacing:.08em;
+  color:var(--faint); border:1px dashed var(--line-2); border-radius:3px;
+  padding:18px 16px; background:var(--dome);
+}
+
+/* ── session header ───────────────────────────────────────────── */
+.tl-session{
+  border:1px solid var(--line); border-radius:4px;
+  background:linear-gradient(180deg, rgba(255,255,255,.02), transparent 30%), var(--dome);
+  padding:15px 20px 12px; margin:0 0 22px;
+}
+.tl-session-row1{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:10px; }
+.tl-sid{ font-size:10.5px; color:var(--fg-dim); letter-spacing:.1em; }
+.tl-session-row2{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+.tl-session-name{
+  margin:0; font-family:var(--serif); font-weight:440; font-size:22px;
+  letter-spacing:.01em; color:var(--fg);
+}
+.tl-session-date{ font-size:11.5px; color:var(--fg-dim); letter-spacing:.08em; }
+
+/* the attendance stamp — engraved, VISIBLE, never blurred or dimmed */
+.tl-attend{
+  font-family:var(--mono); font-size:9px; letter-spacing:.26em; text-transform:uppercase;
+  color:var(--recovery); text-shadow:0 1px 0 rgba(0,0,0,.85);
+  padding:4px 11px 3px; border:1px solid var(--line-2); border-radius:2px;
+  background:linear-gradient(180deg, rgba(0,0,0,.5), rgba(0,0,0,.12)), var(--dome-2);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.65), 0 1px 0 var(--groove-l);
+  white-space:nowrap;
+}
+.tl-session-foot{
+  display:flex; align-items:baseline; gap:18px; flex-wrap:wrap;
+  margin-top:12px; padding-top:10px; border-top:1px solid var(--line);
+  font-family:var(--mono); font-size:10px; color:var(--faint); letter-spacing:.06em;
+  min-width:0;
+}
+.tl-runtime{ white-space:nowrap; }
+.tl-runtime b{ color:var(--fg-dim); font-weight:500; }
+/* layout leash on the session's shell .raw pointer (own class, not a shell restyle) */
+.tl-rawline{ min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+
+/* ── the turn ledger ──────────────────────────────────────────── */
+.tl-turns{ list-style:none; margin:0 0 18px; padding:0; }
+.tl-turn{ display:grid; grid-template-columns:72px minmax(0,1fr); gap:0 18px; }
+
+/* gutter: engraved turn-number plate + the session spine */
+.tl-gut{ display:flex; flex-direction:column; align-items:center; gap:9px; padding-top:1px; }
+.tl-no{
+  font-family:var(--mono); font-size:10px; font-weight:500;
+  letter-spacing:.14em; font-variant-numeric:tabular-nums;
+  color:var(--brass); text-shadow:0 1px 0 rgba(0,0,0,.9);
+  padding:3px 8px 2px; border:1px solid var(--line-2); border-radius:2px;
+  background:linear-gradient(180deg, rgba(0,0,0,.5), rgba(0,0,0,.12)), var(--dome-2);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.65), 0 1px 0 var(--groove-l);
+  white-space:nowrap;
+}
+.tl-spine{
+  flex:1; width:2px; min-height:12px;
+  background:linear-gradient(90deg, var(--groove-d) 0 50%, var(--groove-l) 50% 100%);
+}
+
+/* turn head: time + role word (register-colored) */
+.tl-body{ padding-bottom:28px; min-width:0; }
+.tl-thead{
+  display:flex; align-items:baseline; gap:12px; margin:0 0 8px;
+  font-family:var(--mono); font-size:10px; letter-spacing:.08em; color:var(--faint);
+  min-width:0;
+}
+.tl-time{ font-variant-numeric:tabular-nums; }
+.tl-role{
+  font-family:var(--sans); font-size:9px; font-weight:600;
+  letter-spacing:.26em; text-transform:uppercase;
+}
+.tl-turn-operator .tl-role{ color:var(--fg-dim); }
+.tl-turn-kairos   .tl-role{ color:var(--brass); }
+.tl-turn-tool     .tl-role{ color:var(--washout); }
+.tl-prod{
+  font-family:var(--mono); font-size:9.5px; color:var(--faint); letter-spacing:.06em;
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+
+/* ── the three voice registers ────────────────────────────────── */
+/* operator — sans, the operator's own authority (Chinese lands as-is) */
+.tl-text-op{
+  margin:0; font-family:var(--sans); font-size:14.5px; line-height:1.78;
+  color:var(--fg); max-width:56ch;
+}
+/* kairos — serif argued prose, comfortable reading measure, read critically */
+.tl-text-k{
+  margin:0; font-family:var(--serif); font-weight:350; font-size:16.5px;
+  line-height:1.66; color:var(--fg); max-width:60ch;
+}
+
+/* ── tool turns: compressed instrument cards ──────────────────── */
+/* each card is a shell details.fold (danger machinery for free)
+   with the kit's instrument internals; signed in its foot. */
+.tl-card{ max-width:820px; margin:0; }
+.tl-sum{
+  min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color:var(--fg-dim); font-variant-numeric:tabular-nums;
+}
+.tl-instr{ padding-top:7px; }
+.tl-card-foot{
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  margin-top:12px; padding-top:10px; border-top:1px solid var(--line);
+}
+
+/* compressed plaques — cousins of the R2 backtest plaques */
+.tl-plqs{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }
+.tl-plq{
+  border:1px solid var(--line); border-radius:3px; background:var(--dome);
+  padding:9px 11px 8px; min-width:0;
+}
+.tl-plq .k{
+  display:block; margin-bottom:5px; font-family:var(--mono); font-size:8.5px;
+  letter-spacing:.2em; text-transform:uppercase; color:var(--faint);
+}
+.tl-plq .v{
+  font-family:var(--mono); font-size:16px; font-weight:500; line-height:1.15;
+  font-variant-numeric:tabular-nums; color:var(--fg); white-space:nowrap;
+}
+.tl-plq .v.up{ color:var(--up); } .tl-plq .v.down{ color:var(--down); }
+.tl-plq .s{
+  display:block; margin-top:4px; font-family:var(--mono); font-size:9.5px;
+  color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+
+/* the danger rule line — printed with the alert, part of the reading */
+.tl-ruleline{
+  margin:11px 0 0; font-family:var(--mono); font-size:11px; line-height:1.6;
+  color:var(--danger); letter-spacing:.03em;
+}
+.tl-ruleline::before{
+  content:"rule \25b8  "; font-size:9px; letter-spacing:.18em; text-transform:uppercase;
+}
+
+/* backtest probe — arms table + first-class honesty fields */
+.tl-arms{ border:1px solid var(--line); border-radius:3px; overflow:hidden; background:var(--dome); }
+.tl-honesty{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin-top:10px; }
+.tl-hon{
+  border:1px solid var(--line); border-left:3px solid var(--brass-dim); border-radius:2px;
+  background:var(--dome); padding:8px 11px 7px; min-width:0;
+}
+.tl-hon .k{
+  display:block; margin-bottom:4px; font-family:var(--mono); font-size:8.5px;
+  letter-spacing:.2em; text-transform:uppercase; color:var(--faint);
+}
+.tl-hon .v{
+  font-family:var(--mono); font-size:14px; font-weight:500; line-height:1.15;
+  font-variant-numeric:tabular-nums; color:var(--fg);
+}
+.tl-hon-flag .v{ color:var(--ignition); }
+.tl-hon .s{
+  display:block; margin-top:4px; font-family:var(--mono); font-size:9.5px;
+  color:var(--faint); line-height:1.5;
+}
+.tl-caveat{
+  margin:10px 0 0; font-family:var(--mono); font-size:10.5px; line-height:1.6;
+  color:var(--warn); letter-spacing:.04em;
+}
+.tl-caveat::before{
+  content:"caveat \25b8  "; font-size:9px; letter-spacing:.18em; text-transform:uppercase;
+}
+.tl-window{
+  margin:9px 0 0; font-family:var(--mono); font-size:10px; letter-spacing:.05em;
+  color:var(--fg-dim); line-height:1.6;
+}
+.tl-window b{ color:var(--fg); font-weight:500; }
+.tl-window .note{ color:var(--faint); }
+.tl-window .note::before{ content:" \2014  "; }
+
+/* diffs — committed arena writes vs. draft proposals */
+.tl-diff{
+  border:1px solid var(--line); border-radius:3px; background:var(--dome);
+  padding:8px 0; overflow-x:auto;
+}
+.tl-diff-line{
+  position:relative; padding:0 14px 0 30px; white-space:pre;
+  font-family:var(--mono); font-size:11.5px; line-height:1.75; color:var(--fg-dim);
+}
+.tl-diff-line::before{
+  content:"+"; position:absolute; left:12px; color:var(--recovery);
+}
+.tl-commit{
+  display:inline-block; margin-top:10px;
+  font-family:var(--mono); font-size:10px; letter-spacing:.14em;
+  color:var(--brass); text-shadow:0 1px 0 rgba(0,0,0,.9);
+  padding:3px 10px 2px; border:1px solid var(--line-2); border-radius:2px;
+  background:linear-gradient(180deg, rgba(0,0,0,.5), rgba(0,0,0,.12)), var(--dome-2);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.65), 0 1px 0 var(--groove-l);
+  white-space:nowrap;
+}
+/* proposal: a draft awaiting judgment — dashed, amber, uncommitted */
+.tl-draft-row{ margin:0 0 9px; }
+.tl-draft{
+  display:inline-block; font-family:var(--mono); font-size:9px; letter-spacing:.24em;
+  text-transform:uppercase; color:var(--ignition);
+  padding:4px 11px 3px; border:1px dashed var(--brass-dim); border-radius:2px;
+  white-space:nowrap;
+}
+.tl-diff-draft{ border-style:dashed; border-color:var(--brass-dim); }
+.tl-diff-draft .tl-diff-line::before{ content:"±"; color:var(--ignition); }
+
+/* fallback card body for an unknown kind — honest mono key lines */
+.tl-generic-line{
+  font-family:var(--mono); font-size:11px; line-height:1.7; color:var(--fg-dim);
+  letter-spacing:.03em; overflow-wrap:anywhere; white-space:normal;
+}
+
+/* ── the inert composer — the timeline's one write-shaped control ── */
+.tl-composer{
+  border:1px dashed var(--line-2); border-radius:4px; background:var(--dome);
+  padding:14px 16px 11px;
+}
+.tl-composer-row{ display:flex; gap:12px; align-items:stretch; }
+.tl-input{
+  flex:1; min-width:0; min-height:60px; resize:none;
+  font-family:var(--sans); font-size:13.5px; line-height:1.6; color:var(--fg-dim);
+  background:linear-gradient(180deg, rgba(0,0,0,.42), rgba(0,0,0,.1)), var(--dome-2);
+  border:1px solid var(--line-2); border-radius:3px; padding:10px 12px;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.55);
+}
+.tl-input::placeholder{ color:var(--faint); }
+.tl-send{
+  align-self:flex-end; flex:none;
+  font-family:var(--sans); font-size:10.5px; font-weight:600; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--faint);
+  background:transparent; border:1px solid var(--line-2); border-radius:2px;
+  padding:9px 18px; cursor:not-allowed;
+}
+.tl-composer-note{
+  margin:9px 0 0; font-family:var(--mono); font-size:9.5px; letter-spacing:.1em;
+  color:var(--faint); line-height:1.6;
+}
+.tl-composer-note::before{ content:"\2298  "; color:var(--brass-dim); }
