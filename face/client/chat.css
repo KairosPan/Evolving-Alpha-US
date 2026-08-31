@@ -1,0 +1,304 @@
+/* The R4 Minimal Chat kit, gone live. Ported verbatim from the round-4
+   prototype docs/design/prototypes/r4/chat.css (the LIGHT palette is the
+   round-4 verdict), minus exactly two things the prototype needed and the live
+   face does not: the SAMPLE stamp (.tag-sample — the data is real now) and the
+   composer's disabled styling (it sends). Token-driven: every color and radius
+   is a :root custom property, so a palette is a token override and never a
+   rule edit — the prototype's dark variant is that override, kept out of v1.
+   Structural additions for the live page land at the END, under their own
+   marker, so this ported block stays diffable against the prototype. */
+
+:root {
+  /* light (default) palette — clean messenger, one restrained accent */
+  --bg: #f6f5f2;
+  --panel: #ffffff;
+  --line: #e4e1da;
+  --text: #26241f;
+  --dim: #8b8579;
+  --accent: #8a6d2e;
+  --danger: #b0742c;
+  --green: #3f7d50;
+  --red: #b34a3e;
+
+  --active-bg: #f0ece3;
+  --op-bubble: #33302a;
+  --op-text: #f7f5f0;
+  --k-bubble: #ffffff;
+  --card-bg: #fcfbf8;
+  --diff-bg: rgba(63, 125, 80, 0.07);
+
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --r-bubble: 16px;
+  --r-card: 8px;
+  --r-chip: 999px;
+  --r-input: 999px;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 var(--sans);
+  overflow: hidden;
+}
+
+.chat-app { display: flex; height: 100vh; }
+
+/* ---------- sidebar ---------- */
+
+.sidebar {
+  width: 300px;
+  min-width: 240px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+}
+.side-brand {
+  padding: 14px 16px 4px;
+  font: 600 11px/1 var(--mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.side-search {
+  margin: 10px 12px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-input);
+  background: var(--bg);
+  color: var(--dim);
+  font-size: 13px;
+}
+.conv-list { flex: 1; overflow-y: auto; }
+.conv { padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.conv.active { background: var(--active-bg); }
+.conv-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.conv-name { font-weight: 600; font-size: 14px; min-width: 0; }
+.conv-date { flex: none; font: 11px var(--mono); color: var(--dim); }
+.conv-sub { display: flex; align-items: center; gap: 6px; margin-top: 4px; min-width: 0; }
+.conv-tail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dim);
+  font-size: 12px;
+}
+.side-foot {
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  font: 10.5px var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+
+/* status chips + header tags */
+.chip {
+  flex: none;
+  font: 500 9.5px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  color: var(--dim);
+}
+.chip[data-status="paper"] { color: var(--accent); border-color: currentColor; }
+.chip[data-status="validated"] { color: var(--green); border-color: currentColor; }
+.chip[data-status="retired"] { color: var(--red); border-color: currentColor; }
+
+.tag {
+  flex: none;
+  font: 500 9.5px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 2px 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--dim);
+}
+.tag-draft { color: var(--accent); border-color: currentColor; }
+
+/* ---------- main pane ---------- */
+
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+.topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.topbar-name { font-weight: 600; font-size: 15px; }
+.topbar .raw { margin-left: auto; }
+
+.raw {
+  font: 11px var(--mono);
+  color: var(--dim);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
+/* ---------- message flow ---------- */
+
+.flow { flex: 1; overflow-y: auto; overflow-x: hidden; }
+.flow-inner {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 18px 20px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sep {
+  align-self: center;
+  margin: 6px 0 2px;
+  font: 10.5px var(--mono);
+  letter-spacing: 0.08em;
+  color: var(--dim);
+}
+
+.msg { display: flex; flex-direction: column; max-width: 78%; }
+.msg.op { align-self: flex-end; align-items: flex-end; }
+.msg.k { align-self: flex-start; align-items: flex-start; }
+.who {
+  margin: 0 0 3px 4px;
+  font: 10.5px var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.bubble {
+  padding: 9px 14px;
+  border-radius: var(--r-bubble);
+  font-size: 14.5px;
+  line-height: 1.55;
+  overflow-wrap: break-word;
+}
+.msg.op .bubble {
+  background: var(--op-bubble);
+  color: var(--op-text);
+  border-bottom-right-radius: 5px;
+}
+.msg.k .bubble {
+  background: var(--k-bubble);
+  border: 1px solid var(--line);
+  border-bottom-left-radius: 5px;
+}
+
+/* ---------- tool cards: one notch quieter than bubbles ---------- */
+
+.card {
+  align-self: stretch;
+  margin: 2px 0;
+  padding: 10px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line);
+  border-radius: var(--r-card);
+}
+.card.danger { border-left-color: var(--danger); }
+.card.danger .kind { color: var(--danger); }
+
+.card-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.kind {
+  flex: none;
+  font: 600 10px/1 var(--sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.producer {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 11px var(--mono);
+  color: var(--dim);
+}
+.card-head .raw { flex: none; }
+
+.stats { display: flex; flex-wrap: wrap; gap: 6px 26px; margin-top: 8px; }
+.stat .l {
+  font: 500 10px var(--sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 2px;
+}
+.stat .v { font: 600 15px var(--mono); }
+.stat .p { font: 10.5px var(--mono); color: var(--dim); margin-top: 2px; }
+
+.rule { margin-top: 8px; font: 11.5px/1.5 var(--mono); color: var(--danger); }
+
+.meta { margin-top: 6px; font: 12px var(--mono); }
+.card-line { margin-top: 6px; font: 12px var(--mono); color: var(--dim); }
+.card .tag-draft { display: inline-block; margin-top: 7px; }
+
+.diff {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: var(--diff-bg);
+  border-radius: 6px;
+  font: 12px/1.6 var(--mono);
+  overflow-x: auto;
+}
+.diff-line { color: var(--green); white-space: pre; }
+
+.tablewrap { overflow-x: auto; margin-top: 8px; }
+.bt { border-collapse: collapse; font: 12px var(--mono); min-width: 430px; }
+.bt th {
+  font: 600 9.5px var(--sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+  text-align: right;
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.bt td { text-align: right; padding: 4px 10px; }
+.bt th:first-child, .bt td:first-child { text-align: left; padding-left: 0; }
+.bt td.pos { color: var(--green); }
+.bt td.neg { color: var(--red); }
+
+.footnote { margin-top: 6px; font: 10.5px/1.5 var(--mono); color: var(--dim); }
+.caveat { margin-top: 7px; font: italic 11.5px var(--sans); color: var(--dim); }
+
+/* ---------- composer (live: this one sends) ---------- */
+
+.composer {
+  flex: none;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  padding: 10px 20px 12px;
+}
+.composer-row { max-width: 760px; margin: 0 auto; display: flex; }
+.composer-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-input);
+  background: var(--bg);
+  color: var(--text);
+  font: 14px var(--sans);
+}
+.composer-input::placeholder { color: var(--dim); opacity: 1; }
+.composer-note {
+  max-width: 760px;
+  margin: 6px auto 0;
+  font: 10.5px var(--mono);
+  color: var(--dim);
+}

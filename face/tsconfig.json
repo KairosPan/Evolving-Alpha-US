@@ -7,6 +7,10 @@
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": false,
+    // allowJs (deliberately without checkJs) lets the TS tests import the browser
+    // client's plain-JS modules and read their JSDoc-declared types. The client
+    // stays untyped by design and is never type-CHECKED here.
+    "allowJs": true,
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"]
