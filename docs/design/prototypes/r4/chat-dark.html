@@ -1,0 +1,48 @@
+<!-- @dsCard group="R4 - Minimal Chat" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KAIROS · CHAT — R4 DARK</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="chat.css">
+  <style>
+    /* Observatory palette — token override only; layout untouched. */
+    :root {
+      --bg: #05070b;
+      --panel: #0b0f16;
+      --line: rgba(255, 255, 255, 0.08);
+      --text: #e8e4da;
+      --dim: #8a8577;
+      --accent: #c8a552;
+      --danger: #d08b3c;
+      --green: #6fae7c;
+      --red: #c2564a;
+
+      --active-bg: rgba(200, 165, 82, 0.08);
+      --op-bubble: #1d2736;
+      --op-text: #e8e4da;
+      --k-bubble: #0b0f16;
+      --card-bg: rgba(255, 255, 255, 0.02);
+      --diff-bg: rgba(111, 174, 124, 0.06);
+
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main" id="main"></main>
+  </div>
+  <script src="../data/workbench_mock.js"></script>
+  <script src="../data/session_mock.js"></script>
+  <script src="chat.js"></script>
+  <script>
+    renderChat(document.getElementById("sidebar"), document.getElementById("main"));
+  </script>
+</body>
+</html>
