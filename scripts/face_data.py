@@ -40,7 +40,10 @@ def market_payload(source, days, end, *, breadth_days=60, tape_days=250,
                    screen_limit=40):
     """Assemble the /market payload. `source` implements daily_snapshot +
     daily_bars; `days` = ascending captured trading days <= end. Pure w.r.t.
-    its inputs; the CLI supplies the real bed."""
+    its inputs; the CLI supplies the real bed. `days` empty -> an honest
+    failure payload rather than an IndexError on the tape window."""
+    if not days:
+        return {"ok": False, "error": "no captured days"}
     guard = GuardedSource(source, AsOfGuard(end))
     snap = guard.daily_snapshot(end)
     symbols = [] if snap is None or snap.empty else snap["symbol"].tolist()
@@ -67,9 +70,12 @@ def market_payload(source, days, end, *, breadth_days=60, tape_days=250,
 
     tape_days_list = days[-tape_days:]
     start_day = tape_days_list[0]
+    # Membership rule: a symbol joins the composite only if it has a bar ON the window start day
+    # (that close is its base). A symbol whose history starts mid-window would otherwise enter at
+    # ratio 1.0 and print a phantom composite move on its entry day, so it is excluded outright.
     base = {}
     for s, df in bars.items():
-        d0 = df[df["date"] >= start_day]
+        d0 = df[df["date"] == start_day]
         if not d0.empty and float(d0.iloc[0]["close"]) > 0:
             base[s] = float(d0.iloc[0]["close"])
     tape = []
@@ -91,22 +97,29 @@ def market_payload(source, days, end, *, breadth_days=60, tape_days=250,
         for s in uni.all()[:screen_limit]:
             d = s.model_dump(mode="json")
             df = bars.get(s.symbol)
-            if df is not None:
-                closes = df[df["date"] <= end].tail(SPARK_BARS)["close"].tolist()
-                # No fabricated baseline: a missing or zero first close means no spark, not a 1.0 divisor.
-                d["spark"] = ([round(c / closes[0], 4) for c in closes]
-                              if closes and closes[0] > 0 else [])
+            closes = ([] if df is None
+                      else df[df["date"] <= end].tail(SPARK_BARS)["close"].tolist())
+            # Always a `spark` key (a screened symbol with no bars gets [], not a missing field).
+            # No fabricated baseline either: a zero first close means no spark, not a 1.0 divisor.
+            d["spark"] = ([round(c / closes[0], 4) for c in closes]
+                          if closes and closes[0] > 0 else [])
             out.append(d)
         return out
 
     return {
         "ok": True,
-        "bed": BED_INFO,
+        # BED_INFO's constants + what this assembly actually measured (merged into a fresh dict;
+        # the module constant is never mutated).
+        "bed": {**BED_INFO, "symbols": len(symbols), "captured_days": len(days)},
         "as_of": end.isoformat(),
         "breadth": {"series": breadth_series,
+                    "note": "cross-section fixed at the as-of day's snapshot - the history is "
+                            "survivorship-composed, not the cross-section that traded each day",
                     "raw": "alpaca_kit.features.breadth.market_breadth"},
         "tape": {"series": tape,
-                 "note": "equal-weight composite, 100 = window start",
+                 "note": "equal-weight composite, 100 = window start; members are the as-of day's "
+                         "symbols that already had a bar on the window start day (late entrants "
+                         "excluded, never spliced in at 1.0) - so it is survivorship-composed too",
                  "raw": "derived from the bed's bars"},
         "screens": {
             kind: {"rows": screen_rows(kind),
