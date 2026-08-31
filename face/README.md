@@ -115,14 +115,17 @@ five as a real upgrade that deserves the drill below.
 **The drill.** Bump `package.json` AND the matching constant in `src/version.ts`
 together — both pins if both tracks moved — then:
 
-1. `npm test` — the pin sweep fails first when the manifest, the installed tree,
+1. `npm install` — first, and not optional: the pin sweep reads the INSTALLED
+   tree as well as the manifest, so running it against a stale `node_modules`
+   fails on the old versions rather than on anything about the upgrade.
+2. `npm test` — the pin sweep fails first when the manifest, the installed tree,
    and either constant disagree. A green sweep is the precondition for the rest,
    not evidence the upgrade is good.
-2. `npm run typecheck` — the contract test. A renamed config key, a narrowed
+3. `npm run typecheck` — the contract test. A renamed config key, a narrowed
    value, a changed exported signature: they surface here, because the overlay's
    row configs are `satisfies`-checked against the plugins' OWN exported config
    types rather than against a local `Record<string, unknown>`.
-3. **Re-diff `src/boot.ts` against the CLI's current `profile-boot-*.js` chunk.**
+4. **Re-diff `src/boot.ts` against the CLI's current `profile-boot-*.js` chunk.**
    At this pin that is `@deepseek-ai/dsh` 0.1.1-rc.2,
    `lib/profile-boot-DG5t9aNs.js` — functions `prepareProfile`, `composeProfile`,
    `resolveTelemetryPatch`, `runProfile`. The chunk name is content-hashed and
@@ -133,7 +136,7 @@ together — both pins if both tracks moved — then:
    compiling clean. `boot.ts`'s header lists the divergences that are deliberate
    (no `--patch` overlays, no HMR reload, no `installFailLoud`, no shipped
    agent-presets graft, the face's own install anchor) — anything else is drift.
-4. **Re-check the frame shapes**: `client/mapper.js` and
+5. **Re-check the frame shapes**: `client/mapper.js` and
    `tests/fixtures/events.jsonl` against the pinned
    `@deepseek-ai/dsh-host-apiproxy/lib/types/api/*.d.ts` — `events.d.ts`
    (`MuxFrame`), `rpc.d.ts` (`ServerRequest`), `rpc-map.d.ts` (the closed method
@@ -142,8 +145,8 @@ together — both pins if both tracks moved — then:
    does not cover this hop — the fixture is the contract, and a fixture that no
    longer matches the wire makes the mapper tests green against a stream nobody
    sends.
-5. `FACE_SMOKE=1 npm test` — the only step that proves the new tree MOUNTS.
-6. Run the Gate-2 drill below.
+6. `FACE_SMOKE=1 npm test` — the only step that proves the new tree MOUNTS.
+7. Run the Gate-2 drill below.
 
 Only then trust it.
 
@@ -170,9 +173,10 @@ closed with nothing on screen saying why.
 
 1. Prompt Kairos to write a file OUTSIDE the session's workspace — the path
    shown on the session's sidebar row — and to escalate when the sandbox denies
-   it. `touch ~/face-gate2-drill` from the bash tool does it. Do NOT use `/tmp`:
-   `workspace-write` already permits the platform temp areas, so a write there
-   is allowed and asks nobody.
+   it. `touch ~/face-gate2-drill` from the bash tool does it, unless the session
+   workspace IS your home directory, in which case pick any path outside it. Do
+   NOT use `/tmp`: `workspace-write` already permits the platform temp areas, so
+   a write there is allowed and asks nobody.
 2. PASS, part one: the approval card renders in the face — headed `approval`,
    the tool's name beside it, the host's reason when it gave one, and exactly
    two buttons. Two outcomes and only two: `cancelled` and `unavailable` are
@@ -185,6 +189,13 @@ closed with nothing on screen saying why.
 5. Both decisions are in the session log under `$DSH_HOME/sessions` as paired
    `approval/asked` + `approval/decided` records. Those are log-only: the audit
    is for you, not for the model.
+6. Clean up: `rm ~/face-gate2-drill` (or whatever path step 1 used).
+
+The escalation retry is capped at ONE per turn: after a denial the model may
+retry that same command once, in that same turn, with a wider mode and a
+justification — and that retry is what raises the card. If it answers with prose
+instead of retrying, that turn is spent; prompt again, more bluntly, rather than
+concluding the seam is broken.
 
 **Never drill with the order tools.** `ALPACA_KIT_ENABLE_ORDERS` stays unset.
 Gate 1 — registration — is what keeps `place_order` / `cancel_order` out of the

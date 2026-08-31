@@ -26,7 +26,8 @@ deferring. Every style-kairos SKILL.md carries that scope header at the top.
 3. **Copy the profile in.** Copy `dsh/profile/cordis.yml` into the harness home's profile
    location per the current dsh docs — as of the frozen survey that is
    `$DSH_HOME/profiles/<name>/` and its patch file is `cordis.patch.yml` (for the `face`
-   profile, that patch file is the ONLY one to edit — `kairos-face` rewrites
+   profile, put this file's rows INTO `$DSH_HOME/profiles/face/cordis.patch.yml` — that
+   patch file is the only one to edit there, because `kairos-face` rewrites
    `<profile>/cordis.yml` on every boot; see `face/README.md`). Fill in every
    `<ABSOLUTE PATH TO THIS REPO>` placeholder in the copy; the repo copy keeps the
    placeholders. In the same pass, replace the bare `python` in the server `command:` with the
