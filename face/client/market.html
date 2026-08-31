@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market — KAIROS</title>
+<!-- Absolute paths, same reason as index.html: the page is served at `/market`
+     (static.ts's exact route) while its assets live under the `/client`
+     prefix, so a relative href would ask for `/chat.css` and 404. -->
+<link rel="stylesheet" href="/client/chat.css">
+</head>
+<body class="inst-body">
+<!-- The frame only. Every reading below is built by market.js from
+     /data/market.json through the DOM API - this file holds not one byte of
+     market data, so nothing here can ever be stale against the payload. -->
+<main class="inst-wrap">
+  <header class="inst-head">
+    <a class="inst-mark" href="/">KAIROS</a>
+    <span class="inst-title">Market</span>
+    <a class="inst-link" href="/account">account →</a>
+    <span id="asof" class="inst-note"></span>
+    <span id="stamp" class="inst-note"></span>
+    <button id="refresh" class="inst-refresh" type="button" title="re-fetch">refresh</button>
+  </header>
+  <div id="root"><p class="inst-note">loading…</p></div>
+</main>
+<script type="module" src="/client/market.js"></script>
+</body>
+</html>

@@ -58,13 +58,15 @@ function recorder(): { rec: Recorded; res: ServerResponse } {
   return { rec, res: res as unknown as ServerResponse };
 }
 
-/** A client dir with an index and one asset, plus a secret OUTSIDE it. */
+/** A client dir with the three pages and one asset, plus a secret OUTSIDE it. */
 function fixture(): { clientDir: string; routes: WebRoute[] } {
   const root = mkdtempSync(join(tmpdir(), "face-client-"));
   const clientDir = join(root, "client");
   writeFileSync(join(root, "secret.txt"), "do not serve me");
   mkdirSync(clientDir);
   writeFileSync(join(clientDir, "index.html"), "<p>page</p>");
+  writeFileSync(join(clientDir, "market.html"), "<p>market</p>");
+  writeFileSync(join(clientDir, "account.html"), "<p>account</p>");
   writeFileSync(join(clientDir, "chat.css"), "body{}");
   const routes: WebRoute[] = [];
   registerStatic({ register: (route) => routes.push(route) }, clientDir);
@@ -80,16 +82,16 @@ async function call(routes: WebRoute[], kind: WebRoute["kind"], path: string, ur
   return rec;
 }
 
-/* The route SHAPE is the contract with the host webserver: `exact /` is the
- * page and `prefix /client` is everything else the face owns. Asserting it
- * here is what catches a mount that registered, say, `prefix /` - which would
+/* The route SHAPE is the contract with the host webserver: three named pages
+ * and `prefix /client` for everything else the face owns. Asserting it here is
+ * what catches a mount that registered, say, `prefix /` - which would
  * typecheck, boot, serve index.html for every asset request, and look fine
  * until the browser tried to parse HTML as CSS. */
-test("registerStatic mounts exactly the two routes it claims", () => {
+test("registerStatic mounts exactly the routes it claims", () => {
   const { routes } = fixture();
   assert.deepEqual(
     routes.map((r) => `${r.kind} ${r.path}`).sort(),
-    ["exact /", "prefix /client"],
+    ["exact /", "exact /account", "exact /market", "prefix /client"],
   );
 });
 
@@ -99,6 +101,19 @@ test("the / route serves index.html as html", async () => {
   assert.equal(rec.status, 200);
   assert.equal(rec.headers["content-type"], "text/html; charset=utf-8");
   assert.equal(String(rec.body), "<p>page</p>");
+});
+
+/* Each instrument route must serve its OWN page. A copy-paste that pointed
+ * both at one file would satisfy a route-shape assertion and still show the
+ * operator the market when they asked for the account. */
+test("the instrument routes serve their own page file", async () => {
+  const { routes } = fixture();
+  for (const [path, body] of [["/market", "<p>market</p>"], ["/account", "<p>account</p>"]] as const) {
+    const rec = await call(routes, "exact", path, path);
+    assert.equal(rec.status, 200);
+    assert.equal(rec.headers["content-type"], "text/html; charset=utf-8");
+    assert.equal(String(rec.body), body);
+  }
 });
 
 test("the /client route serves assets, 404s misses, and 403s traversal", async () => {

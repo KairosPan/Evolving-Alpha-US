@@ -433,3 +433,178 @@ body {
 .composer-stop:hover:enabled { color: var(--red); border-color: currentColor; }
 .composer-stop:disabled { opacity: 0.45; cursor: default; }
 .composer-note.err { color: var(--red); }
+
+/* ---------- instruments ---------- */
+
+/* The two read-only pages (/market, /account) live in the same skin as the
+   chat: every color, font and radius below is one of the tokens declared at
+   the top of this file, so a palette override moves the instruments with the
+   chat and no rule here has to be touched. Every selector is a NEW `.inst-*`
+   name (plus the `.mono` / `.pos` / `.neg` utilities, used only compounded on
+   instrument classes), so nothing above changes meaning and the chat page
+   renders byte-identically with this block present. */
+
+.inst-body {
+  /* The chat is a fixed two-pane app (`body { overflow: hidden }` above); an
+     instrument is a document that scrolls. The root's overflow is visible, so
+     THESE values propagate to the viewport: the page scrolls vertically, and
+     never sideways — a wide table scrolls inside its own `.inst-scroll`. */
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.inst-wrap { max-width: 960px; margin: 0 auto; padding: 16px 20px 48px; }
+
+.inst-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.inst-mark {
+  font: 600 11px/1 var(--mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dim);
+  text-decoration: none;
+}
+.inst-mark:hover { color: var(--accent); }
+.inst-title { font-weight: 600; font-size: 15px; }
+.inst-link { font: 11px var(--mono); color: var(--dim); text-decoration: none; }
+.inst-link:hover { color: var(--accent); }
+
+.inst-note { font: 11px/1.6 var(--mono); color: var(--dim); overflow-wrap: break-word; }
+.inst-card > .inst-note { margin-top: 6px; }
+/* the raw pointer: the same dotted-underline idiom the chat's `.raw` uses */
+.inst-raw { text-decoration: underline dotted; text-underline-offset: 2px; }
+/* a re-served payload after a producer failure — amber, the kit's warn ink */
+.inst-stale { color: var(--danger); }
+
+.inst-refresh {
+  margin-left: auto;
+  flex: none;
+  padding: 3px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  background: var(--panel);
+  color: var(--dim);
+  font: 500 10.5px var(--mono);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.inst-refresh:hover:enabled { color: var(--accent); border-color: currentColor; }
+.inst-refresh:disabled { opacity: 0.45; cursor: default; }
+
+/* ---------- cards: the chat's flat tool-card idiom, one panel per reading */
+
+.inst-card {
+  margin-top: 16px;
+  padding: 12px 16px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+.inst-card-title {
+  margin: 0;
+  font: 600 10px/1 var(--sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.inst-sub {
+  margin: 16px 0 0;
+  font: 600 11.5px var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.inst-grid { display: flex; flex-wrap: wrap; gap: 10px 32px; margin: 10px 0 4px; }
+.inst-stat-label {
+  font: 500 10px var(--sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 2px;
+}
+.inst-stat-value { font: 600 17px var(--mono); }
+
+/* ---------- tables: wide by nature, so they scroll inside themselves */
+
+.inst-scroll { overflow-x: auto; margin-top: 6px; }
+.inst-table { border-collapse: collapse; width: 100%; min-width: 460px; font: 12px var(--mono); }
+.inst-table th {
+  font: 600 9.5px var(--sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+  text-align: right;
+  white-space: nowrap;
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.inst-table td { text-align: right; white-space: nowrap; padding: 3px 10px; border-bottom: 1px solid var(--line); }
+.inst-table tr:last-child td { border-bottom: 0; }
+.inst-table th:first-child, .inst-table td:first-child { text-align: left; padding-left: 0; }
+.inst-table td.pos { color: var(--green); }
+.inst-table td.neg { color: var(--red); }
+.mono { font-family: var(--mono); }
+
+/* ---------- sparks: hand-rolled SVG, inked with currentColor */
+
+.spark { display: block; width: 100%; height: auto; margin-top: 8px; color: var(--accent); }
+.spark.tape { color: var(--text); }
+.spark.row { width: 80px; height: 20px; margin: 0; color: var(--dim); }
+
+/* ---------- the maturity rail: the bed's window as a coordinate space
+
+   `.inst-track` is that space (0% = window start, 100% = window end) and is
+   the positioning parent for both the hatched immature spans and the charted-
+   span bracket, so a percentage means the same thing in every lane. */
+
+.inst-rail { margin-top: 10px; }
+.inst-track { position: relative; padding-bottom: 9px; }
+.inst-lane {
+  position: relative;
+  height: 14px;
+  margin-bottom: 3px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--panel);
+  overflow: hidden;
+}
+/* hatched, not filled: this span holds real days whose long readings are not
+   yet mature — it is a caveat over the data, not a hole in it */
+.inst-lane-immature {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--active-bg) 0 3px,
+    transparent 3px 6px
+  );
+  border-right: 1px solid var(--line);
+}
+.inst-lane-label {
+  position: relative;
+  display: block;
+  padding-left: 5px;
+  font: 9.5px/14px var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--dim);
+  white-space: nowrap;
+}
+/* the charted span, bracketed under the lanes */
+.inst-lane-bracket {
+  position: absolute;
+  bottom: 0;
+  height: 6px;
+  border: 1px solid var(--accent);
+  border-top: 0;
+  border-radius: 0 0 2px 2px;
+}

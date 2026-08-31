@@ -1,10 +1,11 @@
-/** The face's static UI mount: two routes on the host webserver, no framework.
+/** The face's static UI mount: four routes on the host webserver, no framework.
  *
  * dsh-host-webserver "knows no harness concepts and serves no files" (its own
  * header) — the composing app owns dist serving. dsh-web-app does that through
  * the webserver's single `registerFallback` seat; the face deliberately does
- * NOT, and takes two NAMED routes instead: `exact /` for the page and
- * `prefix /client` for its assets. The seat is left empty on purpose. It is a
+ * NOT, and takes NAMED routes instead: `exact /` for the chat page, `exact
+ * /market` and `exact /account` for the two instrument pages, and
+ * `prefix /client` for their assets. The seat is left empty on purpose. It is a
  * one-owner seat that throws on a second claim, and everything it would catch
  * here is a 404 anyway; leaving it free keeps it available to a later row (a
  * frontend bundle, a dev proxy) without the face having to give it up first.
@@ -82,20 +83,32 @@ export interface RouteRegistrar {
   register(route: WebRoute): unknown;
 }
 
+/** The pages, as (route path → file name). Each is an EXACT route: a page is
+ * one address, not a subtree, and nothing under it is served by accident. The
+ * instrument pages are plain documents against the `/data/*.json` routes — no
+ * server-side rendering, so a page is a file like the chat's. */
+const PAGES: ReadonlyArray<readonly [path: string, file: string]> = [
+  ["/", "index.html"],
+  ["/market", "market.html"],
+  ["/account", "account.html"],
+];
+
 /**
- * Mount the face's client: `exact /` → `<clientDir>/index.html`, and
+ * Mount the face's client: one `exact` route per page in {@link PAGES}, and
  * `prefix /client` → files under `clientDir`, traversal-refused.
  * @param webServer - the host webserver service (`ctx.webServer`).
- * @param clientDir - absolute path of the directory holding index.html.
- * @throws when either (kind, path) is already registered — a duplicate route
+ * @param clientDir - absolute path of the directory holding the page files.
+ * @throws when any (kind, path) is already registered — a duplicate route
  * is a composition error the webserver refuses on purpose.
  */
 export function registerStatic(webServer: RouteRegistrar, clientDir: string): void {
-  webServer.register({
-    kind: "exact",
-    path: "/",
-    handler: (_req: IncomingMessage, res: ServerResponse) => serveFile(res, join(clientDir, "index.html")),
-  });
+  for (const [path, file] of PAGES) {
+    webServer.register({
+      kind: "exact",
+      path,
+      handler: (_req: IncomingMessage, res: ServerResponse) => serveFile(res, join(clientDir, file)),
+    });
+  }
   webServer.register({
     kind: "prefix",
     path: "/client",
