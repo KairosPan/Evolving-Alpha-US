@@ -1,4 +1,47 @@
 <!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>KAIROS</title>
-<p>kairos-face booted. Client lands in the next task.</p>
+<!-- Absolute paths: the page is served at `/` (static.ts's exact route) while
+     its assets live under the `/client` prefix, so a relative href would ask
+     for `/chat.css` and 404. -->
+<link rel="stylesheet" href="/client/chat.css">
+</head>
+<body>
+<!-- The r4 kit's own skeleton, live: two panes, one flow, one composer. Every
+     list and every message is built by chat.js through the DOM API — this file
+     holds the frame and not one byte of host data. -->
+<div class="chat-app">
+  <aside class="sidebar">
+    <div class="side-head">
+      <div class="side-brand">Kairos</div>
+      <button id="new-session" class="side-new" type="button" title="start a new conversation">+ new</button>
+    </div>
+    <div id="conv-list" class="conv-list"></div>
+    <div class="side-foot">live · loopback only</div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <span id="topbar-name" class="topbar-name">new session</span>
+      <span id="topbar-raw" class="raw">raw</span>
+    </header>
+
+    <div id="scroll" class="flow">
+      <div id="flow" class="flow-inner"></div>
+    </div>
+
+    <footer class="composer">
+      <form id="composer" class="composer-row">
+        <input id="composer-input" class="composer-input" type="text" placeholder="Message Kairos…" autocomplete="off">
+        <button id="stop" class="composer-stop" type="button" title="stop the active turn">stop</button>
+      </form>
+      <div id="status" class="composer-note">starting…</div>
+    </footer>
+  </main>
+</div>
+<script type="module" src="/client/chat.js"></script>
+</body>
+</html>

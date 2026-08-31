@@ -302,3 +302,134 @@ body {
   font: 10.5px var(--mono);
   color: var(--dim);
 }
+
+/* ---------- live additions ---------- */
+
+/* Everything below exists only for the live page: the affordances a read-only
+   prototype had no need for — a clickable conversation, an answerable card, a
+   turn cut off mid-sentence, a composer that can be stopped. Every rule is
+   ADDITIVE: each selector names a new class, or compounds a new class onto a
+   kit class (`.msg.note`, `.bubble.pre`), so no rule above changes meaning and
+   the ported block stays diffable against the r4 prototype. Colors and radii
+   come from the same tokens; nothing new is introduced. */
+
+/* sidebar head: brand + the new-conversation button */
+.side-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding-right: 12px; }
+.side-new {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  background: var(--panel);
+  color: var(--dim);
+  font: 500 10.5px var(--mono);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.side-new:hover { color: var(--accent); border-color: currentColor; }
+
+/* a conversation row that can be opened */
+.conv-pick { cursor: pointer; }
+.conv-pick:hover { background: var(--active-bg); }
+.conv-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.chip.waiting { color: var(--danger); border-color: currentColor; }
+
+/* message text keeps the newlines the model wrote */
+.bubble.pre { white-space: pre-wrap; }
+
+/* a user-role message the operator did not write (plugin, tool, cron wake-up):
+   centred and quiet, so it can never be read as something the operator said */
+.msg.note { align-self: center; align-items: center; max-width: 88%; }
+.msg.note .bubble {
+  background: transparent;
+  border: 1px dashed var(--line);
+  color: var(--dim);
+  font-size: 12.5px;
+}
+
+/* a turn cancelled mid-stream: what follows is a prefix, not an answer */
+.cut-mark { color: var(--danger); font-weight: 600; }
+.tag-cut { margin-top: 4px; color: var(--danger); border-color: currentColor; }
+
+/* tool result body */
+.tool-out {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  max-height: 280px;
+  overflow: auto;
+  background: var(--bg);
+  border-radius: 6px;
+  font: 12px/1.6 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+.tool-out.err { color: var(--red); }
+
+/* answerable cards: the Gate-2 surface */
+.card.ask { border-left-color: var(--accent); }
+.card.ask .kind { color: var(--accent); }
+.card.answered { border-left-color: var(--line); }
+.card.answered .kind { color: var(--dim); }
+
+.card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.ask-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  background: var(--panel);
+  color: var(--text);
+  font: 500 12px var(--sans);
+  cursor: pointer;
+}
+.ask-btn:hover:enabled { color: var(--accent); border-color: currentColor; }
+.ask-btn.deny:hover:enabled { color: var(--red); border-color: currentColor; }
+.ask-btn:disabled { opacity: 0.45; cursor: default; }
+
+.ask-q { margin-top: 10px; }
+.ask-q-head {
+  font: 600 10px var(--sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.ask-q-text { margin-top: 2px; font-size: 13.5px; }
+.ask-q-detail { margin-top: 3px; font: 12px/1.5 var(--mono); color: var(--dim); white-space: pre-wrap; }
+.opt-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.opt {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  background: var(--panel);
+  color: var(--text);
+  font: 12px var(--sans);
+  text-align: left;
+  cursor: pointer;
+}
+.opt:hover { border-color: var(--accent); }
+.opt.on { color: var(--accent); border-color: currentColor; background: var(--active-bg); }
+.ask-input {
+  width: 100%;
+  margin-top: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-input);
+  background: var(--bg);
+  color: var(--text);
+  font: 13px var(--sans);
+}
+
+/* composer: the stop button and the status line's failure state */
+.composer-stop {
+  flex: none;
+  margin-left: 8px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-input);
+  background: var(--panel);
+  color: var(--dim);
+  font: 500 12px var(--sans);
+  cursor: pointer;
+}
+.composer-stop:hover:enabled { color: var(--red); border-color: currentColor; }
+.composer-stop:disabled { opacity: 0.45; cursor: default; }
+.composer-note.err { color: var(--red); }
