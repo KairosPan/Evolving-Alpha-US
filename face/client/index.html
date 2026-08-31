@@ -16,24 +16,27 @@
 <div class="chat-app">
   <aside class="sidebar">
     <div class="side-head">
+      <!-- The way into /market: its own document, its own exact route; it
+           links back here through its wordmark. -->
+      <a class="corner-link" href="/market" title="Market" aria-label="Market">
+        <svg viewBox="0 0 18 18" width="17" height="17" aria-hidden="true"><polyline points="2,13 6.5,8 10,10.5 16,3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><polyline points="12,3.5 16,3.5 16,7.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
       <div class="side-brand">Kairos</div>
       <button id="new-session" class="side-new" type="button" title="start a new conversation">+ new</button>
     </div>
     <div id="conv-list" class="conv-list"></div>
-    <!-- The way into the two instruments. Plain hrefs, not chat state: each is
-         its own document served by its own exact route, and both link back
-         here through their wordmark. -->
-    <div class="side-foot">
-      <a class="inst-link" href="/market">Market</a> ·
-      <a class="inst-link" href="/account">Account</a><br>
-      live · loopback only
-    </div>
+    <div class="side-foot">live · loopback only</div>
   </aside>
 
   <main class="main">
     <header class="topbar">
       <span id="topbar-name" class="topbar-name">new session</span>
       <span id="topbar-raw" class="raw">raw</span>
+      <!-- The way into /account, mirrored from the market icon in the
+           sidebar head: the page's top-right corner. -->
+      <a class="corner-link" href="/account" title="Account" aria-label="Account">
+        <svg viewBox="0 0 18 18" width="17" height="17" aria-hidden="true"><rect x="2" y="4.5" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11.5 9.5h4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="11.8" cy="9.5" r="1" fill="currentColor"/></svg>
+      </a>
     </header>
 
     <div id="scroll" class="flow">

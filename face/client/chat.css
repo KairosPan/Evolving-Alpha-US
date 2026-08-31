@@ -479,7 +479,17 @@ body {
 /* The same quiet link, reused for the chat sidebar's way IN to the instruments.
    Only the size is re-inherited, so the two links sit on the footer's own
    10.5px line instead of half a pixel above it. */
-.side-foot .inst-link { font-size: inherit; }
+/* corner icon links: /market sits in the sidebar head (top-left), /account at
+   the topbar's right end (top-right). Quiet like .inst-link; the title/aria
+   label carries the name, the glyph stays dim ink until hover. */
+.corner-link {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  color: var(--dim);
+}
+.corner-link:hover { color: var(--accent); }
+.side-head .corner-link { margin: 12px 0 0 16px; align-self: flex-start; }
 
 .inst-note { font: 11px/1.6 var(--mono); color: var(--dim); overflow-wrap: break-word; }
 .inst-card > .inst-note { margin-top: 6px; }
