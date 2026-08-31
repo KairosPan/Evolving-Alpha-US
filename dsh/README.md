@@ -25,7 +25,9 @@ deferring. Every style-kairos SKILL.md carries that scope header at the top.
    directory layout the next step writes into.
 3. **Copy the profile in.** Copy `dsh/profile/cordis.yml` into the harness home's profile
    location per the current dsh docs — as of the frozen survey that is
-   `$DSH_HOME/profiles/<name>/` and its patch file is `cordis.patch.yml`. Fill in every
+   `$DSH_HOME/profiles/<name>/` and its patch file is `cordis.patch.yml` (for the `face`
+   profile, that patch file is the ONLY one to edit — `kairos-face` rewrites
+   `<profile>/cordis.yml` on every boot; see `face/README.md`). Fill in every
    `<ABSOLUTE PATH TO THIS REPO>` placeholder in the copy; the repo copy keeps the
    placeholders. In the same pass, replace the bare `python` in the server `command:` with the
    ABSOLUTE path of the interpreter step 1 installed into (`python -c "import sys;
@@ -85,7 +87,8 @@ deferring. Every style-kairos SKILL.md carries that scope header at the top.
    `tools/pre-execute` ask rule, or a per-tool key if one now exists — and then **confirm that an
    order call actually prompts, before you trust the flag**. Until that confirmation, treat Gate 1
    as the only layer standing between the agent and a paper order; do not rely on Gate 2 to hold
-   if the flag is ever mis-set.
+   if the flag is ever mis-set. The face's approval surface and its drill live in
+   `face/README.md` — once that drill passes on a live face, Gate 2 has a validated home there.
 7. **Re-check the key names.** dsh is a developer preview and states that there will be
    compatibility-breaking changes. The shape in `profile/cordis.yml` is indicative, pinned
    against a survey frozen 2026-08-22
