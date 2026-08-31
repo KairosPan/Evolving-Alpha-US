@@ -15,6 +15,7 @@ They differ whenever the market disk cache hits (see `_real_market`).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -180,16 +181,16 @@ def account_payload(client_factory, env) -> dict:
         return {"ok": True, "available": False,
                 "reason": "no APCA keys in the environment"}
     client = client_factory()
-    orders = client.get_orders() or []
+    # status="all", never the default: Alpaca's /v2/orders defaults to OPEN orders only, so a
+    # settled account would render an empty table under a "recent orders" heading.
+    orders = client.get_orders(status="all") or []
     return {
         "ok": True,
         "available": True,
         "account": client.get_account() or {},
         "positions": client.get_positions() or [],
-        # Capped, and the truncation is disclosed - dropping rows in silence would be a
-        # lie by omission. The order is the trading API's own, not a claim of recency.
         "orders": orders[:ORDERS_CAP],
-        "orders_truncated": len(orders) > ORDERS_CAP,
+        "orders_note": "Alpaca's most recent 50 orders, all statuses",
         "orders_gate": gate_state(env),
         "raw": "alpaca_kit.account.TradingClient - read methods only",
     }
@@ -223,6 +224,34 @@ def _same_dir(a, b) -> bool:
     return Path(a).resolve() == Path(b).resolve()
 
 
+# The market cache lives OUTSIDE any bed. A bed's identity is its CHECKSUMS manifest, written
+# by `alpaca_kit.pit.capture.capture_window` from an rglob of the bed root - a display cache
+# dropped in there would enter that identity and make the bed report dirty. Module-relative,
+# never cwd-relative: the face spawns this script from the repo root today, but a producer's
+# cache must not move when someone runs it from elsewhere. `data/` is gitignored wholesale.
+CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / ".face_cache"
+
+
+def _short_sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()[:8]
+
+
+def _code_hash() -> str:
+    """Digest of THIS module's source. It is part of the cache key, so editing the assembler
+    invalidates every cached payload instead of serving one built by code that no longer
+    exists."""
+    return _short_sha(Path(__file__).read_bytes())
+
+
+def _cache_path(pit_root, as_of: Date) -> Path:
+    """One file per (bed, code version, as-of day). The bed is keyed by a hash of its RESOLVED
+    path, so two beds never collide and a relative/absolute spelling of the same bed hits the
+    same entry. Assumes market_payload's DEFAULT windows; a caller that varies them must key
+    on them too."""
+    root_hash = _short_sha(str(Path(pit_root).resolve()).encode())
+    return CACHE_DIR / f"market-{root_hash}-{_code_hash()}-{as_of.isoformat()}.json"
+
+
 def _read_cache(path: Path):
     """The cached payload, or None when it is absent, unreadable, corrupt or not a
     payload-shaped object (in which case the caller reassembles and overwrites it)."""
@@ -234,9 +263,9 @@ def _read_cache(path: Path):
 
 
 def _write_cache(path: Path, payload: dict) -> None:
-    """Atomic write: a reader must never see a truncated cache file. A cache that cannot
-    be written (read-only bed) is logged to stderr and otherwise ignored - the payload in
-    hand is good, and failing the serve over the cache would be the worse trade."""
+    """Atomic write: a reader must never see a truncated cache file. A cache that cannot be
+    written (an unwritable `data/`) is logged to stderr and otherwise ignored - the payload
+    in hand is good, and failing the serve over the cache would be the worse trade."""
     tmp = None
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -259,10 +288,9 @@ def _real_market():
     """CLI assembly for the real bed. Kept out of the pure functions.
 
     Assembling the shipped bed walks every captured day through market_breadth and both
-    screens - minutes, not seconds - so the result is cached on disk under the bed itself,
-    keyed by (pit_root, as_of). A captured bed is static, so the first run pays and every
-    later one is a file read. The key assumes market_payload's DEFAULT windows; a future
-    caller that varies them has to key on them too.
+    screens - minutes, not seconds - so the result is cached on disk (see `_cache_path`:
+    outside the bed, keyed by bed + code version + as-of day). A captured bed is static, so
+    the first run pays and every later one is a file read.
     """
     from alpaca_kit.pit.pit_store import PITStore
     from alpaca_kit.pit.snapshot_source import SnapshotSource
@@ -284,12 +312,7 @@ def _real_market():
         raise RuntimeError(f"no captured snapshots under {pit_root}")
     as_of = days[-1]
 
-    # NOTE: this lands INSIDE the bed directory, which carries a CHECKSUMS manifest -
-    # `alpaca_kit.pit.integrity_check.verify_checksums` would type it `extra:`. Nothing
-    # verifies a bed in this repo today (the fail-closed producers its docstring names are
-    # retired), but if one returns, either skip `.face_cache/` there or move this cache
-    # out of the bed.
-    cache = Path(pit_root) / ".face_cache" / f"market-{as_of.isoformat()}.json"
+    cache = _cache_path(pit_root, as_of)
     cached = _read_cache(cache)
     if cached is not None:
         return cached
