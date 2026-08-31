@@ -64,16 +64,27 @@ Re-implements the CLI chunk's composition (mirror of `profile-boot-*.js` lines ~
 
 1. `loadLayeredEnv` → `healProfilesModuleFallback(installAnchor)` →
    `loadProfile("dsh", <profileName>, installAnchor)`. Profile name from `FACE_PROFILE`,
-   default `web`. Honest note: the stock `web` profile boots but carries none of the
-   workbench toolset — the real face requires the operator to have installed the repo's
-   cordis profile per `dsh/README.md` (steps 2–4, still a pending operator item) and to
-   point `FACE_PROFILE` at it. The face must boot EITHER cleanly; it never edits profiles.
+   default **`face`** — a dedicated profile with bundles `["@deepseek-ai/dsh-base"]` ONLY
+   (booting the stock `web` profile would mount the entire bundled UI; wrong for the face).
+   A `face setup` script creates `$DSH_HOME/profiles/face/` (package.json + empty
+   `cordis.patch.yml`) and REFUSES to overwrite an existing one — profiles are operator
+   territory. The operator mounts the alpaca_kit MCP + skills into that profile's patch
+   layer per `dsh/README.md` (still a pending operator item); the face boots cleanly with
+   or without those rows. The host rows the face needs (webserver, api-gateway, connection,
+   directory-picker, cordis-host-runner) are inserted by the face's own programmatic
+   overlay patch, not written into the profile. Note: `dsh-base` already mounts the
+   `approval` and `user-questions` rows — §3.2's "mount approval rows" means "confirm they
+   are present from the base bundle", not new inserts.
 2. Patch stack in the CLI's order: bundle patches from `dsh.profile.bundles` → the profile's
    `cordis.patch.yml` → `$DSH_HOME/cordis.patch.yml` → our face overlay (§3.2).
 3. The root-`cordis.yml` rewrite guard (empty `[]` root) — **must not be skipped**; skipping
    corrupts subsequent boots (loader write-back duplication).
-4. Re-implement the two chunk-only patches we'd otherwise lose: the shipped agent-presets
-   root patch (`config/agent-presets/`) and telemetry-disable.
+4. Re-implement the telemetry-disable chunk-only patch (`DSH_TELEMETRY_DISABLED`). The
+   chunk's other private graft — the shipped agent-presets root (`config/agent-presets/`
+   inside the CLI app package) — is deliberately DROPPED in v1: the face's dependency tree
+   does not include the CLI app, so the shipped root is not present to graft. Revisit if a
+   missing preset persona shows up in face sessions (the graft is conditional on an
+   `agent-presets` row existing in the composed tree).
 5. `boot("dsh", <profileDir>/cordis.yml, patches, prepare)` where `prepare` provides
    `DSH_LAUNCH_ENVIRONMENT_KEY` and `provideCmdline(hostCtx, {args, exit})`.
 
@@ -86,9 +97,10 @@ Re-implements the CLI chunk's composition (mirror of `profile-boot-*.js` lines ~
 - `dsh-client-connection` — mounts `/api` prefix (Host-header fence, loopback trust) and the
   two WebSocket upgrade paths. We restate `host/port`/`trustedHosts` config ourselves since
   we bypass `dsh-web-app/startup` (recon risk d). Privileged methods stay loopback-pinned.
-- `dsh-user-approval` + `dsh-user-questions` — REQUIRED: the apiproxy gateway registers its
-  pending-table listener only if `ctx.get("approval")` exists; without these rows, `ask`
-  policies fail closed to deny and Gate 2 never reaches the face.
+- `dsh-user-approval` + `dsh-user-questions` — REQUIRED for Gate 2: the apiproxy gateway
+  registers its pending-table listener only if `ctx.get("approval")` exists; without them,
+  `ask` policies fail closed to deny. Both ship in the `dsh-base` bundle (rows `approval`
+  and `user-questions`) — the face asserts their presence at boot rather than inserting.
 - **Not mounted**: `dsh-host-frontend-static`, `dsh-client-modules`, client-ui rows. Our
   static routes claim `/` (index.html, chat.css, client JS) on `ctx.webServer`.
 
