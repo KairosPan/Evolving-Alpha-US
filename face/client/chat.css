@@ -608,3 +608,54 @@ body {
   border-top: 0;
   border-radius: 0 0 2px 2px;
 }
+
+/* ---------- the gate strip (/account): the double order gate as a circuit
+
+   Read left to right — order intent → GATE 1 → GATE 2 → the trading host: four
+   chips joined by three wires, and a wire downstream of a gate that is not
+   passable is drawn severed. Deliberately quiet: no motion, no alarm ink, no
+   size. A face that dramatizes its own safety interlocks teaches the operator
+   to read them as decoration, and the page writes each gate's state in words
+   underneath anyway — nothing here is the only carrier of a meaning. */
+
+.inst-circuit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 4px;
+}
+.inst-gate-node {
+  flex: none;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--panel);
+  text-align: center;
+  font: 10px/1.4 var(--mono);
+  color: var(--dim);
+}
+/* passable = normal ink on the accent border; not passable = dimmed and
+   dashed, the same "this is not a reading" idiom the maturity hatch uses */
+.inst-gate-node.on { color: var(--text); border-color: var(--accent); }
+.inst-gate-node.off { border-style: dashed; }
+/* the two terminals — where an order starts and where it would land */
+.inst-gate-node.src, .inst-gate-node.host { background: var(--active-bg); letter-spacing: 0.06em; }
+.inst-gate-glyph { font-size: 12px; }
+.inst-gate-label { letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+
+/* a wire: a 1px rule held in the middle of a 32px box, so it lines up with the
+   chips whether or not it is carrying the severed glyph */
+.inst-gate-wire {
+  flex: none;
+  width: 32px;
+  height: 14px;
+  text-align: center;
+  font: 10px/14px var(--mono);
+  color: var(--dim);
+  background: linear-gradient(var(--line), var(--line)) center / 100% 1px no-repeat;
+}
+.inst-gate-wire.severed {
+  background-image: repeating-linear-gradient(to right, var(--line) 0 3px, transparent 3px 6px);
+  color: var(--danger);
+}

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account — KAIROS</title>
+<!-- Absolute paths, same reason as index.html and market.html: the page is
+     served at `/account` (static.ts's exact route) while its assets live under
+     the `/client` prefix, so a relative href would ask for `/chat.css` and
+     404. -->
+<link rel="stylesheet" href="/client/chat.css">
+</head>
+<body class="inst-body">
+<!-- The frame only. Every reading below - the balances, the positions, the
+     orders, and the state of both order gates - is built by account.js from
+     /data/account.json through the DOM API, so this file holds no account data
+     and can never be stale against the payload. -->
+<main class="inst-wrap">
+  <header class="inst-head">
+    <a class="inst-mark" href="/">KAIROS</a>
+    <span class="inst-title">Account</span>
+    <a class="inst-link" href="/market">market →</a>
+    <span id="stamp" class="inst-note"></span>
+    <button id="refresh" class="inst-refresh" type="button" title="re-fetch">refresh</button>
+  </header>
+  <div id="root"><p class="inst-note">loading…</p></div>
+</main>
+<script type="module" src="/client/account.js"></script>
+</body>
+</html>
