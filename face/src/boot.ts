@@ -152,7 +152,7 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
   const telemetry = resolveTelemetryPatch(process.env.DSH_TELEMETRY_DISABLED, rows.has(TELEMETRY_ROW_ID));
   if (telemetry !== undefined) patches.push(telemetry);
   if (rows.has(HMR_ROW_ID)) patches.push({ id: HMR_ROW_ID, disabled: true });
-  patches.push(...faceOverlay(opts.port));
+  patches.push(...faceOverlay(opts.port, home));
   return { patches, rootConfig };
 }
 
