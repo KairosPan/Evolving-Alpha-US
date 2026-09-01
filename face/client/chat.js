@@ -32,6 +32,7 @@
  */
 import { rpc, respond, openMux } from "./api.js";
 import { mapFrame } from "./mapper.js";
+import { renderResult } from "./render.js";
 
 /** Rendered in place of a value the host did not give us. */
 const EM = "—";
@@ -214,11 +215,14 @@ function bubbleNode(view) {
  */
 function toolCardNode(card) {
   const node = el("article", "card");
+  if (typeof card.name === "string") node.dataset.tool = card.name;
   const head = el("div", "card-head");
   head.append(el("span", "kind", dash(card.name ?? card.title ?? "tool")));
   head.append(el("span", "producer", "running…"));
   const raw = el("span", "raw", "raw");
   raw.title = dash(card.callId);
+  /* pretty ⇄ raw: inert unless a pretty view exists (.has-pretty gates the css). */
+  raw.addEventListener("click", () => node.classList.toggle("show-raw"));
   head.append(raw);
   node.append(head);
   return node;
@@ -234,6 +238,13 @@ function fillResult(node, card) {
   if (producer) producer.textContent = card.title ?? (card.isError ? "failed" : "done");
   node.classList.toggle("danger", card.isError === true);
   node.querySelector(".tool-out")?.remove();
+  node.querySelector(".viz")?.remove();
+  /* Pretty view when the tool and shape are both recognized; the raw pre stays
+   * in the DOM as the fallback and as the head's `raw` toggle target. Errors
+   * never render pretty. */
+  const pretty = card.isError === true ? null : renderResult(node.dataset.tool ?? "", card.text);
+  node.classList.toggle("has-pretty", pretty !== null);
+  if (pretty) node.append(pretty);
   const out = el("pre", "tool-out", dash(card.text));
   if (card.isError === true) out.classList.add("err");
   node.append(out);

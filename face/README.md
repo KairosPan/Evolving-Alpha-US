@@ -145,6 +145,21 @@ any other bed and the rail is replaced by "warmup boundaries unknown for this
 bed": those dates describe THAT capture, and drawing them over a different one
 would be a lie.
 
+## Chat rendering of market data (client/render.js)
+
+Recognized alpaca-kit tool results render as instruments instead of raw JSON:
+market_snapshot as a Δ%-sorted table (sign always printed — the red/green pair
+is never the only carrier of direction), screen/positions/orders/earnings as
+generic tables, breadth/account as stat tiles or a kv grid, daily_bars as an
+inline SVG close line + volume strip with a crosshair tooltip. The card head's
+`raw` becomes a pretty ⇄ raw toggle when a pretty view exists. Anything
+unrecognized — a shape surprise, an error, a foreign tool — keeps the raw pre;
+the renderer never dresses up what it cannot parse. dsh spills tool results
+over ~50 KB (head + tail with an elision seam + a note naming the full-output
+file): the parser first tries the complete text, then the text up to the note,
+then salvages whole row objects one by one — the one row cut at the seam is
+dropped and the table's meta line says so.
+
 ## Tests
 
 ```bash

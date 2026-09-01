@@ -675,3 +675,151 @@ body {
   background-image: repeating-linear-gradient(to right, var(--line) 0 3px, transparent 3px 6px);
   color: var(--danger);
 }
+
+/* ---------- 2026-09-01: the light-blue palette + market-data renderers ------
+   Two additions, one block. (1) The palette override: the R4 header's own rule
+   is "a palette is a token override and never a rule edit", so the ported
+   :root above stays byte-identical and this later block wins the cascade —
+   one cool family across all three pages (index/market/account share this
+   sheet). (2) The `.viz` styles for client/render.js: tables, stat tiles, the
+   daily_bars SVG chart, and the pretty ⇄ raw toggle. Up/down green–red is a
+   polarity no palette makes CVD-safe, so the SIGN is always printed with the
+   number (render.js) — color never carries direction alone. Contrast on white:
+   up #1e6b3c 6.5:1 · down #b3372b 6.0:1 · accent #1c5cab 6.6:1 (validated
+   with the dataviz palette script, 2026-09-01). */
+
+:root {
+  --bg: #eaf2f9;
+  --panel: #ffffff;
+  --line: #d9e4ee;
+  --text: #202834;
+  --dim: #64748b;
+  --accent: #1c5cab;
+  --active-bg: #dfeaf4;
+  --op-bubble: #24303f;
+  --op-text: #f2f6fa;
+  --k-bubble: #ffffff;
+  --card-bg: #f8fbfe;
+  --green: #1e6b3c;
+  --red: #b3372b;
+
+  /* chart-only tokens: the mark may be brighter than text-grade ink */
+  --viz-line: #2a78d6;
+  --viz-area: rgba(42, 120, 214, 0.10);
+  --viz-vol: #9ec5f4;
+  --viz-grid: #e2eaf2;
+}
+
+/* pretty ⇄ raw: the head's `raw` becomes a real toggle once a pretty view
+   exists; without one the pre stays visible and `raw` stays the inert label
+   it always was. */
+.card.has-pretty .tool-out { display: none; }
+.card.has-pretty.show-raw .tool-out { display: block; }
+.card.has-pretty.show-raw .viz { display: none; }
+.card.has-pretty .card-head .raw { cursor: pointer; }
+
+.viz { margin-top: 8px; }
+.viz-meta {
+  font: 11px/1.4 var(--mono);
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+
+/* tables: sticky head, hairline rows, tabular figures in the number columns */
+.viz-scroll {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--panel);
+}
+.viz-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.viz-table th {
+  position: sticky;
+  top: 0;
+  background: var(--card-bg);
+  color: var(--dim);
+  font: 600 10.5px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.viz-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--viz-grid);
+  white-space: nowrap;
+}
+.viz-table tr:last-child td { border-bottom: none; }
+.viz-table th.num, .viz-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.viz-table td.sym { font: 600 12px/1.4 var(--mono); }
+.viz-table td.up { color: var(--green); }
+.viz-table td.down { color: var(--red); }
+
+/* stat tiles (breadth) and the kv grid (account) */
+.viz-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+}
+.viz-tile {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  padding: 8px 10px;
+}
+.viz-tile-label { font: 11px/1.3 var(--sans); color: var(--dim); }
+.viz-tile-value { font: 600 17px/1.4 var(--sans); }
+.viz-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 14px;
+  margin: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  padding: 10px 12px;
+  font-size: 12.5px;
+}
+.viz-kv dt { color: var(--dim); }
+.viz-kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+.viz-days {
+  font: 12px/1.8 var(--mono);
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow: auto;
+}
+
+/* the daily_bars chart */
+.viz-chart { position: relative; }
+.viz-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+.viz-line { fill: none; stroke: var(--viz-line); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.viz-area { fill: var(--viz-area); stroke: none; }
+.viz-vol { fill: var(--viz-vol); }
+.viz-grid { stroke: var(--viz-grid); stroke-width: 1; }
+.viz-dot { fill: var(--viz-line); stroke: var(--panel); stroke-width: 2; }
+.viz-tick { font: 10px var(--mono); fill: var(--dim); }
+.viz-end { font: 600 11px var(--sans); fill: var(--text); }
+.viz-hair { stroke: var(--dim); stroke-width: 1; stroke-dasharray: none; opacity: 0.55; }
+.viz-tip {
+  position: absolute;
+  top: 26px;
+  background: var(--op-bubble);
+  color: var(--op-text);
+  font: 11px/1.5 var(--mono);
+  padding: 4px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  white-space: nowrap;
+}
