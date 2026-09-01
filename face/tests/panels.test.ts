@@ -7,8 +7,8 @@ import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import {
-  agentsListing, connectLocalAgent, disconnectLocalAgent, memoryListing, pluginListing,
-  readAgentsMeta, registerPanelRoutes, skillDetail, skillGroup,
+  agentsListing, authFromProbe, connectLocalAgent, disconnectLocalAgent, memoryListing,
+  pluginListing, readAgentsMeta, registerPanelRoutes, skillDetail, skillGroup,
   type PanelDeps, type SkillBody, type SkillRow,
 } from "../src/panels.ts";
 import { DSH_PIN } from "../src/version.ts";
@@ -74,8 +74,32 @@ function fakeDeps(home = "/face-panels-nowhere"): PanelDeps {
       if (bin === "hermes") throw new Error("spawn blew up");
       return null;
     },
+    /* claude is signed in; every other auth probe CRASHES — which must fold
+     * to "unknown", never fail a connect or a listing. */
+    probeAuth: async (bin) => {
+      if (bin === "claude") return { state: "ok", detail: "claude.ai", account: "op@example.com" };
+      throw new Error("auth probe blew up");
+    },
   };
 }
+
+test("authFromProbe folds each CLI's real status output", () => {
+  // Real shapes captured 2026-09-01 on this machine.
+  assert.deepEqual(
+    authFromProbe("claude", { code: 0, stdout: '{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","email":"op@example.com"}' }),
+    { state: "ok", detail: "claude.ai", account: "op@example.com" });
+  assert.deepEqual(authFromProbe("claude", { code: 0, stdout: '{"loggedIn":false}' }), { state: "none" });
+  assert.deepEqual(authFromProbe("claude", { code: 1, stdout: "boom" }), { state: "unknown" });
+  assert.deepEqual(
+    authFromProbe("codex", { code: 0, stdout: "Logged in using ChatGPT\n" }),
+    { state: "ok", detail: "Logged in using ChatGPT" });
+  assert.deepEqual(authFromProbe("codex", { code: 1, stdout: "Not logged in\n" }), { state: "none" });
+  assert.deepEqual(
+    authFromProbe("hermes", { code: 0, stdout: "◆ Environment\n  Model:  x\n  Provider:     DeepSeek\n" }),
+    { state: "ok", detail: "provider DeepSeek" });
+  assert.deepEqual(authFromProbe("gemini", { code: 0, stdout: "whatever" }), { state: "unknown" });
+  assert.deepEqual(authFromProbe("claude", null), { state: "unknown" });
+});
 
 test("skillGroup: pack directory wins, source is the fallback", () => {
   assert.equal(skillGroup(row("a", "mechanics")), "mechanics");
@@ -140,7 +164,10 @@ test("agents roster: starts empty, connect is a verifying handshake, disconnect 
   assert.deepEqual(empty.candidates, [{ bin: "claude", label: "Claude Code", version: "2.1.251 (Claude Code)" }]);
 
   const row = await connectLocalAgent(deps, "claude");
-  assert.deepEqual(row, { bin: "claude", label: "Claude Code", found: true, version: "2.1.251 (Claude Code)" });
+  assert.deepEqual(row, {
+    bin: "claude", label: "Claude Code", found: true, version: "2.1.251 (Claude Code)",
+    auth: { state: "ok", detail: "claude.ai", account: "op@example.com" },
+  });
   await connectLocalAgent(deps, "claude"); // idempotent, not a duplicate
   const listing = await agentsListing(deps);
   assert.deepEqual(listing.local, [row]);

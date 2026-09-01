@@ -1164,6 +1164,7 @@ body {
 }
 .sp-dot.on { background: var(--green); border-color: var(--green); }
 .sp-dot.bad { background: var(--red); border-color: var(--red); }
+.sp-dot.warn { background: var(--danger); border-color: var(--danger); }
 .sp-dot.off { border-style: dashed; }
 
 /* index-row selection: the same inset-accent idiom the picker rows use */

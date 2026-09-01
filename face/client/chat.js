@@ -1379,10 +1379,19 @@ function phaseDot(phase) {
   const dot = el("span", "sp-dot");
   if (phase === "active") dot.classList.add("on");
   else if (phase === "failed") dot.classList.add("bad");
+  else if (phase === "warn") dot.classList.add("warn");
   else if (phase === "disabled") dot.classList.add("off");
   dot.title = phase ?? "not mounted";
   return dot;
 }
+
+/** The exact terminal command that signs an agent in — the Hermes idiom:
+ * a refusal or a gap always names its next step. */
+const LOGIN_HINTS = {
+  claude: "claude /login   (or: claude setup-token)",
+  codex: "codex login",
+  hermes: "hermes setup",
+};
 
 /* -- agent -- */
 
@@ -1437,10 +1446,13 @@ async function refreshAgentPanel() {
     for (const agent of local) {
       const line = el("div", "sp-plug");
       const found = agent.found === true;
-      const dot = phaseDot(found ? "active" : "disabled");
-      dot.title = found ? "answering" : "connected, but not answering";
+      const signedOut = found && agent.auth?.state === "none";
+      const dot = phaseDot(!found ? "disabled" : signedOut ? "warn" : "active");
+      dot.title = !found ? "connected, but not answering" : signedOut ? "answering, but signed out" : "answering";
       line.append(dot, el("span", "sp-plug-name", String(agent.label)));
-      line.title = found ? `${agent.bin} · ${dash(agent.version)}` : `${agent.bin} · connected, but not answering`;
+      line.title = found
+        ? `${agent.bin} · ${dash(agent.version)}${signedOut ? " · signed out" : ""}`
+        : `${agent.bin} · connected, but not answering`;
       if (!found) line.classList.add("off");
       const x = el("button", "sp-x", "×");
       /** @type {HTMLButtonElement} */ (x).type = "button";
@@ -1545,6 +1557,21 @@ function openLocalAgent(agent) {
     kvRow(card, "binary", String(agent.bin));
     if (found) kvRow(card, "version", dash(agent.version));
     inner.append(card);
+
+    /* The Hermes-shaped second half of the handshake: is it signed in? */
+    const auth = agent.auth ?? { state: "unknown" };
+    const authCard = panelCard("auth");
+    kvRow(authCard, "signed in", auth.state === "ok" ? "yes" : auth.state === "none" ? "NO" : "unknown");
+    if (auth.detail) kvRow(authCard, "method", String(auth.detail));
+    if (auth.account) kvRow(authCard, "account", String(auth.account));
+    inner.append(authCard);
+    if (auth.state === "none") {
+      const hint = LOGIN_HINTS[String(agent.bin)];
+      inner.append(el("div", "sp-note", hint !== undefined
+        ? `Signed out — run in your terminal: ${hint}`
+        : "Signed out — sign in from this agent's own CLI."));
+    }
+
     inner.append(el("div", "sp-note", found
       ? `Probed host-side as "${agent.bin} --version" on the face process's PATH; answers cache for a minute.`
       : `No "${agent.bin}" binary answered on the face process's PATH — still on the roster until disconnected.`));

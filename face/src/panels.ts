@@ -85,6 +85,70 @@ const KNOWN_AGENTS: ReadonlyArray<{ bin: string; label: string }> = [
  * connect route safe to feed from a request body at all. */
 const AGENT_BIN_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
 
+/** Per-agent AUTH probes — the Hermes-style second half of the handshake.
+ * Hermes connects Claude Code and Codex at the ACCOUNT level (its own OAuth
+ * session per provider, stored in its own auth store, never sharing the
+ * other CLI's); the face doesn't run OAuth itself, but it adopts the shape:
+ * a connect verifies the agent is INSTALLED (answers `--version`) and asks
+ * its own status command whether it is SIGNED IN — argv fixed per known bin,
+ * never from a request. A bin without an entry here just reads "unknown". */
+const AUTH_PROBES: Readonly<Record<string, readonly string[]>> = {
+  claude: ["auth", "status"],
+  codex: ["login", "status"],
+  hermes: ["status"],
+};
+
+/** One agent's auth reading: signed in, signed out, or not knowable. */
+export interface AgentAuth {
+  state: "ok" | "none" | "unknown";
+  detail?: string;
+  account?: string;
+}
+
+/**
+ * Fold one auth-probe answer into an {@link AgentAuth} — pure, so the
+ * per-CLI parsing is testable against real captured output.
+ * @param bin - which agent answered.
+ * @param result - exit code + stdout, or `null` when the probe could not run.
+ */
+export function authFromProbe(bin: string, result: { code: number; stdout: string } | null): AgentAuth {
+  if (result === null) return { state: "unknown" };
+  const out = result.stdout.trim();
+  if (bin === "claude") {
+    // `claude auth status` prints JSON: {loggedIn, authMethod, email, ...}.
+    try {
+      const parsed = JSON.parse(out) as { loggedIn?: unknown; authMethod?: unknown; email?: unknown };
+      if (parsed.loggedIn === true) {
+        return {
+          state: "ok",
+          detail: typeof parsed.authMethod === "string" ? parsed.authMethod : undefined,
+          account: typeof parsed.email === "string" ? parsed.email : undefined,
+        };
+      }
+      if (parsed.loggedIn === false) return { state: "none" };
+    } catch { /* not JSON — fall through to unknown */ }
+    return { state: "unknown" };
+  }
+  if (bin === "codex") {
+    // `codex login status`: "Logged in using ChatGPT" / "Not logged in".
+    if (/not logged in/i.test(out)) return { state: "none" };
+    if (result.code === 0 && /logged in/i.test(out)) {
+      return { state: "ok", detail: out.split("\n")[0]?.trim().slice(0, 120) };
+    }
+    return { state: "unknown" };
+  }
+  if (bin === "hermes") {
+    // `hermes status` is a config report, not a login gate: a configured
+    // provider line is the closest thing to "signed in" it has.
+    const provider = /Provider:\s*(\S[^\n]*)/.exec(out)?.[1]?.trim();
+    if (result.code === 0 && provider !== undefined && provider !== "") {
+      return { state: "ok", detail: `provider ${provider.slice(0, 60)}` };
+    }
+    return { state: "unknown" };
+  }
+  return { state: "unknown" };
+}
+
 /** The face's agent-roster file under the harness home, beside archived.json. */
 const AGENTS_META = ["face", "agents.json"] as const;
 
@@ -93,12 +157,14 @@ export interface AgentsMeta {
   connected: { bin: string; label: string }[];
 }
 
-/** One probed local agent: present-with-version, or connected-but-silent. */
+/** One probed local agent: present-with-version, or connected-but-silent,
+ * plus its auth reading when the agent has a status command. */
 export interface LocalAgentRow {
   bin: string;
   label: string;
   found: boolean;
   version?: string;
+  auth?: AgentAuth;
 }
 
 /** @returns the stored roster; an absent, unreadable, or hand-mangled file
@@ -167,6 +233,9 @@ export interface PanelDeps {
    * when the binary is absent or refuses. Every `bin` that reaches this has
    * passed {@link AGENT_BIN_RE} — a bare PATH token, never a path. */
   probeAgent(bin: string): Promise<string | null>;
+  /** Ask one agent's own status command whether it is signed in — the
+   * {@link AUTH_PROBES} argv for that bin; "unknown" when it has none. */
+  probeAuth(bin: string): Promise<AgentAuth>;
 }
 
 /** The real prober: `execFile` (no shell) of the bare bin name — resolved on
@@ -180,6 +249,23 @@ export function defaultAgentProber(): PanelDeps["probeAgent"] {
       if (err) return resolve(null);
       const line = String(stdout).split("\n")[0]?.trim() ?? "";
       resolve(line === "" ? null : line.slice(0, 120));
+    });
+  });
+}
+
+/** The real auth prober: the bin's own status command through the same
+ * no-shell `execFile`, folded by {@link authFromProbe}. A status command
+ * that exits nonzero still ANSWERED (signed-out CLIs often exit 1), so the
+ * fold sees its output; only a spawn that produced nothing reads as null. */
+export function defaultAuthProber(): PanelDeps["probeAuth"] {
+  return (bin) => new Promise((resolve) => {
+    const argv = AUTH_PROBES[bin];
+    if (argv === undefined) return resolve({ state: "unknown" });
+    execFile(bin, [...argv], { timeout: 10_000 }, (err, stdout) => {
+      const out = String(stdout ?? "");
+      if (err !== null && out.trim() === "") return resolve(authFromProbe(bin, null));
+      const code = err === null ? 0 : 1;
+      resolve(authFromProbe(bin, { code, stdout: out }));
     });
   });
 }
@@ -213,6 +299,7 @@ export function panelDeps(ctx: Context, cwd: string, home = resolveDshHome(undef
     cwd,
     home,
     probeAgent: defaultAgentProber(),
+    probeAuth: defaultAuthProber(),
   };
 }
 
@@ -222,6 +309,15 @@ async function probeSoft(deps: PanelDeps, bin: string): Promise<string | null> {
     return await deps.probeAgent(bin);
   } catch {
     return null;
+  }
+}
+
+/** The auth probe's never-throws twin: a crash reads as "unknown". */
+async function authSoft(deps: PanelDeps, bin: string): Promise<AgentAuth> {
+  try {
+    return await deps.probeAuth(bin);
+  } catch {
+    return { state: "unknown" };
   }
 }
 
@@ -238,8 +334,8 @@ export async function agentsListing(deps: PanelDeps): Promise<{
 }> {
   const meta = await readAgentsMeta(deps.home);
   const local = await Promise.all(meta.connected.map(async ({ bin, label }): Promise<LocalAgentRow> => {
-    const version = await probeSoft(deps, bin);
-    return { bin, label, found: version !== null, ...(version === null ? {} : { version }) };
+    const [version, auth] = await Promise.all([probeSoft(deps, bin), authSoft(deps, bin)]);
+    return { bin, label, found: version !== null, ...(version === null ? {} : { version }), auth };
   }));
   const connected = new Set(meta.connected.map((row) => row.bin));
   const candidates = (await Promise.all(KNOWN_AGENTS
@@ -252,20 +348,23 @@ export async function agentsListing(deps: PanelDeps): Promise<{
   return { main: { name: "Kairos", runtime: `dsh ${DSH_PIN}` }, local, candidates };
 }
 
-/** The connect handshake: validate the name, PROBE it, and only a binary
- * that answers joins the roster — connecting is a verification, not a
- * bookmark. Idempotent on an already-connected bin (re-probes, re-returns).
- * 400 on a malformed name, 404 when nothing answers. */
+/** The connect handshake, Hermes-shaped: validate the name, then verify the
+ * agent is INSTALLED (answers `--version` — nothing silent joins; a connect
+ * is a verification, not a bookmark) and ask whether it is SIGNED IN (its
+ * own status command). A signed-out agent still connects — installing the
+ * roster row is the face's business, signing in is the operator's, in the
+ * agent's own terminal — but the row says so. Idempotent on an
+ * already-connected bin. 400 on a malformed name, 404 when nothing answers. */
 export async function connectLocalAgent(deps: PanelDeps, bin: unknown): Promise<LocalAgentRow> {
   if (typeof bin !== "string" || !AGENT_BIN_RE.test(bin)) throw new StrategyError(400, "invalid binary name");
-  const version = await probeSoft(deps, bin);
+  const [version, auth] = await Promise.all([probeSoft(deps, bin), authSoft(deps, bin)]);
   if (version === null) throw new StrategyError(404, "binary did not answer on this machine");
   const meta = await readAgentsMeta(deps.home);
   if (!meta.connected.some((row) => row.bin === bin)) {
     meta.connected.push({ bin, label: labelFor(bin) });
     await writeAgentsMeta(deps.home, meta);
   }
-  return { bin, label: labelFor(bin), found: true, version };
+  return { bin, label: labelFor(bin), found: true, version, auth };
 }
 
 /** Remove one bin from the roster. 400 on a malformed name, 404 when it was
@@ -431,6 +530,7 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
    * seconds ago must connect now, not after the cache turns) and then updates
    * the cache with what it learned. */
   const probeCache = new Map<string, { at: number; version: string | null }>();
+  const authCache = new Map<string, { at: number; auth: AgentAuth }>();
   const cachedDeps: PanelDeps = {
     ...deps,
     probeAgent: async (bin) => {
@@ -444,6 +544,18 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
       }
       probeCache.set(bin, { at: Date.now(), version });
       return version;
+    },
+    probeAuth: async (bin) => {
+      const hit = authCache.get(bin);
+      if (hit !== undefined && Date.now() - hit.at < 60_000) return hit.auth;
+      let auth: AgentAuth;
+      try {
+        auth = await deps.probeAuth(bin);
+      } catch {
+        auth = { state: "unknown" };
+      }
+      authCache.set(bin, { at: Date.now(), auth });
+      return auth;
     },
   };
 
@@ -461,6 +573,7 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
     handler: post(async (body) => {
       const agent = await connectLocalAgent(deps, body.bin);
       probeCache.set(agent.bin, { at: Date.now(), version: agent.version ?? null });
+      if (agent.auth !== undefined) authCache.set(agent.bin, { at: Date.now(), auth: agent.auth });
       return { agent };
     }),
   });
