@@ -57,7 +57,7 @@ function fakeRes(): { out: { status: number; body: string }; res: ServerResponse
 
 function postReq(body: string, host = "127.0.0.1:3090"): IncomingMessage {
   const req = Readable.from([Buffer.from(body)]) as unknown as IncomingMessage;
-  (req as { headers: unknown }).headers = { host };
+  (req as { headers: unknown }).headers = { host, "content-type": "application/json" };
   (req as { method: string }).method = "POST";
   return req;
 }

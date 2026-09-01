@@ -1248,6 +1248,45 @@ body {
 .detail-actions { margin-top: 14px; }
 .picker-btn.danger { color: var(--red); }
 
+/* the exec channel's run card: prompt in, markdown answer out */
+.run-input {
+  width: 100%;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: 13px/1.5 var(--sans);
+}
+.run-input:disabled { opacity: 0.5; cursor: default; } /* the author colors above beat the UA's :disabled look */
+.run-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.run-where {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: 12px var(--mono);
+}
+.run-cont { display: flex; align-items: center; gap: 4px; font: 11px var(--mono); color: var(--dim); white-space: nowrap; }
+.run-cont[hidden] { display: none; } /* an author display beats the UA's [hidden] — restate it */
+.run-log { margin-top: 10px; }
+.run-entry { border-top: 1px solid var(--viz-grid); padding: 10px 0 4px; }
+.run-prompt {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  background: var(--inset);
+  border-radius: 6px;
+  font: 12px/1.5 var(--mono);
+  white-space: pre-wrap;
+}
+.run-answer { font-size: 13.5px; }
+.run-answer.err .md { color: var(--red); }
+.run-meta { margin-top: 6px; font: 10.5px var(--mono); color: var(--dim); }
+
 /* 2026-09-01 rev2: the agent panel's local-agent rows — a long --version line
    (Hermes prints its upstream hash) must truncate, never wrap the row. */
 .sp-plug .sp-count {

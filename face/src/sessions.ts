@@ -22,7 +22,7 @@ import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import type { RouteRegistrar } from "./static.ts";
-import { isLoopbackHost } from "./data.ts";
+import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 import { readBody, StrategyError } from "./strategies.ts";
 
 const FORBIDDEN = '{"ok":false,"error":"forbidden"}';
@@ -132,8 +132,9 @@ export function registerSessionRoutes(webServer: RouteRegistrar, home?: string):
   /** The shared shell: fence, method gate, JSON body, error mapping. */
   const post = (act: (body: Record<string, unknown>) => Promise<unknown>) =>
     async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-      if (!isLoopbackHost(req.headers.host)) return send(res, 403, FORBIDDEN);
+      if (!isTrustedDataRequest(req)) return send(res, 403, FORBIDDEN);
       if (req.method !== "POST") return send(res, 405, { ok: false, error: "POST only" });
+      if (!isJsonBody(req)) return send(res, 415, { ok: false, error: "application/json only" });
       try {
         let body: Record<string, unknown>;
         try {
@@ -155,7 +156,7 @@ export function registerSessionRoutes(webServer: RouteRegistrar, home?: string):
     kind: "exact",
     path: "/data/sessions-meta.json",
     handler: async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-      if (!isLoopbackHost(req.headers.host)) return send(res, 403, FORBIDDEN);
+      if (!isTrustedDataRequest(req)) return send(res, 403, FORBIDDEN);
       return send(res, 200, { ok: true, ...(await readMeta(dshHome)) });
     },
   });

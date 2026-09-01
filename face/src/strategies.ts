@@ -21,7 +21,7 @@ import { cp, readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { RouteRegistrar } from "./static.ts";
-import { isLoopbackHost } from "./data.ts";
+import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 
 /** Body of a refused (non-loopback) request — data.ts's fixed text, restated
  * because that module keeps its own private. */
@@ -108,15 +108,17 @@ export async function createStrategy(root: string, name: unknown): Promise<Strat
   return { name, cwd: target, status: "idea" };
 }
 
-/** Collect a request body up to {@link BODY_LIMIT} bytes; longer is refused.
- * Shared with sessions.ts — one body reader, one limit. */
-export async function readBody(req: IncomingMessage): Promise<string> {
+/** Collect a request body up to `limit` bytes (default {@link BODY_LIMIT});
+ * longer is refused. Shared with sessions.ts and panels.ts — one body reader;
+ * the default limit fits ids and names, and a route that carries prose (a
+ * prompt for an agent) names its own. */
+export async function readBody(req: IncomingMessage, limit: number = BODY_LIMIT): Promise<string> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buf.length;
-    if (size > BODY_LIMIT) throw new StrategyError(413, "body too large");
+    if (size > limit) throw new StrategyError(413, "body too large");
     chunks.push(buf);
   }
   return Buffer.concat(chunks).toString("utf8");
@@ -137,7 +139,7 @@ export function registerStrategyRoutes(webServer: RouteRegistrar, root: string):
     kind: "exact",
     path: "/data/strategies.json",
     handler: async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-      if (!isLoopbackHost(req.headers.host)) return send(res, 403, FORBIDDEN);
+      if (!isTrustedDataRequest(req)) return send(res, 403, FORBIDDEN);
       try {
         return send(res, 200, { ok: true, ...(await listStrategies(root)) });
       } catch {
@@ -152,8 +154,9 @@ export function registerStrategyRoutes(webServer: RouteRegistrar, root: string):
     kind: "exact",
     path: "/data/strategies",
     handler: async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-      if (!isLoopbackHost(req.headers.host)) return send(res, 403, FORBIDDEN);
+      if (!isTrustedDataRequest(req)) return send(res, 403, FORBIDDEN);
       if (req.method !== "POST") return send(res, 405, { ok: false, error: "POST only" });
+      if (!isJsonBody(req)) return send(res, 415, { ok: false, error: "application/json only" });
       try {
         let name: unknown;
         try {

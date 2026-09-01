@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
-import { isLoopbackHost, registerDataRoutes, SPAWN_TIMEOUT_MS, TTL_MS, type Spawner } from "../src/data.ts";
+import {
+  isJsonBody, isLoopbackHost, isTrustedDataRequest, registerDataRoutes, SPAWN_TIMEOUT_MS, TTL_MS, type Spawner,
+} from "../src/data.ts";
 
 /** Captured status/body from one handler call. Same structural stand-in as
  * static.test.ts uses: the handler owns the whole response, so what it wrote IS
@@ -232,6 +234,22 @@ test("each mode is spawned with its own timeout and a fixed argv", async () => {
  * this socket while its Host header still names the ATTACKER's domain, and
  * `/data/account.json` carries the operator's positions and orders. Host is
  * the one header rebinding cannot forge. */
+test("isTrustedDataRequest: the harness's /api fence restated — Host, Sec-Fetch-Site, Origin", () => {
+  const req = (headers: Record<string, string>): IncomingMessage => ({ headers }) as unknown as IncomingMessage;
+  assert.equal(isTrustedDataRequest(req({ host: "127.0.0.1:3090" })), true, "loopback, no Origin (curl, tests)");
+  assert.equal(isTrustedDataRequest(req({ host: "127.0.0.1:3090", origin: "http://127.0.0.1:3090" })), true, "the face's own page");
+  assert.equal(isTrustedDataRequest(req({ host: "localhost:3090", origin: "http://localhost:3090", "sec-fetch-site": "same-origin" })), true);
+  assert.equal(isTrustedDataRequest(req({ host: "127.0.0.1:3090", origin: "http://evil.example.com" })), false, "a cross-origin page: the browser set the loopback Host itself");
+  assert.equal(isTrustedDataRequest(req({ host: "127.0.0.1:3090", origin: "http://127.0.0.1:4000" })), false, "another local dev server is cross-origin too");
+  assert.equal(isTrustedDataRequest(req({ host: "127.0.0.1:3090", "sec-fetch-site": "cross-site" })), false, "Fetch-Metadata says cross-site");
+  assert.equal(isTrustedDataRequest(req({ host: "127.0.0.1:3090", origin: "not a url" })), false, "an unparsable Origin fails closed");
+  assert.equal(isTrustedDataRequest(req({ host: "evil.example.com", origin: "http://evil.example.com" })), false, "a rebound Host fails first");
+  assert.equal(isJsonBody(req({ "content-type": "application/json" })), true);
+  assert.equal(isJsonBody(req({ "content-type": "Application/JSON; charset=utf-8" })), true);
+  assert.equal(isJsonBody(req({ "content-type": "text/plain;charset=UTF-8" })), false, "the media type a no-preflight POST is stuck with");
+  assert.equal(isJsonBody(req({})), false);
+});
+
 test("isLoopbackHost accepts the loopback spellings and nothing else", () => {
   for (const good of ["127.0.0.1", "127.0.0.1:3090", "localhost", "localhost:3090", "LocalHost:3090", "[::1]", "[::1]:3090", "::1", "127.0.0.53:3090"]) {
     assert.equal(isLoopbackHost(good), true, good);

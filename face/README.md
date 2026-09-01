@@ -153,7 +153,7 @@ the `strategies/*` directories (each with its status.yaml badge), `workbench`
 strategy from `strategies/_template` on the spot. The first prompt creates the
 session with the picked directory as `cwd`, and the sidebar groups sessions by
 strategy (derived from each session's `cwd`; foreign directories group by
-basename). Two loopback-fenced routes feed it: `GET /data/strategies.json` and
+basename). Two same-origin-fenced routes feed it: `GET /data/strategies.json` and
 `POST /data/strategies` (validated name, template copy, never overwrites).
 The picker's `choose a local folder…` row opens the OS's own directory dialog
 through `host.pickDirectory` (the directory-picker-auto row the overlay
@@ -214,8 +214,46 @@ split by data source:
   hover `×` or the agent's own page (`POST /data/agents/disconnect`); a
   connected binary that stops answering stays listed greyed rather than
   vanishing. Each agent's page is its directory entry (status / binary /
-  version). *A2A network* is a declared placeholder page — network agents
-  land there when that opens.
+  version / signed-in state — read through the agent's OWN status command,
+  `claude auth status`, `codex login status` or `hermes status`, the last a
+  config report rather than a login gate, so a pinned provider reads as
+  signed in — never its credential store) and, for agents the face has a
+  recipe for, the **exec channel**: a *run a task* card (⌘/Ctrl+Enter runs;
+  the working-directory select offers the strategy directories first and the
+  repo root last) that spawns the operator's own UNMODIFIED CLI as a child
+  (`POST /data/agents/run`) and renders its answer as markdown. These are the
+  GREEN rows of `docs/research/2026-09-01-agent-connection-survey.md`: the
+  child performs its own sign-in and the face handles no credential at any
+  point, which is what keeps it on the permitted side of Anthropic's terms
+  (the survey quotes the line and its source); the Hermes-style reuse of
+  `~/.claude/.credentials.json` against the raw API is the bright line and is
+  never ported. Recipes: Claude Code = `claude -p --output-format json
+  --restricted --strict-mcp-config --disallowedTools "Read(./.env)"
+  "Read(./.env.*)"` (no command/code tools, no WebFetch, user/project
+  settings and every MCP config ignored, file tools confined to the run's
+  directory, the workbench's key files unread even from the root — a READER,
+  not an actor); Codex = `codex exec --sandbox read-only --json
+  --skip-git-repo-check -o <scratch> -` (the sandbox is PINNED — the
+  operator's `~/.codex/config.toml` says workspace-write and a recipe must not
+  inherit its posture from a file the face does not own; the git flag lets a
+  strategy dir that is not a repo be the working directory). The prompt
+  always travels on stdin (an argv beginning with `-` would parse as a flag);
+  the working directory is any existing directory inside the workbench
+  (defaults to the root; validated by realpath prefix, so a symlink out of
+  the tree fails); the child's env is scrubbed of every credential override
+  and endpoint redirect that would move a CLI off its own sign-in
+  (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
+  `OPENAI_API_KEY`, `CODEX_API_KEY`, `OPENAI_BASE_URL`, the Bedrock / Vertex /
+  Foundry switches) and of the workbench's own secrets — probes run under the
+  same scrub, so the auth card observes what the run will get; a run
+  continues its session via the UUID the CLI returned (`--resume` /
+  `codex exec resume`). Runs are one-shot and synchronous (ten-minute kill,
+  SIGKILL after a five-second grace, 16 MB output cap), one in flight per
+  agent (a second is refused 409), remembered per agent for the life of the
+  page. Hermes deliberately has NO recipe: its default provider config reuses
+  those tokens, so it stays a directory entry until its provider is pinned.
+  *A2A network* is a declared placeholder page — network agents land there
+  when that opens.
 - **memory** indexes the skill catalog — Kairos's standing knowledge. The
   wire `skill.list` needs an attached session and drops source/path/body, so
   two face routes read `ctx.skills` in-process: `GET /data/memory.json`
@@ -233,11 +271,19 @@ split by data source:
   A server's page is its live tool table; the tree's page is the full ~90-row
   module/id/phase table, its index row calling out any `failed` count.
 
-All panel routes are loopback-fenced like the rest of `/data`; the roster's
-connect/disconnect are the only writes, and they touch nothing but the
-face's own metadata file. `panelDeps` fails loud at boot when
-`skills`/`tools`/`loader` are missing from the tree — a dead panel with
-nothing on stderr is the failure mode it exists to prevent.
+Every `/data` route — the panels', the instruments', the strategy and session
+routes — stands behind the same browser-trust fence the harness puts on
+`/api` (`isTrustedDataRequest`): a loopback Host, no Fetch-Metadata
+`cross-site`, and a present `Origin` that matches the Host; every `/data` POST
+additionally requires `application/json` (415 otherwise), so a cross-site
+page cannot reach a side-effectful route with a "simple" request that needs
+no preflight. The roster's connect/disconnect are the only writes to face
+state (its own metadata file); `run` spawns a child CLI with a fixed argv and
+writes nothing durable of its own — a Codex run gets a `mkdtemp` scratch
+directory under the OS tmpdir for `-o`, read once and removed when the run
+ends. `panelDeps` fails loud at boot when `skills`/`tools`/`loader` are
+missing from the tree — a dead panel with nothing on stderr is the failure
+mode it exists to prevent.
 
 ## Chat rendering (client/render.js + the collapsed process rows)
 

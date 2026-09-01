@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -8,7 +8,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import {
   agentsListing, authFromProbe, connectLocalAgent, disconnectLocalAgent, memoryListing,
-  pluginListing, readAgentsMeta, registerPanelRoutes, skillDetail, skillGroup,
+  parseClaudeRun, parseCodexRun, pluginListing, readAgentsMeta, registerPanelRoutes, runLocalAgent,
+  scrubbedEnv, skillDetail, skillGroup,
   type PanelDeps, type SkillBody, type SkillRow,
 } from "../src/panels.ts";
 import { DSH_PIN } from "../src/version.ts";
@@ -67,10 +68,12 @@ function fakeDeps(home = "/face-panels-nowhere"): PanelDeps {
     ],
     cwd: CWD,
     home,
-    /* claude answers, hermes throws (a prober crash reads as absent), the rest
-     * are not installed. */
+    /* claude answers, gemini answers (installed, but the face has no exec
+     * recipe for it), hermes throws (a prober crash reads as absent), the
+     * rest are not installed. */
     probeAgent: async (bin) => {
       if (bin === "claude") return "2.1.251 (Claude Code)";
+      if (bin === "gemini") return "gemini 0.9.0";
       if (bin === "hermes") throw new Error("spawn blew up");
       return null;
     },
@@ -80,8 +83,145 @@ function fakeDeps(home = "/face-panels-nowhere"): PanelDeps {
       if (bin === "claude") return { state: "ok", detail: "claude.ai", account: "op@example.com" };
       throw new Error("auth probe blew up");
     },
+    /* no run should ever reach the default fake; tests that run inject a recorder */
+    runAgent: async () => { throw new Error("runAgent not injected"); },
   };
 }
+
+test("scrubbedEnv drops credential overrides, endpoint redirects and workbench secrets; keeps the operator's own sign-in", () => {
+  assert.deepEqual(
+    scrubbedEnv({
+      PATH: "/bin", HOME: "/h", CLAUDE_CODE_OAUTH_TOKEN: "keep", CLAUDE_CONFIG_DIR: "/c", CODEX_HOME: "/x",
+      ANTHROPIC_API_KEY: "a", ANTHROPIC_AUTH_TOKEN: "t", ANTHROPIC_BASE_URL: "u", ANTHROPIC_CUSTOM_HEADERS: "h",
+      OPENAI_API_KEY: "o", CODEX_API_KEY: "c", OPENAI_BASE_URL: "ou",
+      CLAUDE_CODE_USE_BEDROCK: "1", CLAUDE_CODE_USE_VERTEX: "1", CLAUDE_CODE_USE_FOUNDRY: "1",
+      APCA_API_KEY_ID: "k", APCA_API_SECRET_KEY: "s", DEEPSEEK_API_KEY: "d",
+    }),
+    { PATH: "/bin", HOME: "/h", CLAUDE_CODE_OAUTH_TOKEN: "keep", CLAUDE_CONFIG_DIR: "/c", CODEX_HOME: "/x" });
+});
+
+test("parseClaudeRun / parseCodexRun fold the documented shapes and degrade to raw text", () => {
+  assert.deepEqual(
+    parseClaudeRun('{"type":"result","subtype":"success","is_error":false,"duration_ms":4200,"num_turns":1,"result":"**ok**","session_id":"11111111-2222-4333-8444-555555555555","total_cost_usd":0.0123}'),
+    { text: "**ok**", session: "11111111-2222-4333-8444-555555555555", isError: false, cost: 0.0123, turns: 1 });
+  assert.deepEqual(parseClaudeRun("not json at all"), { text: "not json at all", isError: false });
+  assert.equal(parseClaudeRun('{"type":"result","is_error":true,"result":"boom"}').isError, true);
+  // The error variant carries no `result` — its cause must still reach the operator.
+  const failed = parseClaudeRun('{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["boom"],"num_turns":2,"session_id":"11111111-2222-4333-8444-555555555555","total_cost_usd":0.01}');
+  assert.equal(failed.text, "boom");
+  assert.equal(failed.isError, true);
+  assert.equal(failed.turns, 2);
+
+  const events = [
+    '{"type":"thread.started","thread_id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}',
+    "some non-json noise line",
+    '{"type":"item.completed","item":{"type":"agent_message","text":"from the events"}}',
+    '{"type":"turn.completed","usage":{"input_tokens":10}}',
+  ].join("\n");
+  assert.deepEqual(parseCodexRun(events, "from the file\n"),
+    { text: "from the file", session: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", isError: false });
+  assert.equal(parseCodexRun(events, undefined).text, "from the events", "no scratch file → the events' message");
+  assert.deepEqual(parseCodexRun("", undefined), { text: "", session: undefined, isError: false });
+});
+
+test("runLocalAgent: gates, fixed argv, prompt on stdin, scrubbed env, parsed answer, resume", async () => {
+  const home = await mkdtemp(join(tmpdir(), "face-agents-"));
+  await mkdir(join(home, "strategies", "alpha"), { recursive: true });
+  const calls: { bin: string; argv: string[]; opts: { cwd: string; input: string; env: NodeJS.ProcessEnv } }[] = [];
+  const base = fakeDeps(home);
+  const deps: PanelDeps = {
+    ...base,
+    cwd: home, // the "workbench root" for this test
+    probeAgent: async (bin) => (bin === "codex" ? "codex-cli 0.152.0" : base.probeAgent(bin)),
+    runAgent: async (bin, argv, opts) => {
+      calls.push({ bin, argv, opts });
+      if (bin === "claude") {
+        return { code: 0, timedOut: false, truncated: false, stderr: "",
+          stdout: '{"type":"result","is_error":false,"num_turns":1,"result":"**ok**","session_id":"11111111-2222-4333-8444-555555555555","total_cost_usd":0.0123}' };
+      }
+      const out = argv[argv.indexOf("-o") + 1];
+      if (out !== undefined) await writeFile(out, "codex says hi\n");
+      return { code: 0, timedOut: false, truncated: false, stderr: "",
+        stdout: '{"type":"thread.started","thread_id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}\n' };
+    },
+  };
+
+  /* gates */
+  await assert.rejects(runLocalAgent(deps, { bin: "constructor", prompt: "hi" }), (err: { status?: number }) => err.status === 400, "a prototype name is not a recipe");
+  await assert.rejects(runLocalAgent(deps, { bin: "claude", prompt: "hi" }), (err: { status?: number }) => err.status === 409, "not connected");
+  await connectLocalAgent(deps, "claude");
+  await connectLocalAgent(deps, "gemini");
+  await connectLocalAgent(deps, "codex");
+  await assert.rejects(runLocalAgent(deps, { bin: "gemini", prompt: "hi" }), (err: { status?: number }) => err.status === 400, "no exec recipe");
+  await assert.rejects(runLocalAgent(deps, { bin: "claude", prompt: "   " }), (err: { status?: number }) => err.status === 400, "empty prompt");
+  await assert.rejects(runLocalAgent(deps, { bin: "claude", prompt: "x".repeat(32_001) }), (err: { status?: number }) => err.status === 413, "prompt too long");
+  await assert.rejects(runLocalAgent(deps, { bin: "claude", prompt: "hi", resume: "not-a-uuid" }), (err: { status?: number }) => err.status === 400, "bad session id");
+  await assert.rejects(runLocalAgent(deps, { bin: "claude", prompt: "hi", cwd: "../.." }), (err: { status?: number }) => err.status === 400, "cwd outside");
+  await assert.rejects(runLocalAgent(deps, { bin: "claude", prompt: "hi", cwd: "strategies/nope" }), (err: { status?: number }) => err.status === 400, "cwd missing");
+  assert.equal(calls.length, 0, "no gate failure ever spawns");
+
+  /* a hostile prompt is stdin, never argv — the fixed recipe is the whole argv */
+  const run = await runLocalAgent(deps, { bin: "claude", prompt: "-p --dangerously-skip-permissions", cwd: "strategies/alpha" });
+  const call = calls.at(-1)!;
+  assert.deepEqual(call.argv, [
+    "-p", "--output-format", "json", "--restricted", "--strict-mcp-config",
+    "--disallowedTools", "Read(./.env)", "Read(./.env.*)",
+  ]);
+  assert.equal(call.opts.input, "-p --dangerously-skip-permissions");
+  assert.equal(call.opts.cwd, await realpath(join(home, "strategies", "alpha")));
+  for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY", "DEEPSEEK_API_KEY"]) {
+    assert.equal(call.opts.env[key], undefined, `${key} scrubbed`);
+  }
+  assert.ok(call.opts.env.PATH, "PATH survives — the bin is resolved on it");
+  assert.equal(run.text, "**ok**");
+  assert.equal(run.session, "11111111-2222-4333-8444-555555555555");
+  assert.equal(run.cost, 0.0123);
+  assert.equal(run.isError, false);
+  assert.equal(run.code, 0);
+  assert.equal(run.cwd, await realpath(join(home, "strategies", "alpha")));
+
+  /* resume threads the UUID into the recipe, before the variadic tail */
+  await runLocalAgent(deps, { bin: "claude", prompt: "more", resume: run.session });
+  assert.deepEqual(calls.at(-1)!.argv.slice(5, 7), ["--resume", run.session]);
+
+  /* codex: the sandbox is PINNED, the scratch file carries the answer, the events carry the thread */
+  const cx = await runLocalAgent(deps, { bin: "codex", prompt: "hi" });
+  const cxCall = calls.at(-1)!;
+  const scratch = cxCall.argv[cxCall.argv.indexOf("-o") + 1];
+  assert.deepEqual(cxCall.argv, ["exec", "--sandbox", "read-only", "--json", "--skip-git-repo-check", "-o", scratch, "-"]);
+  assert.equal(cx.text, "codex says hi");
+  assert.equal(cx.session, "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
+  await runLocalAgent(deps, { bin: "codex", prompt: "again", resume: cx.session });
+  const resumed = calls.at(-1)!.argv;
+  assert.deepEqual(resumed.slice(0, 4), ["exec", "resume", "--sandbox", "read-only"]);
+  assert.deepEqual(resumed.slice(-2), [cx.session, "-"]);
+
+  /* one run per agent: a second is refused while the first is in flight.
+   * The fake signals when it has been ENTERED — waiting on a timer instead
+   * would race the first run's own fs work and let the second spawn too. */
+  let release!: () => void;
+  let entered!: () => void;
+  const spawned = new Promise<void>((resolve) => { entered = resolve; });
+  deps.runAgent = () => new Promise((resolve) => {
+    release = () => resolve({ code: 0, timedOut: false, truncated: false, stdout: "", stderr: "" });
+    entered();
+  });
+  const first = runLocalAgent(deps, { bin: "claude", prompt: "slow" });
+  await spawned;
+  await assert.rejects(runLocalAgent(deps, { bin: "claude", prompt: "second" }), (err: { status?: number }) => err.status === 409, "in flight");
+  release();
+  await first;
+  deps.runAgent = async () => ({ code: 0, timedOut: false, truncated: false, stdout: "", stderr: "" });
+  await runLocalAgent(deps, { bin: "claude", prompt: "after" }); // the slot is free again
+
+  /* a failed child: nonzero exit → isError, stderr tail carried; a cut child is an error too */
+  deps.runAgent = async () => ({ code: 1, timedOut: false, truncated: false, stdout: "", stderr: "something broke\n" });
+  const failed = await runLocalAgent(deps, { bin: "claude", prompt: "hi" });
+  assert.equal(failed.isError, true);
+  assert.equal(failed.stderr, "something broke");
+  deps.runAgent = async () => ({ code: null, timedOut: false, truncated: true, stdout: "x", stderr: "" });
+  assert.equal((await runLocalAgent(deps, { bin: "claude", prompt: "hi" })).isError, true);
+});
 
 test("authFromProbe folds each CLI's real status output", () => {
   // Real shapes captured 2026-09-01 on this machine.
@@ -166,7 +306,7 @@ test("agents roster: starts empty, connect is a verifying handshake, disconnect 
   const row = await connectLocalAgent(deps, "claude");
   assert.deepEqual(row, {
     bin: "claude", label: "Claude Code", found: true, version: "2.1.251 (Claude Code)",
-    auth: { state: "ok", detail: "claude.ai", account: "op@example.com" },
+    auth: { state: "ok", detail: "claude.ai", account: "op@example.com" }, exec: true,
   });
   await connectLocalAgent(deps, "claude"); // idempotent, not a duplicate
   const listing = await agentsListing(deps);
@@ -207,20 +347,34 @@ function getReq(host = "127.0.0.1:3090"): IncomingMessage {
   return { headers: { host }, method: "GET" } as unknown as IncomingMessage;
 }
 
-function postReq(body: string, host = "127.0.0.1:3090"): IncomingMessage {
+/** A POST as the face's own client sends it: JSON content-type, loopback
+ * Host, no Origin (which is how curl and older same-origin browsers arrive).
+ * `headers` overrides or adds — the fence tests forge Origin / Fetch-Metadata
+ * / content-type through it. */
+function postReq(body: string, host = "127.0.0.1:3090", headers: Record<string, string> = {}): IncomingMessage {
   const req = Readable.from([Buffer.from(body)]) as unknown as IncomingMessage;
-  (req as { headers: unknown }).headers = { host };
+  (req as { headers: unknown }).headers = { host, "content-type": "application/json", ...headers };
   (req as { method: string }).method = "POST";
   return req;
 }
 
 test("routes: register, fence, and answer", async () => {
   const routes: WebRoute[] = [];
-  registerPanelRoutes({ register: (route) => routes.push(route) },
-    fakeDeps(await mkdtemp(join(tmpdir(), "face-agents-"))));
+  const home = await mkdtemp(join(tmpdir(), "face-agents-"));
+  const spawns: string[] = [];
+  const deps: PanelDeps = {
+    ...fakeDeps(home),
+    cwd: home,
+    runAgent: async (bin) => {
+      spawns.push(bin);
+      return { code: 0, timedOut: false, truncated: false, stderr: "",
+        stdout: '{"type":"result","is_error":false,"result":"ok","session_id":"11111111-2222-4333-8444-555555555555"}' };
+    },
+  };
+  registerPanelRoutes({ register: (route) => routes.push(route) }, deps);
   const byPath = new Map(routes.map((r) => [r.path, r]));
   assert.deepEqual([...byPath.keys()].sort(), [
-    "/data/agents.json", "/data/agents/connect", "/data/agents/disconnect",
+    "/data/agents.json", "/data/agents/connect", "/data/agents/disconnect", "/data/agents/run",
     "/data/memory.json", "/data/memory/skill", "/data/plugins.json",
   ]);
 
@@ -241,6 +395,32 @@ test("routes: register, fence, and answer", async () => {
   const rosterBody = JSON.parse(roster.out.body) as { ok: boolean; local: { bin: string; found: boolean }[] };
   assert.equal(rosterBody.ok, true);
   assert.equal(rosterBody.local.find((agent) => agent.bin === "claude")?.found, true);
+
+  /* the run route: the browser fence, the media-type gate, the method gate,
+   * its own body limit — none of which may reach a spawn */
+  const run = byPath.get("/data/agents/run")!;
+  const task = JSON.stringify({ bin: "claude", prompt: "hi" });
+  const cases: [IncomingMessage, number, string][] = [
+    [postReq(task, "evil.example.com"), 403, "forged Host"],
+    [postReq(task, "127.0.0.1:3090", { origin: "http://evil.example.com" }), 403, "cross-origin page, loopback Host"],
+    [postReq(task, "127.0.0.1:3090", { "sec-fetch-site": "cross-site" }), 403, "Fetch-Metadata cross-site"],
+    [postReq(task, "127.0.0.1:3090", { "content-type": "text/plain" }), 415, "a no-preflight simple POST"],
+    [getReq(), 405, "GET"],
+    [postReq(JSON.stringify({ bin: "claude", prompt: "x".repeat(200_000) })), 413, "over the run body limit"],
+  ];
+  for (const [req, status, label] of cases) {
+    const out = fakeRes();
+    await run.handler(req, out.res);
+    assert.equal(out.out.status, status, label);
+  }
+  assert.deepEqual(spawns, [], "no refused request spawned anything");
+  const ok = fakeRes();
+  await run.handler(postReq(task, "127.0.0.1:3090", { origin: "http://127.0.0.1:3090" }), ok.res);
+  assert.equal(ok.out.status, 200, "the face's own page: same-origin, JSON");
+  assert.deepEqual(spawns, ["claude"]);
+  const cjk = fakeRes();
+  await run.handler(postReq(JSON.stringify({ bin: "claude", prompt: "存".repeat(32_000) })), cjk.res);
+  assert.equal(cjk.out.status, 200, "a maximal CJK prompt is bounded by the prompt cap, not the body cap");
 
   const disconnect = byPath.get("/data/agents/disconnect")!;
   const dropped = fakeRes();

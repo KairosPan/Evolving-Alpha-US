@@ -69,7 +69,7 @@ function getReq(host?: string): IncomingMessage {
 /** A POST whose body streams like a real request's. */
 function postReq(body: string, host = "127.0.0.1:3090"): IncomingMessage {
   const req = Readable.from([Buffer.from(body)]) as unknown as IncomingMessage;
-  (req as { headers: unknown }).headers = { host };
+  (req as { headers: unknown }).headers = { host, "content-type": "application/json" };
   (req as { method: string }).method = "POST";
   return req;
 }

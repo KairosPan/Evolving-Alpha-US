@@ -22,19 +22,22 @@
  *   record is a 12-line projection of `ctx.loader.entries()` anyway — restated
  *   here rather than mounted, so no new row and no second gateway).
  *
- * The only writes are the agent roster's two (connect/disconnect), and they
- * touch nothing but the face's own metadata file. Loopback-fenced like every
- * `/data` route.
+ * The roster's connect/disconnect are the only writes to face state (its own
+ * metadata file); `run` spawns one connected agent's own CLI as a child inside
+ * a fenced working directory (the exec-channel block above EXEC_SPECS) — its
+ * only face-side write is a tmpdir scratch for codex's `-o`, removed after the
+ * run. Same-origin-fenced like every `/data` route.
  * @module
  */
-import { execFile } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { execFile, spawn } from "node:child_process";
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, relative, resolve as resolvePath } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Context } from "@deepseek-ai/cordis";
 import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import type { RouteRegistrar } from "./static.ts";
-import { isLoopbackHost } from "./data.ts";
+import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 import { readBody, StrategyError } from "./strategies.ts";
 import { DSH_PIN } from "./version.ts";
 
@@ -158,13 +161,15 @@ export interface AgentsMeta {
 }
 
 /** One probed local agent: present-with-version, or connected-but-silent,
- * plus its auth reading when the agent has a status command. */
+ * plus its auth reading when the agent has a status command, and whether the
+ * face can DRIVE it (has an exec recipe — see {@link EXEC_SPECS}). */
 export interface LocalAgentRow {
   bin: string;
   label: string;
   found: boolean;
   version?: string;
   auth?: AgentAuth;
+  exec?: boolean;
 }
 
 /** @returns the stored roster; an absent, unreadable, or hand-mangled file
@@ -197,6 +202,351 @@ async function writeAgentsMeta(home: string, meta: AgentsMeta): Promise<void> {
 /** The pretty label for a bin: the known map's, else the bin itself. */
 const labelFor = (bin: string): string => KNOWN_AGENTS.find((k) => k.bin === bin)?.label ?? bin;
 
+/* ---------- the exec channel: drive a connected agent, one run per agent ------
+ * The GREEN rows of docs/research/2026-09-01-agent-connection-survey.md: the
+ * face spawns the operator's own UNMODIFIED CLI as a child, lets it perform
+ * its own sign-in, and reads what it prints — it handles no credential at any
+ * point, which is what keeps it on the permitted side of Anthropic's terms
+ * (the survey quotes the line). Hermes has NO recipe on purpose: its default
+ * provider config reuses those very tokens (the survey's RED rows), so it
+ * stays a directory entry until the operator pins its provider. */
+
+/** What one run reads out of the child's output. */
+export interface RunParse {
+  text: string;
+  session?: string;
+  isError: boolean;
+  cost?: number;
+  turns?: number;
+}
+
+/** One agent's exec recipe. The prompt ALWAYS travels on stdin, never as an
+ * argument: an argument beginning with "-" would parse as a flag, and stdin
+ * is the documented prompt channel for both CLIs. */
+interface ExecSpec {
+  /** Whether the CLI wants a scratch file for its final message (codex -o). */
+  lastMessageFile: boolean;
+  argv(resume: string | undefined, lastMessageFile: string | undefined): string[];
+  parse(stdout: string, lastMessage: string | undefined): RunParse;
+}
+
+const EXEC_SPECS: Readonly<Record<string, ExecSpec>> = {
+  claude: {
+    /* -p headless · json = one result object · --restricted = no Bash/code
+     * tools, no WebFetch, user/project settings ignored, file tools confined
+     * to the working directory, bypassPermissions refused · --strict-mcp-config
+     * = no MCP servers from any config (a strategy dir's .mcp.json included) ·
+     * --disallowedTools Read(./.env*) = the workbench's key files stay unread
+     * even when the run's directory is the root that holds them (it is
+     * variadic, so it goes LAST). A one-shot the face fires is a READER: it
+     * answers about the tree, it does not act on it. */
+    lastMessageFile: false,
+    argv: (resume) => [
+      "-p", "--output-format", "json", "--restricted", "--strict-mcp-config",
+      ...(resume === undefined ? [] : ["--resume", resume]),
+      "--disallowedTools", "Read(./.env)", "Read(./.env.*)",
+    ],
+    parse: parseClaudeRun,
+  },
+  codex: {
+    /* exec headless · --sandbox read-only PINNED (the operator's
+     * ~/.codex/config.toml says workspace-write, and a recipe must not inherit
+     * its posture from a file the face does not own) · --json = JSONL events
+     * (the thread id rides thread.started) · -o = the final message to a
+     * scratch file, the documented robust channel for the answer · "-" =
+     * prompt from stdin · --skip-git-repo-check: a strategy dir need not be a
+     * repo. */
+    lastMessageFile: true,
+    argv: (resume, out) => [
+      "exec", ...(resume === undefined ? [] : ["resume"]),
+      "--sandbox", "read-only", "--json", "--skip-git-repo-check",
+      ...(out === undefined ? [] : ["-o", out]),
+      ...(resume === undefined ? [] : [resume]), "-",
+    ],
+    parse: parseCodexRun,
+  },
+};
+
+/** Whether the face can drive this agent (has an exec recipe). `hasOwn`, not
+ * a lookup: a bin named `constructor` must read as no recipe, not as
+ * `Object.prototype.constructor`. */
+const hasExec = (bin: string): boolean => Object.hasOwn(EXEC_SPECS, bin);
+
+/** Exactly a session/thread id both CLIs mint: a UUID. Anything else is
+ * refused before it can reach an argv. */
+const AGENT_SESSION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const PROMPT_LIMIT = 32_000;
+/** A run's body carries a prompt (the shared 4 KB reader is sized for ids):
+ * JSON of {bin, prompt, cwd, resume}, where a CJK prompt is 3 UTF-8 bytes per
+ * UTF-16 unit — sized so the prompt cap, not the body cap, is what a long
+ * prompt hits. */
+const RUN_BODY_LIMIT = 4 * PROMPT_LIMIT;
+/** How long one run may take before it is killed — a coding agent reading a
+ * tree and answering is minutes, not seconds. */
+const RUN_TIMEOUT_MS = 600_000;
+/** Cap on collected child output; past it the child is killed. */
+const RUN_OUTPUT_LIMIT = 16 * 1024 * 1024;
+
+/** Variables scrubbed from a child's environment (probes and runs alike, so
+ * what the auth card observes is what the run gets). Deliberately INHERITED:
+ * CLAUDE_CODE_OAUTH_TOKEN (the operator's own headless sign-in, minted by
+ * `claude setup-token`), CLAUDE_CONFIG_DIR and CODEX_HOME (pointers to the
+ * operator's own stores) — scrubbing those would make a run fail while the
+ * auth card says signed in. The face never reads any of them. */
+const SCRUBBED_ENV = [
+  // credential overrides that outrank the CLI's own sign-in — a set key
+  // silently moves the CLI off its subscription onto per-token billing
+  "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "CODEX_API_KEY",
+  // endpoint redirects — would carry the sign-in to a foreign gateway
+  "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "OPENAI_BASE_URL",
+  // cloud-provider billing switches
+  "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+  // the workbench's own secrets — no business in a coding agent's child
+  "APCA_API_KEY_ID", "APCA_API_SECRET_KEY", "DEEPSEEK_API_KEY",
+] as const;
+
+/** `process.env` (or `base`) minus {@link SCRUBBED_ENV}. */
+export function scrubbedEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...base };
+  for (const key of SCRUBBED_ENV) delete env[key];
+  return env;
+}
+
+/** `claude -p --output-format json` prints one result object:
+ * {result, session_id, is_error, total_cost_usd, num_turns, …}; an error
+ * variant (`subtype: "error_*"`) carries `errors[]` instead of `result`, and
+ * the cause must reach the operator. Anything else comes back as raw text so
+ * they still see what happened. */
+export function parseClaudeRun(stdout: string): RunParse {
+  const start = stdout.indexOf("{");
+  const end = stdout.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    try {
+      const obj = JSON.parse(stdout.slice(start, end + 1)) as Record<string, unknown>;
+      const errors = Array.isArray(obj.errors) ? obj.errors.filter((e): e is string => typeof e === "string") : [];
+      const subtype = typeof obj.subtype === "string" ? obj.subtype : "";
+      return {
+        text: typeof obj.result === "string" ? obj.result : errors.length > 0 ? errors.join("\n") : subtype,
+        session: typeof obj.session_id === "string" ? obj.session_id : undefined,
+        isError: obj.is_error === true || subtype.startsWith("error"),
+        cost: typeof obj.total_cost_usd === "number" ? obj.total_cost_usd : undefined,
+        turns: typeof obj.num_turns === "number" ? obj.num_turns : undefined,
+      };
+    } catch { /* not the documented shape — fall through to raw */ }
+  }
+  return { text: stdout.trim(), isError: false };
+}
+
+/** `codex exec --json -o <file>`: the answer is the scratch file (else the
+ * agent_message items joined), the thread id rides the thread.started event.
+ * Non-JSON lines around the events are skipped, not fatal. */
+export function parseCodexRun(stdout: string, lastMessage: string | undefined): RunParse {
+  let session: string | undefined;
+  const messages: string[] = [];
+  for (const line of stdout.split("\n")) {
+    if (line.trim() === "") continue;
+    let event: Record<string, unknown>;
+    try {
+      event = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (event.type === "thread.started" && typeof event.thread_id === "string") session = event.thread_id;
+    const item = event.item;
+    if (event.type === "item.completed" && item !== null && typeof item === "object") {
+      const it = item as Record<string, unknown>;
+      if (it.type === "agent_message" && typeof it.text === "string") messages.push(it.text);
+    }
+  }
+  const fileText = lastMessage?.trim() ?? "";
+  return { text: fileText !== "" ? fileText : messages.join("\n\n"), session, isError: false };
+}
+
+/** What a runner returns: exit code (null when the process never ran or was
+ * killed), both streams, whether the face's timeout fired, and whether the
+ * output cap cut the child off. */
+export interface RunOutcome {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  truncated: boolean;
+}
+
+/** How long a SIGTERMed child gets to leave before SIGKILL. */
+const KILL_GRACE_MS = 5_000;
+
+/** The real runner: `spawn` (no shell), prompt written to stdin then closed,
+ * output collected up to {@link RUN_OUTPUT_LIMIT}, killed at `timeoutMs`.
+ * Three things a naive version gets wrong, and this one does not: a child
+ * that traps SIGTERM is SIGKILLed after {@link KILL_GRACE_MS}; a child that
+ * has EXITED while a grandchild still holds its pipes settles a second
+ * later on `exit` rather than waiting on `close` forever; and the streams
+ * are decoded through `setEncoding`, whose decoder holds a multibyte
+ * sequence split across chunks (a CJK answer must not arrive as U+FFFD).
+ * A spawn failure (the binary vanished) RESOLVES — never rejects — as a
+ * null-code outcome with the reason on stderr, so the operator sees it. The
+ * child dies with the face: a `process` 'exit' hook SIGTERMs it. */
+export function defaultAgentRunner(): PanelDeps["runAgent"] {
+  return (bin, argv, opts) => new Promise((resolve) => {
+    const child = spawn(bin, argv, { cwd: opts.cwd, env: opts.env, stdio: ["pipe", "pipe", "pipe"] });
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let truncated = false;
+    let settled = false;
+    /** @type {ReturnType<typeof setTimeout>[]} every timer this run armed */
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const later = (fn: () => void, ms: number): void => {
+      const t = setTimeout(fn, ms);
+      t.unref();
+      timers.push(t);
+    };
+    const onFaceExit = (): void => { child.kill("SIGTERM"); };
+    process.once("exit", onFaceExit);
+    const finish = (code: number | null): void => {
+      if (settled) return;
+      settled = true;
+      for (const t of timers) clearTimeout(t);
+      process.off("exit", onFaceExit);
+      resolve({ code, stdout, stderr, timedOut, truncated });
+    };
+    const terminate = (): void => {
+      child.kill("SIGTERM");
+      later(() => { if (!settled) child.kill("SIGKILL"); }, KILL_GRACE_MS);
+    };
+    later(() => {
+      timedOut = true;
+      terminate();
+    }, opts.timeoutMs);
+    child.stdout.on("data", (chunk: string) => {
+      if (truncated) return;
+      stdout += chunk;
+      if (stdout.length > RUN_OUTPUT_LIMIT) {
+        truncated = true;
+        stdout = stdout.slice(0, RUN_OUTPUT_LIMIT);
+        terminate();
+      }
+    });
+    child.stderr.on("data", (chunk: string) => { stderr += chunk; });
+    child.on("error", (err) => {
+      stderr += `spawn failed: ${(err as { code?: string }).code ?? err.message}`;
+      finish(null);
+    });
+    child.on("exit", (code) => {
+      /* The pipes may outlive the process (a grandchild inherited them):
+       * give 'close' a second to deliver the tail, then settle regardless. */
+      later(() => {
+        child.stdout.destroy();
+        child.stderr.destroy();
+        finish(code);
+      }, 1_000);
+    });
+    child.on("close", (code) => finish(code));
+    child.stdin.on("error", () => { /* the child closed stdin early; its output still decides */ });
+    child.stdin.end(opts.input);
+  });
+}
+
+/** Resolve a requested working directory INSIDE the workbench root, or the
+ * root itself when none is asked for. Symlinks are followed on both sides so
+ * a link out of the tree cannot pass the prefix test. */
+async function resolveWorkdir(root: string, requested: unknown): Promise<string> {
+  const rootReal = await realpath(root);
+  if (requested === undefined || requested === null || requested === "") return rootReal;
+  if (typeof requested !== "string") throw new StrategyError(400, "invalid cwd");
+  let real: string;
+  try {
+    real = await realpath(resolvePath(rootReal, requested));
+    if (!(await stat(real)).isDirectory()) throw new Error("not a directory");
+  } catch {
+    throw new StrategyError(400, "cwd is not a directory");
+  }
+  const rel = relative(rootReal, real);
+  if (rel.startsWith("..") || isAbsolute(rel)) throw new StrategyError(400, "cwd outside the workbench");
+  return real;
+}
+
+/** The face's answer to one run. */
+export interface RunResult extends RunParse {
+  bin: string;
+  cwd: string;
+  durationMs: number;
+  code: number | null;
+  timedOut: boolean;
+  truncated: boolean;
+  stderr?: string;
+}
+
+/** Runs in flight, keyed by bin — the host-side half of "one run per agent".
+ * Module-level so the exported {@link runLocalAgent} carries it in tests. */
+const running = new Set<string>();
+
+/**
+ * Drive one connected agent through its exec recipe, one task.
+ *
+ * Gates, in order: a valid name with a recipe (400), connected (409), a
+ * non-empty prompt under {@link PROMPT_LIMIT} (400 / 413), a UUID session to
+ * resume if any (400), a working directory inside the workbench (400), no run
+ * already in flight for this agent (409). The prompt goes to the child on
+ * stdin; the answer comes back parsed, with the exit code and the tail of
+ * stderr when the run failed.
+ */
+export async function runLocalAgent(deps: PanelDeps, body: Record<string, unknown>): Promise<RunResult> {
+  const { bin, prompt, cwd, resume } = body;
+  if (typeof bin !== "string" || !AGENT_BIN_RE.test(bin) || !hasExec(bin)) {
+    throw new StrategyError(400, "no exec channel for this agent");
+  }
+  const spec = EXEC_SPECS[bin];
+  const meta = await readAgentsMeta(deps.home);
+  if (!meta.connected.some((row) => row.bin === bin)) throw new StrategyError(409, "not connected");
+  if (typeof prompt !== "string" || prompt.trim() === "") throw new StrategyError(400, "prompt required");
+  if (prompt.length > PROMPT_LIMIT) throw new StrategyError(413, "prompt too long");
+  if (resume !== undefined && (typeof resume !== "string" || !AGENT_SESSION_RE.test(resume))) {
+    throw new StrategyError(400, "invalid session id");
+  }
+  const workdir = await resolveWorkdir(deps.cwd, cwd);
+  if (running.has(bin)) throw new StrategyError(409, "a run is already in progress for this agent");
+  running.add(bin);
+
+  let scratch: string | undefined;
+  const t0 = Date.now();
+  try {
+    let lastMessageFile: string | undefined;
+    if (spec.lastMessageFile) {
+      scratch = await mkdtemp(join(tmpdir(), "face-run-"));
+      lastMessageFile = join(scratch, "last-message.md");
+    }
+    const out = await deps.runAgent(bin, spec.argv(resume, lastMessageFile), {
+      cwd: workdir, input: prompt, env: scrubbedEnv(), timeoutMs: RUN_TIMEOUT_MS,
+    });
+    let lastMessage: string | undefined;
+    if (lastMessageFile !== undefined) {
+      try {
+        lastMessage = await readFile(lastMessageFile, "utf8");
+      } catch { /* the CLI wrote none — the events carry the answer */ }
+    }
+    const parsed = spec.parse(out.stdout, lastMessage);
+    const isError = parsed.isError || out.code !== 0 || out.timedOut || out.truncated;
+    /* Unlike data.ts (whose producer runs WITH the APCA keys, so a traceback
+     * could echo them), this child's env is scrubbed, it is the operator's
+     * own CLI, and its diagnostics are what the operator needs to see — so
+     * the stderr TAIL is returned, error runs only. */
+    const stderr = out.stderr.trim();
+    return {
+      ...parsed, bin, cwd: workdir, isError,
+      durationMs: Date.now() - t0, code: out.code, timedOut: out.timedOut, truncated: out.truncated,
+      ...(isError && stderr !== "" ? { stderr: stderr.slice(-2000) } : {}),
+    };
+  } finally {
+    running.delete(bin);
+    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
+  }
+}
+
 /** One composed Loader row, as the plugin panel shows it — the same projection
  * `dsh-host-plugin-inventory` makes, plus `serverName` for MCP rows so the
  * panel can pair a server with its registered tools. */
@@ -225,7 +575,8 @@ export interface PanelDeps {
     disabled?: boolean;
     fiber?: { state: number };
   }>;
-  /** The cwd skill discovery resolves project roots against. */
+  /** The workbench repo root: skill discovery resolves project roots against
+   * it, and a run's working directory must resolve inside it. */
   cwd: string;
   /** The harness home holding the face's agents.json roster file. */
   home: string;
@@ -236,6 +587,13 @@ export interface PanelDeps {
   /** Ask one agent's own status command whether it is signed in — the
    * {@link AUTH_PROBES} argv for that bin; "unknown" when it has none. */
   probeAuth(bin: string): Promise<AgentAuth>;
+  /** Spawn one connected agent's CLI with a recipe's argv, the prompt on
+   * stdin, inside `cwd` with a scrubbed env; see {@link defaultAgentRunner}. */
+  runAgent(
+    bin: string,
+    argv: string[],
+    opts: { cwd: string; input: string; env: NodeJS.ProcessEnv; timeoutMs: number },
+  ): Promise<RunOutcome>;
 }
 
 /** The real prober: `execFile` (no shell) of the bare bin name — resolved on
@@ -245,7 +603,7 @@ export interface PanelDeps {
  * here", which is all the roster claims to know. */
 export function defaultAgentProber(): PanelDeps["probeAgent"] {
   return (bin) => new Promise((resolve) => {
-    execFile(bin, ["--version"], { timeout: 3_000 }, (err, stdout) => {
+    execFile(bin, ["--version"], { timeout: 3_000, env: scrubbedEnv() }, (err, stdout) => {
       if (err) return resolve(null);
       const line = String(stdout).split("\n")[0]?.trim() ?? "";
       resolve(line === "" ? null : line.slice(0, 120));
@@ -254,15 +612,17 @@ export function defaultAgentProber(): PanelDeps["probeAgent"] {
 }
 
 /** The real auth prober: the bin's own status command through the same
- * no-shell `execFile`, folded by {@link authFromProbe}. A status command
- * that exits nonzero still ANSWERED (signed-out CLIs often exit 1), so the
- * fold sees its output; only a spawn that produced nothing reads as null. */
+ * no-shell `execFile`, folded by {@link authFromProbe}. Both streams are
+ * folded together — `codex login status` reports on STDERR (measured
+ * 2026-09-01), `claude auth status` on stdout. A status command that exits
+ * nonzero still ANSWERED (signed-out CLIs often exit 1), so the fold sees
+ * its output; only a spawn that produced nothing reads as null. */
 export function defaultAuthProber(): PanelDeps["probeAuth"] {
   return (bin) => new Promise((resolve) => {
-    const argv = AUTH_PROBES[bin];
+    const argv = Object.hasOwn(AUTH_PROBES, bin) ? AUTH_PROBES[bin] : undefined;
     if (argv === undefined) return resolve({ state: "unknown" });
-    execFile(bin, [...argv], { timeout: 10_000 }, (err, stdout) => {
-      const out = String(stdout ?? "");
+    execFile(bin, [...argv], { timeout: 10_000, env: scrubbedEnv() }, (err, stdout, stderr) => {
+      const out = `${String(stdout ?? "")}\n${String(stderr ?? "")}`;
       if (err !== null && out.trim() === "") return resolve(authFromProbe(bin, null));
       const code = err === null ? 0 : 1;
       resolve(authFromProbe(bin, { code, stdout: out }));
@@ -300,6 +660,7 @@ export function panelDeps(ctx: Context, cwd: string, home = resolveDshHome(undef
     home,
     probeAgent: defaultAgentProber(),
     probeAuth: defaultAuthProber(),
+    runAgent: defaultAgentRunner(),
   };
 }
 
@@ -335,7 +696,7 @@ export async function agentsListing(deps: PanelDeps): Promise<{
   const meta = await readAgentsMeta(deps.home);
   const local = await Promise.all(meta.connected.map(async ({ bin, label }): Promise<LocalAgentRow> => {
     const [version, auth] = await Promise.all([probeSoft(deps, bin), authSoft(deps, bin)]);
-    return { bin, label, found: version !== null, ...(version === null ? {} : { version }), auth };
+    return { bin, label, found: version !== null, ...(version === null ? {} : { version }), auth, exec: hasExec(bin) };
   }));
   const connected = new Set(meta.connected.map((row) => row.bin));
   const candidates = (await Promise.all(KNOWN_AGENTS
@@ -364,7 +725,7 @@ export async function connectLocalAgent(deps: PanelDeps, bin: unknown): Promise<
     meta.connected.push({ bin, label: labelFor(bin) });
     await writeAgentsMeta(deps.home, meta);
   }
-  return { bin, label: labelFor(bin), found: true, version, auth };
+  return { bin, label: labelFor(bin), found: true, version, auth, exec: hasExec(bin) };
 }
 
 /** Remove one bin from the roster. 400 on a malformed name, 404 when it was
@@ -477,11 +838,13 @@ export function pluginListing(deps: PanelDeps): {
 }
 
 /**
- * Mount the panel routes: `exact GET /data/memory.json`,
- * `exact POST /data/memory/skill` (body `{name}`), and
- * `exact GET /data/plugins.json`.
+ * Mount the panel routes — reads `GET /data/memory.json`, `/data/plugins.json`,
+ * `/data/agents.json`; lookups and actions `POST /data/memory/skill` ({name}),
+ * `/data/agents/connect` and `/disconnect` ({bin}), `/data/agents/run`
+ * ({bin, prompt, cwd?, resume?}, its own body limit).
  * @param webServer - the host webserver service, or a test recorder.
- * @param deps - the tree reads, from {@link panelDeps} or a test fake.
+ * @param deps - the tree reads and process seams, from {@link panelDeps} or a
+ *   test fake.
  */
 export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps): void {
   const send = (res: ServerResponse, status: number, body: unknown): void => {
@@ -492,7 +855,7 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
   /** The shared GET shell: fence, then the read, errors mapped like /data's. */
   const get = (read: () => Promise<object> | object) =>
     async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-      if (!isLoopbackHost(req.headers.host)) return send(res, 403, FORBIDDEN);
+      if (!isTrustedDataRequest(req)) return send(res, 403, FORBIDDEN);
       try {
         return send(res, 200, { ok: true, ...(await read()) });
       } catch (err) {
@@ -503,14 +866,15 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
 
   /** The shared POST shell: fence, method gate, JSON body, error mapping —
    * the same shape sessions.ts uses. */
-  const post = (act: (body: Record<string, unknown>) => Promise<object>) =>
+  const post = (act: (body: Record<string, unknown>) => Promise<object>, bodyLimit?: number) =>
     async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-      if (!isLoopbackHost(req.headers.host)) return send(res, 403, FORBIDDEN);
+      if (!isTrustedDataRequest(req)) return send(res, 403, FORBIDDEN);
       if (req.method !== "POST") return send(res, 405, { ok: false, error: "POST only" });
+      if (!isJsonBody(req)) return send(res, 415, { ok: false, error: "application/json only" });
       try {
         let body: Record<string, unknown>;
         try {
-          const parsed: unknown = JSON.parse(await readBody(req));
+          const parsed: unknown = JSON.parse(await readBody(req, bodyLimit));
           if (parsed === null || typeof parsed !== "object") throw new Error("not an object");
           body = parsed as Record<string, unknown>;
         } catch (err) {
@@ -581,5 +945,10 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
     kind: "exact",
     path: "/data/agents/disconnect",
     handler: post(async (body) => await disconnectLocalAgent(deps, body.bin)),
+  });
+  webServer.register({
+    kind: "exact",
+    path: "/data/agents/run",
+    handler: post(async (body) => ({ run: await runLocalAgent(deps, body) }), RUN_BODY_LIMIT),
   });
 }

@@ -1566,11 +1566,14 @@ function openLocalAgent(agent) {
     if (auth.account) kvRow(authCard, "account", String(auth.account));
     inner.append(authCard);
     if (auth.state === "none") {
-      const hint = LOGIN_HINTS[String(agent.bin)];
+      const hint = Object.hasOwn(LOGIN_HINTS, String(agent.bin)) ? LOGIN_HINTS[String(agent.bin)] : undefined;
       inner.append(el("div", "sp-note", hint !== undefined
         ? `Signed out — run in your terminal: ${hint}`
         : "Signed out — sign in from this agent's own CLI."));
     }
+
+    /* The exec channel, for agents the face has a recipe for. */
+    if (found && agent.exec === true) inner.append(runCard(agent));
 
     inner.append(el("div", "sp-note", found
       ? `Probed host-side as "${agent.bin} --version" on the face process's PATH; answers cache for a minute.`
@@ -1591,6 +1594,165 @@ function openLocalAgent(agent) {
     actions.append(gone);
     inner.append(actions);
   });
+}
+
+/* -- the exec channel: one run per agent, answers rendered as markdown --
+   The face spawns the operator's own unmodified CLI (host: POST
+   /data/agents/run) and shows what it said. The run is a READER — the CLI is
+   started without its command/code tools — so it answers about a tree, it
+   does not act on it. Runs and the session to continue are remembered per
+   agent for the life of the page; a run in flight is written into that log
+   BEFORE the POST, so a card re-rendered mid-run shows it running and stays
+   disabled, and the answer settles into the log whether or not the card that
+   fired it is still on screen (the host refuses a second run for the same
+   agent with 409 either way). */
+
+/** In-page memory of runs per connected agent: the session to continue, the
+ * exchanges, whether one is in flight, and the mounted card's settle hook.
+ * @type {Map<string, {session: string|undefined, entries: {prompt: string, run: Record<string, any>|null}[], inflight: boolean, onSettle: ((entry: object) => void)|undefined}>} */
+const runLog = new Map();
+
+/** The "run a task" card on a connected agent's page.
+ * @param {Record<string, any>} agent @returns {HTMLElement} */
+function runCard(agent) {
+  const bin = String(agent.bin);
+  const log = runLog.get(bin) ?? { session: undefined, entries: [], inflight: false, onSettle: undefined };
+  runLog.set(bin, log);
+  const card = panelCard("run a task");
+
+  const where = /** @type {HTMLSelectElement} */ (el("select", "run-where"));
+  where.title = "working directory";
+  where.setAttribute("aria-label", "working directory");
+  /** @param {string} label @param {string} value - the cwd sent to the host; "" means the workbench root. */
+  const option = (label, value) => {
+    const opt = /** @type {HTMLOptionElement} */ (el("option", null, label));
+    opt.value = value;
+    where.append(opt);
+  };
+  /* Strategy directories first — the default when any exist — and the repo
+   * root last: the root holds .env.alpaca / .env.deepseek, which a child's
+   * file tools could otherwise read even though its env is scrubbed of them. */
+  for (const s of strategyIndex?.strategies ?? []) option(`strategies/${s.name}`, String(s.cwd));
+  option("workbench (repo root)", "");
+
+  const input = /** @type {HTMLTextAreaElement} */ (el("textarea", "run-input"));
+  input.rows = 3;
+  input.placeholder = `task for ${agent.label}… (read-only: it answers about the tree, it does not act on it) — ⌘/Ctrl+Enter runs`;
+
+  const cont = el("label", "run-cont");
+  const box = /** @type {HTMLInputElement} */ (el("input"));
+  box.type = "checkbox";
+  box.checked = true;
+  cont.append(box, el("span", null, "continue session"));
+  cont.hidden = log.session === undefined;
+
+  const run = /** @type {HTMLButtonElement} */ (el("button", "picker-btn", "run"));
+  run.type = "button";
+  run.title = "run — ⌘/Ctrl+Enter";
+  const note = el("div", "sp-note");
+  const out = el("div", "run-log");
+  /** entry → its rendered node, so a settle re-renders in place. @type {Map<object, HTMLElement>} */
+  const nodes = new Map();
+  const show = (entry) => {
+    const node = runEntry(entry);
+    const prev = nodes.get(entry);
+    if (prev !== undefined && prev.isConnected) prev.replaceWith(node);
+    else out.append(node);
+    nodes.set(entry, node);
+  };
+  for (const entry of log.entries) show(entry);
+  const busy = (on) => {
+    run.disabled = on;
+    input.disabled = on;
+  };
+  /* This card is the one on screen: a run that settles — fired here or from
+   * an earlier card for the same agent — lands on it. */
+  log.onSettle = (entry) => {
+    show(entry);
+    cont.hidden = log.session === undefined;
+    input.value = "";
+    const result = entry.run ?? {};
+    note.textContent = `${result.isError === true ? "finished with an error" : "done"} · ${elapsed(result.durationMs ?? 0)}`;
+    note.classList.toggle("err", result.isError === true);
+    busy(false);
+  };
+
+  const go = async () => {
+    const prompt = input.value.trim();
+    if (prompt === "" || log.inflight) return;
+    const entry = { prompt, run: null };
+    log.entries.push(entry);
+    log.inflight = true;
+    show(entry);
+    busy(true);
+    note.classList.remove("err");
+    const t0 = Date.now();
+    note.textContent = "running… 0s";
+    const timer = setInterval(() => { note.textContent = `running… ${elapsed(Date.now() - t0)}`; }, 1000);
+    try {
+      const made = await panelData("/data/agents/run", {
+        bin,
+        prompt,
+        ...(where.value === "" ? {} : { cwd: where.value }),
+        ...(box.checked && log.session !== undefined ? { resume: log.session } : {}),
+      });
+      entry.run = made.run ?? {};
+      if (typeof entry.run.session === "string") log.session = entry.run.session;
+    } catch (err) {
+      entry.run = { isError: true, text: `run: ${err instanceof Error ? err.message : String(err)}`, durationMs: Date.now() - t0 };
+    } finally {
+      log.inflight = false;
+      clearInterval(timer);
+    }
+    log.onSettle?.(entry);
+  };
+  run.addEventListener("click", () => void go());
+  input.addEventListener("keydown", (event) => {
+    const key = /** @type {KeyboardEvent} */ (event);
+    if (key.key !== "Enter" || !(key.metaKey || key.ctrlKey)) return;
+    event.preventDefault();
+    void go();
+  });
+
+  const row = el("div", "run-row");
+  row.append(where, cont, run);
+  card.append(input, row, note, out);
+  if (log.inflight) {
+    busy(true);
+    note.textContent = "a run is in progress…";
+  } else if (agent.auth?.state === "none") {
+    busy(true);
+    note.textContent = "sign in first — see the auth card above";
+  }
+  return card;
+}
+
+/** One prompt → answer exchange, the answer rendered as markdown; a `run` of
+ * null is still in flight.
+ * @param {{prompt: string, run: Record<string, any>|null}} entry @returns {HTMLElement} */
+function runEntry({ prompt, run }) {
+  const box = el("div", "run-entry");
+  box.append(el("pre", "run-prompt", prompt));
+  if (run === null) {
+    box.append(el("div", "sp-note", "running…"));
+    return box;
+  }
+  const answer = el("div", "run-answer");
+  answer.append(renderMarkdown(String(run.text ?? "")).node);
+  if (run.isError === true) answer.classList.add("err");
+  box.append(answer);
+  const meta = [];
+  if (typeof run.session === "string") meta.push(`session ${run.session.slice(0, 8)}`);
+  if (typeof run.cost === "number") meta.push(`$${run.cost.toFixed(4)}`);
+  if (typeof run.turns === "number") meta.push(`${run.turns} turn${run.turns === 1 ? "" : "s"}`);
+  if (typeof run.durationMs === "number") meta.push(elapsed(run.durationMs));
+  if (typeof run.cwd === "string") meta.push(run.cwd.split("/").filter((p) => p !== "").slice(-2).join("/"));
+  if (run.timedOut === true) meta.push("TIMED OUT");
+  else if (run.truncated === true) meta.push("OUTPUT CUT AT 16 MB");
+  else if (typeof run.code === "number" && run.code !== 0) meta.push(`exit ${run.code}`);
+  box.append(el("div", "run-meta", meta.join(" · ")));
+  if (typeof run.stderr === "string" && run.stderr !== "") box.append(el("pre", "tool-out err", run.stderr));
+  return box;
 }
 
 /** Drop one agent from the roster (the binary is untouched). Refreshes the
