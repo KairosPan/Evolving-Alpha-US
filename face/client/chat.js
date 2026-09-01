@@ -1423,7 +1423,9 @@ async function refreshAgentPanel() {
   const mainInfo = roster?.main;
   const kairos = el("div", "sp-plug");
   kairos.append(phaseDot("active"), el("span", "sp-plug-name", String(mainInfo?.name ?? "Kairos")));
-  kairos.append(el("span", "sp-count", dash(mainInfo?.runtime)));
+  /* Names only in this index (operator direction) — the runtime pin, versions
+   * and install state live on the pages the rows open; hover keeps a hint. */
+  kairos.title = dash(mainInfo?.runtime);
   panel.append(indexRow(kairos, () => void openAgentMain(mainInfo)));
 
   /* -- local agents: what else is installed beside Kairos -- */
@@ -1438,7 +1440,7 @@ async function refreshAgentPanel() {
       const dot = phaseDot(found ? "active" : "disabled");
       dot.title = found ? "installed" : "not installed";
       line.append(dot, el("span", "sp-plug-name", String(agent.label)));
-      line.append(el("span", "sp-count", found ? dash(agent.version) : "not installed"));
+      line.title = found ? `${agent.bin} · ${dash(agent.version)}` : `${agent.bin} · not installed`;
       if (!found) line.classList.add("off");
       panel.append(indexRow(line, () => openLocalAgent(agent)));
     }
@@ -1446,7 +1448,7 @@ async function refreshAgentPanel() {
   }
 
   /* -- a2a network: declared, not yet open -- */
-  panel.append(spGroup("a2a network", "pending"));
+  panel.append(spGroup("a2a network"));
   const a2a = el("div", "sp-plug off");
   a2a.append(phaseDot("disabled"), el("span", "sp-plug-name", "A2A network"));
   panel.append(indexRow(a2a, openA2A));
