@@ -161,6 +161,13 @@ the message settles does the thinking itself appear, as a collapsed `think`
 row above its bubble (a reasoning-only step is a think row with no bubble).
 The stream's deltas themselves stay log-only.
 
+Kairos's own bubbles render markdown (client/markdown.js, DOM-built, no
+innerHTML): headings, bold, inline code, links, lists, fenced code, quotes,
+and GFM tables — tables reuse the .viz-table instrument styling, numeric
+columns right-align, and signed percent cells color up/down with the sign
+kept in the text. An answer with document structure widens its lane; the
+operator's own messages render exactly as typed.
+
 ### Market-data renderers
 
 Recognized alpaca-kit tool results render as instruments instead of raw JSON:

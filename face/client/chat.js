@@ -33,6 +33,7 @@
 import { rpc, respond, openMux } from "./api.js";
 import { mapFrame } from "./mapper.js";
 import { renderResult } from "./render.js";
+import { renderMarkdown } from "./markdown.js";
 
 /** Rendered in place of a value the host did not give us. */
 const EM = "—";
@@ -201,7 +202,18 @@ function bubbleNode(view) {
   const hasText = typeof view.text === "string" && view.text !== "";
   if (hasText) {
     if (lane === "k") wrap.append(el("div", "who", "Kairos"));
-    const bubble = el("div", "bubble pre", dash(view.text));
+    /* Kairos writes markdown; the operator's own words render exactly as
+     * typed. A markdown answer with document structure (headings, tables)
+     * widens its lane — a chat-sized reply keeps the bubble. */
+    let bubble;
+    if (lane === "k") {
+      bubble = el("div", "bubble md-bubble");
+      const md = renderMarkdown(view.text);
+      bubble.append(md.node);
+      if (md.doc) wrap.classList.add("doc");
+    } else {
+      bubble = el("div", "bubble pre", dash(view.text));
+    }
     if (view.interrupted === true) {
       // A cancelled turn logged only the prefix that had arrived. Mark the cut
       // INSIDE the bubble, so the truncation travels with the text itself.
