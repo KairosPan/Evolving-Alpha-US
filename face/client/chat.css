@@ -999,3 +999,7 @@ body {
   cursor: pointer;
 }
 .picker-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* the picker's browse row: one small icon, the OS dialog does the rest */
+.pick-icon { flex: none; font-size: 13px; line-height: 1; }
+.pick-browse .pick-name { color: var(--accent); }

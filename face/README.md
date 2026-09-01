@@ -155,6 +155,10 @@ session with the picked directory as `cwd`, and the sidebar groups sessions by
 strategy (derived from each session's `cwd`; foreign directories group by
 basename). Two loopback-fenced routes feed it: `GET /data/strategies.json` and
 `POST /data/strategies` (validated name, template copy, never overwrites).
+The picker's `choose a local folder…` row opens the OS's own directory dialog
+through `host.pickDirectory` (the directory-picker-auto row the overlay
+mounts); the chosen path becomes the session's workspace and groups by its
+basename. Cancel returns null and changes nothing.
 
 The sandbox boundary follows the workspace — deliberately: a strategy session
 writes its own `strategies/<name>/` freely, and anything outside (the repo's

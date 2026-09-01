@@ -26,6 +26,7 @@
  *      order for the rest of the page's life.
  *
  * THE RPC SURFACE IS CLOSED: `session.list/create/history/prompt/cancel`,
+ * `host.pickDirectory` (the strategy picker's native folder dialog),
  * `respond`, and `events.mux`. Answering a gate goes through `respond`, never
  * `rpc` — a different envelope entirely (see api.js).
  * @module
@@ -921,6 +922,48 @@ async function showStrategyPicker() {
   const rows = el("div", "picker-rows");
   for (const s of index?.strategies ?? []) rows.append(pickerRow(s.name, s.cwd, s.status, picker));
   rows.append(pickerRow("workbench", undefined, "repo root", picker));
+  /* Any local folder, through the OS's own dialog — dsh's native
+   * directory-picker capability, which the face's tree already mounts
+   * (overlay.ts, directory-picker-auto). Cancel returns null and changes
+   * nothing; a deployment without the native capability reports instead. */
+  const browse = el("div", "pick-row pick-browse");
+  browse.setAttribute("role", "button");
+  browse.tabIndex = 0;
+  browse.append(el("span", "pick-icon", "📂"), el("span", "pick-name", "choose a local folder…"));
+  const pickFolder = async () => {
+    status("choose a folder in the system dialog…");
+    try {
+      const answer = await rpc("host.pickDirectory", {});
+      const path = answer?.path;
+      if (typeof path !== "string" || path === "") {
+        status("new session · pick a strategy, then type below");
+        return;
+      }
+      const name = path.split("/").filter((part) => part !== "").pop() ?? path;
+      /* One row per distinct folder: picking the same one again reselects it. */
+      const existing = [...picker.querySelectorAll(".pick-row")]
+        .find((row) => /** @type {HTMLElement} */ (row).dataset.cwd === path);
+      if (existing instanceof HTMLElement) {
+        existing.click();
+        return;
+      }
+      const row = pickerRow(name, path, "local", picker);
+      row.dataset.cwd = path;
+      row.title = path;
+      rows.insertBefore(row, browse);
+      row.click();
+    } catch (err) {
+      failed(err, "host.pickDirectory");
+    }
+  };
+  browse.addEventListener("click", () => void pickFolder());
+  browse.addEventListener("keydown", (event) => {
+    const key = /** @type {KeyboardEvent} */ (event).key;
+    if (key !== "Enter" && key !== " ") return;
+    event.preventDefault();
+    void pickFolder();
+  });
+  rows.append(browse);
   picker.append(rows);
   if (index === null) {
     picker.append(el("div", "picker-note", "strategy list unavailable — sessions fall back to the workbench"));
