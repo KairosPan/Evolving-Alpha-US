@@ -17,6 +17,7 @@ import { registerDataRoutes } from "./data.ts";
 import { registerStatic } from "./static.ts";
 import { registerSessionRoutes } from "./sessions.ts";
 import { registerStrategyRoutes } from "./strategies.ts";
+import { panelDeps, registerPanelRoutes } from "./panels.ts";
 
 /** Diagnostic label, the same string boot.ts uses for `BIN`. Not imported
  * because boot.ts does not export it, and it is a label rather than a contract:
@@ -109,6 +110,10 @@ registerDataRoutes(booted.ctx.webServer);
 registerStrategyRoutes(booted.ctx.webServer, process.cwd());
 /* Delete + archive, which the host's own RPC surface lacks at this pin. */
 registerSessionRoutes(booted.ctx.webServer);
+/* The master rail's memory + plugin feeds: in-process reads of the booted
+ * tree (skills / tools / loader), which have no RPC at this pin. The agent
+ * panel needs no route — it runs on RPC the client already reaches. */
+registerPanelRoutes(booted.ctx.webServer, panelDeps(booted.ctx, process.cwd()));
 /* The URL line belongs to the shell, not to the webserver plugin (which states
  * outright that it never prints). This is that shell. Host and port are read
  * back off the service rather than off the config, so an OS-assigned port

@@ -180,6 +180,43 @@ writes its own `strategies/<name>/` freely, and anything outside (the repo's
 strategy session is an approval the operator answers — accepted trade,
 2026-09-01.
 
+## The master rail (src/panels.ts + the sidebar's four faces)
+
+A narrow icon rail at the far left picks which face the sidebar shows:
+**strategy** (the working face — everything above), **agent**, **memory**,
+**plugin**. The three instrument faces are read-only, refetch on every open,
+and split by data source:
+
+- **agent** runs on RPC the client already reaches: `host.describe`
+  (provider/model, cwd, attached count), `settings.describe` (the
+  `agent-default-model` namespace carries `reasoningEffort`), and
+  `credentials.describe` (key configured/source — never values). Its *session
+  usage* card is fed by the `session/projection` mux frames the host was
+  already broadcasting (tokenUsage / contextPressure, from dsh-token-meter's
+  projection units) — the mapper now surfaces them, a per-session store keeps
+  whole values with higher seq winning, and history-tail / list-row projection
+  blocks seed a session opened cold. The context bar turns danger-colored at
+  80%.
+- **memory** is the skill catalog — Kairos's standing knowledge. The wire
+  `skill.list` needs an attached session and drops source/path/body, so two
+  face routes read `ctx.skills` in-process: `GET /data/memory.json` (grouped
+  by pack — the directory under `dsh/skills/`, mechanics first) and
+  `POST /data/memory/skill` (`{name}`, kebab-validated → the full markdown
+  body, rendered with the same client/markdown.js the bubbles use).
+- **plugin** is the composed row tree and the MCP roster:
+  `GET /data/plugins.json` projects `ctx.loader.entries()` (the same
+  12-line projection `dsh-host-plugin-inventory` would make — that row is NOT
+  mounted at this pin, and mounting it would land on the typert gateway
+  anyway) plus `ctx.tools.schemas()` grouped under each `dsh-mcp-client`
+  row's `serverName`. A row's `options.config` is never serialized — the MCP
+  row's env block carries the APCA keys; `serverName` is the one field read.
+  MCP servers show a phase dot and their live tools; the full ~90-row tree
+  folds closed under a count that calls out any `failed` rows.
+
+All three routes are loopback-fenced like the rest of `/data`. `panelDeps`
+fails loud at boot when `skills`/`tools`/`loader` are missing from the tree —
+a dead panel with nothing on stderr is the failure mode it exists to prevent.
+
 ## Chat rendering (client/render.js + the collapsed process rows)
 
 The transcript renders dsh-style calm: every tool call and every injected

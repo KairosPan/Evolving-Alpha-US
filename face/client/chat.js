@@ -25,10 +25,12 @@
  *      frame before the backfill it precedes would put the transcript out of
  *      order for the rest of the page's life.
  *
- * THE RPC SURFACE IS CLOSED: `session.list/create/history/prompt/cancel`,
+ * THE RPC SURFACE IS CLOSED:
+ * `session.list/create/history/prompt/cancel/rename/fork`,
  * `host.pickDirectory` (the strategy picker's native folder dialog),
- * `respond`, and `events.mux`. Answering a gate goes through `respond`, never
- * `rpc` — a different envelope entirely (see api.js).
+ * `host.describe` / `settings.describe` / `credentials.describe` (the agent
+ * panel's three reads), `respond`, and `events.mux`. Answering a gate goes
+ * through `respond`, never `rpc` — a different envelope entirely (see api.js).
  * @module
  */
 import { rpc, respond, openMux } from "./api.js";
@@ -80,6 +82,11 @@ let openSeq = 0;
 let listSeq = 0;
 /** Trailing-edge handle for the sidebar refresh. @type {ReturnType<typeof setTimeout>|null} */
 let listTimer = null;
+/** sessionId → (projection key → {seq, value}): the whole-value store the
+ * `session/projection` frames and history/list projection blocks feed. Every
+ * session's units are kept, not just the active one's — the agent panel reads
+ * whichever session is on screen when it renders. @type {Map<string, Map<string, {seq: number, value: unknown}>>} */
+const projStore = new Map();
 
 /* ---------- dom helpers ---------- */
 
@@ -664,6 +671,12 @@ function acceptFrame(frame) {
     }
     return;
   }
+  if (view.kind === "projection") {
+    // Stored for EVERY session (the agent panel reads on demand), never
+    // seq-deduped with the transcript: a projection is state, not an event.
+    acceptProjection(view);
+    return;
+  }
   if (view.kind === "approval" || view.kind === "question") {
     acceptGate(view);
     return;
@@ -828,6 +841,7 @@ function markActive() {
   $("#topbar-name").textContent = activeSession === null ? "new session" : row?.dataset.title ?? "untitled";
   $("#topbar-raw").title = dash(activeSession);
   /** @type {HTMLButtonElement} */ ($("#stop")).disabled = activeSession === null;
+  renderAgentSession(); // the usage card follows the session on screen
 }
 
 /** Refetch the sidebar. Out-of-order answers are dropped, not rendered. */
@@ -852,6 +866,8 @@ async function refreshSessions() {
   const buckets = new Map();
   for (const summary of value?.items ?? []) {
     if (deletedSet.has(String(summary.sessionId))) continue; // a host-memory ghost
+    // Attached sessions list with a projections block — seed the usage store.
+    seedProjections(String(summary.sessionId), summary.projections);
     const label = archivedSet.has(String(summary.sessionId)) ? "archived" : strategyLabel(summary.cwd);
     let bucket = buckets.get(label);
     if (bucket === undefined) {
@@ -914,6 +930,9 @@ async function openSession(id) {
   if (token !== openSeq) return; // a newer open owns the flow now
   loadingSession = null;
 
+  /* The tail page carries a projections baseline `{asOfSeq, values}` — the
+   * agent panel's seed for a session opened cold, before any live frame. */
+  seedProjections(id, page?.projections);
   for (const entry of page?.events ?? []) {
     // A history entry has no envelope and no frame type; the mapper takes it as
     // a session/event so a backfilled transcript is identical to a streamed one.
@@ -1192,6 +1211,368 @@ async function stopTurn() {
   }
 }
 
+/* ---------- the master rail: strategy · agent · memory · plugin ----------
+   One sidebar, four faces. `strategy` is the working face — the session list
+   and everything already above. The other three are read-only instruments:
+   `agent` over RPC the client already reaches (host.describe /
+   settings.describe / credentials.describe) plus the projection store,
+   `memory` and `plugin` over the face's own /data panel routes (in-process
+   reads of the booted tree — see src/panels.ts). Panels refetch on every
+   open; nothing here writes anything. */
+
+/** The sidebar face on screen. @type {"strategy"|"agent"|"memory"|"plugin"} */
+let activePanel = "strategy";
+
+/** Store one projection value, higher seq winning, and keep the agent panel's
+ * usage card live when it is the one on screen.
+ * @param {Record<string, any>} view - `{sessionId, key, value, seq?}`. */
+function acceptProjection(view) {
+  const id = String(view.sessionId);
+  let units = projStore.get(id);
+  if (units === undefined) {
+    units = new Map();
+    projStore.set(id, units);
+  }
+  const seq = typeof view.seq === "number" ? view.seq : -1;
+  const prev = units.get(view.key);
+  if (prev !== undefined && prev.seq > seq) return;
+  units.set(view.key, { seq, value: view.value });
+  if (id === activeSession && (view.key === "tokenUsage" || view.key === "contextPressure")) {
+    renderAgentSession();
+  }
+}
+
+/** Seed the store from a `{asOfSeq, values}` projections block (history tail
+ * page, or an attached session's list row). Absent or malformed blocks seed
+ * nothing. @param {string} sessionId @param {unknown} block */
+function seedProjections(sessionId, block) {
+  if (block === null || typeof block !== "object") return;
+  const { asOfSeq, values } = /** @type {Record<string, any>} */ (block);
+  if (values === null || typeof values !== "object") return;
+  for (const [key, value] of Object.entries(values)) {
+    acceptProjection({ sessionId, key, value, seq: typeof asOfSeq === "number" ? asOfSeq : -1 });
+  }
+}
+
+/** Show one sidebar face and refresh its content. */
+function setPanel(name) {
+  activePanel = name;
+  for (const btn of document.querySelectorAll(".rail-btn")) {
+    btn.classList.toggle("active", /** @type {HTMLElement} */ (btn).dataset.panel === name);
+  }
+  $(".sidebar").dataset.panel = name;
+  $("#conv-list").hidden = name !== "strategy";
+  for (const panel of ["agent", "memory", "plugin"]) $(`#panel-${panel}`).hidden = panel !== name;
+  if (name === "agent") void refreshAgentPanel();
+  else if (name === "memory") void refreshMemoryPanel();
+  else if (name === "plugin") void refreshPluginPanel();
+}
+
+/* -- shared panel furniture -- */
+
+/** @param {string} title @returns {HTMLElement} one panel card with its title row. */
+function panelCard(title) {
+  const card = el("div", "sp-card");
+  card.append(el("div", "sp-title", title));
+  return card;
+}
+
+/** Append one label → value line to a card. */
+function kvRow(card, label, value) {
+  const row = el("div", "sp-kv");
+  row.append(el("span", "sp-k", label), el("span", "sp-v", value));
+  card.append(row);
+}
+
+/** @param {unknown} err @param {string} what @returns {HTMLElement} an in-panel failure line. */
+function panelError(err, what) {
+  return el("div", "sp-note err", `${what}: ${err instanceof Error ? err.message : String(err)}`);
+}
+
+/** Fetch one face /data route and unwrap its `{ok:true,...}` body.
+ * @param {string} path @param {Record<string, unknown>} [body] - POSTs when given.
+ * @returns {Promise<Record<string, any>>} */
+async function panelData(path, body) {
+  const res = await fetch(path, body === undefined ? undefined : {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const parsed = await res.json();
+  if (parsed?.ok !== true) throw new Error(String(parsed?.error ?? `HTTP ${res.status}`));
+  return parsed;
+}
+
+/** A phase/status dot: green active, red failed, hollow otherwise.
+ * @param {string|null} phase @returns {HTMLElement} */
+function phaseDot(phase) {
+  const dot = el("span", "sp-dot");
+  if (phase === "active") dot.classList.add("on");
+  else if (phase === "failed") dot.classList.add("bad");
+  else if (phase === "disabled") dot.classList.add("off");
+  dot.title = phase ?? "not mounted";
+  return dot;
+}
+
+/* -- agent -- */
+
+/** @param {unknown} n @returns {string} tokens as 812 / 4.1k / 236k. */
+function fmtTokens(n) {
+  if (typeof n !== "number" || !Number.isFinite(n)) return EM;
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  return `${k >= 100 ? Math.round(k) : k.toFixed(1)}k`;
+}
+
+/** The default-model / host / keys cards, from RPC the client already speaks.
+ * Each card degrades alone: one failed call marks its card, not the panel. */
+async function refreshAgentPanel() {
+  const panel = $("#panel-agent");
+  panel.replaceChildren(el("div", "sp-note", "loading…"));
+  const [host, settings, creds] = await Promise.allSettled([
+    rpc("host.describe"),
+    rpc("settings.describe"),
+    rpc("credentials.describe", { refs: ["DEEPSEEK_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"] }),
+  ]);
+  if (activePanel !== "agent") return; // the operator moved on mid-fetch
+  panel.replaceChildren();
+
+  const model = panelCard("model");
+  if (host.status === "fulfilled") {
+    kvRow(model, "provider", dash(host.value?.provider));
+    kvRow(model, "model", dash(host.value?.model));
+  } else {
+    model.append(panelError(host.reason, "host.describe"));
+  }
+  if (settings.status === "fulfilled") {
+    const ns = (settings.value?.namespaces ?? []).find((n) => n?.ns === "agent-default-model");
+    kvRow(model, "effort", dash(ns?.value?.reasoningEffort));
+  }
+  panel.append(model);
+
+  const hostCard = panelCard("host");
+  if (host.status === "fulfilled") {
+    const cwd = String(host.value?.cwd ?? "");
+    kvRow(hostCard, "cwd", cwd.split("/").filter((p) => p !== "").slice(-2).join("/") || EM);
+    hostCard.title = cwd;
+    kvRow(hostCard, "attached", dash(host.value?.attachedSessions));
+    kvRow(hostCard, "home", dash(host.value?.home));
+  } else {
+    hostCard.append(panelError(host.reason, "host.describe"));
+  }
+  panel.append(hostCard);
+
+  const keys = panelCard("keys");
+  if (creds.status === "fulfilled") {
+    const map = creds.value?.credentials ?? {};
+    for (const ref of ["DEEPSEEK_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"]) {
+      const entry = map[ref];
+      const set = entry?.configured === true;
+      const row = el("div", "sp-kv");
+      row.append(el("span", "sp-k", ref.toLowerCase().replaceAll("_", " ")));
+      const value = el("span", `sp-v ${set ? "ok" : "miss"}`, set ? `set · ${dash(entry?.source)}` : "not set");
+      row.append(value);
+      keys.append(row);
+    }
+  } else {
+    keys.append(panelError(creds.reason, "credentials.describe"));
+  }
+  panel.append(keys);
+
+  const usage = panelCard("session usage");
+  usage.id = "agent-session";
+  panel.append(usage);
+  renderAgentSession();
+}
+
+/** (Re)fill the usage card from the projection store — called on every stored
+ * tokenUsage/contextPressure change and on every session switch; a no-op when
+ * the agent panel has never been built. */
+function renderAgentSession() {
+  const card = document.querySelector("#agent-session");
+  if (card === null) return;
+  card.replaceChildren(el("div", "sp-title", "session usage"));
+  if (activeSession === null) {
+    card.append(el("div", "sp-note", "no session open"));
+    return;
+  }
+  const units = projStore.get(activeSession);
+  const usage = /** @type {Record<string, any>|undefined} */ (units?.get("tokenUsage")?.value);
+  const pressure = /** @type {Record<string, any>|undefined} */ (units?.get("contextPressure")?.value);
+  if (usage === undefined && pressure === undefined) {
+    card.append(el("div", "sp-note", "no usage recorded yet"));
+    return;
+  }
+  if (usage !== undefined) {
+    kvRow(card, "input", fmtTokens(usage.uncachedInputTokens));
+    kvRow(card, "output", fmtTokens(usage.outputTokens));
+    kvRow(card, "cache read", fmtTokens(usage.cacheReadTokens));
+    kvRow(card, "cache write", fmtTokens(usage.cacheWriteTokens));
+  }
+  const window = pressure?.contextWindow;
+  const used = typeof pressure?.projectedTokens === "number" ? pressure.projectedTokens : pressure?.pressureTokens;
+  if (typeof window === "number" && window > 0 && typeof used === "number") {
+    const pct = Math.min(100, Math.round((used / window) * 100));
+    kvRow(card, "context", `${fmtTokens(used)} / ${fmtTokens(window)} · ${pct}%`);
+    const bar = el("div", "sp-bar");
+    const fill = el("div", "sp-bar-fill");
+    fill.style.width = `${pct}%`;
+    if (pct >= 80) fill.classList.add("hot");
+    bar.append(fill);
+    card.append(bar);
+  }
+}
+
+/* -- memory -- */
+
+/** The skill catalog, grouped by pack: Kairos's standing knowledge. */
+async function refreshMemoryPanel() {
+  const panel = $("#panel-memory");
+  panel.replaceChildren(el("div", "sp-note", "loading…"));
+  let body;
+  try {
+    body = await panelData("/data/memory.json");
+  } catch (err) {
+    panel.replaceChildren(panelError(err, "memory"));
+    return;
+  }
+  if (activePanel !== "memory") return;
+  panel.replaceChildren();
+  const groups = Array.isArray(body.groups) ? body.groups : [];
+  for (const group of groups) {
+    const skills = Array.isArray(group.skills) ? group.skills : [];
+    const head = el("div", "sp-group");
+    head.append(el("span", "sp-group-name", String(group.name)), el("span", "sp-count", String(skills.length)));
+    panel.append(head);
+    for (const skill of skills) {
+      const row = el("div", "sp-row");
+      row.setAttribute("role", "button");
+      row.tabIndex = 0;
+      row.append(el("div", "sp-row-name", String(skill.name)));
+      row.append(el("div", "sp-row-desc", dash(skill.description)));
+      const open = () => void openSkill(String(skill.name));
+      row.addEventListener("click", open);
+      row.addEventListener("keydown", (event) => {
+        const key = /** @type {KeyboardEvent} */ (event).key;
+        if (key !== "Enter" && key !== " ") return;
+        event.preventDefault();
+        open();
+      });
+      panel.append(row);
+    }
+  }
+  if (groups.length === 0) panel.append(el("div", "sp-note", "no skills discovered"));
+}
+
+/** One skill's body, rendered in place of the list; `‹ memory` goes back. */
+async function openSkill(name) {
+  const panel = $("#panel-memory");
+  panel.replaceChildren(el("div", "sp-note", "loading…"));
+  let detail;
+  try {
+    detail = await panelData("/data/memory/skill", { name });
+  } catch (err) {
+    panel.replaceChildren(panelError(err, name));
+    panel.prepend(backRow(() => void refreshMemoryPanel()));
+    return;
+  }
+  if (activePanel !== "memory") return;
+  panel.replaceChildren();
+  panel.append(backRow(() => void refreshMemoryPanel()));
+  panel.append(el("div", "sp-doc-title", String(detail.name)));
+  if (typeof detail.path === "string" && detail.path !== "") {
+    const path = el("div", "sp-doc-path", detail.path);
+    path.title = detail.path;
+    panel.append(path);
+  }
+  const doc = el("div", "sp-doc");
+  doc.append(renderMarkdown(String(detail.content ?? "")).node);
+  panel.append(doc);
+}
+
+/** @param {() => void} back @returns {HTMLElement} the panel's back row. */
+function backRow(back) {
+  const row = el("div", "sp-back", "‹ back");
+  row.setAttribute("role", "button");
+  row.tabIndex = 0;
+  row.addEventListener("click", back);
+  row.addEventListener("keydown", (event) => {
+    const key = /** @type {KeyboardEvent} */ (event).key;
+    if (key !== "Enter" && key !== " ") return;
+    event.preventDefault();
+    back();
+  });
+  return row;
+}
+
+/* -- plugin -- */
+
+/** MCP servers with their live tool rosters, then the composed row tree. */
+async function refreshPluginPanel() {
+  const panel = $("#panel-plugin");
+  panel.replaceChildren(el("div", "sp-note", "loading…"));
+  let body;
+  try {
+    body = await panelData("/data/plugins.json");
+  } catch (err) {
+    panel.replaceChildren(panelError(err, "plugins"));
+    return;
+  }
+  if (activePanel !== "plugin") return;
+  panel.replaceChildren();
+
+  panel.append(el("div", "sp-group", "mcp servers"));
+  const servers = Array.isArray(body.mcp) ? body.mcp : [];
+  if (servers.length === 0) panel.append(el("div", "sp-note", "no MCP servers composed"));
+  for (const server of servers) {
+    const card = el("div", "sp-card");
+    const head = el("div", "sp-title sp-title-row");
+    const tools = Array.isArray(server.tools) ? server.tools : [];
+    head.append(phaseDot(server.phase), el("span", null, String(server.server)), el("span", "sp-count", `${tools.length} tools`));
+    card.append(head);
+    if (tools.length === 0) {
+      card.append(el("div", "sp-note", "no tools registered — offline or still connecting"));
+    }
+    for (const tool of tools) {
+      const row = el("div", "sp-tool");
+      const name = String(tool.name);
+      const prefix = `mcp__${server.server}__`;
+      // Display-only trim; the full registered name stays on the tooltip.
+      row.append(el("div", "sp-row-name", name.startsWith(prefix) ? name.slice(prefix.length) : name));
+      row.title = name;
+      const desc = String(tool.description ?? "").split("\n")[0].trim();
+      if (desc !== "") row.append(el("div", "sp-row-desc", desc));
+      card.append(row);
+    }
+    panel.append(card);
+  }
+
+  /* The composed rows, folded by default: the whole tree is ~80 rows and the
+   * question it answers ("did my patch row mount, is anything failed?") is a
+   * sometimes-question. */
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+  const failed = rows.filter((row) => row.phase === "failed").length;
+  const head = el("div", "sp-group sp-fold");
+  const chev = el("span", "chev", "▸");
+  head.append(chev, el("span", "sp-group-name", "composed rows"),
+    el("span", "sp-count", failed > 0 ? `${rows.length} · ${failed} failed` : String(rows.length)));
+  const box = el("div");
+  box.hidden = true;
+  head.addEventListener("click", () => {
+    box.hidden = !box.hidden;
+    chev.textContent = box.hidden ? "▸" : "▾";
+  });
+  panel.append(head, box);
+  for (const row of rows) {
+    const line = el("div", "sp-plug");
+    line.append(phaseDot(row.enabled === false ? "disabled" : row.phase));
+    line.append(el("span", "sp-plug-name", String(row.module).replace(/^@deepseek-ai\//, "")));
+    line.title = `${row.id} · ${row.module}${row.enabled === false ? " · disabled" : ""} · ${row.phase ?? "not mounted"}`;
+    if (row.enabled === false) line.classList.add("off");
+    box.append(line);
+  }
+}
+
 /* ---------- wiring ---------- */
 
 $("#composer").addEventListener("submit", (event) => {
@@ -1200,6 +1581,9 @@ $("#composer").addEventListener("submit", (event) => {
 });
 $("#new-session").addEventListener("click", () => newSession());
 $("#stop").addEventListener("click", () => void stopTurn());
+for (const btn of document.querySelectorAll(".rail-btn")) {
+  btn.addEventListener("click", () => setPanel(/** @type {HTMLElement} */ (btn).dataset.panel ?? "strategy"));
+}
 
 openMux(acceptFrame, {
   onOpen: () => {

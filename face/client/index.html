@@ -14,7 +14,24 @@
      list and every message is built by chat.js through the DOM API — this file
      holds the frame and not one byte of host data. -->
 <div class="chat-app">
-  <aside class="sidebar">
+  <!-- The master rail: which face of the sidebar is showing. strategy is the
+       working face (workspaces + sessions); agent, memory and plugin are
+       read-only instruments over the booted tree. chat.js owns the switch. -->
+  <nav class="rail" aria-label="sidebar sections">
+    <button class="rail-btn active" data-panel="strategy" type="button" title="strategy — workspaces and sessions">
+      <span class="rail-glyph">❖</span><span class="rail-label">strategy</span>
+    </button>
+    <button class="rail-btn" data-panel="agent" type="button" title="agent — model, host, keys, session usage">
+      <span class="rail-glyph">◎</span><span class="rail-label">agent</span>
+    </button>
+    <button class="rail-btn" data-panel="memory" type="button" title="memory — the skill packs Kairos carries">
+      <span class="rail-glyph">▤</span><span class="rail-label">memory</span>
+    </button>
+    <button class="rail-btn" data-panel="plugin" type="button" title="plugin — composed rows and MCP tools">
+      <span class="rail-glyph">⚙</span><span class="rail-label">plugin</span>
+    </button>
+  </nav>
+  <aside class="sidebar" data-panel="strategy">
     <div class="side-head">
       <!-- The way into /market: its own document, its own exact route; it
            links back here through its wordmark. -->
@@ -25,6 +42,11 @@
       <button id="new-session" class="side-new" type="button" title="start a new conversation">+ new</button>
     </div>
     <div id="conv-list" class="conv-list"></div>
+    <!-- The rail's other three faces; chat.js fills each on first open and
+         hides all but the active one. -->
+    <div id="panel-agent" class="side-panel" hidden></div>
+    <div id="panel-memory" class="side-panel" hidden></div>
+    <div id="panel-plugin" class="side-panel" hidden></div>
     <div class="side-foot">live · loopback only</div>
   </aside>
 

@@ -1037,3 +1037,158 @@ body {
   cursor: pointer;
 }
 .conv-act:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ---------- 2026-09-01: the master rail + its three instrument panels -------
+   A narrow icon column at the far left picks which face the sidebar shows:
+   strategy (the working face — everything above), agent, memory, plugin. The
+   three instrument panels are read-only cards and rows in the same grey
+   sidebar; only strategy carries the "+ new" button and the session list. */
+
+.rail {
+  flex: none;
+  width: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 10px 6px;
+  background: var(--side-bg);
+  border-right: 1px solid var(--line);
+}
+.rail-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 0 6px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+}
+.rail-btn:hover { background: var(--active-bg); }
+.rail-btn.active { background: var(--panel); color: var(--accent); box-shadow: inset 0 0 0 1px var(--line); }
+.rail-glyph { font-size: 16px; line-height: 1; }
+.rail-label { font: 500 8.5px/1 var(--mono); letter-spacing: 0.04em; }
+
+/* only the strategy face wants the new-session button in the head */
+.sidebar:not([data-panel="strategy"]) .side-new { display: none; }
+
+.side-panel { flex: 1; overflow-y: auto; padding: 6px 10px 12px; }
+.sp-note { font: 11.5px/1.5 var(--sans); color: var(--dim); padding: 6px 6px; }
+.sp-note.err { color: var(--red); }
+
+.sp-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  padding: 8px 10px;
+  margin: 6px 0;
+}
+.sp-title {
+  font: 600 10px/1 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+.sp-title-row { display: flex; align-items: center; gap: 6px; }
+.sp-kv { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 2px 0; }
+.sp-k { color: var(--dim); flex: none; }
+.sp-v {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.sp-v.ok { color: var(--green); }
+.sp-v.miss { color: var(--dim); }
+
+/* the context-occupancy bar on the session-usage card */
+.sp-bar {
+  height: 5px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: var(--inset);
+  overflow: hidden;
+}
+.sp-bar-fill { height: 100%; border-radius: 3px; background: var(--accent); }
+.sp-bar-fill.hot { background: var(--danger); }
+
+/* group headers + list rows shared by memory and plugin */
+.sp-group {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 10px 6px 3px;
+  font: 600 10px/1 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.sp-group .chev { flex: none; font: 10px var(--mono); color: var(--dim); }
+.sp-fold { cursor: pointer; user-select: none; }
+.sp-count { margin-left: auto; font: 10px var(--mono); letter-spacing: 0; color: var(--dim); }
+
+.sp-row { padding: 6px 6px; border-radius: 6px; cursor: pointer; }
+.sp-row:hover { background: var(--active-bg); }
+.sp-row-name { font: 600 12px/1.4 var(--mono); }
+.sp-row-desc {
+  font-size: 11.5px;
+  color: var(--dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* one MCP tool inside a server card: quieter than a panel row */
+.sp-tool { padding: 4px 0; border-top: 1px solid var(--viz-grid); }
+.sp-tool:first-of-type { border-top: none; }
+.sp-tool .sp-row-name { font-size: 11.5px; }
+.sp-tool .sp-row-desc { -webkit-line-clamp: 1; }
+
+/* the composed-rows tree */
+.sp-plug {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  font: 11px/1.6 var(--mono);
+}
+.sp-plug.off { color: var(--dim); }
+.sp-plug-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--dim);
+  background: transparent;
+}
+.sp-dot.on { background: var(--green); border-color: var(--green); }
+.sp-dot.bad { background: var(--red); border-color: var(--red); }
+.sp-dot.off { border-style: dashed; }
+
+/* the memory panel's skill-body view */
+.sp-back {
+  padding: 8px 6px 4px;
+  font: 600 11px/1 var(--mono);
+  color: var(--accent);
+  cursor: pointer;
+  user-select: none;
+}
+.sp-doc-title { padding: 4px 6px 0; font: 650 14px/1.4 var(--sans); }
+.sp-doc-path {
+  padding: 0 6px 6px;
+  font: 10px/1.4 var(--mono);
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-doc { padding: 2px 6px 10px; font-size: 12.5px; }
+.sp-doc .viz-table { font-size: 11px; }

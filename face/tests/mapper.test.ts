@@ -24,8 +24,8 @@ const frames: unknown[] = readFileSync(
 const views = frames.map((frame) => mapFrame(frame));
 
 test("fixture file and view list stay aligned", () => {
-  assert.equal(frames.length, 18);
-  assert.equal(views.length, 18);
+  assert.equal(frames.length, 19);
+  assert.equal(views.length, 19);
 });
 
 test("message events become bubbles, attributed by role", () => {
@@ -156,6 +156,21 @@ test("an interrupted answer is never presented as a complete one", () => {
   // The flag is present-and-false on whole messages, so a renderer reads one field.
   assert.equal(views[1].interrupted, false);
   assert.equal(views[0].interrupted, false, "an operator prompt is never a prefix");
+});
+
+test("a projection frame carries its whole value through, keyed and sequenced", () => {
+  // session/projection is a STATE broadcast (events.d.ts): the store keeps
+  // whole values per (session, key), higher seq winning — never a transcript node.
+  assert.equal(views[18].kind, "projection");
+  assert.equal(views[18].sessionId, "s1");
+  assert.equal(views[18].key, "tokenUsage");
+  assert.equal(views[18].seq, 16);
+  assert.deepEqual(views[18].value, {
+    uncachedInputTokens: 8123, outputTokens: 2411, cacheReadTokens: 51200, cacheWriteTokens: 900,
+  });
+  // A frame missing its address renders nothing rather than a nameless card.
+  assert.equal(mapFrame({ type: "session/projection", key: "tokenUsage" }).kind, "ignore");
+  assert.equal(mapFrame({ type: "session/projection", sessionId: "s1" }).kind, "ignore");
 });
 
 test("null-safe: unrecognized input never throws, it ignores", () => {

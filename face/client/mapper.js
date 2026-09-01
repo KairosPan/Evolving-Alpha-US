@@ -51,7 +51,7 @@
  * One frame's whole meaning to the UI. A closed `kind` vocabulary with optional
  * payload fields: a renderer switches on `kind` and reads only its own fields.
  * @typedef {object} FrameView
- * @property {"bubble"|"card"|"approval"|"question"|"pulse"|"ignore"} kind
+ * @property {"bubble"|"card"|"approval"|"question"|"pulse"|"projection"|"ignore"} kind
  * @property {number} [seq] - the session event's seq; the renderer's dedupe key across backfill and stream.
  * @property {string} [sessionId] - which session this belongs to (absent on a history entry that carries none).
  * @property {SurfaceOpView} [surfaceOp] - on every rendered session event: `append`, or a
@@ -71,6 +71,10 @@
  * @property {string} [callId] - approvals: the call awaiting permission.
  * @property {string} [reason] - approvals: why permission is being asked, when the host said.
  * @property {unknown[]} [questions] - questions: the AskUserQuestionItem batch (one ask, many questions, ONE answer).
+ * @property {string} [key] - projections: which unit changed — `tokenUsage`,
+ *   `contextPressure`, `title`, … The renderer stores whole values per key,
+ *   higher `seq` winning; the frame is a state broadcast, not a delta.
+ * @property {unknown} [value] - projections: the unit's whole new view value.
  */
 
 /** @param {unknown} value @returns {boolean} true for a non-null, non-array object. */
@@ -281,16 +285,29 @@ export function mapFrame(frame) {
       };
     case "session/event":
       return mapSessionEvent(mux);
+    case "session/projection": {
+      // A projection unit's whole new value (events.d.ts session/projection):
+      // the agent panel's live feed for tokenUsage/contextPressure. seq is the
+      // committed event that produced it — the store's higher-wins key.
+      if (typeof mux.sessionId !== "string" || typeof mux.key !== "string") return ignore();
+      return {
+        kind: "projection",
+        sessionId: mux.sessionId,
+        key: mux.key,
+        value: mux.value,
+        seq: typeof mux.seq === "number" ? mux.seq : undefined,
+      };
+    }
     case undefined:
       // No frame type: a session.history entry, which carries only { event, view? }.
       return isObject(mux.event) ? mapSessionEvent(mux) : ignore();
     default:
       // session/subscribed · approval/resolved · question/resolved · session/queue ·
-      // session/jobs · session/projection · stream/error. All carried, none rendered
-      // in v1: the face is a single loopback client with no queue dock, no job list,
-      // and no second answerer to be told about. stream/error is the one with a real
-      // cost — an internal stream failure stays silent — and is the first candidate
-      // when this vocabulary next grows.
+      // session/jobs · stream/error. All carried, none rendered in v1: the face
+      // is a single loopback client with no queue dock, no job list, and no
+      // second answerer to be told about. stream/error is the one with a real
+      // cost — an internal stream failure stays silent — and is the first
+      // candidate when this vocabulary next grows.
       return ignore();
   }
 }
