@@ -160,6 +160,19 @@ through `host.pickDirectory` (the directory-picker-auto row the overlay
 mounts); the chosen path becomes the session's workspace and groups by its
 basename. Cancel returns null and changes nothing.
 
+Groups fold (chevron on the header; view state per browser), and each row
+carries four hover actions: rename and fork are the host's own RPCs
+(`session.rename`, `session.fork` — a fork opens immediately); archive and
+delete are face routes, because the host has neither at this pin. Archive is
+metadata in `$DSH_HOME/face/archived.json` — the session still exists, folded
+into an `archived` group at the bottom, reversible. Delete removes the
+session's persistence directory permanently (confirm-gated, never offered on
+a running session, no undo) and tombstones the id: a session deleted while
+its agent is still attached keeps listing from host memory until the next
+face restart — and write-behind can even re-persist its directory — so the
+sidebar hides tombstoned ids unconditionally and the ghost dies with the
+restart.
+
 The sandbox boundary follows the workspace — deliberately: a strategy session
 writes its own `strategies/<name>/` freely, and anything outside (the repo's
 `.git` included) only through a Gate-2 escalation card. The write map's

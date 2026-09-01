@@ -1003,3 +1003,27 @@ body {
 /* the picker's browse row: one small icon, the OS dialog does the rest */
 .pick-icon { flex: none; font-size: 13px; line-height: 1; }
 .pick-browse .pick-name { color: var(--accent); }
+
+/* group folding + row actions */
+.conv-group { display: flex; align-items: baseline; gap: 6px; cursor: pointer; user-select: none; }
+.conv-group .chev { flex: none; font: 10px var(--mono); color: var(--dim); }
+.conv-group-n { margin-left: auto; font: 10px var(--mono); letter-spacing: 0; color: var(--dim); }
+.conv { position: relative; }
+.conv-actions {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  display: none;
+  gap: 3px;
+}
+.conv:hover .conv-actions, .conv:focus-within .conv-actions { display: inline-flex; }
+.conv-act {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--dim);
+  border-radius: 4px;
+  font: 12px/1.3 var(--mono);
+  padding: 1px 5px;
+  cursor: pointer;
+}
+.conv-act:hover { color: var(--accent); border-color: var(--accent); }

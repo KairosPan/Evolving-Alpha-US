@@ -736,6 +736,79 @@ function convRow(summary) {
   /* The full path lives on hover; the group header carries the identity. */
   row.title = dash(summary.cwd ?? id);
 
+  /* Row actions, revealed on hover: rename and fork are the host's own RPCs;
+   * archive and delete are the face's /data routes (the host has neither at
+   * this pin). Delete is permanent and gated by a confirm — and never offered
+   * on a running session. */
+  const actions = el("span", "conv-actions");
+  const act = (glyph, label, fn) => {
+    const btn = el("button", "conv-act", glyph);
+    btn.type = "button";
+    btn.title = label;
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void fn();
+    });
+    actions.append(btn);
+  };
+  act("✎", "rename", async () => {
+    const current = titleOf(summary);
+    const title = window.prompt("rename session", current === "untitled" ? "" : current);
+    if (title === null || title.trim() === "" || title.trim() === current) return;
+    try {
+      await rpc("session.rename", { sessionId: id, title: title.trim() });
+      await refreshSessions();
+    } catch (err) {
+      failed(err, "session.rename");
+    }
+  });
+  act("⑂", "fork — a new session continuing from this one", async () => {
+    try {
+      const made = await rpc("session.fork", { sessionId: id });
+      await refreshSessions();
+      if (typeof made?.sessionId === "string") void openSession(made.sessionId);
+    } catch (err) {
+      failed(err, "session.fork");
+    }
+  });
+  const archived = archivedSet.has(id);
+  act(archived ? "↩" : "⊟", archived ? "unarchive" : "archive", async () => {
+    try {
+      const res = await fetch("/data/sessions/archive", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId: id, archived: !archived }),
+      });
+      const body = await res.json();
+      if (body?.ok !== true) throw new Error(String(body?.error ?? `HTTP ${res.status}`));
+      archivedSet = new Set(body.archived);
+      await refreshSessions();
+    } catch (err) {
+      failed(err, "archive");
+    }
+  });
+  if (summary.running !== true) {
+    act("×", "delete permanently — no undo", async () => {
+      if (!window.confirm(`Delete "${titleOf(summary)}" permanently? There is no undo.`)) return;
+      try {
+        const res = await fetch("/data/sessions/delete", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId: id }),
+        });
+        const body = await res.json();
+        if (body?.ok !== true) throw new Error(String(body?.error ?? `HTTP ${res.status}`));
+        if (Array.isArray(body.archived)) archivedSet = new Set(body.archived);
+        if (Array.isArray(body.deleted)) deletedSet = new Set(body.deleted);
+        if (activeSession === id) newSession();
+        await refreshSessions();
+      } catch (err) {
+        failed(err, "delete session");
+      }
+    });
+  }
+  row.append(actions);
+
   row.addEventListener("click", () => void openSession(id));
   row.addEventListener("keydown", (event) => {
     const key = /** @type {KeyboardEvent} */ (event).key;
@@ -771,24 +844,34 @@ async function refreshSessions() {
   const list = $("#conv-list");
   convRows.clear();
   list.replaceChildren();
-  /* Group by strategy (derived from each session's cwd). Items arrive
-   * updatedAt-desc, so group order is the recency of each group's freshest
-   * session, and rows inside a group keep that order too.
-   * @type {Map<string, HTMLElement>} */
-  const groups = new Map();
+  /* Group by strategy (derived from each session's cwd); archived sessions
+   * fold into their own group at the BOTTOM regardless of recency. Items
+   * arrive updatedAt-desc, so live group order is the recency of each group's
+   * freshest session, and rows inside a group keep that order too.
+   * @type {Map<string, Record<string, any>[]>} */
+  const buckets = new Map();
   for (const summary of value?.items ?? []) {
-    const label = strategyLabel(summary.cwd);
-    let box = groups.get(label);
-    if (box === undefined) {
-      list.append(el("div", "conv-group", label));
-      box = el("div");
-      list.append(box);
-      groups.set(label, box);
+    if (deletedSet.has(String(summary.sessionId))) continue; // a host-memory ghost
+    const label = archivedSet.has(String(summary.sessionId)) ? "archived" : strategyLabel(summary.cwd);
+    let bucket = buckets.get(label);
+    if (bucket === undefined) {
+      bucket = [];
+      buckets.set(label, bucket);
     }
-    const row = convRow(summary);
-    row.dataset.title = titleOf(summary);
-    convRows.set(String(summary.sessionId), row);
-    box.append(row);
+    bucket.push(summary);
+  }
+  const order = [...buckets.keys()].filter((label) => label !== "archived");
+  if (buckets.has("archived")) order.push("archived");
+  for (const label of order) {
+    const bucket = buckets.get(label) ?? [];
+    const box = el("div");
+    list.append(groupHeader(label, bucket.length, box), box);
+    for (const summary of bucket) {
+      const row = convRow(summary);
+      row.dataset.title = titleOf(summary);
+      convRows.set(String(summary.sessionId), row);
+      box.append(row);
+    }
   }
   markActive();
 }
@@ -872,6 +955,58 @@ async function loadStrategyIndex() {
     if (body?.ok === true) strategyIndex = body;
   } catch { /* grouping degrades to path basenames; the picker says so */ }
   return strategyIndex;
+}
+
+/** Session ids the operator archived — face metadata from
+ * `/data/sessions-meta.json`, host-side so it survives any browser.
+ * @type {Set<string>} */
+let archivedSet = new Set();
+
+/** Tombstones: sessions deleted on disk that host memory may still list until
+ * a restart — never shown. @type {Set<string>} */
+let deletedSet = new Set();
+
+async function loadSessionsMeta() {
+  try {
+    const body = await (await fetch("/data/sessions-meta.json")).json();
+    if (body?.ok === true) {
+      if (Array.isArray(body.archived)) archivedSet = new Set(body.archived);
+      if (Array.isArray(body.deleted)) deletedSet = new Set(body.deleted);
+    }
+  } catch { /* the archive fold degrades to "nothing archived" */ }
+}
+
+/** Sidebar groups the operator folded — view state, per browser. The archive
+ * group starts folded the first time it ever appears. @type {Set<string>} */
+const collapsedGroups = new Set(/** @type {string[]} */ ((() => {
+  try {
+    return JSON.parse(localStorage.getItem("face.collapsed-groups") ?? '["archived"]');
+  } catch {
+    return ["archived"];
+  }
+})()));
+
+function persistCollapsed() {
+  try {
+    localStorage.setItem("face.collapsed-groups", JSON.stringify([...collapsedGroups]));
+  } catch { /* view state only — losing it costs a click */ }
+}
+
+/** One clickable group header: chevron · label · count. Toggling folds the
+ * given box locally; no refetch. */
+function groupHeader(label, count, box) {
+  const head = el("div", "conv-group");
+  const chev = el("span", "chev", collapsedGroups.has(label) ? "▸" : "▾");
+  head.append(chev, el("span", "conv-group-name", label), el("span", "conv-group-n", String(count)));
+  box.hidden = collapsedGroups.has(label);
+  head.addEventListener("click", () => {
+    if (collapsedGroups.has(label)) collapsedGroups.delete(label);
+    else collapsedGroups.add(label);
+    persistCollapsed();
+    box.hidden = collapsedGroups.has(label);
+    chev.textContent = box.hidden ? "▸" : "▾";
+  });
+  return head;
 }
 
 /** Which sidebar group a session's cwd belongs to. */
@@ -1078,7 +1213,8 @@ openMux(acceptFrame, {
 
 markActive();
 status("connecting…");
-void refreshSessions();
+/* Archive metadata first, then the list that folds by it. */
+void loadSessionsMeta().then(() => refreshSessions());
 /* The blank page is an unsaved new session, so it gets the picker too; the
  * index it loads also feeds the sidebar's strategy grouping. */
 void showStrategyPicker();

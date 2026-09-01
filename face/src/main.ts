@@ -15,6 +15,7 @@ import { dirname, join } from "node:path";
 import { bootFace } from "./boot.ts";
 import { registerDataRoutes } from "./data.ts";
 import { registerStatic } from "./static.ts";
+import { registerSessionRoutes } from "./sessions.ts";
 import { registerStrategyRoutes } from "./strategies.ts";
 
 /** Diagnostic label, the same string boot.ts uses for `BIN`. Not imported
@@ -106,6 +107,8 @@ registerDataRoutes(booted.ctx.webServer);
 /* The strategy picker's data + the new-strategy copy action. `process.cwd()`
  * is the workbench repo root — the chdir above put it there. */
 registerStrategyRoutes(booted.ctx.webServer, process.cwd());
+/* Delete + archive, which the host's own RPC surface lacks at this pin. */
+registerSessionRoutes(booted.ctx.webServer);
 /* The URL line belongs to the shell, not to the webserver plugin (which states
  * outright that it never prints). This is that shell. Host and port are read
  * back off the service rather than off the config, so an OS-assigned port

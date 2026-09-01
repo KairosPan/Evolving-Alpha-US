@@ -108,8 +108,9 @@ export async function createStrategy(root: string, name: unknown): Promise<Strat
   return { name, cwd: target, status: "idea" };
 }
 
-/** Collect a request body up to {@link BODY_LIMIT} bytes; longer is refused. */
-async function readBody(req: IncomingMessage): Promise<string> {
+/** Collect a request body up to {@link BODY_LIMIT} bytes; longer is refused.
+ * Shared with sessions.ts — one body reader, one limit. */
+export async function readBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
