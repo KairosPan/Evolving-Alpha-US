@@ -689,17 +689,21 @@ body {
    with the dataviz palette script, 2026-09-01). */
 
 :root {
-  --bg: #eaf2f9;
+  /* 2026-09-01 rev2: neutral surfaces — grey sidebar, white content — with
+   * blue kept as the one accent (operator direction; was blue-tinted all over). */
+  --bg: #ffffff;
+  --side-bg: #f2f4f6;
+  --inset: #f4f6f8;
   --panel: #ffffff;
-  --line: #d9e4ee;
+  --line: #e3e7ea;
   --text: #202834;
   --dim: #64748b;
   --accent: #1c5cab;
-  --active-bg: #dfeaf4;
+  --active-bg: #e8edf2;
   --op-bubble: #24303f;
   --op-text: #f2f6fa;
   --k-bubble: #ffffff;
-  --card-bg: #f8fbfe;
+  --card-bg: #f7f9fa;
   --green: #1e6b3c;
   --red: #b3372b;
 
@@ -707,8 +711,14 @@ body {
   --viz-line: #2a78d6;
   --viz-area: rgba(42, 120, 214, 0.10);
   --viz-vol: #9ec5f4;
-  --viz-grid: #e2eaf2;
+  --viz-grid: #e9edf0;
 }
+
+/* the left/right split: grey rail, white page. Insets that used to borrow
+   --bg (tool output, code) get their own step so they stay visible on the
+   now-white cards. */
+.sidebar { background: var(--side-bg); }
+.tool-out, .md-fence, .md-code { background: var(--inset); }
 
 /* pretty ⇄ raw: the head's `raw` becomes a real toggle once a pretty view
    exists; without one the pre stays visible and `raw` stays the inert label

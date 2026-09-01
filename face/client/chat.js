@@ -726,15 +726,15 @@ function convRow(summary) {
 
   const top = el("div", "conv-top");
   top.append(el("span", "conv-name", titleOf(summary)));
-  top.append(el("span", "conv-date", when(summary.updatedAt)));
   row.append(top);
 
   const sub = el("div", "conv-sub");
   if ([...gates.values()].some((gate) => gate.sessionId === id)) sub.append(waitingChip());
   if (summary.running === true) sub.append(el("span", "chip", "running"));
   row.append(sub);
-  /* The full path lives on hover; the group header carries the identity. */
-  row.title = dash(summary.cwd ?? id);
+  /* Path and last-touch live on hover; the group header carries the identity
+   * and the row keeps just the title (operator direction: no date column). */
+  row.title = `${dash(summary.cwd ?? id)}\n${when(summary.updatedAt)}`;
 
   /* Row actions, revealed on hover: rename and fork are the host's own RPCs;
    * archive and delete are the face's /data routes (the host has neither at
