@@ -1324,18 +1324,41 @@ function fmtTokens(n) {
   return `${k >= 100 ? Math.round(k) : k.toFixed(1)}k`;
 }
 
-/** The default-model / host / keys cards, from RPC the client already speaks.
- * Each card degrades alone: one failed call marks its card, not the panel. */
+/** @param {string} label @param {string} [count] @returns {HTMLElement} one panel group header. */
+function spGroup(label, count) {
+  const head = el("div", "sp-group");
+  head.append(el("span", "sp-group-name", label));
+  if (count !== undefined) head.append(el("span", "sp-count", count));
+  return head;
+}
+
+/** The agent panel's three sections: the MAIN agent (Kairos — the dsh runtime
+ * this face hosts: model / host / keys / live session usage), the LOCAL
+ * agents (coding CLIs probed on this machine's PATH), and the A2A network
+ * (declared, not yet open). Each card degrades alone: one failed call marks
+ * its card, not the panel. */
 async function refreshAgentPanel() {
   const panel = $("#panel-agent");
   panel.replaceChildren(el("div", "sp-note", "loading…"));
-  const [host, settings, creds] = await Promise.allSettled([
+  const [host, settings, creds, roster] = await Promise.allSettled([
     rpc("host.describe"),
     rpc("settings.describe"),
     rpc("credentials.describe", { refs: ["DEEPSEEK_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"] }),
+    panelData("/data/agents.json"),
   ]);
   if (activePanel !== "agent") return; // the operator moved on mid-fetch
   panel.replaceChildren();
+
+  /* -- main agent: Kairos, owner of this whole runtime -- */
+  panel.append(spGroup("main agent"));
+  const mainInfo = roster.status === "fulfilled" ? roster.value?.main : undefined;
+  const identity = el("div", "sp-card");
+  const identityHead = el("div", "sp-title sp-title-row");
+  identityHead.append(phaseDot("active"),
+    el("span", null, String(mainInfo?.name ?? "Kairos")),
+    el("span", "sp-count", dash(mainInfo?.runtime)));
+  identity.append(identityHead);
+  panel.append(identity);
 
   const model = panelCard("model");
   if (host.status === "fulfilled") {
@@ -1383,6 +1406,30 @@ async function refreshAgentPanel() {
   usage.id = "agent-session";
   panel.append(usage);
   renderAgentSession();
+
+  /* -- local agents: what else is installed beside Kairos -- */
+  panel.append(spGroup("local agents"));
+  if (roster.status === "fulfilled") {
+    const local = Array.isArray(roster.value?.local) ? roster.value.local : [];
+    for (const agent of local) {
+      const line = el("div", "sp-plug");
+      const found = agent.found === true;
+      const dot = phaseDot(found ? "active" : "disabled");
+      dot.title = found ? "installed" : "not installed";
+      line.append(dot, el("span", "sp-plug-name", String(agent.label)));
+      line.append(el("span", "sp-count", found ? dash(agent.version) : "not installed"));
+      line.title = found ? `${agent.bin} · ${dash(agent.version)}` : `${agent.bin} · not found on the face's PATH`;
+      if (!found) line.classList.add("off");
+      panel.append(line);
+    }
+    if (local.length === 0) panel.append(el("div", "sp-note", "no local agents probed"));
+  } else {
+    panel.append(panelError(roster.reason, "agents"));
+  }
+
+  /* -- a2a network: declared, not yet open -- */
+  panel.append(spGroup("a2a network", "pending"));
+  panel.append(el("div", "sp-note", "A2A network agents land here when the network opens."));
 }
 
 /** (Re)fill the usage card from the projection store — called on every stored
@@ -1441,9 +1488,7 @@ async function refreshMemoryPanel() {
   const groups = Array.isArray(body.groups) ? body.groups : [];
   for (const group of groups) {
     const skills = Array.isArray(group.skills) ? group.skills : [];
-    const head = el("div", "sp-group");
-    head.append(el("span", "sp-group-name", String(group.name)), el("span", "sp-count", String(skills.length)));
-    panel.append(head);
+    panel.append(spGroup(String(group.name), String(skills.length)));
     for (const skill of skills) {
       const row = el("div", "sp-row");
       row.setAttribute("role", "button");

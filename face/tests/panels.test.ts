@@ -4,9 +4,10 @@ import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import {
-  memoryListing, pluginListing, registerPanelRoutes, skillDetail, skillGroup,
+  agentsListing, memoryListing, pluginListing, registerPanelRoutes, skillDetail, skillGroup,
   type PanelDeps, type SkillBody, type SkillRow,
 } from "../src/panels.ts";
+import { DSH_PIN } from "../src/version.ts";
 
 const CWD = "/repo";
 
@@ -60,6 +61,13 @@ function fakeDeps(): PanelDeps {
       },
     ],
     cwd: CWD,
+    /* claude answers, hermes throws (a prober crash reads as absent), the rest
+     * are not installed. */
+    probeAgent: async (bin) => {
+      if (bin === "claude") return "2.1.251 (Claude Code)";
+      if (bin === "hermes") throw new Error("spawn blew up");
+      return null;
+    },
   };
 }
 
@@ -114,6 +122,18 @@ test("pluginListing: rows projected, groups and root dropped, MCP paired with it
   assert.doesNotMatch(JSON.stringify(listing), /SECRET-KEY-VALUE|APCA_API_KEY_ID/);
 });
 
+test("agentsListing: main names the runtime, probes fold to found/absent", async () => {
+  const listing = await agentsListing(fakeDeps());
+  assert.deepEqual(listing.main, { name: "Kairos", runtime: `dsh ${DSH_PIN}` });
+  assert.deepEqual(listing.local.map((agent) => agent.bin), ["claude", "codex", "hermes", "openclaw"]);
+  const byBin = new Map(listing.local.map((agent) => [agent.bin, agent]));
+  assert.deepEqual(byBin.get("claude"),
+    { bin: "claude", label: "Claude Code", found: true, version: "2.1.251 (Claude Code)" });
+  assert.deepEqual(byBin.get("codex"), { bin: "codex", label: "Codex", found: false });
+  // A prober that THROWS is an absent agent, never a failed listing.
+  assert.deepEqual(byBin.get("hermes"), { bin: "hermes", label: "Hermes", found: false });
+});
+
 /* ---------- the routes ---------- */
 
 function fakeRes(): { out: { status: number; body: string }; res: ServerResponse } {
@@ -141,7 +161,15 @@ test("routes: register, fence, and answer", async () => {
   registerPanelRoutes({ register: (route) => routes.push(route) }, fakeDeps());
   const byPath = new Map(routes.map((r) => [r.path, r]));
   assert.deepEqual([...byPath.keys()].sort(),
-    ["/data/memory.json", "/data/memory/skill", "/data/plugins.json"]);
+    ["/data/agents.json", "/data/memory.json", "/data/memory/skill", "/data/plugins.json"]);
+
+  const agents = byPath.get("/data/agents.json")!;
+  const roster = fakeRes();
+  await agents.handler(getReq(), roster.res);
+  assert.equal(roster.out.status, 200);
+  const rosterBody = JSON.parse(roster.out.body) as { ok: boolean; local: { bin: string; found: boolean }[] };
+  assert.equal(rosterBody.ok, true);
+  assert.equal(rosterBody.local.find((agent) => agent.bin === "claude")?.found, true);
 
   const memory = byPath.get("/data/memory.json")!;
   const forged = fakeRes();

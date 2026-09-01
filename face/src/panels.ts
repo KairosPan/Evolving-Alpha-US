@@ -1,11 +1,14 @@
-/** The master-rail panel feeds the host RPC surface cannot serve: memory and
- * plugin.
+/** The master-rail panel feeds the host RPC surface cannot serve: agent
+ * roster, memory, and plugin.
  *
  * The sidebar's four sections split by data source. `strategy` runs on
- * `session.*`/`workspace.*` and the face's own session routes; `agent` runs
- * entirely on RPC the client can already call (`host.describe`,
- * `settings.describe`, `credentials.describe`). The remaining two need what
- * only the booted tree holds in-process:
+ * `session.*`/`workspace.*` and the face's own session routes; the `agent`
+ * panel's MAIN-agent cards run on RPC the client can already call
+ * (`host.describe`, `settings.describe`, `credentials.describe`), while its
+ * LOCAL-agent roster — the coding agents installed beside Kairos — is a
+ * host-side probe (`/data/agents.json`), because only the face process can
+ * ask the machine what is on its PATH. The remaining two need what only the
+ * booted tree holds in-process:
  *
  * - MEMORY is the skill catalog — Kairos's standing knowledge (the mechanics
  *   and style-kairos packs). `skill.list` over RPC needs an attached session
@@ -20,11 +23,13 @@
  * lookup, no writes anywhere. Loopback-fenced like every `/data` route.
  * @module
  */
+import { execFile } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Context } from "@deepseek-ai/cordis";
 import type { RouteRegistrar } from "./static.ts";
 import { isLoopbackHost } from "./data.ts";
 import { readBody, StrategyError } from "./strategies.ts";
+import { DSH_PIN } from "./version.ts";
 
 const FORBIDDEN = '{"ok":false,"error":"forbidden"}';
 
@@ -54,6 +59,25 @@ export interface SkillRow {
 export interface SkillBody extends SkillRow {
   content?: string;
   path?: string;
+}
+
+/** The local-agent roster the agent panel probes: the coding agents the
+ * operator runs BESIDE Kairos on this machine. A fixed list on purpose — the
+ * probe spawns whatever these names resolve to on the face's PATH, so the set
+ * of names must be this file's, never a request's. Extend by adding a row. */
+const LOCAL_AGENTS: ReadonlyArray<{ bin: string; label: string }> = [
+  { bin: "claude", label: "Claude Code" },
+  { bin: "codex", label: "Codex" },
+  { bin: "hermes", label: "Hermes" },
+  { bin: "openclaw", label: "OpenClaw" },
+];
+
+/** One probed local agent: present-with-version, or absent. */
+export interface LocalAgentRow {
+  bin: string;
+  label: string;
+  found: boolean;
+  version?: string;
 }
 
 /** One composed Loader row, as the plugin panel shows it — the same projection
@@ -86,6 +110,24 @@ export interface PanelDeps {
   }>;
   /** The cwd skill discovery resolves project roots against. */
   cwd: string;
+  /** Run one local-agent probe: `<bin> --version`, first stdout line, `null`
+   * when the binary is absent or refuses. Argv is fixed — no request data. */
+  probeAgent(bin: string): Promise<string | null>;
+}
+
+/** The real prober: `execFile` (no shell) of the bare bin name — resolved on
+ * the face process's PATH, which is the operator's shell's — with a fixed
+ * `--version` argv and a kill timeout. Every failure is the same `null`: a
+ * missing binary, a hung one, and one that exits nonzero all read as "not
+ * here", which is all the roster claims to know. */
+export function defaultAgentProber(): PanelDeps["probeAgent"] {
+  return (bin) => new Promise((resolve) => {
+    execFile(bin, ["--version"], { timeout: 3_000 }, (err, stdout) => {
+      if (err) return resolve(null);
+      const line = String(stdout).split("\n")[0]?.trim() ?? "";
+      resolve(line === "" ? null : line.slice(0, 120));
+    });
+  });
 }
 
 /**
@@ -115,7 +157,24 @@ export function panelDeps(ctx: Context, cwd: string): PanelDeps {
     toolSchemas: () => tools.schemas(),
     loaderEntries: () => loader.entries(),
     cwd,
+    probeAgent: defaultAgentProber(),
   };
+}
+
+/** The agent roster: the main agent (Kairos on this dsh runtime) and the
+ * probed local agents, in roster order. The A2A section is the client's — it
+ * is a declared placeholder with no host data yet. */
+export async function agentsListing(deps: PanelDeps): Promise<{ main: object; local: LocalAgentRow[] }> {
+  const local = await Promise.all(LOCAL_AGENTS.map(async ({ bin, label }): Promise<LocalAgentRow> => {
+    let version: string | null;
+    try {
+      version = await deps.probeAgent(bin);
+    } catch {
+      version = null; // a prober that throws reads as "not here", like the default's null
+    }
+    return { bin, label, found: version !== null, ...(version === null ? {} : { version }) };
+  }));
+  return { main: { name: "Kairos", runtime: `dsh ${DSH_PIN}` }, local };
 }
 
 /** Which pack a skill belongs to: the directory under `dsh/skills/` when it
@@ -243,6 +302,20 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
 
   webServer.register({ kind: "exact", path: "/data/memory.json", handler: get(() => memoryListing(deps)) });
   webServer.register({ kind: "exact", path: "/data/plugins.json", handler: get(() => pluginListing(deps)) });
+  /* The agent roster spawns one probe per roster row, so its answer is held
+   * for a minute: a version bump shows up on the next-but-soon open, and
+   * flipping panels never turns into a spawn storm. */
+  let agentsCache: { at: number; body: Promise<object> } | null = null;
+  webServer.register({
+    kind: "exact",
+    path: "/data/agents.json",
+    handler: get(() => {
+      if (agentsCache === null || Date.now() - agentsCache.at > 60_000) {
+        agentsCache = { at: Date.now(), body: agentsListing(deps) };
+      }
+      return agentsCache.body;
+    }),
+  });
   webServer.register({
     kind: "exact",
     path: "/data/memory/skill",

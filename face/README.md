@@ -187,7 +187,8 @@ A narrow icon rail at the far left picks which face the sidebar shows:
 **plugin**. The three instrument faces are read-only, refetch on every open,
 and split by data source:
 
-- **agent** runs on RPC the client already reaches: `host.describe`
+- **agent** has three sections. *Main agent* is Kairos — the dsh runtime this
+  face hosts — on RPC the client already reaches: `host.describe`
   (provider/model, cwd, attached count), `settings.describe` (the
   `agent-default-model` namespace carries `reasoningEffort`), and
   `credentials.describe` (key configured/source — never values). Its *session
@@ -196,7 +197,12 @@ and split by data source:
   projection units) — the mapper now surfaces them, a per-session store keeps
   whole values with higher seq winning, and history-tail / list-row projection
   blocks seed a session opened cold. The context bar turns danger-colored at
-  80%.
+  80%. *Local agents* is the coding-CLI roster probed host-side
+  (`GET /data/agents.json`): a FIXED bin list (claude / codex / hermes /
+  openclaw — extend in panels.ts), each spawned as `<bin> --version` with no
+  shell and no request data, first stdout line shown, one-minute cache;
+  absent reads as a greyed row, never an error. *A2A network* is a declared
+  placeholder — network agents land there when that opens.
 - **memory** is the skill catalog — Kairos's standing knowledge. The wire
   `skill.list` needs an attached session and drops source/path/body, so two
   face routes read `ctx.skills` in-process: `GET /data/memory.json` (grouped

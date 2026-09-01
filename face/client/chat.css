@@ -1192,3 +1192,13 @@ body {
 }
 .sp-doc { padding: 2px 6px 10px; font-size: 12.5px; }
 .sp-doc .viz-table { font-size: 11px; }
+
+/* 2026-09-01 rev2: the agent panel's local-agent rows — a long --version line
+   (Hermes prints its upstream hash) must truncate, never wrap the row. */
+.sp-plug .sp-count {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
