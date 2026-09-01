@@ -113,7 +113,10 @@ actually bound, for the next install or the next pin bump:
   config, which is fine here because dsh-base mounts the row configless).
 - **`toolCallTimeoutMs: 300000` on the MCP row is load-bearing.** `screen(trend_template)`
   computes ~188 s for one day on the 2yr bed (measured 2026-08-31); the 60 s default kills
-  it every time, as `MCP error -32001: Request timed out`.
+  it every time, as `MCP error -32001: Request timed out`. Since then screen/breadth results
+  disk-cache per (bed, code version, day, kind) under `data/.screen_cache`
+  (`alpaca_kit/mcp/cache.py`), so only the FIRST call for a (day, kind) pays the walk — the
+  timeout raise still matters for exactly those cold calls.
 - **The MCP child's env is scrubbed.** The APCA keys must be passed explicitly on the row
   (`!!js process.env...`); they do not flow in ambiently.
 - **Accepted residual:** the face process holds the paper keys in its environment (for

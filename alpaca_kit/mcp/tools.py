@@ -7,7 +7,9 @@ AlpacaSource.daily_snapshot raises NotImplementedError and a daily cross-section
 captured bed; account queries behind keys; order tools behind keys AND the operator-only
 ALPACA_KIT_ENABLE_ORDERS flag (set in the dsh profile, outside the agent's workspace). Every tool
 body is fail-soft: exceptions return ok=False with an actionable message, never raise into the
-harness.
+harness. The snapshot-walk tools (screen, breadth) disk-cache their ok=True results per
+(bed, code version, day, kind) — alpaca_kit/mcp/cache.py — with the lookahead check hoisted
+above the cache read and errors never cached, so the contracts above survive a hit.
 
 PIT: every dated market call wraps the RAW source in GuardedSource(AsOfGuard(as_of)) - the tool
 layer is the guard-wrapping caller the data-layer contract demands - and as_of defaults to TODAY,
@@ -26,10 +28,12 @@ import os
 from dataclasses import dataclass
 from datetime import date as Date
 from datetime import datetime as DateTime
+from datetime import timezone
 
 import pandas as pd
 
 from alpaca_kit.firewall import AsOfGuard
+from alpaca_kit.mcp import cache as screen_cache
 from alpaca_kit.source import GuardedSource
 
 MAX_ROWS = 2000
@@ -59,6 +63,10 @@ def _soft(fn):
 
 def _d(s: str) -> Date:
     return Date.fromisoformat(s)
+
+
+def _utcnow() -> str:
+    return DateTime.now(timezone.utc).isoformat()
 
 
 def _jsonable(v):
@@ -211,30 +219,65 @@ def build_tools(env=None, *, source_factory=None, trading_factory=None,
                                "date defaults to the newest day with a captured snapshot at or "
                                "before today", market_snapshot)
 
+        # The slow bed walks (screen(trend_template) ~188 s for ONE day on the 2yr bed, measured
+        # 2026-08-31; breadth walks every symbol's bars too) cache their results on disk per
+        # (bed, code version, day, kind) — see alpaca_kit/mcp/cache.py. Only the real bed is
+        # cached: an injected factory supplies a source the bed path does not name, so nothing
+        # on disk keys it.
+        cached_root = None if injected_source else pit_root
+
         def screen(date: str, kind: str = "gainer", as_of: str | None = None):
-            from alpaca_kit.universe import build_universe
+            from alpaca_kit.universe import build_universe, resolve_universe_screen
             day = _d(date)
-            g = _guarded(snapshot_factory, _d(as_of) if as_of else Date.today())
-            # screen=kind routes through the universe module's own resolver, so an explicit kind
-            # beats ambient ALPHA_UNIVERSE_SCREEN and an unknown kind raises -> ok=False.
-            uni = build_universe(g, day, screen=kind)
+            # Resolved BEFORE keying, through the universe module's own resolver, so an explicit
+            # kind beats ambient ALPHA_UNIVERSE_SCREEN, an unknown kind raises -> ok=False, and
+            # the cache never files an entry under an unresolved spelling (kind="" falls through
+            # to the env inside build_universe).
+            resolved = resolve_universe_screen(kind)
+            guard = AsOfGuard(_d(as_of) if as_of else Date.today())
+            # The lookahead check runs BEFORE the cache read — a cached day must never leak past
+            # an earlier cursor. Equivalent to the in-walk checks (every fetch in the walk is
+            # dated <= day), just hoisted above the cache.
+            guard.check(day)
+            path = (screen_cache.cache_path(cached_root, f"screen-{resolved}", day)
+                    if cached_root else None)
+            if path is not None:
+                hit = screen_cache.read(path)
+                if hit is not None:
+                    return hit
+            uni = build_universe(GuardedSource(snapshot_factory(), guard), day, screen=resolved)
             # CandidateUniverse indexes StockSnapshots by symbol; .all() is its list accessor.
-            return {"ok": True, "rows": [s.model_dump(mode="json") for s in uni.all()][:MAX_ROWS]}
-        add("screen", "daily screen (offline PIT bed): kind=gainer or trend_template", screen)
+            out = {"ok": True, "computed_at": _utcnow(),
+                   "rows": [s.model_dump(mode="json") for s in uni.all()][:MAX_ROWS]}
+            if path is not None:
+                screen_cache.write(path, out)     # ok=True only: an error is never cached
+            return out
+        add("screen", "daily screen (offline PIT bed): kind=gainer or trend_template; results "
+                      "are disk-cached per (bed, day, kind), so only the first call for a day "
+                      "is slow", screen)
 
         def breadth(date: str):
             from alpaca_kit.features.breadth import market_breadth
             from alpaca_kit.pit.pit_store import PITStore
             from alpaca_kit.pit.snapshot_source import SnapshotSource
             day = _d(date)
+            # Unlike screen, breadth reads PITStore(pit_root) directly — injection never reaches
+            # it — so the bed path names the source unconditionally and the cache always applies.
+            path = screen_cache.cache_path(pit_root, "breadth", day)
+            hit = screen_cache.read(path)
+            if hit is not None:
+                return hit
             store = PITStore(pit_root)
             src = SnapshotSource(store)
             snap = GuardedSource(src, AsOfGuard(day)).daily_snapshot(day)
             bars = {sym: src.daily_bars(sym, Date(1990, 1, 1), day)
                     for sym in snap["symbol"].tolist()}
             reading = market_breadth(bars, day)
-            return {"ok": True, **reading.model_dump(mode="json")}
-        add("breadth", "market breadth for a date (offline PIT bed)", breadth)
+            out = {"ok": True, "computed_at": _utcnow(), **reading.model_dump(mode="json")}
+            screen_cache.write(path, out)         # ok=True only: an error is never cached
+            return out
+        add("breadth", "market breadth for a date (offline PIT bed); disk-cached per (bed, day)",
+            breadth)
 
     # ---- account (keys) ---------------------------------------------------------
     if trading_factory is not None:
