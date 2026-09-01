@@ -184,40 +184,48 @@ strategy session is an approval the operator answers — accepted trade,
 
 A narrow icon rail at the far left picks which face the sidebar shows:
 **strategy** (the working face — everything above), **agent**, **memory**,
-**plugin**. The three instrument faces are read-only, refetch on every open,
-and split by data source:
+**plugin**. One pattern across all four (operator direction): the sidebar is
+always an INDEX — rows, never content — and clicking a row opens that item's
+page in the RIGHT pane, in place of the chat (`.main.detail-mode` hides the
+flow + composer; the topbar names the open item; picking a session or
+"+ new" always brings the chat back). Strategy's "content" is the chat
+itself. The three instrument faces are read-only, refetch on every open, and
+split by data source:
 
-- **agent** has three sections. *Main agent* is Kairos — the dsh runtime this
-  face hosts — on RPC the client already reaches: `host.describe`
-  (provider/model, cwd, attached count), `settings.describe` (the
-  `agent-default-model` namespace carries `reasoningEffort`), and
-  `credentials.describe` (key configured/source — never values). Its *session
-  usage* card is fed by the `session/projection` mux frames the host was
-  already broadcasting (tokenUsage / contextPressure, from dsh-token-meter's
-  projection units) — the mapper now surfaces them, a per-session store keeps
-  whole values with higher seq winning, and history-tail / list-row projection
-  blocks seed a session opened cold. The context bar turns danger-colored at
-  80%. *Local agents* is the coding-CLI roster probed host-side
-  (`GET /data/agents.json`): a FIXED bin list (claude / codex / hermes /
-  openclaw — extend in panels.ts), each spawned as `<bin> --version` with no
-  shell and no request data, first stdout line shown, one-minute cache;
-  absent reads as a greyed row, never an error. *A2A network* is a declared
-  placeholder — network agents land there when that opens.
-- **memory** is the skill catalog — Kairos's standing knowledge. The wire
-  `skill.list` needs an attached session and drops source/path/body, so two
-  face routes read `ctx.skills` in-process: `GET /data/memory.json` (grouped
-  by pack — the directory under `dsh/skills/`, mechanics first) and
-  `POST /data/memory/skill` (`{name}`, kebab-validated → the full markdown
-  body, rendered with the same client/markdown.js the bubbles use).
-- **plugin** is the composed row tree and the MCP roster:
+- **agent** indexes three sections. *Main agent* is Kairos — the dsh runtime
+  this face hosts; its page is a card grid over RPC the client already
+  reaches: `host.describe` (provider/model, cwd, attached count),
+  `settings.describe` (the `agent-default-model` namespace carries
+  `reasoningEffort`), and `credentials.describe` (key configured/source —
+  never values). Its *session usage* card is fed by the `session/projection`
+  mux frames the host was already broadcasting (tokenUsage / contextPressure,
+  from dsh-token-meter's projection units) — the mapper surfaces them, a
+  per-session store keeps whole values with higher seq winning, and
+  history-tail / list-row projection blocks seed a session opened cold. The
+  context bar turns danger-colored at 80%. *Local agents* is the coding-CLI
+  roster probed host-side (`GET /data/agents.json`): a FIXED bin list
+  (claude / codex / hermes / openclaw — extend in panels.ts), each spawned as
+  `<bin> --version` with no shell and no request data, first stdout line
+  shown, one-minute cache; absent reads as a greyed row, never an error, and
+  each agent's page is its directory entry (status / binary / version).
+  *A2A network* is a declared placeholder page — network agents land there
+  when that opens.
+- **memory** indexes the skill catalog — Kairos's standing knowledge. The
+  wire `skill.list` needs an attached session and drops source/path/body, so
+  two face routes read `ctx.skills` in-process: `GET /data/memory.json`
+  (grouped by pack — the directory under `dsh/skills/`, mechanics first) and
+  `POST /data/memory/skill` (`{name}`, kebab-validated). A skill's page is
+  the full SKILL.md body at document width, rendered with the same
+  client/markdown.js the bubbles use.
+- **plugin** indexes the MCP servers and the composed row tree:
   `GET /data/plugins.json` projects `ctx.loader.entries()` (the same
   12-line projection `dsh-host-plugin-inventory` would make — that row is NOT
   mounted at this pin, and mounting it would land on the typert gateway
   anyway) plus `ctx.tools.schemas()` grouped under each `dsh-mcp-client`
   row's `serverName`. A row's `options.config` is never serialized — the MCP
   row's env block carries the APCA keys; `serverName` is the one field read.
-  MCP servers show a phase dot and their live tools; the full ~90-row tree
-  folds closed under a count that calls out any `failed` rows.
+  A server's page is its live tool table; the tree's page is the full ~90-row
+  module/id/phase table, its index row calling out any `failed` count.
 
 All three routes are loopback-fenced like the rest of `/data`. `panelDeps`
 fails loud at boot when `skills`/`tools`/`loader` are missing from the tree —

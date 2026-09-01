@@ -837,9 +837,12 @@ function convRow(summary) {
  * place titles are known, so the topbar reads it rather than calling again. */
 function markActive() {
   for (const [id, row] of convRows) row.classList.toggle("active", id === activeSession);
-  const row = activeSession === null ? undefined : convRows.get(activeSession);
-  $("#topbar-name").textContent = activeSession === null ? "new session" : row?.dataset.title ?? "untitled";
-  $("#topbar-raw").title = dash(activeSession);
+  /* In detail mode the topbar names the open detail, not the session. */
+  if (!detailOpen) {
+    const row = activeSession === null ? undefined : convRows.get(activeSession);
+    $("#topbar-name").textContent = activeSession === null ? "new session" : row?.dataset.title ?? "untitled";
+    $("#topbar-raw").title = dash(activeSession);
+  }
   /** @type {HTMLButtonElement} */ ($("#stop")).disabled = activeSession === null;
   renderAgentSession(); // the usage card follows the session on screen
 }
@@ -912,6 +915,7 @@ function scheduleListRefresh() {
  */
 async function openSession(id) {
   const token = ++openSeq;
+  closeDetail(); // picking a session always brings the chat back
   activeSession = id;
   resetFlow();
   markActive();
@@ -948,6 +952,7 @@ async function openSession(id) {
  * a session created by a button that is then abandoned is a blank row forever. */
 function newSession() {
   openSeq += 1; // orphan any in-flight history load
+  closeDetail();
   loadingSession = null;
   activeSession = null;
   pendingCwd = undefined;
@@ -1212,16 +1217,81 @@ async function stopTurn() {
 }
 
 /* ---------- the master rail: strategy · agent · memory · plugin ----------
-   One sidebar, four faces. `strategy` is the working face — the session list
-   and everything already above. The other three are read-only instruments:
-   `agent` over RPC the client already reaches (host.describe /
-   settings.describe / credentials.describe) plus the projection store,
-   `memory` and `plugin` over the face's own /data panel routes (in-process
-   reads of the booted tree — see src/panels.ts). Panels refetch on every
-   open; nothing here writes anything. */
+   One sidebar, four faces, one pattern (operator direction 2026-09-01): the
+   sidebar is always an INDEX — rows, never content — and clicking a row opens
+   that item's content in the RIGHT pane, in place of the chat. `strategy`
+   indexes sessions and its content is the chat itself; `agent` indexes the
+   main agent (Kairos), the local coding CLIs, and the A2A placeholder;
+   `memory` indexes the skill packs; `plugin` indexes MCP servers and the
+   composed row tree. Picking a session (or "+ new") always brings the chat
+   back. Data: `agent` over RPC the client already reaches plus the
+   projection store; `memory`/`plugin` over the face's own /data panel routes
+   (in-process reads of the booted tree — see src/panels.ts). Read-only. */
 
 /** The sidebar face on screen. @type {"strategy"|"agent"|"memory"|"plugin"} */
 let activePanel = "strategy";
+
+/** Whether the right pane is showing a detail view instead of the chat. */
+let detailOpen = false;
+/** Detail generation: an async builder that finished after the operator moved
+ * on (another detail, or back to chat) must not touch the pane. */
+let detailSeq = 0;
+
+/**
+ * Show one detail view in the right pane: the flow and composer step aside,
+ * the topbar names the item. `build` fills the readable-width inner column.
+ * @param {string} title @param {(inner: HTMLElement) => void} build
+ * @returns {number} this view's generation — compare to `detailSeq` before a
+ *   later async re-render.
+ */
+function openDetail(title, build) {
+  detailSeq += 1;
+  const inner = el("div", "detail-inner");
+  build(inner);
+  $("#detail").replaceChildren(inner);
+  document.querySelector(".main")?.classList.add("detail-mode");
+  detailOpen = true;
+  $("#topbar-name").textContent = title;
+  $("#topbar-raw").title = title;
+  return detailSeq;
+}
+
+/** Bring the chat back. Safe to call when no detail is open. */
+function closeDetail() {
+  detailSeq += 1; // orphan any in-flight detail build
+  if (!detailOpen) return;
+  detailOpen = false;
+  document.querySelector(".main")?.classList.remove("detail-mode");
+  $("#detail").replaceChildren();
+  markActive(); // restore the session's name to the topbar
+}
+
+/** Mark one index row selected within its panel. @param {HTMLElement} row */
+function selRow(row) {
+  const panel = row.closest(".side-panel");
+  if (panel === null) return;
+  for (const other of panel.querySelectorAll(".sel")) other.classList.remove("sel");
+  row.classList.add("sel");
+}
+
+/** One clickable index row: builds, wires click/keyboard, marks selection.
+ * @param {HTMLElement} row @param {() => void} open @returns {HTMLElement} */
+function indexRow(row, open) {
+  row.setAttribute("role", "button");
+  row.tabIndex = 0;
+  const pick = () => {
+    selRow(row);
+    open();
+  };
+  row.addEventListener("click", pick);
+  row.addEventListener("keydown", (event) => {
+    const key = /** @type {KeyboardEvent} */ (event).key;
+    if (key !== "Enter" && key !== " ") return;
+    event.preventDefault();
+    pick();
+  });
+  return row;
+}
 
 /** Store one projection value, higher seq winning, and keep the agent panel's
  * usage card live when it is the one on screen.
@@ -1332,85 +1402,36 @@ function spGroup(label, count) {
   return head;
 }
 
-/** The agent panel's three sections: the MAIN agent (Kairos — the dsh runtime
- * this face hosts: model / host / keys / live session usage), the LOCAL
- * agents (coding CLIs probed on this machine's PATH), and the A2A network
- * (declared, not yet open). Each card degrades alone: one failed call marks
- * its card, not the panel. */
+/** The agent index: main agent (Kairos) · local agents · a2a. Rows only —
+ * clicking one opens its page in the right pane. */
 async function refreshAgentPanel() {
   const panel = $("#panel-agent");
   panel.replaceChildren(el("div", "sp-note", "loading…"));
-  const [host, settings, creds, roster] = await Promise.allSettled([
-    rpc("host.describe"),
-    rpc("settings.describe"),
-    rpc("credentials.describe", { refs: ["DEEPSEEK_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"] }),
-    panelData("/data/agents.json"),
-  ]);
+  /** @type {Record<string, any>|null} */
+  let roster = null;
+  let rosterErr = null;
+  try {
+    roster = await panelData("/data/agents.json");
+  } catch (err) {
+    rosterErr = err;
+  }
   if (activePanel !== "agent") return; // the operator moved on mid-fetch
   panel.replaceChildren();
 
   /* -- main agent: Kairos, owner of this whole runtime -- */
   panel.append(spGroup("main agent"));
-  const mainInfo = roster.status === "fulfilled" ? roster.value?.main : undefined;
-  const identity = el("div", "sp-card");
-  const identityHead = el("div", "sp-title sp-title-row");
-  identityHead.append(phaseDot("active"),
-    el("span", null, String(mainInfo?.name ?? "Kairos")),
-    el("span", "sp-count", dash(mainInfo?.runtime)));
-  identity.append(identityHead);
-  panel.append(identity);
-
-  const model = panelCard("model");
-  if (host.status === "fulfilled") {
-    kvRow(model, "provider", dash(host.value?.provider));
-    kvRow(model, "model", dash(host.value?.model));
-  } else {
-    model.append(panelError(host.reason, "host.describe"));
-  }
-  if (settings.status === "fulfilled") {
-    const ns = (settings.value?.namespaces ?? []).find((n) => n?.ns === "agent-default-model");
-    kvRow(model, "effort", dash(ns?.value?.reasoningEffort));
-  }
-  panel.append(model);
-
-  const hostCard = panelCard("host");
-  if (host.status === "fulfilled") {
-    const cwd = String(host.value?.cwd ?? "");
-    kvRow(hostCard, "cwd", cwd.split("/").filter((p) => p !== "").slice(-2).join("/") || EM);
-    hostCard.title = cwd;
-    kvRow(hostCard, "attached", dash(host.value?.attachedSessions));
-    kvRow(hostCard, "home", dash(host.value?.home));
-  } else {
-    hostCard.append(panelError(host.reason, "host.describe"));
-  }
-  panel.append(hostCard);
-
-  const keys = panelCard("keys");
-  if (creds.status === "fulfilled") {
-    const map = creds.value?.credentials ?? {};
-    for (const ref of ["DEEPSEEK_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"]) {
-      const entry = map[ref];
-      const set = entry?.configured === true;
-      const row = el("div", "sp-kv");
-      row.append(el("span", "sp-k", ref.toLowerCase().replaceAll("_", " ")));
-      const value = el("span", `sp-v ${set ? "ok" : "miss"}`, set ? `set · ${dash(entry?.source)}` : "not set");
-      row.append(value);
-      keys.append(row);
-    }
-  } else {
-    keys.append(panelError(creds.reason, "credentials.describe"));
-  }
-  panel.append(keys);
-
-  const usage = panelCard("session usage");
-  usage.id = "agent-session";
-  panel.append(usage);
-  renderAgentSession();
+  const mainInfo = roster?.main;
+  const kairos = el("div", "sp-plug");
+  kairos.append(phaseDot("active"), el("span", "sp-plug-name", String(mainInfo?.name ?? "Kairos")));
+  kairos.append(el("span", "sp-count", dash(mainInfo?.runtime)));
+  panel.append(indexRow(kairos, () => void openAgentMain(mainInfo)));
 
   /* -- local agents: what else is installed beside Kairos -- */
   panel.append(spGroup("local agents"));
-  if (roster.status === "fulfilled") {
-    const local = Array.isArray(roster.value?.local) ? roster.value.local : [];
+  if (rosterErr !== null) {
+    panel.append(panelError(rosterErr, "agents"));
+  } else {
+    const local = Array.isArray(roster?.local) ? roster.local : [];
     for (const agent of local) {
       const line = el("div", "sp-plug");
       const found = agent.found === true;
@@ -1418,18 +1439,113 @@ async function refreshAgentPanel() {
       dot.title = found ? "installed" : "not installed";
       line.append(dot, el("span", "sp-plug-name", String(agent.label)));
       line.append(el("span", "sp-count", found ? dash(agent.version) : "not installed"));
-      line.title = found ? `${agent.bin} · ${dash(agent.version)}` : `${agent.bin} · not found on the face's PATH`;
       if (!found) line.classList.add("off");
-      panel.append(line);
+      panel.append(indexRow(line, () => openLocalAgent(agent)));
     }
     if (local.length === 0) panel.append(el("div", "sp-note", "no local agents probed"));
-  } else {
-    panel.append(panelError(roster.reason, "agents"));
   }
 
   /* -- a2a network: declared, not yet open -- */
   panel.append(spGroup("a2a network", "pending"));
-  panel.append(el("div", "sp-note", "A2A network agents land here when the network opens."));
+  const a2a = el("div", "sp-plug off");
+  a2a.append(phaseDot("disabled"), el("span", "sp-plug-name", "A2A network"));
+  panel.append(indexRow(a2a, openA2A));
+}
+
+/** The main agent's page: identity, model, host, keys, live session usage.
+ * Each card degrades alone: one failed call marks its card, not the page.
+ * @param {Record<string, any>|undefined} mainInfo - the roster's main block. */
+async function openAgentMain(mainInfo) {
+  const name = String(mainInfo?.name ?? "Kairos");
+  const title = `${name} · main agent`;
+  const token = openDetail(title, (inner) => {
+    inner.append(el("div", "detail-title", name));
+    inner.append(el("div", "sp-note", "loading…"));
+  });
+  const [host, settings, creds] = await Promise.allSettled([
+    rpc("host.describe"),
+    rpc("settings.describe"),
+    rpc("credentials.describe", { refs: ["DEEPSEEK_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"] }),
+  ]);
+  if (token !== detailSeq) return; // the operator moved on mid-fetch
+  openDetail(title, (inner) => {
+    inner.append(el("div", "detail-title", name));
+    inner.append(el("div", "detail-sub", `main agent · owns this runtime · ${dash(mainInfo?.runtime)}`));
+    const grid = el("div", "detail-grid");
+    inner.append(grid);
+
+    const model = panelCard("model");
+    if (host.status === "fulfilled") {
+      kvRow(model, "provider", dash(host.value?.provider));
+      kvRow(model, "model", dash(host.value?.model));
+    } else {
+      model.append(panelError(host.reason, "host.describe"));
+    }
+    if (settings.status === "fulfilled") {
+      const ns = (settings.value?.namespaces ?? []).find((n) => n?.ns === "agent-default-model");
+      kvRow(model, "effort", dash(ns?.value?.reasoningEffort));
+    }
+    grid.append(model);
+
+    const hostCard = panelCard("host");
+    if (host.status === "fulfilled") {
+      kvRow(hostCard, "cwd", dash(host.value?.cwd));
+      kvRow(hostCard, "attached", dash(host.value?.attachedSessions));
+      kvRow(hostCard, "home", dash(host.value?.home));
+    } else {
+      hostCard.append(panelError(host.reason, "host.describe"));
+    }
+    grid.append(hostCard);
+
+    const keys = panelCard("keys");
+    if (creds.status === "fulfilled") {
+      const map = creds.value?.credentials ?? {};
+      for (const ref of ["DEEPSEEK_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"]) {
+        const entry = map[ref];
+        const set = entry?.configured === true;
+        const row = el("div", "sp-kv");
+        row.append(el("span", "sp-k", ref.toLowerCase().replaceAll("_", " ")));
+        row.append(el("span", `sp-v ${set ? "ok" : "miss"}`, set ? `set · ${dash(entry?.source)}` : "not set"));
+        keys.append(row);
+      }
+    } else {
+      keys.append(panelError(creds.reason, "credentials.describe"));
+    }
+    grid.append(keys);
+
+    const usage = panelCard("session usage");
+    usage.id = "agent-session";
+    grid.append(usage);
+  });
+  renderAgentSession();
+}
+
+/** One local agent's page: a directory entry — presence, version, binary.
+ * @param {Record<string, any>} agent - a roster `local` row. */
+function openLocalAgent(agent) {
+  const found = agent.found === true;
+  openDetail(`${String(agent.label)} · local agent`, (inner) => {
+    inner.append(el("div", "detail-title", String(agent.label)));
+    inner.append(el("div", "detail-sub", found ? "local agent · installed on this machine" : "local agent · not installed"));
+    const card = panelCard("probe");
+    kvRow(card, "status", found ? "installed" : "not installed");
+    kvRow(card, "binary", String(agent.bin));
+    if (found) kvRow(card, "version", dash(agent.version));
+    inner.append(card);
+    inner.append(el("div", "sp-note", found
+      ? `Probed host-side as "${agent.bin} --version" on the face process's PATH; answers cache for a minute.`
+      : `No "${agent.bin}" binary answered on the face process's PATH.`));
+  });
+}
+
+/** The A2A placeholder page: the seat is declared, nothing is wired. */
+function openA2A() {
+  openDetail("A2A network · pending", (inner) => {
+    inner.append(el("div", "detail-title", "A2A network"));
+    inner.append(el("div", "detail-sub", "agent-to-agent network · not yet open"));
+    inner.append(el("div", "sp-note",
+      "Network agents land here when the A2A network opens. Nothing is wired yet — this entry declares the seat."));
+  });
 }
 
 /** (Re)fill the usage card from the projection store — called on every stored
@@ -1491,68 +1607,48 @@ async function refreshMemoryPanel() {
     panel.append(spGroup(String(group.name), String(skills.length)));
     for (const skill of skills) {
       const row = el("div", "sp-row");
-      row.setAttribute("role", "button");
-      row.tabIndex = 0;
       row.append(el("div", "sp-row-name", String(skill.name)));
       row.append(el("div", "sp-row-desc", dash(skill.description)));
-      const open = () => void openSkill(String(skill.name));
-      row.addEventListener("click", open);
-      row.addEventListener("keydown", (event) => {
-        const key = /** @type {KeyboardEvent} */ (event).key;
-        if (key !== "Enter" && key !== " ") return;
-        event.preventDefault();
-        open();
-      });
-      panel.append(row);
+      panel.append(indexRow(row, () => void openSkill(String(skill.name))));
     }
   }
   if (groups.length === 0) panel.append(el("div", "sp-note", "no skills discovered"));
 }
 
-/** One skill's body, rendered in place of the list; `‹ memory` goes back. */
+/** One skill's page: the full SKILL.md body, rendered in the right pane. */
 async function openSkill(name) {
-  const panel = $("#panel-memory");
-  panel.replaceChildren(el("div", "sp-note", "loading…"));
+  const token = openDetail(`${name} · memory`, (inner) => {
+    inner.append(el("div", "detail-title", name));
+    inner.append(el("div", "sp-note", "loading…"));
+  });
   let detail;
   try {
     detail = await panelData("/data/memory/skill", { name });
   } catch (err) {
-    panel.replaceChildren(panelError(err, name));
-    panel.prepend(backRow(() => void refreshMemoryPanel()));
+    if (token !== detailSeq) return;
+    openDetail(`${name} · memory`, (inner) => {
+      inner.append(el("div", "detail-title", name));
+      inner.append(panelError(err, name));
+    });
     return;
   }
-  if (activePanel !== "memory") return;
-  panel.replaceChildren();
-  panel.append(backRow(() => void refreshMemoryPanel()));
-  panel.append(el("div", "sp-doc-title", String(detail.name)));
-  if (typeof detail.path === "string" && detail.path !== "") {
-    const path = el("div", "sp-doc-path", detail.path);
-    path.title = detail.path;
-    panel.append(path);
-  }
-  const doc = el("div", "sp-doc");
-  doc.append(renderMarkdown(String(detail.content ?? "")).node);
-  panel.append(doc);
-}
-
-/** @param {() => void} back @returns {HTMLElement} the panel's back row. */
-function backRow(back) {
-  const row = el("div", "sp-back", "‹ back");
-  row.setAttribute("role", "button");
-  row.tabIndex = 0;
-  row.addEventListener("click", back);
-  row.addEventListener("keydown", (event) => {
-    const key = /** @type {KeyboardEvent} */ (event).key;
-    if (key !== "Enter" && key !== " ") return;
-    event.preventDefault();
-    back();
+  if (token !== detailSeq) return; // the operator moved on mid-fetch
+  openDetail(`${String(detail.name)} · memory`, (inner) => {
+    inner.append(el("div", "detail-title", String(detail.name)));
+    inner.append(el("div", "detail-sub", `skill · ${dash(detail.group)} pack`));
+    if (typeof detail.path === "string" && detail.path !== "") {
+      inner.append(el("div", "detail-path", detail.path));
+    }
+    const doc = el("div", "detail-doc");
+    doc.append(renderMarkdown(String(detail.content ?? "")).node);
+    inner.append(doc);
   });
-  return row;
 }
 
 /* -- plugin -- */
 
-/** MCP servers with their live tool rosters, then the composed row tree. */
+/** The plugin index: one row per MCP server, one for the composed row tree —
+ * each opening its table in the right pane. */
 async function refreshPluginPanel() {
   const panel = $("#panel-plugin");
   panel.replaceChildren(el("div", "sp-note", "loading…"));
@@ -1560,62 +1656,97 @@ async function refreshPluginPanel() {
   try {
     body = await panelData("/data/plugins.json");
   } catch (err) {
+    if (activePanel !== "plugin") return;
     panel.replaceChildren(panelError(err, "plugins"));
     return;
   }
   if (activePanel !== "plugin") return;
   panel.replaceChildren();
 
-  panel.append(el("div", "sp-group", "mcp servers"));
+  panel.append(spGroup("mcp servers"));
   const servers = Array.isArray(body.mcp) ? body.mcp : [];
   if (servers.length === 0) panel.append(el("div", "sp-note", "no MCP servers composed"));
   for (const server of servers) {
-    const card = el("div", "sp-card");
-    const head = el("div", "sp-title sp-title-row");
+    const line = el("div", "sp-plug");
     const tools = Array.isArray(server.tools) ? server.tools : [];
-    head.append(phaseDot(server.phase), el("span", null, String(server.server)), el("span", "sp-count", `${tools.length} tools`));
-    card.append(head);
-    if (tools.length === 0) {
-      card.append(el("div", "sp-note", "no tools registered — offline or still connecting"));
-    }
-    for (const tool of tools) {
-      const row = el("div", "sp-tool");
-      const name = String(tool.name);
-      const prefix = `mcp__${server.server}__`;
-      // Display-only trim; the full registered name stays on the tooltip.
-      row.append(el("div", "sp-row-name", name.startsWith(prefix) ? name.slice(prefix.length) : name));
-      row.title = name;
-      const desc = String(tool.description ?? "").split("\n")[0].trim();
-      if (desc !== "") row.append(el("div", "sp-row-desc", desc));
-      card.append(row);
-    }
-    panel.append(card);
+    line.append(phaseDot(server.phase), el("span", "sp-plug-name", String(server.server)));
+    line.append(el("span", "sp-count", `${tools.length} tools`));
+    panel.append(indexRow(line, () => openMcpServer(server)));
   }
 
-  /* The composed rows, folded by default: the whole tree is ~80 rows and the
-   * question it answers ("did my patch row mount, is anything failed?") is a
-   * sometimes-question. */
   const rows = Array.isArray(body.rows) ? body.rows : [];
   const failed = rows.filter((row) => row.phase === "failed").length;
-  const head = el("div", "sp-group sp-fold");
-  const chev = el("span", "chev", "▸");
-  head.append(chev, el("span", "sp-group-name", "composed rows"),
-    el("span", "sp-count", failed > 0 ? `${rows.length} · ${failed} failed` : String(rows.length)));
-  const box = el("div");
-  box.hidden = true;
-  head.addEventListener("click", () => {
-    box.hidden = !box.hidden;
-    chev.textContent = box.hidden ? "▸" : "▾";
+  panel.append(spGroup("composed rows"));
+  const tree = el("div", "sp-plug");
+  tree.append(phaseDot(failed > 0 ? "failed" : "active"), el("span", "sp-plug-name", "the live plugin tree"));
+  tree.append(el("span", "sp-count", failed > 0 ? `${rows.length} · ${failed} failed` : String(rows.length)));
+  panel.append(indexRow(tree, () => openComposedRows(rows)));
+}
+
+/** A bare (thead + tbody) instrument table for a detail page.
+ * @param {string[]} headers @returns {{wrap: HTMLElement, tbody: HTMLElement}} */
+function detailTable(headers) {
+  const wrap = el("div", "viz-scroll detail-table");
+  const table = el("table", "viz-table");
+  const thead = el("thead");
+  const head = el("tr");
+  for (const header of headers) head.append(el("th", null, header));
+  thead.append(head);
+  const tbody = el("tbody");
+  table.append(thead, tbody);
+  wrap.append(table);
+  return { wrap, tbody };
+}
+
+/** One MCP server's page: its live tool roster as a table.
+ * @param {Record<string, any>} server - a plugins.json `mcp` row. */
+function openMcpServer(server) {
+  const name = String(server.server);
+  const tools = Array.isArray(server.tools) ? server.tools : [];
+  openDetail(`${name} · mcp`, (inner) => {
+    inner.append(el("div", "detail-title", name));
+    inner.append(el("div", "detail-sub", `MCP server · ${server.phase ?? "not mounted"} · ${tools.length} tools`));
+    if (tools.length === 0) {
+      inner.append(el("div", "sp-note", "no tools registered — offline or still connecting"));
+      return;
+    }
+    const { wrap, tbody } = detailTable(["tool", "description"]);
+    const prefix = `mcp__${name}__`;
+    for (const tool of tools) {
+      const full = String(tool.name);
+      const tr = el("tr");
+      // Display-only trim; the full registered name stays on the tooltip.
+      const cell = el("td", "sym", full.startsWith(prefix) ? full.slice(prefix.length) : full);
+      cell.title = full;
+      tr.append(cell, el("td", null, String(tool.description ?? "")));
+      tbody.append(tr);
+    }
+    inner.append(wrap);
   });
-  panel.append(head, box);
-  for (const row of rows) {
-    const line = el("div", "sp-plug");
-    line.append(phaseDot(row.enabled === false ? "disabled" : row.phase));
-    line.append(el("span", "sp-plug-name", String(row.module).replace(/^@deepseek-ai\//, "")));
-    line.title = `${row.id} · ${row.module}${row.enabled === false ? " · disabled" : ""} · ${row.phase ?? "not mounted"}`;
-    if (row.enabled === false) line.classList.add("off");
-    box.append(line);
-  }
+}
+
+/** The composed row tree's page: every live Loader row as a table.
+ * @param {Record<string, any>[]} rows - plugins.json `rows`. */
+function openComposedRows(rows) {
+  const failed = rows.filter((row) => row.phase === "failed").length;
+  openDetail("composed rows · plugin", (inner) => {
+    inner.append(el("div", "detail-title", "composed rows"));
+    inner.append(el("div", "detail-sub",
+      `the live plugin tree · ${rows.length} rows${failed > 0 ? ` · ${failed} FAILED` : ""}`));
+    const { wrap, tbody } = detailTable(["module", "row id", "phase"]);
+    for (const row of rows) {
+      const tr = el("tr");
+      tr.append(el("td", "sym", String(row.module).replace(/^@deepseek-ai\//, "")));
+      tr.append(el("td", null, String(row.id)));
+      const phase = row.enabled === false ? "disabled" : String(row.phase ?? EM);
+      const cell = el("td", null, phase);
+      if (phase === "active") cell.classList.add("up");
+      if (phase === "failed") cell.classList.add("down");
+      tr.append(cell);
+      tbody.append(tr);
+    }
+    inner.append(wrap);
+  });
 }
 
 /* ---------- wiring ---------- */

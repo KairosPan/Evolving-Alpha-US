@@ -65,6 +65,12 @@
       <div id="flow" class="flow-inner"></div>
     </div>
 
+    <!-- The right-pane detail view: what a sidebar panel row opens (a skill's
+         body, an MCP server's tools, the main agent's cards). Shown in place
+         of the flow + composer while `.main` carries `detail-mode`; picking a
+         session (or "+ new") brings the chat back. chat.js builds it all. -->
+    <div id="detail" class="detail"></div>
+
     <footer class="composer">
       <form id="composer" class="composer-row">
         <input id="composer-input" class="composer-input" type="text" placeholder="Message Kairos…" autocomplete="off">
