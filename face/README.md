@@ -202,14 +202,20 @@ split by data source:
   from dsh-token-meter's projection units) — the mapper surfaces them, a
   per-session store keeps whole values with higher seq winning, and
   history-tail / list-row projection blocks seed a session opened cold. The
-  context bar turns danger-colored at 80%. *Local agents* is the coding-CLI
-  roster probed host-side (`GET /data/agents.json`): a FIXED bin list
-  (claude / codex / hermes / openclaw — extend in panels.ts), each spawned as
-  `<bin> --version` with no shell and no request data, first stdout line
-  shown, one-minute cache; absent reads as a greyed row, never an error, and
-  each agent's page is its directory entry (status / binary / version).
-  *A2A network* is a declared placeholder page — network agents land there
-  when that opens.
+  context bar turns danger-colored at 80%. *Local agents* is an
+  OPERATOR-CURATED roster, not a fixed list: it starts empty and lives in
+  `$DSH_HOME/face/agents.json`. The `+ connect` row opens a handshake page —
+  detected candidates (the panels.ts suggestion list, probed and not yet
+  connected) one click away, anything else by name — and
+  `POST /data/agents/connect` admits a binary ONLY if it answers
+  `<bin> --version` (execFile, no shell; the name is fenced to one bare PATH
+  token, so a request body can never steer the probe to a path). Probes cache
+  per bin for a minute, but connect probes fresh. Rows disconnect from a
+  hover `×` or the agent's own page (`POST /data/agents/disconnect`); a
+  connected binary that stops answering stays listed greyed rather than
+  vanishing. Each agent's page is its directory entry (status / binary /
+  version). *A2A network* is a declared placeholder page — network agents
+  land there when that opens.
 - **memory** indexes the skill catalog — Kairos's standing knowledge. The
   wire `skill.list` needs an attached session and drops source/path/body, so
   two face routes read `ctx.skills` in-process: `GET /data/memory.json`
@@ -227,9 +233,11 @@ split by data source:
   A server's page is its live tool table; the tree's page is the full ~90-row
   module/id/phase table, its index row calling out any `failed` count.
 
-All three routes are loopback-fenced like the rest of `/data`. `panelDeps`
-fails loud at boot when `skills`/`tools`/`loader` are missing from the tree —
-a dead panel with nothing on stderr is the failure mode it exists to prevent.
+All panel routes are loopback-fenced like the rest of `/data`; the roster's
+connect/disconnect are the only writes, and they touch nothing but the
+face's own metadata file. `panelDeps` fails loud at boot when
+`skills`/`tools`/`loader` are missing from the tree — a dead panel with
+nothing on stderr is the failure mode it exists to prevent.
 
 ## Chat rendering (client/render.js + the collapsed process rows)
 

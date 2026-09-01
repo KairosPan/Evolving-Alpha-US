@@ -5,10 +5,13 @@
  * `session.*`/`workspace.*` and the face's own session routes; the `agent`
  * panel's MAIN-agent cards run on RPC the client can already call
  * (`host.describe`, `settings.describe`, `credentials.describe`), while its
- * LOCAL-agent roster — the coding agents installed beside Kairos — is a
- * host-side probe (`/data/agents.json`), because only the face process can
- * ask the machine what is on its PATH. The remaining two need what only the
- * booted tree holds in-process:
+ * LOCAL-agent roster — the coding agents connected beside Kairos — lives
+ * here, because only the face process can ask the machine what is on its
+ * PATH. The roster is OPERATOR-CURATED, not fixed: it starts empty, a
+ * connect route probes a binary and adds it (`$DSH_HOME/face/agents.json`,
+ * the same face-metadata home archived.json uses), and a disconnect route
+ * removes it. The remaining two need what only the booted tree holds
+ * in-process:
  *
  * - MEMORY is the skill catalog — Kairos's standing knowledge (the mechanics
  *   and style-kairos packs). `skill.list` over RPC needs an attached session
@@ -19,13 +22,17 @@
  *   record is a 12-line projection of `ctx.loader.entries()` anyway — restated
  *   here rather than mounted, so no new row and no second gateway).
  *
- * Read-only by construction: three GET-shaped reads and one body-addressed
- * lookup, no writes anywhere. Loopback-fenced like every `/data` route.
+ * The only writes are the agent roster's two (connect/disconnect), and they
+ * touch nothing but the face's own metadata file. Loopback-fenced like every
+ * `/data` route.
  * @module
  */
 import { execFile } from "node:child_process";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Context } from "@deepseek-ai/cordis";
+import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import type { RouteRegistrar } from "./static.ts";
 import { isLoopbackHost } from "./data.ts";
 import { readBody, StrategyError } from "./strategies.ts";
@@ -61,24 +68,68 @@ export interface SkillBody extends SkillRow {
   path?: string;
 }
 
-/** The local-agent roster the agent panel probes: the coding agents the
- * operator runs BESIDE Kairos on this machine. A fixed list on purpose — the
- * probe spawns whatever these names resolve to on the face's PATH, so the set
- * of names must be this file's, never a request's. Extend by adding a row. */
-const LOCAL_AGENTS: ReadonlyArray<{ bin: string; label: string }> = [
+/** Candidate suggestions for the connect page: coding CLIs worth probing for
+ * when the operator has not connected them yet, with their pretty labels.
+ * Suggestions only — the connected roster is the operator's, in
+ * `$DSH_HOME/face/agents.json`, and any valid bare name can be connected. */
+const KNOWN_AGENTS: ReadonlyArray<{ bin: string; label: string }> = [
   { bin: "claude", label: "Claude Code" },
   { bin: "codex", label: "Codex" },
   { bin: "hermes", label: "Hermes" },
   { bin: "openclaw", label: "OpenClaw" },
 ];
 
-/** One probed local agent: present-with-version, or absent. */
+/** Exactly a connectable binary name: ONE bare token for a PATH lookup. No
+ * separators of any kind, so the probe (`execFile(bin, ["--version"])`, no
+ * shell) can never be steered to a path — this regex is what makes the
+ * connect route safe to feed from a request body at all. */
+const AGENT_BIN_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
+
+/** The face's agent-roster file under the harness home, beside archived.json. */
+const AGENTS_META = ["face", "agents.json"] as const;
+
+/** The operator's connected roster, in connect order. */
+export interface AgentsMeta {
+  connected: { bin: string; label: string }[];
+}
+
+/** One probed local agent: present-with-version, or connected-but-silent. */
 export interface LocalAgentRow {
   bin: string;
   label: string;
   found: boolean;
   version?: string;
 }
+
+/** @returns the stored roster; an absent, unreadable, or hand-mangled file
+ * reads as best it can — a convenience, never a gate. */
+export async function readAgentsMeta(home: string): Promise<AgentsMeta> {
+  try {
+    const parsed: unknown = JSON.parse(await readFile(join(home, ...AGENTS_META), "utf8"));
+    if (parsed !== null && typeof parsed === "object") {
+      const rows = (parsed as { connected?: unknown }).connected;
+      if (Array.isArray(rows)) {
+        return {
+          connected: rows
+            .filter((row): row is { bin: string; label?: unknown } =>
+              row !== null && typeof row === "object"
+              && typeof (row as { bin?: unknown }).bin === "string"
+              && AGENT_BIN_RE.test((row as { bin: string }).bin))
+            .map((row) => ({ bin: row.bin, label: typeof row.label === "string" ? row.label : row.bin })),
+        };
+      }
+    }
+  } catch { /* fall through to empty */ }
+  return { connected: [] };
+}
+
+async function writeAgentsMeta(home: string, meta: AgentsMeta): Promise<void> {
+  await mkdir(join(home, AGENTS_META[0]), { recursive: true });
+  await writeFile(join(home, ...AGENTS_META), JSON.stringify(meta), "utf8");
+}
+
+/** The pretty label for a bin: the known map's, else the bin itself. */
+const labelFor = (bin: string): string => KNOWN_AGENTS.find((k) => k.bin === bin)?.label ?? bin;
 
 /** One composed Loader row, as the plugin panel shows it — the same projection
  * `dsh-host-plugin-inventory` makes, plus `serverName` for MCP rows so the
@@ -110,8 +161,11 @@ export interface PanelDeps {
   }>;
   /** The cwd skill discovery resolves project roots against. */
   cwd: string;
+  /** The harness home holding the face's agents.json roster file. */
+  home: string;
   /** Run one local-agent probe: `<bin> --version`, first stdout line, `null`
-   * when the binary is absent or refuses. Argv is fixed — no request data. */
+   * when the binary is absent or refuses. Every `bin` that reaches this has
+   * passed {@link AGENT_BIN_RE} — a bare PATH token, never a path. */
   probeAgent(bin: string): Promise<string | null>;
 }
 
@@ -140,7 +194,7 @@ export function defaultAgentProber(): PanelDeps["probeAgent"] {
  * @param ctx - the settled root context `bootFace` returned.
  * @param cwd - the workbench repo root (main.ts anchored the process there).
  */
-export function panelDeps(ctx: Context, cwd: string): PanelDeps {
+export function panelDeps(ctx: Context, cwd: string, home = resolveDshHome(undefined)): PanelDeps {
   const skills = ctx.get("skills") as PanelDeps["skills"] | undefined;
   const tools = ctx.get("tools") as { schemas(): { name: string; description: string }[] } | undefined;
   const loader = ctx.get("loader") as { entries(): ReturnType<PanelDeps["loaderEntries"]> } | undefined;
@@ -157,24 +211,72 @@ export function panelDeps(ctx: Context, cwd: string): PanelDeps {
     toolSchemas: () => tools.schemas(),
     loaderEntries: () => loader.entries(),
     cwd,
+    home,
     probeAgent: defaultAgentProber(),
   };
 }
 
-/** The agent roster: the main agent (Kairos on this dsh runtime) and the
- * probed local agents, in roster order. The A2A section is the client's — it
- * is a declared placeholder with no host data yet. */
-export async function agentsListing(deps: PanelDeps): Promise<{ main: object; local: LocalAgentRow[] }> {
-  const local = await Promise.all(LOCAL_AGENTS.map(async ({ bin, label }): Promise<LocalAgentRow> => {
-    let version: string | null;
-    try {
-      version = await deps.probeAgent(bin);
-    } catch {
-      version = null; // a prober that throws reads as "not here", like the default's null
-    }
+/** A probe that never throws: a prober crash reads as "not here". */
+async function probeSoft(deps: PanelDeps, bin: string): Promise<string | null> {
+  try {
+    return await deps.probeAgent(bin);
+  } catch {
+    return null;
+  }
+}
+
+/** The agent roster: the main agent (Kairos on this dsh runtime), the
+ * operator's CONNECTED local agents (probed, in connect order — one that
+ * stopped answering stays listed as found:false rather than vanishing), and
+ * the connect page's candidates (known suggestions that answer on this
+ * machine and are not yet connected). The A2A section is the client's — a
+ * declared placeholder with no host data yet. */
+export async function agentsListing(deps: PanelDeps): Promise<{
+  main: object;
+  local: LocalAgentRow[];
+  candidates: { bin: string; label: string; version: string }[];
+}> {
+  const meta = await readAgentsMeta(deps.home);
+  const local = await Promise.all(meta.connected.map(async ({ bin, label }): Promise<LocalAgentRow> => {
+    const version = await probeSoft(deps, bin);
     return { bin, label, found: version !== null, ...(version === null ? {} : { version }) };
   }));
-  return { main: { name: "Kairos", runtime: `dsh ${DSH_PIN}` }, local };
+  const connected = new Set(meta.connected.map((row) => row.bin));
+  const candidates = (await Promise.all(KNOWN_AGENTS
+    .filter((known) => !connected.has(known.bin))
+    .map(async ({ bin, label }) => {
+      const version = await probeSoft(deps, bin);
+      return version === null ? null : { bin, label, version };
+    })))
+    .filter((row): row is { bin: string; label: string; version: string } => row !== null);
+  return { main: { name: "Kairos", runtime: `dsh ${DSH_PIN}` }, local, candidates };
+}
+
+/** The connect handshake: validate the name, PROBE it, and only a binary
+ * that answers joins the roster — connecting is a verification, not a
+ * bookmark. Idempotent on an already-connected bin (re-probes, re-returns).
+ * 400 on a malformed name, 404 when nothing answers. */
+export async function connectLocalAgent(deps: PanelDeps, bin: unknown): Promise<LocalAgentRow> {
+  if (typeof bin !== "string" || !AGENT_BIN_RE.test(bin)) throw new StrategyError(400, "invalid binary name");
+  const version = await probeSoft(deps, bin);
+  if (version === null) throw new StrategyError(404, "binary did not answer on this machine");
+  const meta = await readAgentsMeta(deps.home);
+  if (!meta.connected.some((row) => row.bin === bin)) {
+    meta.connected.push({ bin, label: labelFor(bin) });
+    await writeAgentsMeta(deps.home, meta);
+  }
+  return { bin, label: labelFor(bin), found: true, version };
+}
+
+/** Remove one bin from the roster. 400 on a malformed name, 404 when it was
+ * not connected. The binary itself is untouched — this is the face's list. */
+export async function disconnectLocalAgent(deps: PanelDeps, bin: unknown): Promise<AgentsMeta> {
+  if (typeof bin !== "string" || !AGENT_BIN_RE.test(bin)) throw new StrategyError(400, "invalid binary name");
+  const meta = await readAgentsMeta(deps.home);
+  if (!meta.connected.some((row) => row.bin === bin)) throw new StrategyError(404, "not connected");
+  const next = { connected: meta.connected.filter((row) => row.bin !== bin) };
+  await writeAgentsMeta(deps.home, next);
+  return next;
 }
 
 /** Which pack a skill belongs to: the directory under `dsh/skills/` when it
@@ -300,41 +402,71 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
       }
     };
 
-  webServer.register({ kind: "exact", path: "/data/memory.json", handler: get(() => memoryListing(deps)) });
-  webServer.register({ kind: "exact", path: "/data/plugins.json", handler: get(() => pluginListing(deps)) });
-  /* The agent roster spawns one probe per roster row, so its answer is held
-   * for a minute: a version bump shows up on the next-but-soon open, and
-   * flipping panels never turns into a spawn storm. */
-  let agentsCache: { at: number; body: Promise<object> } | null = null;
-  webServer.register({
-    kind: "exact",
-    path: "/data/agents.json",
-    handler: get(() => {
-      if (agentsCache === null || Date.now() - agentsCache.at > 60_000) {
-        agentsCache = { at: Date.now(), body: agentsListing(deps) };
-      }
-      return agentsCache.body;
-    }),
-  });
-  webServer.register({
-    kind: "exact",
-    path: "/data/memory/skill",
-    handler: async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+  /** The shared POST shell: fence, method gate, JSON body, error mapping —
+   * the same shape sessions.ts uses. */
+  const post = (act: (body: Record<string, unknown>) => Promise<object>) =>
+    async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
       if (!isLoopbackHost(req.headers.host)) return send(res, 403, FORBIDDEN);
       if (req.method !== "POST") return send(res, 405, { ok: false, error: "POST only" });
       try {
-        let name: unknown;
+        let body: Record<string, unknown>;
         try {
-          name = (JSON.parse(await readBody(req)) as Record<string, unknown>).name;
+          const parsed: unknown = JSON.parse(await readBody(req));
+          if (parsed === null || typeof parsed !== "object") throw new Error("not an object");
+          body = parsed as Record<string, unknown>;
         } catch (err) {
           if (err instanceof StrategyError) throw err;
           throw new StrategyError(400, "body must be a JSON object");
         }
-        return send(res, 200, { ok: true, ...(await skillDetail(deps, name)) });
+        return send(res, 200, { ok: true, ...(await act(body)) });
       } catch (err) {
         if (err instanceof StrategyError) return send(res, err.status, { ok: false, error: err.message });
         return send(res, 500, { ok: false, error: "request failed" });
       }
+    };
+
+  /* Probes are answered from a per-bin one-minute cache: flipping panels is
+   * never a spawn storm, and a version bump shows on the next-but-soon open.
+   * The CONNECT handshake deliberately probes FRESH (a binary installed ten
+   * seconds ago must connect now, not after the cache turns) and then updates
+   * the cache with what it learned. */
+  const probeCache = new Map<string, { at: number; version: string | null }>();
+  const cachedDeps: PanelDeps = {
+    ...deps,
+    probeAgent: async (bin) => {
+      const hit = probeCache.get(bin);
+      if (hit !== undefined && Date.now() - hit.at < 60_000) return hit.version;
+      let version: string | null;
+      try {
+        version = await deps.probeAgent(bin);
+      } catch {
+        version = null;
+      }
+      probeCache.set(bin, { at: Date.now(), version });
+      return version;
     },
+  };
+
+  webServer.register({ kind: "exact", path: "/data/memory.json", handler: get(() => memoryListing(deps)) });
+  webServer.register({ kind: "exact", path: "/data/plugins.json", handler: get(() => pluginListing(deps)) });
+  webServer.register({ kind: "exact", path: "/data/agents.json", handler: get(() => agentsListing(cachedDeps)) });
+  webServer.register({
+    kind: "exact",
+    path: "/data/memory/skill",
+    handler: post(async (body) => await skillDetail(deps, body.name)),
+  });
+  webServer.register({
+    kind: "exact",
+    path: "/data/agents/connect",
+    handler: post(async (body) => {
+      const agent = await connectLocalAgent(deps, body.bin);
+      probeCache.set(agent.bin, { at: Date.now(), version: agent.version ?? null });
+      return { agent };
+    }),
+  });
+  webServer.register({
+    kind: "exact",
+    path: "/data/agents/disconnect",
+    handler: post(async (body) => await disconnectLocalAgent(deps, body.bin)),
   });
 }

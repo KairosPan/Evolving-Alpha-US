@@ -1428,7 +1428,7 @@ async function refreshAgentPanel() {
   kairos.title = dash(mainInfo?.runtime);
   panel.append(indexRow(kairos, () => void openAgentMain(mainInfo)));
 
-  /* -- local agents: what else is installed beside Kairos -- */
+  /* -- local agents: the operator's CONNECTED roster, not a fixed list -- */
   panel.append(spGroup("local agents"));
   if (rosterErr !== null) {
     panel.append(panelError(rosterErr, "agents"));
@@ -1438,13 +1438,24 @@ async function refreshAgentPanel() {
       const line = el("div", "sp-plug");
       const found = agent.found === true;
       const dot = phaseDot(found ? "active" : "disabled");
-      dot.title = found ? "installed" : "not installed";
+      dot.title = found ? "answering" : "connected, but not answering";
       line.append(dot, el("span", "sp-plug-name", String(agent.label)));
-      line.title = found ? `${agent.bin} · ${dash(agent.version)}` : `${agent.bin} · not installed`;
+      line.title = found ? `${agent.bin} · ${dash(agent.version)}` : `${agent.bin} · connected, but not answering`;
       if (!found) line.classList.add("off");
+      const x = el("button", "sp-x", "×");
+      /** @type {HTMLButtonElement} */ (x).type = "button";
+      x.title = "disconnect";
+      x.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void disconnectAgent(String(agent.bin), false);
+      });
+      line.append(x);
       panel.append(indexRow(line, () => openLocalAgent(agent)));
     }
-    if (local.length === 0) panel.append(el("div", "sp-note", "no local agents probed"));
+    if (local.length === 0) panel.append(el("div", "sp-note", "none connected yet"));
+    const add = el("div", "sp-plug sp-add");
+    add.append(el("span", "sp-plug-name", "+ connect an agent"));
+    panel.append(indexRow(add, () => void openConnectPage()));
   }
 
   /* -- a2a network: declared, not yet open -- */
@@ -1522,21 +1533,134 @@ async function openAgentMain(mainInfo) {
   renderAgentSession();
 }
 
-/** One local agent's page: a directory entry — presence, version, binary.
+/** One connected agent's page: its directory entry, plus the way out.
  * @param {Record<string, any>} agent - a roster `local` row. */
 function openLocalAgent(agent) {
   const found = agent.found === true;
   openDetail(`${String(agent.label)} · local agent`, (inner) => {
     inner.append(el("div", "detail-title", String(agent.label)));
-    inner.append(el("div", "detail-sub", found ? "local agent · installed on this machine" : "local agent · not installed"));
+    inner.append(el("div", "detail-sub", found ? "local agent · connected" : "local agent · connected, not answering"));
     const card = panelCard("probe");
-    kvRow(card, "status", found ? "installed" : "not installed");
+    kvRow(card, "status", found ? "answering" : "not answering");
     kvRow(card, "binary", String(agent.bin));
     if (found) kvRow(card, "version", dash(agent.version));
     inner.append(card);
     inner.append(el("div", "sp-note", found
       ? `Probed host-side as "${agent.bin} --version" on the face process's PATH; answers cache for a minute.`
-      : `No "${agent.bin}" binary answered on the face process's PATH.`));
+      : `No "${agent.bin}" binary answered on the face process's PATH — still on the roster until disconnected.`));
+    const actions = el("div", "detail-actions");
+    const gone = el("button", "picker-btn danger", "disconnect");
+    /** @type {HTMLButtonElement} */ (gone).type = "button";
+    const note = el("div", "sp-note err");
+    gone.addEventListener("click", async () => {
+      /** @type {HTMLButtonElement} */ (gone).disabled = true;
+      const ok = await disconnectAgent(String(agent.bin), true);
+      if (!ok) {
+        /** @type {HTMLButtonElement} */ (gone).disabled = false;
+        note.textContent = "disconnect failed — see the roster";
+        actions.append(note);
+      }
+    });
+    actions.append(gone);
+    inner.append(actions);
+  });
+}
+
+/** Drop one agent from the roster (the binary is untouched). Refreshes the
+ * index; `reopenConnect` also lands on the connect page — where an installed
+ * agent reappears as a candidate, ready to reconnect.
+ * @param {string} bin @param {boolean} reopenConnect @returns {Promise<boolean>} */
+async function disconnectAgent(bin, reopenConnect) {
+  try {
+    await panelData("/data/agents/disconnect", { bin });
+  } catch (err) {
+    failed(err, "disconnect");
+    return false;
+  }
+  if (activePanel === "agent") void refreshAgentPanel();
+  if (reopenConnect) void openConnectPage();
+  return true;
+}
+
+/** The connect page: the handshake that ADDS a local agent — detected
+ * candidates one click away, anything else by name. Only a binary that
+ * answers `--version` joins the roster. */
+async function openConnectPage() {
+  const title = "connect · local agents";
+  const token = openDetail(title, (inner) => {
+    inner.append(el("div", "detail-title", "connect a local agent"));
+    inner.append(el("div", "sp-note", "probing this machine…"));
+  });
+  /** @type {Record<string, any>} */
+  let body;
+  try {
+    body = await panelData("/data/agents.json");
+  } catch (err) {
+    if (token !== detailSeq) return;
+    openDetail(title, (inner) => {
+      inner.append(el("div", "detail-title", "connect a local agent"));
+      inner.append(panelError(err, "agents"));
+    });
+    return;
+  }
+  if (token !== detailSeq) return; // the operator moved on mid-probe
+  openDetail(title, (inner) => {
+    inner.append(el("div", "detail-title", "connect a local agent"));
+    inner.append(el("div", "detail-sub", "a connect is a handshake — the binary must answer --version to join the roster"));
+    const note = el("div", "sp-note err");
+
+    /** @param {string} bin @param {HTMLButtonElement} btn */
+    const connect = async (bin, btn) => {
+      btn.disabled = true;
+      note.textContent = "";
+      try {
+        const made = await panelData("/data/agents/connect", { bin });
+        if (activePanel === "agent") void refreshAgentPanel();
+        openLocalAgent(made.agent ?? { bin, label: bin, found: true });
+      } catch (err) {
+        btn.disabled = false;
+        note.textContent = `connect ${bin}: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    };
+
+    const card = panelCard("detected on this machine");
+    const candidates = Array.isArray(body.candidates) ? body.candidates : [];
+    if (candidates.length === 0) {
+      card.append(el("div", "sp-note", "nothing new detected — connect by name below"));
+    }
+    for (const cand of candidates) {
+      const row = el("div", "connect-row");
+      row.append(el("span", "connect-name", String(cand.label)));
+      const version = el("span", "connect-ver", dash(cand.version));
+      version.title = `${cand.bin} · ${dash(cand.version)}`;
+      row.append(version);
+      const btn = /** @type {HTMLButtonElement} */ (el("button", "picker-btn", "connect"));
+      btn.type = "button";
+      btn.addEventListener("click", () => void connect(String(cand.bin), btn));
+      row.append(btn);
+      card.append(row);
+    }
+    inner.append(card);
+
+    const form = el("div", "picker-new");
+    const input = /** @type {HTMLInputElement} */ (el("input", "picker-input"));
+    input.type = "text";
+    input.placeholder = "binary name, e.g. gemini";
+    const btn = /** @type {HTMLButtonElement} */ (el("button", "picker-btn", "connect"));
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      const bin = input.value.trim();
+      if (bin !== "") void connect(bin, btn);
+    });
+    input.addEventListener("keydown", (event) => {
+      if (/** @type {KeyboardEvent} */ (event).key !== "Enter") return;
+      event.preventDefault();
+      const bin = input.value.trim();
+      if (bin !== "") void connect(bin, btn);
+    });
+    form.append(input, btn);
+    inner.append(form);
+    inner.append(note);
   });
 }
 

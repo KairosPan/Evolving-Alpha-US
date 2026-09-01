@@ -1,10 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import {
-  agentsListing, memoryListing, pluginListing, registerPanelRoutes, skillDetail, skillGroup,
+  agentsListing, connectLocalAgent, disconnectLocalAgent, memoryListing, pluginListing,
+  readAgentsMeta, registerPanelRoutes, skillDetail, skillGroup,
   type PanelDeps, type SkillBody, type SkillRow,
 } from "../src/panels.ts";
 import { DSH_PIN } from "../src/version.ts";
@@ -23,8 +27,9 @@ function row(name: string, pack: string | null, extra: Partial<SkillRow> = {}): 
 }
 
 /** A deps fake over fixed data; the loader tree mirrors the real shapes —
- * a group row, the root include, a disabled row, a failed row, the MCP row. */
-function fakeDeps(): PanelDeps {
+ * a group row, the root include, a disabled row, a failed row, the MCP row.
+ * @param home - a real directory only for tests that touch the roster file. */
+function fakeDeps(home = "/face-panels-nowhere"): PanelDeps {
   const skills: SkillBody[] = [
     row("doctrine", "style-kairos"),
     row("backtest-rules", "mechanics"),
@@ -61,6 +66,7 @@ function fakeDeps(): PanelDeps {
       },
     ],
     cwd: CWD,
+    home,
     /* claude answers, hermes throws (a prober crash reads as absent), the rest
      * are not installed. */
     probeAgent: async (bin) => {
@@ -122,16 +128,41 @@ test("pluginListing: rows projected, groups and root dropped, MCP paired with it
   assert.doesNotMatch(JSON.stringify(listing), /SECRET-KEY-VALUE|APCA_API_KEY_ID/);
 });
 
-test("agentsListing: main names the runtime, probes fold to found/absent", async () => {
-  const listing = await agentsListing(fakeDeps());
-  assert.deepEqual(listing.main, { name: "Kairos", runtime: `dsh ${DSH_PIN}` });
-  assert.deepEqual(listing.local.map((agent) => agent.bin), ["claude", "codex", "hermes", "openclaw"]);
-  const byBin = new Map(listing.local.map((agent) => [agent.bin, agent]));
-  assert.deepEqual(byBin.get("claude"),
-    { bin: "claude", label: "Claude Code", found: true, version: "2.1.251 (Claude Code)" });
-  assert.deepEqual(byBin.get("codex"), { bin: "codex", label: "Codex", found: false });
-  // A prober that THROWS is an absent agent, never a failed listing.
-  assert.deepEqual(byBin.get("hermes"), { bin: "hermes", label: "Hermes", found: false });
+test("agents roster: starts empty, connect is a verifying handshake, disconnect removes", async () => {
+  const home = await mkdtemp(join(tmpdir(), "face-agents-"));
+  const deps = fakeDeps(home);
+
+  const empty = await agentsListing(deps);
+  assert.deepEqual(empty.main, { name: "Kairos", runtime: `dsh ${DSH_PIN}` });
+  assert.deepEqual(empty.local, [], "nothing is fixed in place — the roster starts empty");
+  // Candidates = known suggestions that ANSWER and are not yet connected; a
+  // prober that throws (hermes) reads as no answer, never a failed listing.
+  assert.deepEqual(empty.candidates, [{ bin: "claude", label: "Claude Code", version: "2.1.251 (Claude Code)" }]);
+
+  const row = await connectLocalAgent(deps, "claude");
+  assert.deepEqual(row, { bin: "claude", label: "Claude Code", found: true, version: "2.1.251 (Claude Code)" });
+  await connectLocalAgent(deps, "claude"); // idempotent, not a duplicate
+  const listing = await agentsListing(deps);
+  assert.deepEqual(listing.local, [row]);
+  assert.deepEqual(listing.candidates, [], "a connected agent leaves the candidate pool");
+
+  // Refusals: a malformed name never reaches the prober; silence is a 404.
+  await assert.rejects(connectLocalAgent(deps, "../evil"), (err: { status?: number }) => err.status === 400);
+  await assert.rejects(connectLocalAgent(deps, "a/b"), (err: { status?: number }) => err.status === 400);
+  await assert.rejects(connectLocalAgent(deps, "openclaw"), (err: { status?: number }) => err.status === 404);
+  await assert.rejects(connectLocalAgent(deps, "hermes"), (err: { status?: number }) => err.status === 404);
+
+  assert.deepEqual(await disconnectLocalAgent(deps, "claude"), { connected: [] });
+  await assert.rejects(disconnectLocalAgent(deps, "claude"), (err: { status?: number }) => err.status === 404);
+  await assert.rejects(disconnectLocalAgent(deps, "bad/name"), (err: { status?: number }) => err.status === 400);
+});
+
+test("agents meta: a hand-mangled roster file reads as best it can", async () => {
+  const home = await mkdtemp(join(tmpdir(), "face-agents-"));
+  await mkdir(join(home, "face"), { recursive: true });
+  await writeFile(join(home, "face", "agents.json"),
+    JSON.stringify({ connected: [{ bin: "claude" }, { bin: "../evil", label: "x" }, "junk", { label: "nobin" }] }));
+  assert.deepEqual(await readAgentsMeta(home), { connected: [{ bin: "claude", label: "claude" }] });
 });
 
 /* ---------- the routes ---------- */
@@ -158,10 +189,23 @@ function postReq(body: string, host = "127.0.0.1:3090"): IncomingMessage {
 
 test("routes: register, fence, and answer", async () => {
   const routes: WebRoute[] = [];
-  registerPanelRoutes({ register: (route) => routes.push(route) }, fakeDeps());
+  registerPanelRoutes({ register: (route) => routes.push(route) },
+    fakeDeps(await mkdtemp(join(tmpdir(), "face-agents-"))));
   const byPath = new Map(routes.map((r) => [r.path, r]));
-  assert.deepEqual([...byPath.keys()].sort(),
-    ["/data/agents.json", "/data/memory.json", "/data/memory/skill", "/data/plugins.json"]);
+  assert.deepEqual([...byPath.keys()].sort(), [
+    "/data/agents.json", "/data/agents/connect", "/data/agents/disconnect",
+    "/data/memory.json", "/data/memory/skill", "/data/plugins.json",
+  ]);
+
+  /* the roster round-trips through the routes: connect → listed → disconnect */
+  const connect = byPath.get("/data/agents/connect")!;
+  const made = fakeRes();
+  await connect.handler(postReq(JSON.stringify({ bin: "claude" })), made.res);
+  assert.equal(made.out.status, 200);
+  assert.equal((JSON.parse(made.out.body) as { agent: { version: string } }).agent.version, "2.1.251 (Claude Code)");
+  const refused = fakeRes();
+  await connect.handler(postReq(JSON.stringify({ bin: "openclaw" })), refused.res);
+  assert.equal(refused.out.status, 404);
 
   const agents = byPath.get("/data/agents.json")!;
   const roster = fakeRes();
@@ -170,6 +214,12 @@ test("routes: register, fence, and answer", async () => {
   const rosterBody = JSON.parse(roster.out.body) as { ok: boolean; local: { bin: string; found: boolean }[] };
   assert.equal(rosterBody.ok, true);
   assert.equal(rosterBody.local.find((agent) => agent.bin === "claude")?.found, true);
+
+  const disconnect = byPath.get("/data/agents/disconnect")!;
+  const dropped = fakeRes();
+  await disconnect.handler(postReq(JSON.stringify({ bin: "claude" })), dropped.res);
+  assert.equal(dropped.out.status, 200);
+  assert.deepEqual((JSON.parse(dropped.out.body) as { connected: unknown[] }).connected, []);
 
   const memory = byPath.get("/data/memory.json")!;
   const forged = fakeRes();
