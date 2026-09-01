@@ -51,7 +51,7 @@
  * One frame's whole meaning to the UI. A closed `kind` vocabulary with optional
  * payload fields: a renderer switches on `kind` and reads only its own fields.
  * @typedef {object} FrameView
- * @property {"bubble"|"card"|"approval"|"question"|"ignore"} kind
+ * @property {"bubble"|"card"|"approval"|"question"|"pulse"|"ignore"} kind
  * @property {number} [seq] - the session event's seq; the renderer's dedupe key across backfill and stream.
  * @property {string} [sessionId] - which session this belongs to (absent on a history entry that carries none).
  * @property {SurfaceOpView} [surfaceOp] - on every rendered session event: `append`, or a
@@ -61,6 +61,9 @@
  * @property {boolean} [interrupted] - bubbles: the turn was cancelled mid-stream and this is
  *   only the prefix that had arrived. Never render a partial answer as a complete one.
  * @property {string} [source] - who produced a bubble's message: `user`, `plugin`, `model`, `tool`.
+ * @property {string} [thinking] - kairos bubbles: the message's reasoning blocks, joined.
+ *   Thinking is never chat text; a renderer shows it apart from the bubble or not at all.
+ * @property {string} [mode] - pulses: which block kind just opened live — `reasoning`, `text`, `tool-call`.
  * @property {ToolCardView} [card] - the card body.
  * @property {string} [id] - answerable frames: the rpcId `/api/respond` echoes.
  * @property {string} [approvalId] - approvals: the host's audit id (NOT the wire id).
@@ -91,6 +94,18 @@ function blocksText(blocks) {
   if (!Array.isArray(blocks)) return "";
   return blocks
     .filter((block) => isObject(block) && block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join("\n")
+    .trim();
+}
+
+/** The message's reasoning blocks, joined — the model's thinking, never chat
+ * text (message.d.ts reasoning block: same `text` field, its own type).
+ * @param {unknown} blocks @returns {string} */
+function blocksReasoning(blocks) {
+  if (!Array.isArray(blocks)) return "";
+  return blocks
+    .filter((block) => isObject(block) && block.type === "reasoning" && typeof block.text === "string")
     .map((block) => block.text)
     .join("\n")
     .trim();
@@ -136,7 +151,8 @@ function surfaceOpOf(event) {
  */
 function bubble(role, message, base, interrupted) {
   const text = isObject(message) ? blocksText(message.content) : "";
-  if (text === "") return ignore();
+  const thinking = role === "kairos" && isObject(message) ? blocksReasoning(message.content) : "";
+  if (text === "" && thinking === "") return ignore();
   const source = isObject(message) && isObject(message.source) ? message.source.kind : undefined;
   return {
     ...base,
@@ -145,6 +161,7 @@ function bubble(role, message, base, interrupted) {
     text,
     interrupted,
     source: typeof source === "string" ? source : undefined,
+    thinking: thinking === "" ? undefined : thinking,
   };
 }
 
@@ -215,6 +232,14 @@ function mapSessionEvent(frame) {
         isError: block.isError === true || isObject(data.error),
         view,
       } };
+    }
+    case "assistant/chunk": {
+      // The stream itself stays log-only, but a block OPENING is the one live
+      // signal worth surfacing: it says what Kairos is doing right now
+      // (reasoning / text / tool-call) while nothing settled has landed yet.
+      const chunk = isObject(data.chunk) ? data.chunk : {};
+      if (chunk.type !== "block-start" || typeof chunk.blockType !== "string") return ignore();
+      return { ...base, kind: "pulse", mode: chunk.blockType };
     }
     default:
       // Every other session event type is log-only for v1: boundaries

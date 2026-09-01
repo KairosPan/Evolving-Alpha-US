@@ -868,3 +868,8 @@ body {
    this hide wins while collapsed, and they take over again when expanded. */
 .card.collapsible.collapsed > :not(.card-head) { display: none; }
 .card.collapsible.collapsed .card-head .raw { display: none; }
+
+/* think rows: the model's reasoning as one quiet line; the body is an aside,
+   not chat text, and never dresses as one. */
+.card.think .kind { color: var(--accent); }
+.think-out { color: var(--dim); }

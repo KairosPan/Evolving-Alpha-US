@@ -154,6 +154,12 @@ expanding on click. A failed call's error is in the line itself, no click
 needed. Prose bubbles and the answerable gates (approval / question) keep
 their full shape: only what the operator must read or act on is loud.
 
+Thinking is surfaced twice, both quiet: a settled assistant message's
+reasoning blocks render as a collapsed `think` row above its bubble (a
+reasoning-only step is a think row with no bubble), and a live `block-start`
+chunk pulses the status line ("Kairos is thinking…/writing…") until the next
+settled frame clears it. The stream's deltas themselves stay log-only.
+
 ### Market-data renderers
 
 Recognized alpaca-kit tool results render as instruments instead of raw JSON:

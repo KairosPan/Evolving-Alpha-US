@@ -24,8 +24,8 @@ const frames: unknown[] = readFileSync(
 const views = frames.map((frame) => mapFrame(frame));
 
 test("fixture file and view list stay aligned", () => {
-  assert.equal(frames.length, 17);
-  assert.equal(views.length, 17);
+  assert.equal(frames.length, 18);
+  assert.equal(views.length, 18);
 });
 
 test("message events become bubbles, attributed by role", () => {
@@ -38,8 +38,17 @@ test("message events become bubbles, attributed by role", () => {
   assert.equal(views[1].kind, "bubble");
   assert.equal(views[1].role, "kairos");
   assert.equal(views[1].text, "Both pivots are technically valid.");
-  // Reasoning is not chat text: the thinking block must not reach the bubble.
+  // Reasoning is not chat text: it rides the view on its own field, never the bubble.
   assert.doesNotMatch(views[1].text ?? "", /200DMA/);
+  assert.equal(views[1].thinking, "weigh both against the 200DMA");
+  assert.equal(views[0].thinking, undefined, "operator prompts carry no thinking");
+});
+
+test("a block-start chunk pulses; the stream itself stays log-only", () => {
+  assert.equal(views[17].kind, "pulse");
+  assert.equal(views[17].mode, "reasoning");
+  assert.equal(views[17].sessionId, "s1");
+  assert.equal(views[4].kind, "ignore", "a text-delta chunk renders nothing");
 });
 
 test("tool call and tool result become cards keyed by callId", () => {

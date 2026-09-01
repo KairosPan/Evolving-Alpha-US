@@ -192,16 +192,24 @@ function bubbleNode(view) {
   const lane = operator ? "op" : "k";
 
   const wrap = el("div", `msg ${lane}`);
-  if (lane === "k") wrap.append(el("div", "who", "Kairos"));
-
-  const bubble = el("div", "bubble pre", dash(view.text));
-  if (view.interrupted === true) {
-    // A cancelled turn logged only the prefix that had arrived. Mark the cut
-    // INSIDE the bubble, so the truncation travels with the text itself.
-    bubble.classList.add("cut");
-    bubble.append(el("span", "cut-mark", ` ${EM}`));
+  /* Thinking rides the same message but is never chat text: a collapsed row
+   * above the bubble, the bubble itself untouched. A reasoning-only step (the
+   * model thought, then went straight to tools) is a think row with no bubble. */
+  if (lane === "k" && typeof view.thinking === "string" && view.thinking !== "") {
+    wrap.append(thinkRow(view.thinking));
   }
-  wrap.append(bubble);
+  const hasText = typeof view.text === "string" && view.text !== "";
+  if (hasText) {
+    if (lane === "k") wrap.append(el("div", "who", "Kairos"));
+    const bubble = el("div", "bubble pre", dash(view.text));
+    if (view.interrupted === true) {
+      // A cancelled turn logged only the prefix that had arrived. Mark the cut
+      // INSIDE the bubble, so the truncation travels with the text itself.
+      bubble.classList.add("cut");
+      bubble.append(el("span", "cut-mark", ` ${EM}`));
+    }
+    wrap.append(bubble);
+  }
   if (view.interrupted === true) wrap.append(el("span", "tag tag-cut", "interrupted"));
   return wrap;
 }
@@ -244,6 +252,21 @@ function contextRow(view) {
   const sum = head.querySelector(".sum");
   if (sum) sum.textContent = named.length ? named.join(", ") : firstLine.slice(0, 160);
   node.append(el("pre", "tool-out", text));
+  return node;
+}
+
+/**
+ * A message's reasoning as one collapsed line — the operator sees THAT Kairos
+ * thought and the first line of what about; the full text is one click away.
+ * @param {string} text @returns {HTMLElement}
+ */
+function thinkRow(text) {
+  const node = el("article", "card think");
+  const head = collapsibleHead(node, "think");
+  const firstLine = text.split("\n").find((l) => l.trim() !== "") ?? "";
+  const sum = head.querySelector(".sum");
+  if (sum) sum.textContent = firstLine.slice(0, 160);
+  node.append(el("pre", "tool-out think-out", text));
   return node;
 }
 
@@ -534,11 +557,37 @@ function renderGate(view) {
 
 /* ---------- frame intake ---------- */
 
+/** What each live block opening reads as on the status line. */
+const PULSE_TEXT = {
+  reasoning: "Kairos is thinking…",
+  text: "Kairos is writing…",
+  "tool-call": "Kairos is preparing a tool call…",
+};
+
+/** Whether the status line currently shows a pulse — so the reset on the next
+ * settled frame only ever overwrites a pulse's own text, never "sent" or an
+ * error the operator should still be reading. */
+let pulsing = false;
+
+/** @param {string|undefined} mode - the block kind that just opened. */
+function pulse(mode) {
+  status(PULSE_TEXT[mode ?? ""] ?? "Kairos is working…");
+  pulsing = true;
+}
+
+/** Settle the status line back once something real lands. */
+function clearPulse() {
+  if (!pulsing) return;
+  pulsing = false;
+  status(activeSession === null ? "connected" : `session ${activeSession}`);
+}
+
 /**
  * Render one already-decoded view of the active session.
  * @param {Record<string, any>} view
  */
 function accept(view) {
+  clearPulse();
   honourSurfaceOp(view);
   if (view.kind === "bubble") place(view, bubbleNode(view));
   else if (view.kind === "card") acceptCard(view);
@@ -557,6 +606,12 @@ function acceptFrame(frame) {
   }
   const view = mapFrame(frame);
   if (view.kind === "ignore") return;
+  if (view.kind === "pulse") {
+    // Live liveness only — no node, no seq, no dedupe. Replayed through a
+    // backfill it still lands in order, so the final status is the true one.
+    if (view.sessionId === undefined || view.sessionId === activeSession) pulse(view.mode);
+    return;
+  }
   if (view.kind === "approval" || view.kind === "question") {
     acceptGate(view);
     return;
