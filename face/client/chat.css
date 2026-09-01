@@ -823,3 +823,48 @@ body {
   pointer-events: none;
   white-space: nowrap;
 }
+
+/* ---------- 2026-09-01: collapsed process rows (the dsh-style calm line) ----
+   Tool calls and injected-context messages render as one quiet line each —
+   chevron · kind · one-line summary · status — and expand on click. Prose
+   bubbles and the answerable gates (approval/question) keep their full shape:
+   only what the operator must read or act on is loud by default. */
+
+.card.collapsible {
+  background: transparent;
+  border: none;
+  padding: 3px 14px;
+  margin: 0;
+}
+.card.collapsible .card-head { cursor: pointer; user-select: none; }
+.card.collapsible .chev {
+  flex: none;
+  font: 10px/1 var(--mono);
+  color: var(--dim);
+  transition: transform 0.12s ease;
+}
+.card.collapsible:not(.collapsed) .chev { transform: rotate(90deg); }
+.card.collapsible .sum {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 11px var(--mono);
+  color: var(--dim);
+}
+.card.collapsible .producer { flex: none; }
+.card.collapsible.danger .sum { color: var(--danger); }
+
+/* expanded: the body panel returns */
+.card.collapsible:not(.collapsed) {
+  background: var(--card-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  padding: 8px 14px 10px;
+  margin: 2px 0;
+}
+/* collapsed: nothing but the head — placed after the has-pretty rules above so
+   this hide wins while collapsed, and they take over again when expanded. */
+.card.collapsible.collapsed > :not(.card-head) { display: none; }
+.card.collapsible.collapsed .card-head .raw { display: none; }

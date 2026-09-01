@@ -145,7 +145,16 @@ any other bed and the rail is replaced by "warmup boundaries unknown for this
 bed": those dates describe THAT capture, and drawing them over a different one
 would be a lie.
 
-## Chat rendering of market data (client/render.js)
+## Chat rendering (client/render.js + the collapsed process rows)
+
+The transcript renders dsh-style calm: every tool call and every injected
+user-role message (AGENTS.md context, skill catalog, file notices, cron
+wake-ups) is ONE collapsed line — chevron · kind · one-line summary · status —
+expanding on click. A failed call's error is in the line itself, no click
+needed. Prose bubbles and the answerable gates (approval / question) keep
+their full shape: only what the operator must read or act on is loud.
+
+### Market-data renderers
 
 Recognized alpaca-kit tool results render as instruments instead of raw JSON:
 market_snapshot as a Δ%-sorted table (sign always printed — the red/green pair

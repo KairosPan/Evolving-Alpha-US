@@ -188,11 +188,11 @@ function index(view, node) {
 function bubbleNode(view) {
   const operator = view.role === "operator";
   const injected = operator && typeof view.source === "string" && view.source !== "user";
-  const lane = injected ? "note" : operator ? "op" : "k";
+  if (injected) return contextRow(view);
+  const lane = operator ? "op" : "k";
 
   const wrap = el("div", `msg ${lane}`);
   if (lane === "k") wrap.append(el("div", "who", "Kairos"));
-  if (lane === "note") wrap.append(el("div", "who", `${view.source} message`));
 
   const bubble = el("div", "bubble pre", dash(view.text));
   if (view.interrupted === true) {
@@ -206,6 +206,47 @@ function bubbleNode(view) {
   return wrap;
 }
 
+/* ---------- transcript: collapsed process rows ---------- */
+
+/**
+ * Head of a collapsible row: chevron · kind · one-line summary (+ trailing
+ * spans the caller adds). Clicking the head toggles the node's `collapsed`
+ * class; clicks on `.raw` are the raw toggle's own and do not bubble here.
+ * @param {HTMLElement} node @param {string} kind @returns {HTMLElement} the head
+ */
+function collapsibleHead(node, kind) {
+  node.classList.add("collapsible", "collapsed");
+  const head = el("div", "card-head");
+  head.append(el("span", "chev", "▸"));
+  head.append(el("span", "kind", kind));
+  head.append(el("span", "sum", ""));
+  head.addEventListener("click", (ev) => {
+    if (ev.target instanceof HTMLElement && ev.target.classList.contains("raw")) return;
+    node.classList.toggle("collapsed");
+  });
+  node.append(head);
+  return head;
+}
+
+/**
+ * An injected user-role message (source plugin/tool/model — AGENTS.md and
+ * skill-catalog context, file-change notices, cron wake-ups) as one collapsed
+ * line, dsh-style: the injection is a fact worth a row, not a wall of text.
+ * @param {Record<string, any>} view @returns {HTMLElement}
+ */
+function contextRow(view) {
+  const text = dash(view.text);
+  const node = el("article", "card ctx");
+  const head = collapsibleHead(node, `context · ${view.source}`);
+  // Prefer the sources the injection itself names; else its first content line.
+  const named = [...text.matchAll(/Instructions from: (\S+)/g)].map((m) => m[1]);
+  const firstLine = text.split("\n").find((l) => l.trim() !== "" && !l.startsWith("<system-reminder>")) ?? "";
+  const sum = head.querySelector(".sum");
+  if (sum) sum.textContent = named.length ? named.join(", ") : firstLine.slice(0, 160);
+  node.append(el("pre", "tool-out", text));
+  return node;
+}
+
 /* ---------- transcript: tool cards ---------- */
 
 /**
@@ -214,17 +255,15 @@ function bubbleNode(view) {
  * @returns {HTMLElement}
  */
 function toolCardNode(card) {
-  const node = el("article", "card");
+  const node = el("article", "card tool");
   if (typeof card.name === "string") node.dataset.tool = card.name;
-  const head = el("div", "card-head");
-  head.append(el("span", "kind", dash(card.name ?? card.title ?? "tool")));
+  const head = collapsibleHead(node, dash(card.name ?? card.title ?? "tool"));
   head.append(el("span", "producer", "running…"));
   const raw = el("span", "raw", "raw");
   raw.title = dash(card.callId);
   /* pretty ⇄ raw: inert unless a pretty view exists (.has-pretty gates the css). */
   raw.addEventListener("click", () => node.classList.toggle("show-raw"));
   head.append(raw);
-  node.append(head);
   return node;
 }
 
@@ -248,6 +287,15 @@ function fillResult(node, card) {
   const out = el("pre", "tool-out", dash(card.text));
   if (card.isError === true) out.classList.add("err");
   node.append(out);
+  /* the collapsed row's one-line summary: the pretty view's own meta line when
+   * there is one, else the result's first content line (errors included — the
+   * row should say what went wrong without a click). */
+  const sum = node.querySelector(".card-head .sum");
+  if (sum) {
+    const meta = pretty?.querySelector(".viz-meta")?.textContent;
+    const firstLine = dash(card.text).split("\n").find((l) => l.trim() !== "") ?? "";
+    sum.textContent = (meta ?? firstLine).slice(0, 160);
+  }
 }
 
 /**
