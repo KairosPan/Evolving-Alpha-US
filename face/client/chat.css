@@ -873,3 +873,17 @@ body {
    not chat text, and never dresses as one. */
 .card.think .kind { color: var(--accent); }
 .think-out { color: var(--dim); }
+
+/* the live thinking indicator: mark + elapsed time, never content */
+.think-live {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 3px 14px;
+  font: 11px var(--mono);
+  color: var(--accent);
+}
+.think-live-dot { animation: think-spin 1.1s linear infinite; display: inline-block; }
+.think-live-secs { color: var(--dim); }
+@keyframes think-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .think-live-dot { animation: none; } }

@@ -582,12 +582,47 @@ function clearPulse() {
   status(activeSession === null ? "connected" : `session ${activeSession}`);
 }
 
+/** The live thinking indicator, dsh-style: while a reasoning block is OPEN, one
+ * ephemeral line at the tail — a pulsing mark and elapsed time, never content.
+ * The thinking itself appears only once settled, as the think row. One at a
+ * time; not seq-indexed; removed by the next settled frame or non-reasoning
+ * block. @type {{node: HTMLElement, timer: ReturnType<typeof setInterval>}|null} */
+let thinkLive = null;
+
+/** @param {number} ms @returns {string} elapsed as 47s / 2m45s. */
+function elapsed(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${s % 60}s`;
+}
+
+function showThinkLive() {
+  if (thinkLive !== null && thinkLive.node.isConnected) return;
+  hideThinkLive();
+  const node = el("div", "think-live");
+  const secs = el("span", "think-live-secs", "0s");
+  node.append(el("span", "think-live-dot", "◐"), el("span", null, "thinking…"), secs);
+  const t0 = Date.now();
+  const timer = setInterval(() => { secs.textContent = elapsed(Date.now() - t0); }, 1000);
+  const stick = atTail();
+  flow().append(node);
+  if (stick) toTail();
+  thinkLive = { node, timer };
+}
+
+function hideThinkLive() {
+  if (thinkLive === null) return;
+  clearInterval(thinkLive.timer);
+  thinkLive.node.remove();
+  thinkLive = null;
+}
+
 /**
  * Render one already-decoded view of the active session.
  * @param {Record<string, any>} view
  */
 function accept(view) {
   clearPulse();
+  hideThinkLive();
   honourSurfaceOp(view);
   if (view.kind === "bubble") place(view, bubbleNode(view));
   else if (view.kind === "card") acceptCard(view);
@@ -609,7 +644,11 @@ function acceptFrame(frame) {
   if (view.kind === "pulse") {
     // Live liveness only — no node, no seq, no dedupe. Replayed through a
     // backfill it still lands in order, so the final status is the true one.
-    if (view.sessionId === undefined || view.sessionId === activeSession) pulse(view.mode);
+    if (view.sessionId === undefined || view.sessionId === activeSession) {
+      pulse(view.mode);
+      if (view.mode === "reasoning") showThinkLive();
+      else hideThinkLive();
+    }
     return;
   }
   if (view.kind === "approval" || view.kind === "question") {
@@ -636,6 +675,7 @@ function flushQueued() {
 
 /** Wipe everything that belongs to the session leaving the screen. */
 function resetFlow() {
+  hideThinkLive();
   flow().replaceChildren();
   seen.clear();
   bySeq.clear();
