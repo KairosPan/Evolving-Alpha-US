@@ -5,6 +5,17 @@ import pytest
 from alpaca_kit.source import FakeSource
 
 
+@pytest.fixture(autouse=True)
+def screen_cache_isolation(tmp_path, monkeypatch):
+    """No test may write into the repo's real data/.screen_cache — suite-wide, because ANY
+    test that reads a real bed through the screen/breadth MCP tools goes through the cache
+    (the face_data tests carry the same fixture for their own CACHE_DIR)."""
+    from alpaca_kit.mcp import cache as screen_cache
+    d = tmp_path / "screen_cache"
+    monkeypatch.setattr(screen_cache, "CACHE_DIR", d)
+    return d
+
+
 @pytest.fixture
 def fake_source():
     """Two symbols over 3 days. RUN gaps up and runs; FLOP fades."""
