@@ -145,6 +145,24 @@ any other bed and the rail is replaced by "warmup boundaries unknown for this
 bed": those dates describe THAT capture, and drawing them over a different one
 would be a lie.
 
+## Strategy workspaces (src/strategies.ts + the session picker)
+
+A session's dsh workspace IS a strategy: a new session starts with a picker —
+the `strategies/*` directories (each with its status.yaml badge), `workbench`
+(the repo root, for non-strategy chores), and a create field that births a new
+strategy from `strategies/_template` on the spot. The first prompt creates the
+session with the picked directory as `cwd`, and the sidebar groups sessions by
+strategy (derived from each session's `cwd`; foreign directories group by
+basename). Two loopback-fenced routes feed it: `GET /data/strategies.json` and
+`POST /data/strategies` (validated name, template copy, never overwrites).
+
+The sandbox boundary follows the workspace — deliberately: a strategy session
+writes its own `strategies/<name>/` freely, and anything outside (the repo's
+`.git` included) only through a Gate-2 escalation card. The write map's
+"Kairos works strategies/ freely" becomes code, and a `git commit` from a
+strategy session is an approval the operator answers — accepted trade,
+2026-09-01.
+
 ## Chat rendering (client/render.js + the collapsed process rows)
 
 The transcript renders dsh-style calm: every tool call and every injected

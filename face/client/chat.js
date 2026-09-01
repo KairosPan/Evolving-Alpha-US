@@ -731,8 +731,9 @@ function convRow(summary) {
   const sub = el("div", "conv-sub");
   if ([...gates.values()].some((gate) => gate.sessionId === id)) sub.append(waitingChip());
   if (summary.running === true) sub.append(el("span", "chip", "running"));
-  sub.append(el("span", "conv-tail", dash(summary.cwd ?? id)));
   row.append(sub);
+  /* The full path lives on hover; the group header carries the identity. */
+  row.title = dash(summary.cwd ?? id);
 
   row.addEventListener("click", () => void openSession(id));
   row.addEventListener("keydown", (event) => {
@@ -769,11 +770,24 @@ async function refreshSessions() {
   const list = $("#conv-list");
   convRows.clear();
   list.replaceChildren();
+  /* Group by strategy (derived from each session's cwd). Items arrive
+   * updatedAt-desc, so group order is the recency of each group's freshest
+   * session, and rows inside a group keep that order too.
+   * @type {Map<string, HTMLElement>} */
+  const groups = new Map();
   for (const summary of value?.items ?? []) {
+    const label = strategyLabel(summary.cwd);
+    let box = groups.get(label);
+    if (box === undefined) {
+      list.append(el("div", "conv-group", label));
+      box = el("div");
+      list.append(box);
+      groups.set(label, box);
+    }
     const row = convRow(summary);
     row.dataset.title = titleOf(summary);
     convRows.set(String(summary.sessionId), row);
-    list.append(row);
+    box.append(row);
   }
   markActive();
 }
@@ -833,9 +847,116 @@ function newSession() {
   openSeq += 1; // orphan any in-flight history load
   loadingSession = null;
   activeSession = null;
+  pendingCwd = undefined;
   resetFlow();
   markActive();
-  status("new session · type below");
+  status("new session · pick a strategy, then type below");
+  void showStrategyPicker();
+}
+
+/* ---------- the strategy picker: a session's workspace IS a strategy ---------- */
+
+/** `/data/strategies.json`'s last good answer — `{root, strategies}` — used by
+ * the picker and by sidebar grouping. @type {Record<string, any>|null} */
+let strategyIndex = null;
+
+/** The `cwd` the NEXT `session.create` carries; `undefined` is the host
+ * default — the workbench repo root. @type {string|undefined} */
+let pendingCwd;
+
+async function loadStrategyIndex() {
+  try {
+    const res = await fetch("/data/strategies.json");
+    const body = await res.json();
+    if (body?.ok === true) strategyIndex = body;
+  } catch { /* grouping degrades to path basenames; the picker says so */ }
+  return strategyIndex;
+}
+
+/** Which sidebar group a session's cwd belongs to. */
+function strategyLabel(cwd) {
+  if (typeof cwd !== "string" || cwd === "") return "elsewhere";
+  const root = strategyIndex?.root;
+  if (typeof root === "string") {
+    if (cwd === root) return "workbench";
+    const prefix = `${root}/strategies/`;
+    if (cwd.startsWith(prefix)) {
+      const name = cwd.slice(prefix.length).split("/")[0];
+      if (name !== "") return name;
+    }
+  }
+  return cwd.split("/").filter((part) => part !== "").pop() ?? "elsewhere";
+}
+
+/** One selectable row of the picker. @param {string|undefined} cwd - the
+ * workspace it stands for; undefined = the workbench default. */
+function pickerRow(label, cwd, badge, picker) {
+  const row = el("div", "pick-row");
+  row.setAttribute("role", "button");
+  row.tabIndex = 0;
+  row.append(el("span", "pick-name", label));
+  if (badge) row.append(el("span", "chip", badge));
+  const choose = () => {
+    pendingCwd = cwd;
+    for (const other of picker.querySelectorAll(".pick-row")) other.classList.toggle("sel", other === row);
+    status(`new session · ${label} · type below`);
+  };
+  row.addEventListener("click", choose);
+  row.addEventListener("keydown", (event) => {
+    const key = /** @type {KeyboardEvent} */ (event).key;
+    if (key !== "Enter" && key !== " ") return;
+    event.preventDefault();
+    choose();
+  });
+  return row;
+}
+
+/** Offer the strategies as workspaces for the next session. The first prompt
+ * creates the session with the picked cwd; until then nothing exists. */
+async function showStrategyPicker() {
+  const index = await loadStrategyIndex();
+  if (activeSession !== null || flow().querySelector(".picker") !== null) return;
+  const picker = el("div", "picker");
+  picker.append(el("div", "picker-title", "workspace — the strategy this session works"));
+  const rows = el("div", "picker-rows");
+  for (const s of index?.strategies ?? []) rows.append(pickerRow(s.name, s.cwd, s.status, picker));
+  rows.append(pickerRow("workbench", undefined, "repo root", picker));
+  picker.append(rows);
+  if (index === null) {
+    picker.append(el("div", "picker-note", "strategy list unavailable — sessions fall back to the workbench"));
+  } else {
+    const form = el("div", "picker-new");
+    const input = /** @type {HTMLInputElement} */ (el("input", "picker-input"));
+    input.type = "text";
+    input.placeholder = "new strategy (a-z 0-9 - _) — copies strategies/_template";
+    const create = /** @type {HTMLButtonElement} */ (el("button", "picker-btn", "create"));
+    create.type = "button";
+    create.addEventListener("click", async () => {
+      const name = input.value.trim();
+      if (name === "") return;
+      create.disabled = true;
+      try {
+        const res = await fetch("/data/strategies", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        const body = await res.json();
+        if (body?.ok !== true) throw new Error(String(body?.error ?? `HTTP ${res.status}`));
+        const row = pickerRow(body.name, body.cwd, body.status, picker);
+        rows.insertBefore(row, rows.lastElementChild); // above the workbench row
+        row.click();
+        input.value = "";
+      } catch (err) {
+        failed(err, "create strategy");
+      } finally {
+        create.disabled = false;
+      }
+    });
+    form.append(input, create);
+    picker.append(form);
+  }
+  flow().append(picker);
 }
 
 /** @returns {string|undefined} the browser's IANA zone, which the host records
@@ -856,10 +977,12 @@ async function send() {
   input.value = "";
   try {
     if (activeSession === null) {
-      const created = await rpc("session.create", {});
+      const created = await rpc("session.create", pendingCwd === undefined ? {} : { cwd: pendingCwd });
       const id = created?.sessionId;
       if (typeof id !== "string") throw new Error("session.create returned no sessionId");
       activeSession = id;
+      pendingCwd = undefined;
+      flow().querySelector(".picker")?.remove();
       await refreshSessions();
       markActive();
     }
@@ -913,3 +1036,6 @@ openMux(acceptFrame, {
 markActive();
 status("connecting…");
 void refreshSessions();
+/* The blank page is an unsaved new session, so it gets the picker too; the
+ * index it loads also feeds the sidebar's strategy grouping. */
+void showStrategyPicker();
