@@ -1,3 +1,8 @@
+---
+name: alpaca-kit-guide
+description: How the alpaca-kit MCP tools and the offline PIT beds actually behave — tool registration, RAW prices, bed windows and warmup, fail-soft errors.
+---
+
 # alpaca-kit guide (neutral mechanics)
 
 - Interactive queries: use the MCP tools (daily_bars, market_snapshot, screen, breadth,

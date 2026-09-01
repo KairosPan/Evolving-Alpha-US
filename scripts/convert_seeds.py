@@ -38,10 +38,13 @@ SEEDS = _REPO / "seeds_v2"
 ROOT = _REPO / "dsh" / "skills" / "style-kairos"
 
 
-def _write(name: str, lines: list[str]) -> Path:
+def _write(name: str, description: str, lines: list[str]) -> Path:
+    # dsh's skill discovery drops any SKILL.md without YAML frontmatter carrying
+    # name and description (silently, at warn level) — the block is load-bearing.
+    frontmatter = f"---\nname: {name}\ndescription: {description}\n---\n"
     out = ROOT / name / "SKILL.md"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("\n".join(lines), encoding="utf-8")
+    out.write_text(frontmatter + "\n".join(lines), encoding="utf-8")
     return out
 
 
@@ -63,7 +66,10 @@ def main() -> None:
     for e in doctrine:
         tag = " (red-line)" if e.get("immutable") else ""
         d.append(f"## {e['section']}{tag}\n{_scope(e)}{e['guidance']}\n")
-    _write("doctrine", d)
+    _write("doctrine",
+           "Operator trading rules — red-lines plus market/theme/stock cycle doctrine. "
+           "Follow by default; when research conflicts with an entry, report the conflict, "
+           "never silently defer.", d)
 
     s = ["# Signals — operator setups\n", STYLE_HEADER]
     for e in skills:
@@ -82,7 +88,9 @@ def main() -> None:
                  f"*{e.get('type', '')} · {e.get('status', '')} · "
                  f"phases: {', '.join(e.get('phases', []))}*\n"
                  + "\n".join(bullets) + "\n")
-    _write("signals", s)
+    _write("signals",
+           "The operator's entry/exit setups (base breakout and kin) — operator style, "
+           "follow by default and report conflicts with research findings.", s)
 
     m = ["# Lessons — operator failure signatures\n", STYLE_HEADER]
     for e in memory:
@@ -98,7 +106,9 @@ def main() -> None:
         m.append(f"## {e.get('lesson_id', 'lesson')}"
                  f"{f' ({outcome})' if outcome else ''}\n"
                  + "\n".join(bullets) + "\n")
-    _write("lessons", m)
+    _write("lessons",
+           "The operator's recorded failure signatures and the lessons drawn from them — "
+           "operator style, follow by default and report conflicts with research findings.", m)
 
     print("wrote", *sorted(p.name for p in ROOT.iterdir()))
 

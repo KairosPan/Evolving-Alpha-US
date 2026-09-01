@@ -1,3 +1,8 @@
+---
+name: signals
+description: The operator's entry/exit setups (base breakout and kin) — operator style, follow by default and report conflicts with research findings.
+---
+
 # Signals — operator setups
 
 > **Scope: operator style, not market law.** These are the operator's personal

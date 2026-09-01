@@ -96,11 +96,43 @@ deferring. Every style-kairos SKILL.md carries that scope header at the top.
    (`docs/research/2026-08-22-deepseek-harness-dsh-survey.md`), not against a live install.
    Expect one adaptation pass; the content is the deliverable, the container is not.
 
+## Installed state — the `face` profile (2026-08-31)
+
+The template above is realized, live and drilled, in the face's profile. The shapes that
+actually bound, for the next install or the next pin bump:
+
+- **The MCP bridge is `@deepseek-ai/dsh-mcp-client`, and it is NOT in dsh-base.** It is
+  declared in `face/package.json` at the exact `DSH_PIN` (the lockstep sweep in
+  `face/tests/version.test.ts` covers it automatically), not installed into the profile —
+  patch rows resolve plugin names from the face's dependency closure via the healed
+  profiles fallback.
+- **The two operator rows live in `$DSH_HOME/profiles/face/cordis.patch.yml`:** one
+  `dsh-mcp-client` insert (`serverName: alpaca-kit`, stdio, absolute interpreter path,
+  `cwd` = this repo, env block as in the template) and one `skill-filesystem` config patch
+  (`customSkillDirs` = the two group roots — a patch REPLACES the addressed row's whole
+  config, which is fine here because dsh-base mounts the row configless).
+- **`toolCallTimeoutMs: 300000` on the MCP row is load-bearing.** `screen(trend_template)`
+  computes ~188 s for one day on the 2yr bed (measured 2026-08-31); the 60 s default kills
+  it every time, as `MCP error -32001: Request timed out`.
+- **The MCP child's env is scrubbed.** The APCA keys must be passed explicitly on the row
+  (`!!js process.env...`); they do not flow in ambiently.
+- **Accepted residual:** the face process holds the paper keys in its environment (for
+  `/account`), and the session's bash tool inherits them — so Gate 1 gates the ORDER TOOLS,
+  not the capability: a shell can reach `alpaca_kit.account` directly. Accepted
+  operator-trust posture (paper account, single operator, git as ledger), not an oversight.
+- **Gate-2 drill: PASSED on the live face, 2026-08-31.** Both outcomes exercised — deny
+  (command did not run, model saw a rejection result) and approve (`allowed-once`, one-shot)
+  — with paired `approval/asked`/`approval/decided` records in the session log.
+
 ## Notes
 
 - **Skill roots are the group directories.** Discovery expects `<root>/<name>/SKILL.md`, so
   the profile lists `dsh/skills/mechanics` and `dsh/skills/style-kairos` separately rather
   than their shared parent.
+- **SKILL.md frontmatter is mandatory.** dsh's skill discovery drops any SKILL.md whose
+  YAML frontmatter is missing `name` and `description` — SILENTLY, at warn level in a log
+  nobody reads. Every skill in this repo carries the block, and `scripts/convert_seeds.py`
+  emits it; a skill that goes missing from a session starts its diagnosis here.
 - **MCP server noise.** `python -m alpaca_kit.mcp` runs FastMCP, which logs INFO to stderr at
   boot. If dsh surfaces that as noise, quiet it from the profile with
   `FASTMCP_LOG_LEVEL=WARNING` in the server's env block (FastMCP reads its settings from

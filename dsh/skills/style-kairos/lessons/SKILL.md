@@ -1,3 +1,8 @@
+---
+name: lessons
+description: The operator's recorded failure signatures and the lessons drawn from them — operator style, follow by default and report conflicts with research findings.
+---
+
 # Lessons — operator failure signatures
 
 > **Scope: operator style, not market law.** These are the operator's personal

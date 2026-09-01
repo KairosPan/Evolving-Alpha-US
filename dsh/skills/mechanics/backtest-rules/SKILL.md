@@ -1,3 +1,8 @@
+---
+name: backtest-rules
+description: The five honest-eval rules that bind every backtest in strategies/ — neutral mechanics, never overruled by findings.
+---
+
 # Backtest rules (neutral mechanics)
 
 Always applies (neutral mechanics, not style). Every backtest in strategies/ MUST follow

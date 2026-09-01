@@ -282,3 +282,9 @@ Gate 1 to do it. Any harmless denied-then-escalated file write proves the same
 seam.
 
 Until this drill passes on a live face, the face does not claim Gate 2.
+
+**Drilled and PASSED 2026-08-31** on the live face with the workbench toolset mounted:
+deny (command did not run; the model saw a rejection result, never the card) and approve
+(`allowed-once`, one-shot) both exercised, with paired `approval/asked` +
+`approval/decided` records in the session log. Re-run after any face or dsh change, per
+the heading above.

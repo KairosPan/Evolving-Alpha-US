@@ -1,3 +1,8 @@
+---
+name: doctrine
+description: Operator trading rules — red-lines plus market/theme/stock cycle doctrine. Follow by default; when research conflicts with an entry, report the conflict, never silently defer.
+---
+
 # Doctrine — operator trading rules
 
 > **Scope: operator style, not market law.** These are the operator's personal
