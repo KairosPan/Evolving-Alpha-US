@@ -9,7 +9,7 @@ import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import {
   agentToolDefinition, agentsListing, authFromProbe, connectLocalAgent, defaultAgentProber, defaultAuthProber,
   disconnectLocalAgent, hasExec, isAgentBin, memoryListing, parseClaudeRun, parseCodexRun, pluginListing,
-  readAgentsMeta, registerPanelRoutes, runAgentRecipe, scrubbedEnv, setCandidateIgnored, skillDetail, skillGroup,
+  readAgentsMeta, registerPanelRoutes, runAgentRecipe, scrubbedEnv, skillDetail, skillGroup,
   syncAgentTools, toolNameFor,
   type AgentToolDefinition, type AgentToolRegistry, type PanelDeps, type RunOutcome, type SkillBody, type SkillRow,
 } from "../src/panels.ts";
@@ -167,43 +167,16 @@ test("detection: candidates are the known list, in its order, that answer and ar
     { bin: "gemini", label: "Gemini CLI", version: "gemini 0.9.0" },
     { bin: "auggie", label: "Auggie", version: "auggie 1.2.3" },
   ], "known-list order, absent and crashing probes dropped");
-  assert.deepEqual(listing.ignored, []);
   assert.equal(probed.length, 15, "every known name probed exactly once");
   assert.ok(!probed.includes("zed"), "an unknown-but-installed binary is never probed for detection");
 });
 
-test("detection: hide takes a candidate off the page and remembers it; show brings it back", async () => {
+test("detection: a disconnected agent is a candidate again", async () => {
   const deps = fakeDeps(await freshHome());
-  assert.deepEqual((await setCandidateIgnored(deps, "gemini", true)).ignored, ["gemini"]);
-  await setCandidateIgnored(deps, "gemini", true); // idempotent, no duplicate
-  assert.deepEqual((await readAgentsMeta(deps.home)).ignored, ["gemini"], "persisted");
-  let listing = await agentsListing(deps);
-  assert.deepEqual(listing.candidates.map((c) => c.bin), ["claude"]);
-  assert.deepEqual(listing.ignored, [{ bin: "gemini", label: "Gemini CLI" }], "listed so the page can offer it back");
-
-  await setCandidateIgnored(deps, "openclaw", true); // hiding an absent name is allowed and harmless
-  listing = await agentsListing(deps);
-  assert.deepEqual(listing.ignored.map((h) => h.bin), ["gemini", "openclaw"]);
-
-  assert.deepEqual((await setCandidateIgnored(deps, "gemini", false)).ignored, ["openclaw"]);
-  listing = await agentsListing(deps);
-  assert.deepEqual(listing.candidates.map((c) => c.bin), ["claude", "gemini"], "back in known-list order");
-  await assert.rejects(setCandidateIgnored(deps, "../evil", true), (err: { status?: number }) => err.status === 400);
-});
-
-test("detection: connecting a hidden candidate un-hides it; disconnecting leaves the hidden list alone", async () => {
-  const deps = fakeDeps(await freshHome());
-  await setCandidateIgnored(deps, "claude", true);
-  await setCandidateIgnored(deps, "gemini", true);
   await connectLocalAgent(deps, "claude");
-  let meta = await readAgentsMeta(deps.home);
-  assert.deepEqual(meta.connected.map((c) => c.bin), ["claude"]);
-  assert.deepEqual(meta.ignored, ["gemini"], "the connected one left the hidden list, the other stayed");
+  assert.deepEqual((await agentsListing(deps)).candidates.map((c) => c.bin), ["gemini"]);
   await disconnectLocalAgent(deps, "claude");
-  meta = await readAgentsMeta(deps.home);
-  assert.deepEqual(meta.connected, []);
-  assert.deepEqual(meta.ignored, ["gemini"]);
-  assert.deepEqual((await agentsListing(deps)).candidates.map((c) => c.bin), ["claude"], "disconnected → a candidate again");
+  assert.deepEqual((await agentsListing(deps)).candidates.map((c) => c.bin), ["claude", "gemini"], "back in known-list order");
 });
 
 test("roster: connect is a verifying handshake, disconnect removes, both refuse malformed names", async () => {
@@ -239,13 +212,11 @@ test("roster file: a hand-mangled or legacy file reads as best it can", async ()
   await mkdir(join(home, "face"), { recursive: true });
   await writeFile(join(home, "face", "agents.json"), JSON.stringify({
     connected: [{ bin: "claude" }, { bin: "../evil", label: "x" }, "junk", { label: "nobin" }, { bin: "claude", label: "dup" }],
-    ignored: ["gemini", "a/b", 7, "gemini"],
+    ignored: ["a stray field from a retracted feature is simply not read"],
   }));
-  assert.deepEqual(await readAgentsMeta(home), { connected: [{ bin: "claude", label: "claude" }], ignored: ["gemini"] });
-  await writeFile(join(home, "face", "agents.json"), JSON.stringify({ connected: [{ bin: "codex", label: "Codex" }] }));
-  assert.deepEqual(await readAgentsMeta(home), { connected: [{ bin: "codex", label: "Codex" }], ignored: [] }, "pre-ignore files");
+  assert.deepEqual(await readAgentsMeta(home), { connected: [{ bin: "claude", label: "claude" }] });
   await writeFile(join(home, "face", "agents.json"), "not json");
-  assert.deepEqual(await readAgentsMeta(home), { connected: [], ignored: [] });
+  assert.deepEqual(await readAgentsMeta(home), { connected: [] });
 });
 
 /* ====================================================================== */
@@ -570,8 +541,8 @@ test("routes: register, boot-sync, fence, and the roster round-trip with its too
   await registerPanelRoutes({ register: (route) => routes.push(route) }, deps);
   const byPath = new Map(routes.map((r) => [r.path, r]));
   assert.deepEqual([...byPath.keys()].sort(), [
-    "/data/agents.json", "/data/agents/connect", "/data/agents/disconnect", "/data/agents/ignore",
-    "/data/agents/rescan", "/data/memory.json", "/data/memory/skill", "/data/plugins.json",
+    "/data/agents.json", "/data/agents/connect", "/data/agents/disconnect", "/data/agents/rescan",
+    "/data/memory.json", "/data/memory/skill", "/data/plugins.json",
   ]);
   assert.deepEqual([...reg.defs.keys()], ["agent_codex"], "an agent already on the roster is callable from boot");
 
@@ -616,25 +587,13 @@ test("routes: register, boot-sync, fence, and the roster round-trip with its too
   await agents.handler(getReq(), fakeRes().res);
   assert.equal(probes.length, afterFirst, "a second listing inside the minute probes nothing");
 
-  /* hide a candidate, then the refresh forgets the cache and re-probes */
-  const ignore = byPath.get("/data/agents/ignore")!;
-  const hid = fakeRes();
-  await ignore.handler(postReq(JSON.stringify({ bin: "gemini", ignored: true })), hid.res);
-  assert.equal(hid.out.status, 200);
+  /* the refresh forgets the cache and re-probes */
   const rescan = byPath.get("/data/agents/rescan")!;
   const fresh = fakeRes();
   await rescan.handler(postReq("{}"), fresh.res);
   assert.equal(fresh.out.status, 200);
   assert.ok(probes.length > afterFirst, "refresh re-probes");
-  const rescanned = JSON.parse(fresh.out.body) as { candidates: { bin: string }[]; ignored: { bin: string }[] };
-  assert.deepEqual(rescanned.candidates, [], "the hidden candidate stays hidden through a refresh");
-  assert.deepEqual(rescanned.ignored.map((h) => h.bin), ["gemini"]);
-  const shown = fakeRes();
-  await ignore.handler(postReq(JSON.stringify({ bin: "gemini", ignored: false })), shown.res);
-  assert.deepEqual((JSON.parse(shown.out.body) as { ignored: string[] }).ignored, []);
-  const bad = fakeRes();
-  await ignore.handler(postReq(JSON.stringify({ bin: "a/b", ignored: true })), bad.res);
-  assert.equal(bad.out.status, 400);
+  assert.deepEqual((JSON.parse(fresh.out.body) as { candidates: { bin: string }[] }).candidates.map((c) => c.bin), ["gemini"]);
 
   /* disconnect → tool disposed */
   const disconnect = byPath.get("/data/agents/disconnect")!;

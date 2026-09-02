@@ -209,16 +209,15 @@ split by data source:
   *detected on this machine* — the panels.ts suggestion list, fifteen
   coding-agent CLIs by their PATH names, each probed with `<bin> --version`
   (execFile, no shell, scrubbed env, 3 s kill; absent, hung and nonzero all
-  read as "not here"), offered in list order when it answers and is neither
-  connected nor hidden, one click to connect, a `delete` that HIDES it
-  (remembered in the roster file, listed as a restore chip beneath, so
-  nothing is forgotten), and a ↻ refresh that forgets the one-minute probe
-  cache and looks again (`POST /data/agents/rescan`); and connect-by-name for
-  anything the list does not know. `POST /data/agents/connect` admits a
-  binary ONLY if it answers `--version` (the name is fenced to one bare PATH
-  token, so a request body can never steer a probe to a path), probes fresh,
-  and un-hides a hidden candidate; rows also disconnect from a hover `×` in
-  the index or the agent's own page (`POST /data/agents/disconnect`); a
+  read as "not here"), offered in list order when it answers and is not yet
+  connected, one click to connect, with a ↻ refresh that forgets the
+  one-minute probe cache and looks again (`POST /data/agents/rescan`); and
+  connect-by-name for anything the list does not know.
+  `POST /data/agents/connect` admits a binary ONLY if it answers `--version`
+  (the name is fenced to one bare PATH token, so a request body can never
+  steer a probe to a path) and probes fresh; rows also disconnect from a
+  hover `×` in the index or the agent's own page
+  (`POST /data/agents/disconnect`); a
   connected binary that stops answering stays listed greyed rather than
   vanishing. Each agent's page is its directory entry (status / binary /
   version / signed-in state — read through the agent's OWN status command,
@@ -288,8 +287,8 @@ routes — stands behind the same browser-trust fence the harness puts on
 `cross-site`, and a present `Origin` that matches the Host; every `/data` POST
 additionally requires `application/json` (415 otherwise), so a cross-site
 page cannot reach a side-effectful route with a "simple" request that needs
-no preflight. The roster's connect/disconnect/ignore are the only writes to
-face state (its own metadata file); an agent tool spawns that agent's own CLI
+no preflight. The roster's connect/disconnect are the only writes to face
+state (its own metadata file); an agent tool spawns that agent's own CLI
 with a fixed argv and writes nothing durable of its own — a Codex call gets a
 `mkdtemp` scratch directory under the OS tmpdir for `-o`, read once and
 removed when the run ends. `panelDeps` fails loud at boot when

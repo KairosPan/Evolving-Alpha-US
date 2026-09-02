@@ -1262,21 +1262,6 @@ body {
 .detail-actions { margin-top: 14px; }
 .picker-btn.danger { color: var(--red); }
 
-/* the roster page's hidden candidates: a quiet strip of restore chips */
-.connect-hidden { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 0 2px; }
-.connect-hidden-label { font: 600 10px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
-.connect-restore {
-  border: 1px dashed var(--line);
-  background: transparent;
-  color: var(--dim);
-  border-radius: var(--r-chip);
-  font: 11px/1.4 var(--sans);
-  padding: 1px 9px;
-  cursor: pointer;
-}
-.connect-restore:hover { color: var(--accent); border-color: var(--accent); }
-.connect-restore:disabled { opacity: 0.5; cursor: default; }
-
 /* 2026-09-01 rev2: the agent panel's local-agent rows — a long --version line
    (Hermes prints its upstream hash) must truncate, never wrap the row. */
 .sp-plug .sp-count {

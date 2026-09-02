@@ -1742,45 +1742,7 @@ function renderConnectPage(body) {
       btn.type = "button";
       btn.addEventListener("click", () => void connect(String(cand.bin), btn));
       row.append(btn);
-      /* a detected agent the operator does not want offered: hidden, not
-       * forgotten — it can be shown again below */
-      const hide = /** @type {HTMLButtonElement} */ (el("button", "picker-btn danger", "delete"));
-      hide.type = "button";
-      hide.title = `stop offering ${cand.bin} (it can be shown again)`;
-      hide.addEventListener("click", async () => {
-        hide.disabled = true;
-        try {
-          await panelData("/data/agents/ignore", { bin: cand.bin, ignored: true });
-          void redraw();
-        } catch (err) {
-          hide.disabled = false;
-          fail(`delete ${cand.bin}`, err);
-        }
-      });
-      row.append(hide);
       card.append(row);
-    }
-    const ignored = Array.isArray(body.ignored) ? body.ignored : [];
-    if (ignored.length > 0) {
-      const hidden = el("div", "connect-hidden");
-      hidden.append(el("span", "connect-hidden-label", "hidden"));
-      for (const item of ignored) {
-        const restore = /** @type {HTMLButtonElement} */ (el("button", "connect-restore", `${item.label} ↩`));
-        restore.type = "button";
-        restore.title = `offer ${item.bin} again`;
-        restore.addEventListener("click", async () => {
-          restore.disabled = true;
-          try {
-            await panelData("/data/agents/ignore", { bin: item.bin, ignored: false });
-            void redraw();
-          } catch (err) {
-            restore.disabled = false;
-            fail(`restore ${item.bin}`, err);
-          }
-        });
-        hidden.append(restore);
-      }
-      card.append(hidden);
     }
     inner.append(card);
 

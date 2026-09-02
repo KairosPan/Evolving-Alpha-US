@@ -8,10 +8,10 @@
  * LOCAL-agent roster — the coding agents connected beside Kairos — lives
  * here, because only the face process can ask the machine what is on its
  * PATH. The roster is OPERATOR-CURATED, not fixed: it starts empty; auto-
- * discovery probes a known list of coding-agent CLIs and offers what answers
- * (an entry the operator does not want is hidden, restorably); a connect
- * probes one binary and adds it to `$DSH_HOME/face/agents.json` (the same
- * face-metadata home archived.json uses); a disconnect removes it. What a
+ * discovery probes a known list of coding-agent CLIs and offers what answers;
+ * a connect probes one binary and adds it to `$DSH_HOME/face/agents.json`
+ * (the same face-metadata home archived.json uses); a disconnect removes it.
+ * What a
  * connection is FOR: every connected agent the face has a recipe for is
  * registered as a tool in the dsh tree — `agent_<bin>` — so Kairos can call
  * it from any strategy session (see the agent-tools block). The remaining two
@@ -26,7 +26,7 @@
  *   record is a 12-line projection of `ctx.loader.entries()` anyway — restated
  *   here rather than mounted, so no new row and no second gateway).
  *
- * The roster's connect/disconnect/ignore are the only writes to face state
+ * The roster's connect/disconnect are the only writes to face state
  * (its own metadata file); an agent tool spawns that agent's own CLI as a
  * child inside the calling session's directory — its only face-side write is
  * a tmpdir scratch for codex's `-o`, removed after the run. Same-origin-fenced
@@ -177,11 +177,9 @@ export function authFromProbe(bin: string, result: { code: number; stdout: strin
 /** The face's agent-roster file under the harness home, beside archived.json. */
 const AGENTS_META = ["face", "agents.json"] as const;
 
-/** The operator's roster: what is connected, in connect order, and which
- * detected candidates they have hidden. */
+/** The operator's roster: what is connected, in connect order. */
 export interface AgentsMeta {
   connected: { bin: string; label: string }[];
-  ignored: string[];
 }
 
 /** One probed local agent: present-with-version, or connected-but-silent,
@@ -199,11 +197,11 @@ export interface LocalAgentRow {
 /** @returns the stored roster; an absent, unreadable, or hand-mangled file
  * reads as best it can — a convenience, never a gate. */
 export async function readAgentsMeta(home: string): Promise<AgentsMeta> {
-  const meta: AgentsMeta = { connected: [], ignored: [] };
+  const meta: AgentsMeta = { connected: [] };
   try {
     const parsed: unknown = JSON.parse(await readFile(join(home, ...AGENTS_META), "utf8"));
     if (parsed !== null && typeof parsed === "object") {
-      const { connected, ignored } = parsed as { connected?: unknown; ignored?: unknown };
+      const { connected } = parsed as { connected?: unknown };
       if (Array.isArray(connected)) {
         for (const row of connected) {
           if (row === null || typeof row !== "object") continue;
@@ -211,9 +209,6 @@ export async function readAgentsMeta(home: string): Promise<AgentsMeta> {
           if (!isAgentBin(bin) || meta.connected.some((have) => have.bin === bin)) continue;
           meta.connected.push({ bin, label: typeof label === "string" ? label : bin });
         }
-      }
-      if (Array.isArray(ignored)) {
-        for (const bin of ignored) if (isAgentBin(bin) && !meta.ignored.includes(bin)) meta.ignored.push(bin);
       }
     }
   } catch { /* fall through to empty */ }
@@ -867,15 +862,13 @@ export interface Candidate { bin: string; label: string; version: string }
 /** The agent roster as the panel shows it: the main agent (Kairos on this
  * dsh runtime), the operator's CONNECTED local agents (probed, in connect
  * order — one that stopped answering stays listed as found:false rather than
- * vanishing), the detected candidates (known suggestions that answer on this
- * machine and are neither connected nor hidden), and what the operator hid.
- * The A2A section is the client's — a declared placeholder with no host data
- * yet. */
+ * vanishing), and the detected candidates (known suggestions that answer on
+ * this machine and are not yet connected). The A2A section is the client's —
+ * a declared placeholder with no host data yet. */
 export async function agentsListing(deps: PanelDeps): Promise<{
   main: object;
   local: LocalAgentRow[];
   candidates: Candidate[];
-  ignored: { bin: string; label: string }[];
 }> {
   const meta = await readAgentsMeta(deps.home);
   const local = await Promise.all(meta.connected.map(async ({ bin, label }): Promise<LocalAgentRow> => {
@@ -886,20 +879,14 @@ export async function agentsListing(deps: PanelDeps): Promise<{
     };
   }));
   const connected = new Set(meta.connected.map((row) => row.bin));
-  const hidden = new Set(meta.ignored);
   const candidates = (await Promise.all(KNOWN_AGENTS
-    .filter((known) => !connected.has(known.bin) && !hidden.has(known.bin))
+    .filter((known) => !connected.has(known.bin))
     .map(async ({ bin, label }): Promise<Candidate | null> => {
       const version = await probeSoft(deps, bin);
       return version === null ? null : { bin, label, version };
     })))
     .filter((row): row is Candidate => row !== null);
-  return {
-    main: { name: "Kairos", runtime: `dsh ${DSH_PIN}` },
-    local,
-    candidates,
-    ignored: meta.ignored.map((bin) => ({ bin, label: labelFor(bin) })),
-  };
+  return { main: { name: "Kairos", runtime: `dsh ${DSH_PIN}` }, local, candidates };
 }
 
 /** The connect handshake, Hermes-shaped: validate the name, then verify the
@@ -907,19 +894,15 @@ export async function agentsListing(deps: PanelDeps): Promise<{
  * is a verification, not a bookmark) and ask whether it is SIGNED IN (its
  * own status command). A signed-out agent still connects — installing the
  * roster row is the face's business, signing in is the operator's, in the
- * agent's own terminal — but the row says so. Connecting a hidden candidate
- * un-hides it. Idempotent on an already-connected bin. 400 on a malformed
- * name, 404 when nothing answers. */
+ * agent's own terminal — but the row says so. Idempotent on an
+ * already-connected bin. 400 on a malformed name, 404 when nothing answers. */
 export async function connectLocalAgent(deps: PanelDeps, bin: unknown): Promise<LocalAgentRow> {
   if (!isAgentBin(bin)) throw new StrategyError(400, "invalid binary name");
   const [version, auth] = await Promise.all([probeSoft(deps, bin), authSoft(deps, bin)]);
   if (version === null) throw new StrategyError(404, "binary did not answer on this machine");
   const meta = await readAgentsMeta(deps.home);
-  const already = meta.connected.some((row) => row.bin === bin);
-  const wasHidden = meta.ignored.includes(bin);
-  if (!already || wasHidden) {
-    if (!already) meta.connected.push({ bin, label: labelFor(bin) });
-    meta.ignored = meta.ignored.filter((hidden) => hidden !== bin);
+  if (!meta.connected.some((row) => row.bin === bin)) {
+    meta.connected.push({ bin, label: labelFor(bin) });
     await writeAgentsMeta(deps.home, meta);
   }
   return {
@@ -934,20 +917,7 @@ export async function disconnectLocalAgent(deps: PanelDeps, bin: unknown): Promi
   if (!isAgentBin(bin)) throw new StrategyError(400, "invalid binary name");
   const meta = await readAgentsMeta(deps.home);
   if (!meta.connected.some((row) => row.bin === bin)) throw new StrategyError(404, "not connected");
-  const next = { ...meta, connected: meta.connected.filter((row) => row.bin !== bin) };
-  await writeAgentsMeta(deps.home, next);
-  return next;
-}
-
-/** Hide one detected candidate from the roster page, or show it again. A
- * hidden name is remembered even if the binary is later uninstalled, so the
- * page can always list what is hidden and offer it back. 400 on a malformed
- * name; idempotent. */
-export async function setCandidateIgnored(deps: PanelDeps, bin: unknown, ignored: boolean): Promise<AgentsMeta> {
-  if (!isAgentBin(bin)) throw new StrategyError(400, "invalid binary name");
-  const meta = await readAgentsMeta(deps.home);
-  const without = meta.ignored.filter((hidden) => hidden !== bin);
-  const next = { ...meta, ignored: ignored ? [...without, bin] : without };
+  const next = { connected: meta.connected.filter((row) => row.bin !== bin) };
   await writeAgentsMeta(deps.home, next);
   return next;
 }
@@ -1075,8 +1045,8 @@ export function pluginListing(deps: PanelDeps): {
  * Mount the panel routes and bring the agent tools in line with the roster.
  * Reads: `GET /data/memory.json`, `/data/plugins.json`, `/data/agents.json`.
  * Lookups and actions: `POST /data/memory/skill` ({name}),
- * `/data/agents/connect` and `/disconnect` ({bin}), `/data/agents/ignore`
- * ({bin, ignored}), `/data/agents/rescan` ({}). Every roster write re-syncs
+ * `/data/agents/connect` and `/disconnect` ({bin}), `/data/agents/rescan`
+ * ({}). Every roster write re-syncs
  * the registered `agent_<bin>` tools.
  * @param webServer - the host webserver service, or a test recorder.
  * @param deps - the tree reads and process seams, from {@link panelDeps} or a
@@ -1191,11 +1161,6 @@ export async function registerPanelRoutes(webServer: RouteRegistrar, deps: Panel
       await syncAgentTools(deps, registry);
       return meta;
     }),
-  });
-  webServer.register({
-    kind: "exact",
-    path: "/data/agents/ignore",
-    handler: post(async (body) => await setCandidateIgnored(deps, body.bin, body.ignored === true)),
   });
   webServer.register({
     kind: "exact",
