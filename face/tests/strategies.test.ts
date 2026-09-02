@@ -46,9 +46,29 @@ test("createStrategy copies the template, skips __pycache__, never overwrites", 
 
 test("createStrategy refuses names outside the closed class", async () => {
   const root = await makeRoot();
-  for (const bad of ["", "_template", "UPPER", "a b", "../evil", "a/../b", "a.b", 42, null]) {
-    await assert.rejects(createStrategy(root, bad), (err: StrategyError) => err.status === 400, String(bad));
+  // the class is letters/digits in any script plus - and _: one path segment, nothing else
+  for (const bad of [
+    "", "_template", "a b", "市场 情绪", "../evil", "a/../b", "市场/情绪", "a.b",
+    ".hidden", "-lead", "_lead", "a\u0000b", "x".repeat(42), 42, null,
+  ]) {
+    await assert.rejects(createStrategy(root, bad), (err: StrategyError) => err.status === 400, JSON.stringify(bad));
   }
+});
+
+test("createStrategy takes a name in any script, and creates it in NFC", async () => {
+  const root = await makeRoot();
+  const zh = "市场情绪";
+  const made = await createStrategy(root, zh);
+  assert.equal(made.name, zh);
+  assert.ok((await stat(join(root, "strategies", zh))).isDirectory());
+  /* one word, two normalizations -> one directory: NFD in, NFC on disk */
+  const NFD = "cafe\u0301"; // e + combining acute
+  const NFC = "caf\u00e9";
+  const decomposed = await createStrategy(root, NFD);
+  assert.equal(decomposed.name, NFC, "created in NFC");
+  assert.ok((await stat(join(root, "strategies", NFC))).isDirectory());
+  await assert.rejects(createStrategy(root, NFC), (err: StrategyError) => err.status === 409, "the NFC spelling is the same strategy");
+  assert.equal((await createStrategy(root, "Upper-Case_9")).name, "Upper-Case_9", "case is the operator's to choose");
 });
 
 /* ---------- the routes ---------- */

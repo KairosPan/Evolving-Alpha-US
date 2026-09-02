@@ -30,7 +30,13 @@ const FORBIDDEN = '{"ok":false,"error":"forbidden"}';
 /** A strategy name: lower-case, digits, `-`/`_`, must start alphanumeric.
  * A closed class — path separators, dots, and anything shell-meaningful are
  * unrepresentable, which is what lets the name touch a filesystem path. */
-const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,40}$/;
+/** Exactly a strategy directory name: one path segment of letters and digits
+ * in ANY script (a Chinese name is a name) plus `-` and `_`, 1–41 code
+ * points, opening with a letter or digit — so `.`/`..`, dotfiles,
+ * separators, spaces and control characters never reach a path. Names are
+ * compared and created in NFC, so one word typed in two Unicode
+ * normalizations is one directory, not two. */
+const NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N}\p{M}_-]{0,40}$/u;
 
 /** The copy source every new strategy starts from, and never a valid pick. */
 const TEMPLATE = "_template";
@@ -83,9 +89,10 @@ export class StrategyError extends Error {
  * @param root - absolute workbench repo root.
  * @param name - the new strategy's directory name; must match {@link NAME_RE}.
  */
-export async function createStrategy(root: string, name: unknown): Promise<StrategyEntry> {
+export async function createStrategy(root: string, rawName: unknown): Promise<StrategyEntry> {
+  const name = typeof rawName === "string" ? rawName.normalize("NFC") : rawName;
   if (typeof name !== "string" || !NAME_RE.test(name) || name === TEMPLATE) {
-    throw new StrategyError(400, "invalid strategy name (want [a-z0-9][a-z0-9_-]{0,40})");
+    throw new StrategyError(400, "invalid strategy name (letters or digits in any script, plus - and _; no spaces, dots or slashes; up to 41 characters)");
   }
   const template = join(root, "strategies", TEMPLATE);
   try {

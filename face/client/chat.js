@@ -1179,7 +1179,7 @@ async function showStrategyPicker() {
     const form = el("div", "picker-new");
     const input = /** @type {HTMLInputElement} */ (el("input", "picker-input"));
     input.type = "text";
-    input.placeholder = "new strategy (a-z 0-9 - _) — copies strategies/_template";
+    input.placeholder = "new strategy name (letters · digits · - _ · no spaces) — copies strategies/_template";
     const create = /** @type {HTMLButtonElement} */ (el("button", "picker-btn", "create"));
     create.type = "button";
     create.addEventListener("click", async () => {
