@@ -71,15 +71,28 @@ export interface SkillBody extends SkillRow {
   path?: string;
 }
 
-/** Candidate suggestions for the connect page: coding CLIs worth probing for
- * when the operator has not connected them yet, with their pretty labels.
- * Suggestions only — the connected roster is the operator's, in
- * `$DSH_HOME/face/agents.json`, and any valid bare name can be connected. */
+/** What the connect page's "detected on this machine" auto-discovery probes
+ * for: the coding-agent CLIs in circulation, by the bare name each installs
+ * on PATH, with pretty labels. Suggestions only — an absent one fails its
+ * probe instantly (ENOENT) and never shows; the connected roster is the
+ * operator's, in `$DSH_HOME/face/agents.json`, and any valid bare name can be
+ * connected by hand. Extend by adding a row. */
 const KNOWN_AGENTS: ReadonlyArray<{ bin: string; label: string }> = [
   { bin: "claude", label: "Claude Code" },
   { bin: "codex", label: "Codex" },
   { bin: "hermes", label: "Hermes" },
   { bin: "openclaw", label: "OpenClaw" },
+  { bin: "gemini", label: "Gemini CLI" },
+  { bin: "aider", label: "Aider" },
+  { bin: "goose", label: "Goose" },
+  { bin: "opencode", label: "OpenCode" },
+  { bin: "amp", label: "Amp" },
+  { bin: "cursor-agent", label: "Cursor Agent" },
+  { bin: "copilot", label: "GitHub Copilot CLI" },
+  { bin: "qwen", label: "Qwen Code" },
+  { bin: "droid", label: "Factory Droid" },
+  { bin: "crush", label: "Crush" },
+  { bin: "auggie", label: "Auggie" },
 ];
 
 /** Exactly a connectable binary name: ONE bare token for a PATH lookup. No
@@ -950,5 +963,17 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
     kind: "exact",
     path: "/data/agents/run",
     handler: post(async (body) => ({ run: await runLocalAgent(deps, body) }), RUN_BODY_LIMIT),
+  });
+  /* The connect page's refresh: forget every cached probe and look again —
+   * the operator just installed something and should not wait out the
+   * minute. Same shape as the listing, so the page re-renders from it. */
+  webServer.register({
+    kind: "exact",
+    path: "/data/agents/rescan",
+    handler: post(async () => {
+      probeCache.clear();
+      authCache.clear();
+      return await agentsListing(cachedDeps);
+    }),
   });
 }

@@ -204,21 +204,23 @@ split by data source:
   history-tail / list-row projection blocks seed a session opened cold. The
   context bar turns danger-colored at 80%. *Local agents* is an
   OPERATOR-CURATED roster, not a fixed list: it starts empty and lives in
-  `$DSH_HOME/face/agents.json`. The `+ connect` row opens a handshake page —
-  detected candidates (the panels.ts suggestion list, probed and not yet
-  connected) one click away, anything else by name — and
-  `POST /data/agents/connect` admits a binary ONLY if it answers
+  `$DSH_HOME/face/agents.json`. The `+ connect` row opens the roster page:
+  what is *connected* (each row deletable), what auto-discovery *detected on
+  this machine* (the panels.ts suggestion list — fifteen coding-agent CLIs by
+  their PATH names — probed and not yet connected, one click to connect, with
+  a ↻ refresh that re-probes now through `POST /data/agents/rescan`, skipping
+  the one-minute probe cache), and connect-by-name for anything the list does
+  not know. `POST /data/agents/connect` admits a binary ONLY if it answers
   `<bin> --version` (execFile, no shell; the name is fenced to one bare PATH
-  token, so a request body can never steer the probe to a path). Probes cache
-  per bin for a minute, but connect probes fresh. Rows disconnect from a
-  hover `×` or the agent's own page (`POST /data/agents/disconnect`); a
-  connected binary that stops answering stays listed greyed rather than
-  vanishing. Each agent's page is its directory entry (status / binary /
+  token, so a request body can never steer the probe to a path); connect
+  probes fresh. Rows also disconnect from a hover `×` in the index or the
+  agent's own page (`POST /data/agents/disconnect`); a connected binary that
+  stops answering stays listed greyed rather than vanishing. Each agent's page is its directory entry (status / binary /
   version / signed-in state — read through the agent's OWN status command,
   `claude auth status`, `codex login status` or `hermes status`, the last a
   config report rather than a login gate, so a pinned provider reads as
   signed in — never its credential store) and, for agents the face has a
-  recipe for, the **exec channel**: a *run a task* card (⌘/Ctrl+Enter runs;
+  recipe for, the **exec channel**: an untitled run card (⌘/Ctrl+Enter runs;
   the working-directory select offers the strategy directories first and the
   repo root last) that spawns the operator's own UNMODIFIED CLI as a child
   (`POST /data/agents/run`) and renders its answer as markdown. These are the

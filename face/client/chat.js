@@ -1618,7 +1618,7 @@ function runCard(agent) {
   const bin = String(agent.bin);
   const log = runLog.get(bin) ?? { session: undefined, entries: [], inflight: false, onSettle: undefined };
   runLog.set(bin, log);
-  const card = panelCard("run a task");
+  const card = el("div", "sp-card"); // untitled: the textarea and its button say what it is
 
   const where = /** @type {HTMLSelectElement} */ (el("select", "run-where"));
   where.title = "working directory";
@@ -1771,13 +1771,12 @@ async function disconnectAgent(bin, reopenConnect) {
   return true;
 }
 
-/** The connect page: the handshake that ADDS a local agent — detected
- * candidates one click away, anything else by name. Only a binary that
- * answers `--version` joins the roster. */
+/** The roster page ("+ connect an agent"): what is connected (each
+ * removable), what auto-discovery found on this machine (connect one click
+ * away, ↻ re-probes now), and connect-by-name for anything else. */
 async function openConnectPage() {
-  const title = "connect · local agents";
-  const token = openDetail(title, (inner) => {
-    inner.append(el("div", "detail-title", "connect a local agent"));
+  const token = openDetail(CONNECT_TITLE, (inner) => {
+    inner.append(el("div", "detail-title", "local agents"));
     inner.append(el("div", "sp-note", "probing this machine…"));
   });
   /** @type {Record<string, any>} */
@@ -1786,36 +1785,103 @@ async function openConnectPage() {
     body = await panelData("/data/agents.json");
   } catch (err) {
     if (token !== detailSeq) return;
-    openDetail(title, (inner) => {
-      inner.append(el("div", "detail-title", "connect a local agent"));
+    openDetail(CONNECT_TITLE, (inner) => {
+      inner.append(el("div", "detail-title", "local agents"));
       inner.append(panelError(err, "agents"));
     });
     return;
   }
   if (token !== detailSeq) return; // the operator moved on mid-probe
-  openDetail(title, (inner) => {
-    inner.append(el("div", "detail-title", "connect a local agent"));
-    inner.append(el("div", "detail-sub", "a connect is a handshake — the binary must answer --version to join the roster"));
+  renderConnectPage(body);
+}
+
+const CONNECT_TITLE = "local agents · connect";
+
+/** Draw the roster page from one agents listing. Every action on it
+ * (connect, delete, refresh) re-fetches and redraws, so the page is always
+ * the host's current truth. @param {Record<string, any>} body */
+function renderConnectPage(body) {
+  openDetail(CONNECT_TITLE, (inner) => {
+    inner.append(el("div", "detail-title", "local agents"));
     const note = el("div", "sp-note err");
+    const fail = (what, err) => {
+      note.textContent = `${what}: ${err instanceof Error ? err.message : String(err)}`;
+    };
+    /** Redraw from the host after an action changed the roster. */
+    const redraw = async () => {
+      if (activePanel === "agent") void refreshAgentPanel();
+      try {
+        renderConnectPage(await panelData("/data/agents.json"));
+      } catch (err) {
+        fail("agents", err);
+      }
+    };
+
+    /* -- connected: the roster as it stands, each row removable -- */
+    const have = panelCard("connected");
+    const local = Array.isArray(body.local) ? body.local : [];
+    if (local.length === 0) have.append(el("div", "sp-note", "none yet"));
+    for (const agent of local) {
+      const row = el("div", "connect-row");
+      const found = agent.found === true;
+      const signedOut = found && agent.auth?.state === "none";
+      const dot = phaseDot(!found ? "disabled" : signedOut ? "warn" : "active");
+      dot.title = !found ? "not answering" : signedOut ? "signed out" : "answering";
+      row.append(dot, el("span", "connect-name", String(agent.label)));
+      const ver = el("span", "connect-ver", found ? dash(agent.version) : "not answering");
+      ver.title = String(agent.bin);
+      row.append(ver);
+      const del = /** @type {HTMLButtonElement} */ (el("button", "picker-btn danger", "delete"));
+      del.type = "button";
+      del.title = `remove ${agent.bin} from the roster (the binary is untouched)`;
+      del.addEventListener("click", async () => {
+        del.disabled = true;
+        if (await disconnectAgent(String(agent.bin), false)) void redraw();
+        else del.disabled = false;
+      });
+      row.append(del);
+      have.append(row);
+    }
+    inner.append(have);
 
     /** @param {string} bin @param {HTMLButtonElement} btn */
     const connect = async (bin, btn) => {
       btn.disabled = true;
       note.textContent = "";
       try {
-        const made = await panelData("/data/agents/connect", { bin });
-        if (activePanel === "agent") void refreshAgentPanel();
-        openLocalAgent(made.agent ?? { bin, label: bin, found: true });
+        await panelData("/data/agents/connect", { bin });
+        void redraw();
       } catch (err) {
         btn.disabled = false;
-        note.textContent = `connect ${bin}: ${err instanceof Error ? err.message : String(err)}`;
+        fail(`connect ${bin}`, err);
       }
     };
 
-    const card = panelCard("detected on this machine");
+    /* -- detected: auto-discovery over this machine's PATH, re-probed on ↻ -- */
+    const card = el("div", "sp-card");
+    const head = el("div", "sp-title sp-title-row");
+    head.append(el("span", null, "detected on this machine"));
+    const refresh = /** @type {HTMLButtonElement} */ (el("button", "sp-title-btn", "↻ refresh"));
+    refresh.type = "button";
+    refresh.title = "probe this machine again now (skips the one-minute cache)";
+    refresh.addEventListener("click", async () => {
+      refresh.disabled = true;
+      refresh.textContent = "probing…";
+      try {
+        const fresh = await panelData("/data/agents/rescan", {});
+        if (activePanel === "agent") void refreshAgentPanel();
+        renderConnectPage(fresh);
+      } catch (err) {
+        refresh.disabled = false;
+        refresh.textContent = "↻ refresh";
+        fail("refresh", err);
+      }
+    });
+    head.append(refresh);
+    card.append(head);
     const candidates = Array.isArray(body.candidates) ? body.candidates : [];
     if (candidates.length === 0) {
-      card.append(el("div", "sp-note", "nothing new detected — connect by name below"));
+      card.append(el("div", "sp-note", "nothing new detected — refresh after installing one, or connect by name below"));
     }
     for (const cand of candidates) {
       const row = el("div", "connect-row");
@@ -1831,10 +1897,11 @@ async function openConnectPage() {
     }
     inner.append(card);
 
+    /* -- by name: anything the suggestion list does not know -- */
     const form = el("div", "picker-new");
     const input = /** @type {HTMLInputElement} */ (el("input", "picker-input"));
     input.type = "text";
-    input.placeholder = "binary name, e.g. gemini";
+    input.placeholder = "connect by binary name, e.g. gemini";
     const btn = /** @type {HTMLButtonElement} */ (el("button", "picker-btn", "connect"));
     btn.type = "button";
     btn.addEventListener("click", () => {

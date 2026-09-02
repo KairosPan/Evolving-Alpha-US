@@ -301,7 +301,10 @@ test("agents roster: starts empty, connect is a verifying handshake, disconnect 
   assert.deepEqual(empty.local, [], "nothing is fixed in place — the roster starts empty");
   // Candidates = known suggestions that ANSWER and are not yet connected; a
   // prober that throws (hermes) reads as no answer, never a failed listing.
-  assert.deepEqual(empty.candidates, [{ bin: "claude", label: "Claude Code", version: "2.1.251 (Claude Code)" }]);
+  assert.deepEqual(empty.candidates, [
+    { bin: "claude", label: "Claude Code", version: "2.1.251 (Claude Code)" },
+    { bin: "gemini", label: "Gemini CLI", version: "gemini 0.9.0" },
+  ]);
 
   const row = await connectLocalAgent(deps, "claude");
   assert.deepEqual(row, {
@@ -311,7 +314,7 @@ test("agents roster: starts empty, connect is a verifying handshake, disconnect 
   await connectLocalAgent(deps, "claude"); // idempotent, not a duplicate
   const listing = await agentsListing(deps);
   assert.deepEqual(listing.local, [row]);
-  assert.deepEqual(listing.candidates, [], "a connected agent leaves the candidate pool");
+  assert.deepEqual(listing.candidates.map((c) => c.bin), ["gemini"], "a connected agent leaves the candidate pool");
 
   // Refusals: a malformed name never reaches the prober; silence is a 404.
   await assert.rejects(connectLocalAgent(deps, "../evil"), (err: { status?: number }) => err.status === 400);
@@ -374,9 +377,17 @@ test("routes: register, fence, and answer", async () => {
   registerPanelRoutes({ register: (route) => routes.push(route) }, deps);
   const byPath = new Map(routes.map((r) => [r.path, r]));
   assert.deepEqual([...byPath.keys()].sort(), [
-    "/data/agents.json", "/data/agents/connect", "/data/agents/disconnect", "/data/agents/run",
-    "/data/memory.json", "/data/memory/skill", "/data/plugins.json",
+    "/data/agents.json", "/data/agents/connect", "/data/agents/disconnect", "/data/agents/rescan",
+    "/data/agents/run", "/data/memory.json", "/data/memory/skill", "/data/plugins.json",
   ]);
+
+  /* rescan answers with a fresh listing (same shape as agents.json) */
+  const rescan = fakeRes();
+  await byPath.get("/data/agents/rescan")!.handler(postReq("{}"), rescan.res);
+  assert.equal(rescan.out.status, 200);
+  const rescanned = JSON.parse(rescan.out.body) as { ok: boolean; local: unknown[]; candidates: { bin: string }[] };
+  assert.equal(rescanned.ok, true);
+  assert.deepEqual(rescanned.candidates.map((c) => c.bin), ["claude", "gemini"]);
 
   /* the roster round-trips through the routes: connect → listed → disconnect */
   const connect = byPath.get("/data/agents/connect")!;

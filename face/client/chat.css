@@ -1233,6 +1233,20 @@ body {
 .sp-plug:hover .sp-x { display: inline-block; }
 .sp-plug .sp-x:hover { color: var(--red); border-color: currentColor; }
 .sp-add .sp-plug-name { color: var(--accent); }
+/* a small action in a card's title row (the roster page's ↻ refresh) */
+.sp-title-btn {
+  margin-left: auto;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--accent);
+  border-radius: 4px;
+  font: 10.5px/1.4 var(--mono);
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 1px 7px;
+  cursor: pointer;
+}
+.sp-title-btn:disabled { opacity: 0.5; cursor: default; }
 .connect-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
 .connect-row + .connect-row { border-top: 1px solid var(--viz-grid); }
 .connect-name { flex: none; font: 600 12.5px/1.5 var(--sans); }
