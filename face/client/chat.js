@@ -867,6 +867,7 @@ async function refreshSessions() {
    * freshest session, and rows inside a group keep that order too.
    * @type {Map<string, Record<string, any>[]>} */
   const buckets = new Map();
+  lastSessions = (value?.items ?? []).filter((summary) => !deletedSet.has(String(summary.sessionId)));
   for (const summary of value?.items ?? []) {
     if (deletedSet.has(String(summary.sessionId))) continue; // a host-memory ghost
     // Attached sessions list with a projections block — seed the usage store.
@@ -893,6 +894,7 @@ async function refreshSessions() {
     }
   }
   markActive();
+  syncPickerFolders(); // a picker already on screen learns the folders the list just revealed
 }
 
 /** Refetch the sidebar shortly, coalescing a whole turn's worth of events. */
@@ -971,6 +973,51 @@ let strategyIndex = null;
 /** The `cwd` the NEXT `session.create` carries; `undefined` is the host
  * default — the workbench repo root. @type {string|undefined} */
 let pendingCwd;
+
+/** The last `session.list` answer (ghosts dropped): the picker derives the
+ * local folders sessions have worked in from it. @type {Record<string, any>[]} */
+let lastSessions = [];
+
+/**
+ * Folders sessions have already worked in that are neither the repo root nor
+ * a `strategies/` directory — the local folders picked through the OS
+ * dialog, which the strategy index cannot know about. Keyed by cwd, labelled
+ * by basename (the same label the sidebar groups them under), most recently
+ * used first. Empty until the strategy index has loaded: without its root a
+ * strategy directory cannot be told from a folder.
+ * @returns {Map<string, string>} cwd → label
+ */
+function knownFolders() {
+  const root = strategyIndex?.root;
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  if (typeof root !== "string") return out;
+  for (const summary of lastSessions) {
+    const cwd = summary.cwd;
+    if (typeof cwd !== "string" || cwd === "" || cwd === root || cwd.startsWith(`${root}/strategies/`)) continue;
+    const name = cwd.split("/").filter((part) => part !== "").pop();
+    if (name !== undefined && !out.has(cwd)) out.set(cwd, name);
+  }
+  return out;
+}
+
+/** Offer every known folder in the picker on screen, once each — the same
+ * row the browse button makes, so picking one again reselects it. */
+function syncPickerFolders() {
+  const picker = flow().querySelector(".picker");
+  const rows = picker?.querySelector(".picker-rows");
+  const browse = rows?.querySelector(".pick-browse");
+  if (!picker || !rows || !browse) return;
+  const offered = new Set([...rows.querySelectorAll(".pick-row")]
+    .map((row) => /** @type {HTMLElement} */ (row).dataset.cwd));
+  for (const [cwd, name] of knownFolders()) {
+    if (offered.has(cwd)) continue;
+    const row = pickerRow(name, cwd, "local", picker);
+    row.dataset.cwd = cwd;
+    row.title = cwd;
+    rows.insertBefore(row, browse);
+  }
+}
 
 async function loadStrategyIndex() {
   try {
@@ -1159,6 +1206,9 @@ async function showStrategyPicker() {
     picker.append(form);
   }
   flow().append(picker);
+  /* Folders earlier sessions worked in come back as rows of their own — the
+   * sidebar already groups their sessions, so the picker must offer them. */
+  syncPickerFolders();
 }
 
 /** @returns {string|undefined} the browser's IANA zone, which the host records

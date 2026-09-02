@@ -158,7 +158,12 @@ basename). Two same-origin-fenced routes feed it: `GET /data/strategies.json` an
 The picker's `choose a local folder…` row opens the OS's own directory dialog
 through `host.pickDirectory` (the directory-picker-auto row the overlay
 mounts); the chosen path becomes the session's workspace and groups by its
-basename. Cancel returns null and changes nothing.
+basename. Cancel returns null and changes nothing. Every folder an existing
+session has worked in that is neither the repo root nor a `strategies/`
+directory comes back in the picker as a `local` row of its own (derived from
+`session.list`'s cwds, so the picker offers exactly the groups the sidebar
+shows); the strategy index must have loaded first, since without its root a
+strategy directory cannot be told from a folder.
 
 Groups fold (chevron on the header; view state per browser), and each row
 carries four hover actions: rename and fork are the host's own RPCs
