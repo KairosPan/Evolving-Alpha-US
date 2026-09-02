@@ -148,9 +148,10 @@ would be a lie.
 ## Strategy workspaces (src/strategies.ts + the session picker)
 
 A session's dsh workspace IS a strategy: a new session starts with a picker —
-the `strategies/*` directories (each with its status.yaml badge), `workbench`
-(the repo root, for non-strategy chores), and a create field that births a new
-strategy from `strategies/_template` on the spot. The first prompt creates the
+the `strategies/*` directories (names only; a strategy's status.yaml status
+is on hover), `workbench` (the repo root, for non-strategy chores), and a
+create field that births a new strategy from `strategies/_template` on the
+spot. The first prompt creates the
 session with the picked directory as `cwd`, and the sidebar groups sessions by
 strategy (derived from each session's `cwd`; foreign directories group by
 basename). Two same-origin-fenced routes feed it: `GET /data/strategies.json` and
@@ -160,9 +161,9 @@ through `host.pickDirectory` (the directory-picker-auto row the overlay
 mounts); the chosen path becomes the session's workspace and groups by its
 basename. Cancel returns null and changes nothing. Every folder an existing
 session has worked in that is neither the repo root nor a `strategies/`
-directory comes back in the picker as a `local` row of its own (derived from
-`session.list`'s cwds, so the picker offers exactly the groups the sidebar
-shows); the strategy index must have loaded first, since without its root a
+directory comes back in the picker as a row of its own, its path on hover
+(derived from `session.list`'s cwds, so the picker offers exactly the groups
+the sidebar shows); the strategy index must have loaded first, since without its root a
 strategy directory cannot be told from a folder.
 
 Groups fold (chevron on the header; view state per browser), and each row

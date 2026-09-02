@@ -1102,7 +1102,9 @@ function pickerRow(label, cwd, badge, picker) {
   row.setAttribute("role", "button");
   row.tabIndex = 0;
   row.append(el("span", "pick-name", label));
-  if (badge) row.append(el("span", "chip", badge));
+  /* The row is the name (operator direction): a strategy's status, "repo
+   * root", "local" stay on hover only — callers with a path put that there. */
+  if (badge) row.title = badge;
   const choose = () => {
     pendingCwd = cwd;
     for (const other of picker.querySelectorAll(".pick-row")) other.classList.toggle("sel", other === row);
