@@ -204,58 +204,67 @@ split by data source:
   history-tail / list-row projection blocks seed a session opened cold. The
   context bar turns danger-colored at 80%. *Local agents* is an
   OPERATOR-CURATED roster, not a fixed list: it starts empty and lives in
-  `$DSH_HOME/face/agents.json`. The `+ connect` row opens the roster page:
-  what is *connected* (each row deletable), what auto-discovery *detected on
-  this machine* (the panels.ts suggestion list — fifteen coding-agent CLIs by
-  their PATH names — probed and not yet connected, one click to connect, with
-  a ↻ refresh that re-probes now through `POST /data/agents/rescan`, skipping
-  the one-minute probe cache), and connect-by-name for anything the list does
-  not know. `POST /data/agents/connect` admits a binary ONLY if it answers
-  `<bin> --version` (execFile, no shell; the name is fenced to one bare PATH
-  token, so a request body can never steer the probe to a path); connect
-  probes fresh. Rows also disconnect from a hover `×` in the index or the
-  agent's own page (`POST /data/agents/disconnect`); a connected binary that
-  stops answering stays listed greyed rather than vanishing. Each agent's page is its directory entry (status / binary /
+  `$DSH_HOME/face/agents.json`. The `+ connect` row opens the roster page,
+  three parts: what is *connected* (each row deletable); what auto-discovery
+  *detected on this machine* — the panels.ts suggestion list, fifteen
+  coding-agent CLIs by their PATH names, each probed with `<bin> --version`
+  (execFile, no shell, scrubbed env, 3 s kill; absent, hung and nonzero all
+  read as "not here"), offered in list order when it answers and is neither
+  connected nor hidden, one click to connect, a `delete` that HIDES it
+  (remembered in the roster file, listed as a restore chip beneath, so
+  nothing is forgotten), and a ↻ refresh that forgets the one-minute probe
+  cache and looks again (`POST /data/agents/rescan`); and connect-by-name for
+  anything the list does not know. `POST /data/agents/connect` admits a
+  binary ONLY if it answers `--version` (the name is fenced to one bare PATH
+  token, so a request body can never steer a probe to a path), probes fresh,
+  and un-hides a hidden candidate; rows also disconnect from a hover `×` in
+  the index or the agent's own page (`POST /data/agents/disconnect`); a
+  connected binary that stops answering stays listed greyed rather than
+  vanishing. Each agent's page is its directory entry (status / binary /
   version / signed-in state — read through the agent's OWN status command,
   `claude auth status`, `codex login status` or `hermes status`, the last a
   config report rather than a login gate, so a pinned provider reads as
-  signed in — never its credential store) and, for agents the face has a
-  recipe for, the **exec channel**: an untitled run card (⌘/Ctrl+Enter runs;
-  the working-directory select offers the strategy directories first and the
-  repo root last) that spawns the operator's own UNMODIFIED CLI as a child
-  (`POST /data/agents/run`) and renders its answer as markdown. These are the
-  GREEN rows of `docs/research/2026-09-01-agent-connection-survey.md`: the
-  child performs its own sign-in and the face handles no credential at any
-  point, which is what keeps it on the permitted side of Anthropic's terms
-  (the survey quotes the line and its source); the Hermes-style reuse of
+  signed in — never its credential store) and names the tool it became.
+
+  **What a connection is FOR.** The face has no run box of its own: a
+  connected agent the face has a recipe for is registered in the dsh tree as
+  a tool, `agent_<bin>` (`ctx.tools.register`, synced at boot and after every
+  roster write, disposed on disconnect), so **Kairos calls it from any
+  strategy session** — `agent_claude(prompt, resume?)`. The tool spawns the
+  operator's own UNMODIFIED CLI as a child in the calling session's directory
+  (`exec.agent.session.header.cwd` — the strategy's workspace), forwards the
+  call's cancellation to the child, and hands the answer back as the tool
+  result with the CLI's session id, so Kairos can continue the conversation
+  with `resume`. These are the GREEN rows of
+  `docs/research/2026-09-01-agent-connection-survey.md`: the child performs
+  its own sign-in and the face handles no credential at any point, which is
+  what keeps it on the permitted side of Anthropic's terms (the survey quotes
+  the line and its source); the Hermes-style reuse of
   `~/.claude/.credentials.json` against the raw API is the bright line and is
   never ported. Recipes: Claude Code = `claude -p --output-format json
   --restricted --strict-mcp-config --disallowedTools "Read(./.env)"
   "Read(./.env.*)"` (no command/code tools, no WebFetch, user/project
   settings and every MCP config ignored, file tools confined to the run's
-  directory, the workbench's key files unread even from the root — a READER,
-  not an actor); Codex = `codex exec --sandbox read-only --json
-  --skip-git-repo-check -o <scratch> -` (the sandbox is PINNED — the
-  operator's `~/.codex/config.toml` says workspace-write and a recipe must not
-  inherit its posture from a file the face does not own; the git flag lets a
-  strategy dir that is not a repo be the working directory). The prompt
-  always travels on stdin (an argv beginning with `-` would parse as a flag);
-  the working directory is any existing directory inside the workbench
-  (defaults to the root; validated by realpath prefix, so a symlink out of
-  the tree fails); the child's env is scrubbed of every credential override
-  and endpoint redirect that would move a CLI off its own sign-in
-  (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
-  `OPENAI_API_KEY`, `CODEX_API_KEY`, `OPENAI_BASE_URL`, the Bedrock / Vertex /
-  Foundry switches) and of the workbench's own secrets — probes run under the
-  same scrub, so the auth card observes what the run will get; a run
-  continues its session via the UUID the CLI returned (`--resume` /
-  `codex exec resume`). Runs are one-shot and synchronous (ten-minute kill,
-  SIGKILL after a five-second grace, 16 MB output cap), one in flight per
-  agent (a second is refused 409), remembered per agent for the life of the
-  page. Hermes deliberately has NO recipe: its default provider config reuses
-  those tokens, so it stays a directory entry until its provider is pinned.
-  *A2A network* is a declared placeholder page — network agents land there
-  when that opens.
+  directory, the workbench's key files unread — a READER, not an actor);
+  Codex = `codex exec --sandbox read-only --json --skip-git-repo-check -o
+  <scratch> -` (the sandbox is PINNED — the operator's `~/.codex/config.toml`
+  says workspace-write and a recipe must not inherit its posture from a file
+  the face does not own). The prompt always travels on stdin (an argv
+  beginning with `-` would parse as a flag); the child's env is scrubbed of
+  every credential override and endpoint redirect that would move a CLI off
+  its own sign-in (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+  `ANTHROPIC_BASE_URL`, `OPENAI_API_KEY`, `CODEX_API_KEY`, `OPENAI_BASE_URL`,
+  the Bedrock / Vertex / Foundry switches) and of the workbench's own secrets
+  — probes run under the same scrub, so the auth card observes what a call
+  will get. Runs are one at a time per agent (a second call is refused while
+  one is in flight), ten-minute kill with SIGKILL after a five-second grace,
+  16 MB output cap. A tool call runs under the session's normal policy — like
+  the alpaca-kit tools it raises no approval card; a `tools/pre-execute`
+  `ask` hook is the knob if the operator ever wants one per delegation.
+  Hermes deliberately has NO recipe: its default provider config reuses those
+  tokens, so it stays a directory entry until its provider is pinned. *A2A
+  network* is a declared placeholder page — network agents land there when
+  that opens.
 - **memory** indexes the skill catalog — Kairos's standing knowledge. The
   wire `skill.list` needs an attached session and drops source/path/body, so
   two face routes read `ctx.skills` in-process: `GET /data/memory.json`
@@ -279,13 +288,13 @@ routes — stands behind the same browser-trust fence the harness puts on
 `cross-site`, and a present `Origin` that matches the Host; every `/data` POST
 additionally requires `application/json` (415 otherwise), so a cross-site
 page cannot reach a side-effectful route with a "simple" request that needs
-no preflight. The roster's connect/disconnect are the only writes to face
-state (its own metadata file); `run` spawns a child CLI with a fixed argv and
-writes nothing durable of its own — a Codex run gets a `mkdtemp` scratch
-directory under the OS tmpdir for `-o`, read once and removed when the run
-ends. `panelDeps` fails loud at boot when `skills`/`tools`/`loader` are
-missing from the tree — a dead panel with nothing on stderr is the failure
-mode it exists to prevent.
+no preflight. The roster's connect/disconnect/ignore are the only writes to
+face state (its own metadata file); an agent tool spawns that agent's own CLI
+with a fixed argv and writes nothing durable of its own — a Codex call gets a
+`mkdtemp` scratch directory under the OS tmpdir for `-o`, read once and
+removed when the run ends. `panelDeps` fails loud at boot when
+`skills`/`tools`/`loader` are missing from the tree — a dead panel with
+nothing on stderr is the failure mode it exists to prevent.
 
 ## Chat rendering (client/render.js + the collapsed process rows)
 

@@ -7,11 +7,15 @@
  * (`host.describe`, `settings.describe`, `credentials.describe`), while its
  * LOCAL-agent roster — the coding agents connected beside Kairos — lives
  * here, because only the face process can ask the machine what is on its
- * PATH. The roster is OPERATOR-CURATED, not fixed: it starts empty, a
- * connect route probes a binary and adds it (`$DSH_HOME/face/agents.json`,
- * the same face-metadata home archived.json uses), and a disconnect route
- * removes it. The remaining two need what only the booted tree holds
- * in-process:
+ * PATH. The roster is OPERATOR-CURATED, not fixed: it starts empty; auto-
+ * discovery probes a known list of coding-agent CLIs and offers what answers
+ * (an entry the operator does not want is hidden, restorably); a connect
+ * probes one binary and adds it to `$DSH_HOME/face/agents.json` (the same
+ * face-metadata home archived.json uses); a disconnect removes it. What a
+ * connection is FOR: every connected agent the face has a recipe for is
+ * registered as a tool in the dsh tree — `agent_<bin>` — so Kairos can call
+ * it from any strategy session (see the agent-tools block). The remaining two
+ * sections need what only the booted tree holds in-process:
  *
  * - MEMORY is the skill catalog — Kairos's standing knowledge (the mechanics
  *   and style-kairos packs). `skill.list` over RPC needs an attached session
@@ -22,17 +26,17 @@
  *   record is a 12-line projection of `ctx.loader.entries()` anyway — restated
  *   here rather than mounted, so no new row and no second gateway).
  *
- * The roster's connect/disconnect are the only writes to face state (its own
- * metadata file); `run` spawns one connected agent's own CLI as a child inside
- * a fenced working directory (the exec-channel block above EXEC_SPECS) — its
- * only face-side write is a tmpdir scratch for codex's `-o`, removed after the
- * run. Same-origin-fenced like every `/data` route.
+ * The roster's connect/disconnect/ignore are the only writes to face state
+ * (its own metadata file); an agent tool spawns that agent's own CLI as a
+ * child inside the calling session's directory — its only face-side write is
+ * a tmpdir scratch for codex's `-o`, removed after the run. Same-origin-fenced
+ * like every `/data` route.
  * @module
  */
 import { execFile, spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve as resolvePath } from "node:path";
+import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Context } from "@deepseek-ai/cordis";
 import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
@@ -71,12 +75,13 @@ export interface SkillBody extends SkillRow {
   path?: string;
 }
 
-/** What the connect page's "detected on this machine" auto-discovery probes
- * for: the coding-agent CLIs in circulation, by the bare name each installs
- * on PATH, with pretty labels. Suggestions only — an absent one fails its
- * probe instantly (ENOENT) and never shows; the connected roster is the
- * operator's, in `$DSH_HOME/face/agents.json`, and any valid bare name can be
- * connected by hand. Extend by adding a row. */
+/* ---------- the local-agent roster: detection, connect, disconnect ---------- */
+
+/** What auto-discovery probes for: the coding-agent CLIs in circulation, by
+ * the bare name each installs on PATH, with pretty labels. Suggestions only —
+ * an absent one fails its probe instantly (ENOENT) and never shows; the
+ * connected roster is the operator's, in `$DSH_HOME/face/agents.json`, and any
+ * valid bare name can be connected by hand. Extend by adding a row. */
 const KNOWN_AGENTS: ReadonlyArray<{ bin: string; label: string }> = [
   { bin: "claude", label: "Claude Code" },
   { bin: "codex", label: "Codex" },
@@ -98,8 +103,12 @@ const KNOWN_AGENTS: ReadonlyArray<{ bin: string; label: string }> = [
 /** Exactly a connectable binary name: ONE bare token for a PATH lookup. No
  * separators of any kind, so the probe (`execFile(bin, ["--version"])`, no
  * shell) can never be steered to a path — this regex is what makes the
- * connect route safe to feed from a request body at all. */
+ * roster routes safe to feed from a request body at all. */
 const AGENT_BIN_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
+
+/** Whether a value is a connectable binary name. */
+export const isAgentBin = (value: unknown): value is string =>
+  typeof value === "string" && AGENT_BIN_RE.test(value);
 
 /** Per-agent AUTH probes — the Hermes-style second half of the handshake.
  * Hermes connects Claude Code and Codex at the ACCOUNT level (its own OAuth
@@ -168,43 +177,47 @@ export function authFromProbe(bin: string, result: { code: number; stdout: strin
 /** The face's agent-roster file under the harness home, beside archived.json. */
 const AGENTS_META = ["face", "agents.json"] as const;
 
-/** The operator's connected roster, in connect order. */
+/** The operator's roster: what is connected, in connect order, and which
+ * detected candidates they have hidden. */
 export interface AgentsMeta {
   connected: { bin: string; label: string }[];
+  ignored: string[];
 }
 
 /** One probed local agent: present-with-version, or connected-but-silent,
- * plus its auth reading when the agent has a status command, and whether the
- * face can DRIVE it (has an exec recipe — see {@link EXEC_SPECS}). */
+ * plus its auth reading when the agent has a status command, and the dsh
+ * tool name Kairos reaches it by when the face has a recipe for it. */
 export interface LocalAgentRow {
   bin: string;
   label: string;
   found: boolean;
   version?: string;
   auth?: AgentAuth;
-  exec?: boolean;
+  tool?: string;
 }
 
 /** @returns the stored roster; an absent, unreadable, or hand-mangled file
  * reads as best it can — a convenience, never a gate. */
 export async function readAgentsMeta(home: string): Promise<AgentsMeta> {
+  const meta: AgentsMeta = { connected: [], ignored: [] };
   try {
     const parsed: unknown = JSON.parse(await readFile(join(home, ...AGENTS_META), "utf8"));
     if (parsed !== null && typeof parsed === "object") {
-      const rows = (parsed as { connected?: unknown }).connected;
-      if (Array.isArray(rows)) {
-        return {
-          connected: rows
-            .filter((row): row is { bin: string; label?: unknown } =>
-              row !== null && typeof row === "object"
-              && typeof (row as { bin?: unknown }).bin === "string"
-              && AGENT_BIN_RE.test((row as { bin: string }).bin))
-            .map((row) => ({ bin: row.bin, label: typeof row.label === "string" ? row.label : row.bin })),
-        };
+      const { connected, ignored } = parsed as { connected?: unknown; ignored?: unknown };
+      if (Array.isArray(connected)) {
+        for (const row of connected) {
+          if (row === null || typeof row !== "object") continue;
+          const { bin, label } = row as { bin?: unknown; label?: unknown };
+          if (!isAgentBin(bin) || meta.connected.some((have) => have.bin === bin)) continue;
+          meta.connected.push({ bin, label: typeof label === "string" ? label : bin });
+        }
+      }
+      if (Array.isArray(ignored)) {
+        for (const bin of ignored) if (isAgentBin(bin) && !meta.ignored.includes(bin)) meta.ignored.push(bin);
       }
     }
   } catch { /* fall through to empty */ }
-  return { connected: [] };
+  return meta;
 }
 
 async function writeAgentsMeta(home: string, meta: AgentsMeta): Promise<void> {
@@ -215,14 +228,18 @@ async function writeAgentsMeta(home: string, meta: AgentsMeta): Promise<void> {
 /** The pretty label for a bin: the known map's, else the bin itself. */
 const labelFor = (bin: string): string => KNOWN_AGENTS.find((k) => k.bin === bin)?.label ?? bin;
 
-/* ---------- the exec channel: drive a connected agent, one run per agent ------
- * The GREEN rows of docs/research/2026-09-01-agent-connection-survey.md: the
- * face spawns the operator's own UNMODIFIED CLI as a child, lets it perform
- * its own sign-in, and reads what it prints — it handles no credential at any
- * point, which is what keeps it on the permitted side of Anthropic's terms
- * (the survey quotes the line). Hermes has NO recipe on purpose: its default
- * provider config reuses those very tokens (the survey's RED rows), so it
- * stays a directory entry until the operator pins its provider. */
+/* ---------- the agent tools: connected ⇒ callable by Kairos -----------------
+ * The GREEN rows of docs/research/2026-09-01-agent-connection-survey.md, put
+ * where they belong: not a face-side run box but a TOOL in the dsh tree. A
+ * connected agent with a recipe is registered as `agent_<bin>`; Kairos calls
+ * it from a strategy session and the face spawns the operator's own
+ * UNMODIFIED CLI as a child in that session's directory, lets it perform its
+ * own sign-in, and hands the answer back as the tool result. The face handles
+ * no credential at any point — that is what keeps this on the permitted side
+ * of Anthropic's terms (the survey quotes the line). Hermes has NO recipe on
+ * purpose: its default provider config reuses those very tokens (the survey's
+ * RED rows), so it stays a directory entry until the operator pins its
+ * provider. */
 
 /** What one run reads out of the child's output. */
 export interface RunParse {
@@ -251,8 +268,8 @@ const EXEC_SPECS: Readonly<Record<string, ExecSpec>> = {
      * = no MCP servers from any config (a strategy dir's .mcp.json included) ·
      * --disallowedTools Read(./.env*) = the workbench's key files stay unread
      * even when the run's directory is the root that holds them (it is
-     * variadic, so it goes LAST). A one-shot the face fires is a READER: it
-     * answers about the tree, it does not act on it. */
+     * variadic, so it goes LAST). A call from Kairos is a READER: it answers
+     * about the tree, it does not act on it. */
     lastMessageFile: false,
     argv: (resume) => [
       "-p", "--output-format", "json", "--restricted", "--strict-mcp-config",
@@ -283,18 +300,17 @@ const EXEC_SPECS: Readonly<Record<string, ExecSpec>> = {
 /** Whether the face can drive this agent (has an exec recipe). `hasOwn`, not
  * a lookup: a bin named `constructor` must read as no recipe, not as
  * `Object.prototype.constructor`. */
-const hasExec = (bin: string): boolean => Object.hasOwn(EXEC_SPECS, bin);
+export const hasExec = (bin: string): boolean => Object.hasOwn(EXEC_SPECS, bin);
+
+/** The dsh tool name a connected agent is reachable by. Tool names are
+ * `[A-Za-z0-9_-]`; a bin may carry `.` or `+`, which fold to `_`. */
+export const toolNameFor = (bin: string): string => `agent_${bin.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 
 /** Exactly a session/thread id both CLIs mint: a UUID. Anything else is
  * refused before it can reach an argv. */
 const AGENT_SESSION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const PROMPT_LIMIT = 32_000;
-/** A run's body carries a prompt (the shared 4 KB reader is sized for ids):
- * JSON of {bin, prompt, cwd, resume}, where a CJK prompt is 3 UTF-8 bytes per
- * UTF-16 unit — sized so the prompt cap, not the body cap, is what a long
- * prompt hits. */
-const RUN_BODY_LIMIT = 4 * PROMPT_LIMIT;
 /** How long one run may take before it is killed — a coding agent reading a
  * tree and answering is minutes, not seconds. */
 const RUN_TIMEOUT_MS = 600_000;
@@ -329,7 +345,7 @@ export function scrubbedEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Proce
 /** `claude -p --output-format json` prints one result object:
  * {result, session_id, is_error, total_cost_usd, num_turns, …}; an error
  * variant (`subtype: "error_*"`) carries `errors[]` instead of `result`, and
- * the cause must reach the operator. Anything else comes back as raw text so
+ * the cause must reach the caller. Anything else comes back as raw text so
  * they still see what happened. */
 export function parseClaudeRun(stdout: string): RunParse {
   const start = stdout.indexOf("{");
@@ -387,20 +403,31 @@ export interface RunOutcome {
   truncated: boolean;
 }
 
+/** What a runner is asked for: where, what to feed on stdin, which env, how
+ * long, and the caller's cancellation (Kairos's tool call being aborted). */
+export interface RunOptions {
+  cwd: string;
+  input: string;
+  env: NodeJS.ProcessEnv;
+  timeoutMs: number;
+  signal?: AbortSignal;
+}
+
 /** How long a SIGTERMed child gets to leave before SIGKILL. */
 const KILL_GRACE_MS = 5_000;
 
 /** The real runner: `spawn` (no shell), prompt written to stdin then closed,
- * output collected up to {@link RUN_OUTPUT_LIMIT}, killed at `timeoutMs`.
- * Three things a naive version gets wrong, and this one does not: a child
- * that traps SIGTERM is SIGKILLed after {@link KILL_GRACE_MS}; a child that
- * has EXITED while a grandchild still holds its pipes settles a second
- * later on `exit` rather than waiting on `close` forever; and the streams
- * are decoded through `setEncoding`, whose decoder holds a multibyte
- * sequence split across chunks (a CJK answer must not arrive as U+FFFD).
- * A spawn failure (the binary vanished) RESOLVES — never rejects — as a
- * null-code outcome with the reason on stderr, so the operator sees it. The
- * child dies with the face: a `process` 'exit' hook SIGTERMs it. */
+ * output collected up to {@link RUN_OUTPUT_LIMIT}, killed at `timeoutMs` or
+ * when the caller's signal aborts. Three things a naive version gets wrong,
+ * and this one does not: a child that traps SIGTERM is SIGKILLed after
+ * {@link KILL_GRACE_MS}; a child that has EXITED while a grandchild still
+ * holds its pipes settles a second later on `exit` rather than waiting on
+ * `close` forever; and the streams are decoded through `setEncoding`, whose
+ * decoder holds a multibyte sequence split across chunks (a CJK answer must
+ * not arrive as U+FFFD). A spawn failure (the binary vanished) RESOLVES —
+ * never rejects — as a null-code outcome with the reason on stderr, so the
+ * caller sees it. The child dies with the face: a `process` 'exit' hook
+ * SIGTERMs it. */
 export function defaultAgentRunner(): PanelDeps["runAgent"] {
   return (bin, argv, opts) => new Promise((resolve) => {
     const child = spawn(bin, argv, { cwd: opts.cwd, env: opts.env, stdio: ["pipe", "pipe", "pipe"] });
@@ -411,7 +438,6 @@ export function defaultAgentRunner(): PanelDeps["runAgent"] {
     let timedOut = false;
     let truncated = false;
     let settled = false;
-    /** @type {ReturnType<typeof setTimeout>[]} every timer this run armed */
     const timers: ReturnType<typeof setTimeout>[] = [];
     const later = (fn: () => void, ms: number): void => {
       const t = setTimeout(fn, ms);
@@ -420,16 +446,19 @@ export function defaultAgentRunner(): PanelDeps["runAgent"] {
     };
     const onFaceExit = (): void => { child.kill("SIGTERM"); };
     process.once("exit", onFaceExit);
+    const terminate = (): void => {
+      child.kill("SIGTERM");
+      later(() => { if (!settled) child.kill("SIGKILL"); }, KILL_GRACE_MS);
+    };
+    const onAbort = (): void => terminate();
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
     const finish = (code: number | null): void => {
       if (settled) return;
       settled = true;
       for (const t of timers) clearTimeout(t);
       process.off("exit", onFaceExit);
+      opts.signal?.removeEventListener("abort", onAbort);
       resolve({ code, stdout, stderr, timedOut, truncated });
-    };
-    const terminate = (): void => {
-      child.kill("SIGTERM");
-      later(() => { if (!settled) child.kill("SIGKILL"); }, KILL_GRACE_MS);
     };
     later(() => {
       timedOut = true;
@@ -460,27 +489,24 @@ export function defaultAgentRunner(): PanelDeps["runAgent"] {
     });
     child.on("close", (code) => finish(code));
     child.stdin.on("error", () => { /* the child closed stdin early; its output still decides */ });
+    if (opts.signal?.aborted) terminate();
     child.stdin.end(opts.input);
   });
 }
 
-/** Resolve a requested working directory INSIDE the workbench root, or the
- * root itself when none is asked for. Symlinks are followed on both sides so
- * a link out of the tree cannot pass the prefix test. */
-async function resolveWorkdir(root: string, requested: unknown): Promise<string> {
-  const rootReal = await realpath(root);
-  if (requested === undefined || requested === null || requested === "") return rootReal;
-  if (typeof requested !== "string") throw new StrategyError(400, "invalid cwd");
-  let real: string;
-  try {
-    real = await realpath(resolvePath(rootReal, requested));
-    if (!(await stat(real)).isDirectory()) throw new Error("not a directory");
-  } catch {
-    throw new StrategyError(400, "cwd is not a directory");
+/** The directory a run executes in: the calling session's cwd when it still
+ * is a directory, else the workbench root. Not a fence — the cwd comes from
+ * the SESSION (trusted, never a request), and dsh's own sandbox bounds what a
+ * session may touch; this only keeps a vanished directory from failing the
+ * spawn. */
+async function resolveRunDir(root: string, requested: unknown): Promise<string> {
+  if (typeof requested === "string" && requested !== "") {
+    try {
+      const real = await realpath(requested);
+      if ((await stat(real)).isDirectory()) return real;
+    } catch { /* fall through to the root */ }
   }
-  const rel = relative(rootReal, real);
-  if (rel.startsWith("..") || isAbsolute(rel)) throw new StrategyError(400, "cwd outside the workbench");
-  return real;
+  return realpath(root);
 }
 
 /** The face's answer to one run. */
@@ -494,34 +520,39 @@ export interface RunResult extends RunParse {
   stderr?: string;
 }
 
-/** Runs in flight, keyed by bin — the host-side half of "one run per agent".
- * Module-level so the exported {@link runLocalAgent} carries it in tests. */
+/** One request to drive an agent through its recipe. */
+export interface RunRequest {
+  bin: unknown;
+  prompt: unknown;
+  cwd?: unknown;
+  resume?: unknown;
+  signal?: AbortSignal;
+}
+
+/** Runs in flight, keyed by bin — one run per agent at a time. Module-level so
+ * the exported {@link runAgentRecipe} carries it in tests. */
 const running = new Set<string>();
 
 /**
- * Drive one connected agent through its exec recipe, one task.
+ * Drive one agent through its exec recipe, one task.
  *
- * Gates, in order: a valid name with a recipe (400), connected (409), a
- * non-empty prompt under {@link PROMPT_LIMIT} (400 / 413), a UUID session to
- * resume if any (400), a working directory inside the workbench (400), no run
- * already in flight for this agent (409). The prompt goes to the child on
+ * Gates, in order: a valid name with a recipe (400), a non-empty prompt under
+ * {@link PROMPT_LIMIT} (400 / 413), a UUID session to resume if any (400), no
+ * run already in flight for this agent (409). The prompt goes to the child on
  * stdin; the answer comes back parsed, with the exit code and the tail of
- * stderr when the run failed.
+ * stderr when the run failed. Whether the agent is CONNECTED is not checked
+ * here: the tool that calls this exists only while it is.
  */
-export async function runLocalAgent(deps: PanelDeps, body: Record<string, unknown>): Promise<RunResult> {
-  const { bin, prompt, cwd, resume } = body;
-  if (typeof bin !== "string" || !AGENT_BIN_RE.test(bin) || !hasExec(bin)) {
-    throw new StrategyError(400, "no exec channel for this agent");
-  }
+export async function runAgentRecipe(deps: PanelDeps, req: RunRequest): Promise<RunResult> {
+  const { bin, prompt, resume } = req;
+  if (!isAgentBin(bin) || !hasExec(bin)) throw new StrategyError(400, "no exec channel for this agent");
   const spec = EXEC_SPECS[bin];
-  const meta = await readAgentsMeta(deps.home);
-  if (!meta.connected.some((row) => row.bin === bin)) throw new StrategyError(409, "not connected");
   if (typeof prompt !== "string" || prompt.trim() === "") throw new StrategyError(400, "prompt required");
   if (prompt.length > PROMPT_LIMIT) throw new StrategyError(413, "prompt too long");
   if (resume !== undefined && (typeof resume !== "string" || !AGENT_SESSION_RE.test(resume))) {
     throw new StrategyError(400, "invalid session id");
   }
-  const workdir = await resolveWorkdir(deps.cwd, cwd);
+  const workdir = await resolveRunDir(deps.cwd, req.cwd);
   if (running.has(bin)) throw new StrategyError(409, "a run is already in progress for this agent");
   running.add(bin);
 
@@ -534,7 +565,7 @@ export async function runLocalAgent(deps: PanelDeps, body: Record<string, unknow
       lastMessageFile = join(scratch, "last-message.md");
     }
     const out = await deps.runAgent(bin, spec.argv(resume, lastMessageFile), {
-      cwd: workdir, input: prompt, env: scrubbedEnv(), timeoutMs: RUN_TIMEOUT_MS,
+      cwd: workdir, input: prompt, env: scrubbedEnv(), timeoutMs: RUN_TIMEOUT_MS, signal: req.signal,
     });
     let lastMessage: string | undefined;
     if (lastMessageFile !== undefined) {
@@ -546,8 +577,8 @@ export async function runLocalAgent(deps: PanelDeps, body: Record<string, unknow
     const isError = parsed.isError || out.code !== 0 || out.timedOut || out.truncated;
     /* Unlike data.ts (whose producer runs WITH the APCA keys, so a traceback
      * could echo them), this child's env is scrubbed, it is the operator's
-     * own CLI, and its diagnostics are what the operator needs to see — so
-     * the stderr TAIL is returned, error runs only. */
+     * own CLI, and its diagnostics are what the caller needs to see — so the
+     * stderr TAIL is returned, error runs only. */
     const stderr = out.stderr.trim();
     return {
       ...parsed, bin, cwd: workdir, isError,
@@ -560,16 +591,148 @@ export async function runLocalAgent(deps: PanelDeps, body: Record<string, unknow
   }
 }
 
-/** One composed Loader row, as the plugin panel shows it — the same projection
- * `dsh-host-plugin-inventory` makes, plus `serverName` for MCP rows so the
- * panel can pair a server with its registered tools. */
-export interface PluginRow {
-  id: string;
-  module: string;
-  enabled: boolean;
-  phase: string | null;
-  serverName?: string;
+/** What the face reads off dsh's ToolRunContext (dsh-tools 0.1.1-rc.2
+ * lib/types/index.d.ts:196-300): the calling session's directory and the
+ * caller's cancellation. Stated structurally so the face neither declares
+ * dsh-tools as a dependency nor drifts silently. */
+export interface AgentToolExec {
+  agent?: { session: { header: { cwd?: string } } };
+  signal: AbortSignal;
 }
+
+/** The shape `ctx.tools.register` takes (dsh-tools ToolDefinition,
+ * lib/types/index.d.ts:106-173), stated structurally for the same reason;
+ * the registry validates the real contract at registration. */
+export interface AgentToolDefinition {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  output: {
+    schema: Record<string, unknown>;
+    render(args: unknown, value: unknown): { type: "text"; text: string }[];
+  };
+  timeoutMs: number;
+  execute(args: unknown, exec: AgentToolExec): Promise<unknown>;
+  presentCall(args: unknown): { card: "generic"; title: string; kind: "read"; rawInput?: unknown };
+}
+
+/** The value one agent tool returns — exactly what `output.schema` declares. */
+export interface AgentToolValue {
+  text: string;
+  session?: string;
+  isError: boolean;
+  cost?: number;
+  turns?: number;
+  durationMs: number;
+}
+
+/**
+ * The tool Kairos gets for one connected agent. `execute` runs the recipe in
+ * the CALLING SESSION's directory (a strategy's workspace), forwards the
+ * call's cancellation to the child, and throws on a failed run so the
+ * registry hands Kairos an error result with the cause. The rendered text
+ * carries the CLI's session id so Kairos can continue the conversation.
+ * @param deps - the process seams.
+ * @param bin - a connected bin with a recipe.
+ * @param label - its pretty label, for the description and the card title.
+ */
+export function agentToolDefinition(deps: PanelDeps, bin: string, label: string): AgentToolDefinition {
+  const name = toolNameFor(bin);
+  return {
+    name,
+    description:
+      `Ask the operator's locally installed ${label} (${bin}) a question about the current working tree. ` +
+      "It runs as itself, signed in with the operator's own account, in the session's working directory. " +
+      "READ-ONLY: it can inspect files but cannot run commands or edit anything — use it for a second opinion, " +
+      "a survey of the tree, or a review. Pass `resume` with the session id from a previous answer to continue " +
+      "that same conversation.",
+    parameters: {
+      type: "object",
+      properties: {
+        prompt: { type: "string", description: `The task or question for ${label}.` },
+        resume: { type: "string", description: "Session id from a previous answer, to continue that conversation." },
+      },
+      required: ["prompt"],
+      additionalProperties: false,
+    },
+    output: {
+      schema: {
+        type: "object",
+        properties: {
+          text: { type: "string" },
+          session: { type: "string" },
+          isError: { type: "boolean" },
+          cost: { type: "number" },
+          turns: { type: "number" },
+          durationMs: { type: "number" },
+        },
+        required: ["text", "isError", "durationMs"],
+        additionalProperties: false,
+      },
+      render(_args, value) {
+        const v = value as AgentToolValue;
+        const tail = v.session === undefined ? "" : `\n\n[${label} session ${v.session} — pass resume="${v.session}" to continue this conversation]`;
+        return [{ type: "text", text: `${v.text}${tail}` }];
+      },
+    },
+    timeoutMs: RUN_TIMEOUT_MS,
+    async execute(args, exec) {
+      const a = (args !== null && typeof args === "object" ? args : {}) as Record<string, unknown>;
+      const run = await runAgentRecipe(deps, {
+        bin, prompt: a.prompt, resume: a.resume,
+        cwd: exec.agent?.session.header.cwd, signal: exec.signal,
+      });
+      if (run.isError) {
+        throw new Error(run.text !== "" ? run.text : run.stderr ?? (run.timedOut ? `${label} timed out` : `${label} reported an error`));
+      }
+      const value: AgentToolValue = { text: run.text, isError: false, durationMs: run.durationMs };
+      if (run.session !== undefined) value.session = run.session;
+      if (run.cost !== undefined) value.cost = run.cost;
+      if (run.turns !== undefined) value.turns = run.turns;
+      return value;
+    },
+    presentCall(args) {
+      const prompt = (args as { prompt?: unknown } | null)?.prompt;
+      return {
+        card: "generic",
+        title: `Ask ${label}`,
+        kind: "read",
+        rawInput: typeof prompt === "string" ? prompt.slice(0, 200) : undefined,
+      };
+    },
+  };
+}
+
+/** Registered agent tools by bin, with their disposers — the live half of
+ * "connected ⇒ callable". */
+export type AgentToolRegistry = Map<string, () => void>;
+
+/**
+ * Make the registered tools match the roster: register every connected agent
+ * with a recipe that is not registered yet, dispose every registered one no
+ * longer connected. Idempotent; called at boot and after every roster write.
+ * @returns which bins changed, for the caller's log line.
+ */
+export async function syncAgentTools(deps: PanelDeps, registry: AgentToolRegistry): Promise<{ added: string[]; removed: string[] }> {
+  const meta = await readAgentsMeta(deps.home);
+  const wanted = new Map(meta.connected.filter((row) => hasExec(row.bin)).map((row) => [row.bin, row.label]));
+  const added: string[] = [];
+  const removed: string[] = [];
+  for (const [bin, dispose] of [...registry]) {
+    if (wanted.has(bin)) continue;
+    dispose();
+    registry.delete(bin);
+    removed.push(bin);
+  }
+  for (const [bin, label] of wanted) {
+    if (registry.has(bin)) continue;
+    registry.set(bin, deps.registerTool(agentToolDefinition(deps, bin, label)));
+    added.push(bin);
+  }
+  return { added, removed };
+}
+
+/* ---------- the process seams ---------- */
 
 /** What {@link registerPanelRoutes} needs of the booted tree. Structural and
  * injected so the tests drive the routes without a harness; {@link panelDeps}
@@ -581,6 +744,8 @@ export interface PanelDeps {
   };
   /** `ctx.tools.schemas()` — the global tool view, MCP registrations included. */
   toolSchemas(): { name: string; description: string }[];
+  /** `ctx.tools.register(definition)` — returns the exact disposer. */
+  registerTool(definition: AgentToolDefinition): () => void;
   /** `ctx.loader.entries()` — the LIVE composed row tree. */
   loaderEntries(): Iterable<{
     id: string;
@@ -589,7 +754,7 @@ export interface PanelDeps {
     fiber?: { state: number };
   }>;
   /** The workbench repo root: skill discovery resolves project roots against
-   * it, and a run's working directory must resolve inside it. */
+   * it, and a run whose session directory is gone falls back to it. */
   cwd: string;
   /** The harness home holding the face's agents.json roster file. */
   home: string;
@@ -600,20 +765,16 @@ export interface PanelDeps {
   /** Ask one agent's own status command whether it is signed in — the
    * {@link AUTH_PROBES} argv for that bin; "unknown" when it has none. */
   probeAuth(bin: string): Promise<AgentAuth>;
-  /** Spawn one connected agent's CLI with a recipe's argv, the prompt on
-   * stdin, inside `cwd` with a scrubbed env; see {@link defaultAgentRunner}. */
-  runAgent(
-    bin: string,
-    argv: string[],
-    opts: { cwd: string; input: string; env: NodeJS.ProcessEnv; timeoutMs: number },
-  ): Promise<RunOutcome>;
+  /** Spawn one agent's CLI with a recipe's argv, the prompt on stdin, inside
+   * `cwd` with a scrubbed env; see {@link defaultAgentRunner}. */
+  runAgent(bin: string, argv: string[], opts: RunOptions): Promise<RunOutcome>;
 }
 
 /** The real prober: `execFile` (no shell) of the bare bin name — resolved on
  * the face process's PATH, which is the operator's shell's — with a fixed
- * `--version` argv and a kill timeout. Every failure is the same `null`: a
- * missing binary, a hung one, and one that exits nonzero all read as "not
- * here", which is all the roster claims to know. */
+ * `--version` argv, the scrubbed env, and a kill timeout. Every failure is
+ * the same `null`: a missing binary, a hung one, and one that exits nonzero
+ * all read as "not here", which is all detection claims to know. */
 export function defaultAgentProber(): PanelDeps["probeAgent"] {
   return (bin) => new Promise((resolve) => {
     execFile(bin, ["--version"], { timeout: 3_000, env: scrubbedEnv() }, (err, stdout) => {
@@ -652,10 +813,14 @@ export function defaultAuthProber(): PanelDeps["probeAuth"] {
  * mode this check exists to prevent.
  * @param ctx - the settled root context `bootFace` returned.
  * @param cwd - the workbench repo root (main.ts anchored the process there).
+ * @param home - the harness home; defaults to the resolved `$DSH_HOME`.
  */
 export function panelDeps(ctx: Context, cwd: string, home = resolveDshHome(undefined)): PanelDeps {
   const skills = ctx.get("skills") as PanelDeps["skills"] | undefined;
-  const tools = ctx.get("tools") as { schemas(): { name: string; description: string }[] } | undefined;
+  const tools = ctx.get("tools") as {
+    schemas(): { name: string; description: string }[];
+    register(definition: AgentToolDefinition): () => void;
+  } | undefined;
   const loader = ctx.get("loader") as { entries(): ReturnType<PanelDeps["loaderEntries"]> } | undefined;
   const missing = [
     ...(skills === undefined ? ["skills"] : []),
@@ -668,6 +833,7 @@ export function panelDeps(ctx: Context, cwd: string, home = resolveDshHome(undef
   return {
     skills,
     toolSchemas: () => tools.schemas(),
+    registerTool: (definition) => tools.register(definition),
     loaderEntries: () => loader.entries(),
     cwd,
     home,
@@ -695,31 +861,45 @@ async function authSoft(deps: PanelDeps, bin: string): Promise<AgentAuth> {
   }
 }
 
-/** The agent roster: the main agent (Kairos on this dsh runtime), the
- * operator's CONNECTED local agents (probed, in connect order — one that
- * stopped answering stays listed as found:false rather than vanishing), and
- * the connect page's candidates (known suggestions that answer on this
- * machine and are not yet connected). The A2A section is the client's — a
- * declared placeholder with no host data yet. */
+/** A detected-but-unconnected agent, as the roster page offers it. */
+export interface Candidate { bin: string; label: string; version: string }
+
+/** The agent roster as the panel shows it: the main agent (Kairos on this
+ * dsh runtime), the operator's CONNECTED local agents (probed, in connect
+ * order — one that stopped answering stays listed as found:false rather than
+ * vanishing), the detected candidates (known suggestions that answer on this
+ * machine and are neither connected nor hidden), and what the operator hid.
+ * The A2A section is the client's — a declared placeholder with no host data
+ * yet. */
 export async function agentsListing(deps: PanelDeps): Promise<{
   main: object;
   local: LocalAgentRow[];
-  candidates: { bin: string; label: string; version: string }[];
+  candidates: Candidate[];
+  ignored: { bin: string; label: string }[];
 }> {
   const meta = await readAgentsMeta(deps.home);
   const local = await Promise.all(meta.connected.map(async ({ bin, label }): Promise<LocalAgentRow> => {
     const [version, auth] = await Promise.all([probeSoft(deps, bin), authSoft(deps, bin)]);
-    return { bin, label, found: version !== null, ...(version === null ? {} : { version }), auth, exec: hasExec(bin) };
+    return {
+      bin, label, found: version !== null, ...(version === null ? {} : { version }), auth,
+      ...(hasExec(bin) ? { tool: toolNameFor(bin) } : {}),
+    };
   }));
   const connected = new Set(meta.connected.map((row) => row.bin));
+  const hidden = new Set(meta.ignored);
   const candidates = (await Promise.all(KNOWN_AGENTS
-    .filter((known) => !connected.has(known.bin))
-    .map(async ({ bin, label }) => {
+    .filter((known) => !connected.has(known.bin) && !hidden.has(known.bin))
+    .map(async ({ bin, label }): Promise<Candidate | null> => {
       const version = await probeSoft(deps, bin);
       return version === null ? null : { bin, label, version };
     })))
-    .filter((row): row is { bin: string; label: string; version: string } => row !== null);
-  return { main: { name: "Kairos", runtime: `dsh ${DSH_PIN}` }, local, candidates };
+    .filter((row): row is Candidate => row !== null);
+  return {
+    main: { name: "Kairos", runtime: `dsh ${DSH_PIN}` },
+    local,
+    candidates,
+    ignored: meta.ignored.map((bin) => ({ bin, label: labelFor(bin) })),
+  };
 }
 
 /** The connect handshake, Hermes-shaped: validate the name, then verify the
@@ -727,30 +907,52 @@ export async function agentsListing(deps: PanelDeps): Promise<{
  * is a verification, not a bookmark) and ask whether it is SIGNED IN (its
  * own status command). A signed-out agent still connects — installing the
  * roster row is the face's business, signing in is the operator's, in the
- * agent's own terminal — but the row says so. Idempotent on an
- * already-connected bin. 400 on a malformed name, 404 when nothing answers. */
+ * agent's own terminal — but the row says so. Connecting a hidden candidate
+ * un-hides it. Idempotent on an already-connected bin. 400 on a malformed
+ * name, 404 when nothing answers. */
 export async function connectLocalAgent(deps: PanelDeps, bin: unknown): Promise<LocalAgentRow> {
-  if (typeof bin !== "string" || !AGENT_BIN_RE.test(bin)) throw new StrategyError(400, "invalid binary name");
+  if (!isAgentBin(bin)) throw new StrategyError(400, "invalid binary name");
   const [version, auth] = await Promise.all([probeSoft(deps, bin), authSoft(deps, bin)]);
   if (version === null) throw new StrategyError(404, "binary did not answer on this machine");
   const meta = await readAgentsMeta(deps.home);
-  if (!meta.connected.some((row) => row.bin === bin)) {
-    meta.connected.push({ bin, label: labelFor(bin) });
+  const already = meta.connected.some((row) => row.bin === bin);
+  const wasHidden = meta.ignored.includes(bin);
+  if (!already || wasHidden) {
+    if (!already) meta.connected.push({ bin, label: labelFor(bin) });
+    meta.ignored = meta.ignored.filter((hidden) => hidden !== bin);
     await writeAgentsMeta(deps.home, meta);
   }
-  return { bin, label: labelFor(bin), found: true, version, auth, exec: hasExec(bin) };
+  return {
+    bin, label: labelFor(bin), found: true, version, auth,
+    ...(hasExec(bin) ? { tool: toolNameFor(bin) } : {}),
+  };
 }
 
 /** Remove one bin from the roster. 400 on a malformed name, 404 when it was
  * not connected. The binary itself is untouched — this is the face's list. */
 export async function disconnectLocalAgent(deps: PanelDeps, bin: unknown): Promise<AgentsMeta> {
-  if (typeof bin !== "string" || !AGENT_BIN_RE.test(bin)) throw new StrategyError(400, "invalid binary name");
+  if (!isAgentBin(bin)) throw new StrategyError(400, "invalid binary name");
   const meta = await readAgentsMeta(deps.home);
   if (!meta.connected.some((row) => row.bin === bin)) throw new StrategyError(404, "not connected");
-  const next = { connected: meta.connected.filter((row) => row.bin !== bin) };
+  const next = { ...meta, connected: meta.connected.filter((row) => row.bin !== bin) };
   await writeAgentsMeta(deps.home, next);
   return next;
 }
+
+/** Hide one detected candidate from the roster page, or show it again. A
+ * hidden name is remembered even if the binary is later uninstalled, so the
+ * page can always list what is hidden and offer it back. 400 on a malformed
+ * name; idempotent. */
+export async function setCandidateIgnored(deps: PanelDeps, bin: unknown, ignored: boolean): Promise<AgentsMeta> {
+  if (!isAgentBin(bin)) throw new StrategyError(400, "invalid binary name");
+  const meta = await readAgentsMeta(deps.home);
+  const without = meta.ignored.filter((hidden) => hidden !== bin);
+  const next = { ...meta, ignored: ignored ? [...without, bin] : without };
+  await writeAgentsMeta(deps.home, next);
+  return next;
+}
+
+/* ---------- memory: the skill catalog ---------- */
 
 /** Which pack a skill belongs to: the directory under `dsh/skills/` when it
  * came from one of the repo's skill roots, else its discovery source. The
@@ -802,9 +1004,22 @@ export async function skillDetail(deps: PanelDeps, name: unknown): Promise<objec
   };
 }
 
+/* ---------- plugin: the composed tree and the tool rosters ---------- */
+
+/** One composed Loader row, as the plugin panel shows it — the same projection
+ * `dsh-host-plugin-inventory` makes, plus `serverName` for MCP rows so the
+ * panel can pair a server with its registered tools. */
+export interface PluginRow {
+  id: string;
+  module: string;
+  enabled: boolean;
+  phase: string | null;
+  serverName?: string;
+}
+
 /**
- * The plugin listing: the live composed rows and the MCP servers with their
- * registered tools.
+ * The plugin listing: the live composed rows, the MCP servers with their
+ * registered tools, and the agent tools the face itself registered.
  *
  * SECURITY: a row's `options.config` is NEVER serialized — the MCP row's env
  * block carries the operator's APCA keys. The one field read out of any
@@ -812,6 +1027,7 @@ export async function skillDetail(deps: PanelDeps, name: unknown): Promise<objec
  */
 export function pluginListing(deps: PanelDeps): {
   mcp: { server: string; phase: string | null; tools: { name: string; description: string }[] }[];
+  agentTools: { name: string; description: string }[];
   rows: PluginRow[];
 } {
   const rows: PluginRow[] = [];
@@ -847,19 +1063,27 @@ export function pluginListing(deps: PanelDeps): {
           .map((tool) => ({ name: tool.name, description: tool.description })),
       };
     });
-  return { mcp, rows };
+  const agentTools = schemas
+    .filter((tool) => tool.name.startsWith("agent_"))
+    .map((tool) => ({ name: tool.name, description: tool.description }));
+  return { mcp, agentTools, rows };
 }
 
+/* ---------- the routes ---------- */
+
 /**
- * Mount the panel routes — reads `GET /data/memory.json`, `/data/plugins.json`,
- * `/data/agents.json`; lookups and actions `POST /data/memory/skill` ({name}),
- * `/data/agents/connect` and `/disconnect` ({bin}), `/data/agents/run`
- * ({bin, prompt, cwd?, resume?}, its own body limit).
+ * Mount the panel routes and bring the agent tools in line with the roster.
+ * Reads: `GET /data/memory.json`, `/data/plugins.json`, `/data/agents.json`.
+ * Lookups and actions: `POST /data/memory/skill` ({name}),
+ * `/data/agents/connect` and `/disconnect` ({bin}), `/data/agents/ignore`
+ * ({bin, ignored}), `/data/agents/rescan` ({}). Every roster write re-syncs
+ * the registered `agent_<bin>` tools.
  * @param webServer - the host webserver service, or a test recorder.
  * @param deps - the tree reads and process seams, from {@link panelDeps} or a
  *   test fake.
+ * @returns once the boot-time tool sync has settled.
  */
-export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps): void {
+export async function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps): Promise<void> {
   const send = (res: ServerResponse, status: number, body: unknown): void => {
     res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
     res.end(typeof body === "string" ? body : JSON.stringify(body));
@@ -877,9 +1101,9 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
       }
     };
 
-  /** The shared POST shell: fence, method gate, JSON body, error mapping —
-   * the same shape sessions.ts uses. */
-  const post = (act: (body: Record<string, unknown>) => Promise<object>, bodyLimit?: number) =>
+  /** The shared POST shell: fence, method gate, media-type gate, JSON body,
+   * error mapping — the same shape sessions.ts uses. */
+  const post = (act: (body: Record<string, unknown>) => Promise<object>) =>
     async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
       if (!isTrustedDataRequest(req)) return send(res, 403, FORBIDDEN);
       if (req.method !== "POST") return send(res, 405, { ok: false, error: "POST only" });
@@ -887,7 +1111,7 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
       try {
         let body: Record<string, unknown>;
         try {
-          const parsed: unknown = JSON.parse(await readBody(req, bodyLimit));
+          const parsed: unknown = JSON.parse(await readBody(req));
           if (parsed === null || typeof parsed !== "object") throw new Error("not an object");
           body = parsed as Record<string, unknown>;
         } catch (err) {
@@ -905,7 +1129,8 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
    * never a spawn storm, and a version bump shows on the next-but-soon open.
    * The CONNECT handshake deliberately probes FRESH (a binary installed ten
    * seconds ago must connect now, not after the cache turns) and then updates
-   * the cache with what it learned. */
+   * the cache with what it learned; the roster page's refresh forgets the
+   * whole cache. */
   const probeCache = new Map<string, { at: number; version: string | null }>();
   const authCache = new Map<string, { at: number; auth: AgentAuth }>();
   const cachedDeps: PanelDeps = {
@@ -936,6 +1161,9 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
     },
   };
 
+  /** The live agent tools, kept in step with the roster. */
+  const registry: AgentToolRegistry = new Map();
+
   webServer.register({ kind: "exact", path: "/data/memory.json", handler: get(() => memoryListing(deps)) });
   webServer.register({ kind: "exact", path: "/data/plugins.json", handler: get(() => pluginListing(deps)) });
   webServer.register({ kind: "exact", path: "/data/agents.json", handler: get(() => agentsListing(cachedDeps)) });
@@ -951,22 +1179,24 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
       const agent = await connectLocalAgent(deps, body.bin);
       probeCache.set(agent.bin, { at: Date.now(), version: agent.version ?? null });
       if (agent.auth !== undefined) authCache.set(agent.bin, { at: Date.now(), auth: agent.auth });
+      await syncAgentTools(deps, registry);
       return { agent };
     }),
   });
   webServer.register({
     kind: "exact",
     path: "/data/agents/disconnect",
-    handler: post(async (body) => await disconnectLocalAgent(deps, body.bin)),
+    handler: post(async (body) => {
+      const meta = await disconnectLocalAgent(deps, body.bin);
+      await syncAgentTools(deps, registry);
+      return meta;
+    }),
   });
   webServer.register({
     kind: "exact",
-    path: "/data/agents/run",
-    handler: post(async (body) => ({ run: await runLocalAgent(deps, body) }), RUN_BODY_LIMIT),
+    path: "/data/agents/ignore",
+    handler: post(async (body) => await setCandidateIgnored(deps, body.bin, body.ignored === true)),
   });
-  /* The connect page's refresh: forget every cached probe and look again —
-   * the operator just installed something and should not wait out the
-   * minute. Same shape as the listing, so the page re-renders from it. */
   webServer.register({
     kind: "exact",
     path: "/data/agents/rescan",
@@ -976,4 +1206,7 @@ export function registerPanelRoutes(webServer: RouteRegistrar, deps: PanelDeps):
       return await agentsListing(cachedDeps);
     }),
   });
+
+  /* Boot: whatever the roster already holds becomes callable now. */
+  await syncAgentTools(deps, registry);
 }

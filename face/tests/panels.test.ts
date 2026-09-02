@@ -7,10 +7,11 @@ import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import {
-  agentsListing, authFromProbe, connectLocalAgent, disconnectLocalAgent, memoryListing,
-  parseClaudeRun, parseCodexRun, pluginListing, readAgentsMeta, registerPanelRoutes, runLocalAgent,
-  scrubbedEnv, skillDetail, skillGroup,
-  type PanelDeps, type SkillBody, type SkillRow,
+  agentToolDefinition, agentsListing, authFromProbe, connectLocalAgent, defaultAgentProber, defaultAuthProber,
+  disconnectLocalAgent, hasExec, isAgentBin, memoryListing, parseClaudeRun, parseCodexRun, pluginListing,
+  readAgentsMeta, registerPanelRoutes, runAgentRecipe, scrubbedEnv, setCandidateIgnored, skillDetail, skillGroup,
+  syncAgentTools, toolNameFor,
+  type AgentToolDefinition, type AgentToolRegistry, type PanelDeps, type RunOutcome, type SkillBody, type SkillRow,
 } from "../src/panels.ts";
 import { DSH_PIN } from "../src/version.ts";
 
@@ -26,6 +27,10 @@ function row(name: string, pack: string | null, extra: Partial<SkillRow> = {}): 
     ...extra,
   };
 }
+
+/** A clean run outcome, for fakes. */
+const ran = (stdout: string, over: Partial<RunOutcome> = {}): RunOutcome =>
+  ({ code: 0, stdout, stderr: "", timedOut: false, truncated: false, ...over });
 
 /** A deps fake over fixed data; the loader tree mirrors the real shapes —
  * a group row, the root include, a disabled row, a failed row, the MCP row.
@@ -49,8 +54,10 @@ function fakeDeps(home = "/face-panels-nowhere"): PanelDeps {
       { name: "mcp__alpaca-kit__screen", description: "Run the daily screen.\nSecond line." },
       { name: "mcp__alpaca-kit__breadth", description: "Market breadth." },
       { name: "mcp__other-server__thing", description: "not ours" },
+      { name: "agent_claude", description: "Ask the operator's locally installed Claude Code…" },
       { name: "bash", description: "run a command" },
     ],
+    registerTool: () => () => {},
     loaderEntries: () => [
       { id: "include", options: { name: "cordis:include" } },
       { id: "include:group-core", options: { name: "cordis-plugin-group", group: true } },
@@ -68,12 +75,13 @@ function fakeDeps(home = "/face-panels-nowhere"): PanelDeps {
     ],
     cwd: CWD,
     home,
-    /* claude answers, gemini answers (installed, but the face has no exec
-     * recipe for it), hermes throws (a prober crash reads as absent), the
-     * rest are not installed. */
+    /* claude answers, gemini answers (installed, no exec recipe), zed answers
+     * (installed, not on the known list), hermes throws (a prober crash reads
+     * as absent), the rest are not installed. */
     probeAgent: async (bin) => {
       if (bin === "claude") return "2.1.251 (Claude Code)";
       if (bin === "gemini") return "gemini 0.9.0";
+      if (bin === "zed") return "zed 0.200.0";
       if (bin === "hermes") throw new Error("spawn blew up");
       return null;
     },
@@ -88,139 +96,38 @@ function fakeDeps(home = "/face-panels-nowhere"): PanelDeps {
   };
 }
 
-test("scrubbedEnv drops credential overrides, endpoint redirects and workbench secrets; keeps the operator's own sign-in", () => {
-  assert.deepEqual(
-    scrubbedEnv({
-      PATH: "/bin", HOME: "/h", CLAUDE_CODE_OAUTH_TOKEN: "keep", CLAUDE_CONFIG_DIR: "/c", CODEX_HOME: "/x",
-      ANTHROPIC_API_KEY: "a", ANTHROPIC_AUTH_TOKEN: "t", ANTHROPIC_BASE_URL: "u", ANTHROPIC_CUSTOM_HEADERS: "h",
-      OPENAI_API_KEY: "o", CODEX_API_KEY: "c", OPENAI_BASE_URL: "ou",
-      CLAUDE_CODE_USE_BEDROCK: "1", CLAUDE_CODE_USE_VERTEX: "1", CLAUDE_CODE_USE_FOUNDRY: "1",
-      APCA_API_KEY_ID: "k", APCA_API_SECRET_KEY: "s", DEEPSEEK_API_KEY: "d",
-    }),
-    { PATH: "/bin", HOME: "/h", CLAUDE_CODE_OAUTH_TOKEN: "keep", CLAUDE_CONFIG_DIR: "/c", CODEX_HOME: "/x" });
-});
+/** A roster home of its own per test. */
+const freshHome = (): Promise<string> => mkdtemp(join(tmpdir(), "face-agents-"));
 
-test("parseClaudeRun / parseCodexRun fold the documented shapes and degrade to raw text", () => {
-  assert.deepEqual(
-    parseClaudeRun('{"type":"result","subtype":"success","is_error":false,"duration_ms":4200,"num_turns":1,"result":"**ok**","session_id":"11111111-2222-4333-8444-555555555555","total_cost_usd":0.0123}'),
-    { text: "**ok**", session: "11111111-2222-4333-8444-555555555555", isError: false, cost: 0.0123, turns: 1 });
-  assert.deepEqual(parseClaudeRun("not json at all"), { text: "not json at all", isError: false });
-  assert.equal(parseClaudeRun('{"type":"result","is_error":true,"result":"boom"}').isError, true);
-  // The error variant carries no `result` — its cause must still reach the operator.
-  const failed = parseClaudeRun('{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["boom"],"num_turns":2,"session_id":"11111111-2222-4333-8444-555555555555","total_cost_usd":0.01}');
-  assert.equal(failed.text, "boom");
-  assert.equal(failed.isError, true);
-  assert.equal(failed.turns, 2);
+/* ====================================================================== */
+/* detection: names, probes, candidates, hide/show, refresh                */
+/* ====================================================================== */
 
-  const events = [
-    '{"type":"thread.started","thread_id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}',
-    "some non-json noise line",
-    '{"type":"item.completed","item":{"type":"agent_message","text":"from the events"}}',
-    '{"type":"turn.completed","usage":{"input_tokens":10}}',
-  ].join("\n");
-  assert.deepEqual(parseCodexRun(events, "from the file\n"),
-    { text: "from the file", session: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", isError: false });
-  assert.equal(parseCodexRun(events, undefined).text, "from the events", "no scratch file → the events' message");
-  assert.deepEqual(parseCodexRun("", undefined), { text: "", session: undefined, isError: false });
-});
-
-test("runLocalAgent: gates, fixed argv, prompt on stdin, scrubbed env, parsed answer, resume", async () => {
-  const home = await mkdtemp(join(tmpdir(), "face-agents-"));
-  await mkdir(join(home, "strategies", "alpha"), { recursive: true });
-  const calls: { bin: string; argv: string[]; opts: { cwd: string; input: string; env: NodeJS.ProcessEnv } }[] = [];
-  const base = fakeDeps(home);
-  const deps: PanelDeps = {
-    ...base,
-    cwd: home, // the "workbench root" for this test
-    probeAgent: async (bin) => (bin === "codex" ? "codex-cli 0.152.0" : base.probeAgent(bin)),
-    runAgent: async (bin, argv, opts) => {
-      calls.push({ bin, argv, opts });
-      if (bin === "claude") {
-        return { code: 0, timedOut: false, truncated: false, stderr: "",
-          stdout: '{"type":"result","is_error":false,"num_turns":1,"result":"**ok**","session_id":"11111111-2222-4333-8444-555555555555","total_cost_usd":0.0123}' };
-      }
-      const out = argv[argv.indexOf("-o") + 1];
-      if (out !== undefined) await writeFile(out, "codex says hi\n");
-      return { code: 0, timedOut: false, truncated: false, stderr: "",
-        stdout: '{"type":"thread.started","thread_id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}\n' };
-    },
-  };
-
-  /* gates */
-  await assert.rejects(runLocalAgent(deps, { bin: "constructor", prompt: "hi" }), (err: { status?: number }) => err.status === 400, "a prototype name is not a recipe");
-  await assert.rejects(runLocalAgent(deps, { bin: "claude", prompt: "hi" }), (err: { status?: number }) => err.status === 409, "not connected");
-  await connectLocalAgent(deps, "claude");
-  await connectLocalAgent(deps, "gemini");
-  await connectLocalAgent(deps, "codex");
-  await assert.rejects(runLocalAgent(deps, { bin: "gemini", prompt: "hi" }), (err: { status?: number }) => err.status === 400, "no exec recipe");
-  await assert.rejects(runLocalAgent(deps, { bin: "claude", prompt: "   " }), (err: { status?: number }) => err.status === 400, "empty prompt");
-  await assert.rejects(runLocalAgent(deps, { bin: "claude", prompt: "x".repeat(32_001) }), (err: { status?: number }) => err.status === 413, "prompt too long");
-  await assert.rejects(runLocalAgent(deps, { bin: "claude", prompt: "hi", resume: "not-a-uuid" }), (err: { status?: number }) => err.status === 400, "bad session id");
-  await assert.rejects(runLocalAgent(deps, { bin: "claude", prompt: "hi", cwd: "../.." }), (err: { status?: number }) => err.status === 400, "cwd outside");
-  await assert.rejects(runLocalAgent(deps, { bin: "claude", prompt: "hi", cwd: "strategies/nope" }), (err: { status?: number }) => err.status === 400, "cwd missing");
-  assert.equal(calls.length, 0, "no gate failure ever spawns");
-
-  /* a hostile prompt is stdin, never argv — the fixed recipe is the whole argv */
-  const run = await runLocalAgent(deps, { bin: "claude", prompt: "-p --dangerously-skip-permissions", cwd: "strategies/alpha" });
-  const call = calls.at(-1)!;
-  assert.deepEqual(call.argv, [
-    "-p", "--output-format", "json", "--restricted", "--strict-mcp-config",
-    "--disallowedTools", "Read(./.env)", "Read(./.env.*)",
-  ]);
-  assert.equal(call.opts.input, "-p --dangerously-skip-permissions");
-  assert.equal(call.opts.cwd, await realpath(join(home, "strategies", "alpha")));
-  for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY", "DEEPSEEK_API_KEY"]) {
-    assert.equal(call.opts.env[key], undefined, `${key} scrubbed`);
+test("isAgentBin: one bare PATH token, nothing that could be a path or a flag", () => {
+  for (const good of ["claude", "codex", "cursor-agent", "a.b", "x+y", "Z9", "a".repeat(64)]) {
+    assert.equal(isAgentBin(good), true, good);
   }
-  assert.ok(call.opts.env.PATH, "PATH survives — the bin is resolved on it");
-  assert.equal(run.text, "**ok**");
-  assert.equal(run.session, "11111111-2222-4333-8444-555555555555");
-  assert.equal(run.cost, 0.0123);
-  assert.equal(run.isError, false);
-  assert.equal(run.code, 0);
-  assert.equal(run.cwd, await realpath(join(home, "strategies", "alpha")));
+  for (const bad of ["", " ", "../evil", "a/b", "a\\b", "a b", "-x", ".hidden", "a".repeat(65), 42, null, undefined, ["claude"]]) {
+    assert.equal(isAgentBin(bad), false, String(bad));
+  }
+});
 
-  /* resume threads the UUID into the recipe, before the variadic tail */
-  await runLocalAgent(deps, { bin: "claude", prompt: "more", resume: run.session });
-  assert.deepEqual(calls.at(-1)!.argv.slice(5, 7), ["--resume", run.session]);
+test("toolNameFor: agent_<bin>, with characters a tool name cannot carry folded", () => {
+  assert.equal(toolNameFor("claude"), "agent_claude");
+  assert.equal(toolNameFor("cursor-agent"), "agent_cursor-agent");
+  assert.equal(toolNameFor("a.b+c"), "agent_a_b_c");
+});
 
-  /* codex: the sandbox is PINNED, the scratch file carries the answer, the events carry the thread */
-  const cx = await runLocalAgent(deps, { bin: "codex", prompt: "hi" });
-  const cxCall = calls.at(-1)!;
-  const scratch = cxCall.argv[cxCall.argv.indexOf("-o") + 1];
-  assert.deepEqual(cxCall.argv, ["exec", "--sandbox", "read-only", "--json", "--skip-git-repo-check", "-o", scratch, "-"]);
-  assert.equal(cx.text, "codex says hi");
-  assert.equal(cx.session, "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
-  await runLocalAgent(deps, { bin: "codex", prompt: "again", resume: cx.session });
-  const resumed = calls.at(-1)!.argv;
-  assert.deepEqual(resumed.slice(0, 4), ["exec", "resume", "--sandbox", "read-only"]);
-  assert.deepEqual(resumed.slice(-2), [cx.session, "-"]);
+test("defaultAgentProber: a real binary answers with its first line; absence and silence read as null", async () => {
+  const probe = defaultAgentProber();
+  const node = await probe("node");
+  assert.match(node ?? "", /^v\d+\./, "node --version's first line");
+  assert.equal(await probe("no-such-binary-face-test-9f3a"), null, "ENOENT");
+  assert.equal(await probe("true"), null, "exits 0 with no output — nothing to show");
+});
 
-  /* one run per agent: a second is refused while the first is in flight.
-   * The fake signals when it has been ENTERED — waiting on a timer instead
-   * would race the first run's own fs work and let the second spawn too. */
-  let release!: () => void;
-  let entered!: () => void;
-  const spawned = new Promise<void>((resolve) => { entered = resolve; });
-  deps.runAgent = () => new Promise((resolve) => {
-    release = () => resolve({ code: 0, timedOut: false, truncated: false, stdout: "", stderr: "" });
-    entered();
-  });
-  const first = runLocalAgent(deps, { bin: "claude", prompt: "slow" });
-  await spawned;
-  await assert.rejects(runLocalAgent(deps, { bin: "claude", prompt: "second" }), (err: { status?: number }) => err.status === 409, "in flight");
-  release();
-  await first;
-  deps.runAgent = async () => ({ code: 0, timedOut: false, truncated: false, stdout: "", stderr: "" });
-  await runLocalAgent(deps, { bin: "claude", prompt: "after" }); // the slot is free again
-
-  /* a failed child: nonzero exit → isError, stderr tail carried; a cut child is an error too */
-  deps.runAgent = async () => ({ code: 1, timedOut: false, truncated: false, stdout: "", stderr: "something broke\n" });
-  const failed = await runLocalAgent(deps, { bin: "claude", prompt: "hi" });
-  assert.equal(failed.isError, true);
-  assert.equal(failed.stderr, "something broke");
-  deps.runAgent = async () => ({ code: null, timedOut: false, truncated: true, stdout: "x", stderr: "" });
-  assert.equal((await runLocalAgent(deps, { bin: "claude", prompt: "hi" })).isError, true);
+test("defaultAuthProber: no status recipe means unknown without spawning anything", async () => {
+  assert.deepEqual(await defaultAuthProber()("node"), { state: "unknown" });
 });
 
 test("authFromProbe folds each CLI's real status output", () => {
@@ -241,6 +148,332 @@ test("authFromProbe folds each CLI's real status output", () => {
   assert.deepEqual(authFromProbe("claude", null), { state: "unknown" });
 });
 
+test("detection: candidates are the known list, in its order, that answer and are neither connected nor hidden", async () => {
+  const deps = fakeDeps(await freshHome());
+  const probed: string[] = [];
+  deps.probeAgent = async (bin) => {
+    probed.push(bin);
+    if (bin === "claude") return "2.1.251 (Claude Code)";
+    if (bin === "gemini") return "gemini 0.9.0";
+    if (bin === "auggie") return "auggie 1.2.3";
+    if (bin === "hermes") throw new Error("spawn blew up");
+    return null;
+  };
+  const listing = await agentsListing(deps);
+  assert.deepEqual(listing.main, { name: "Kairos", runtime: `dsh ${DSH_PIN}` });
+  assert.deepEqual(listing.local, [], "nothing is fixed in place — the roster starts empty");
+  assert.deepEqual(listing.candidates, [
+    { bin: "claude", label: "Claude Code", version: "2.1.251 (Claude Code)" },
+    { bin: "gemini", label: "Gemini CLI", version: "gemini 0.9.0" },
+    { bin: "auggie", label: "Auggie", version: "auggie 1.2.3" },
+  ], "known-list order, absent and crashing probes dropped");
+  assert.deepEqual(listing.ignored, []);
+  assert.equal(probed.length, 15, "every known name probed exactly once");
+  assert.ok(!probed.includes("zed"), "an unknown-but-installed binary is never probed for detection");
+});
+
+test("detection: hide takes a candidate off the page and remembers it; show brings it back", async () => {
+  const deps = fakeDeps(await freshHome());
+  assert.deepEqual((await setCandidateIgnored(deps, "gemini", true)).ignored, ["gemini"]);
+  await setCandidateIgnored(deps, "gemini", true); // idempotent, no duplicate
+  assert.deepEqual((await readAgentsMeta(deps.home)).ignored, ["gemini"], "persisted");
+  let listing = await agentsListing(deps);
+  assert.deepEqual(listing.candidates.map((c) => c.bin), ["claude"]);
+  assert.deepEqual(listing.ignored, [{ bin: "gemini", label: "Gemini CLI" }], "listed so the page can offer it back");
+
+  await setCandidateIgnored(deps, "openclaw", true); // hiding an absent name is allowed and harmless
+  listing = await agentsListing(deps);
+  assert.deepEqual(listing.ignored.map((h) => h.bin), ["gemini", "openclaw"]);
+
+  assert.deepEqual((await setCandidateIgnored(deps, "gemini", false)).ignored, ["openclaw"]);
+  listing = await agentsListing(deps);
+  assert.deepEqual(listing.candidates.map((c) => c.bin), ["claude", "gemini"], "back in known-list order");
+  await assert.rejects(setCandidateIgnored(deps, "../evil", true), (err: { status?: number }) => err.status === 400);
+});
+
+test("detection: connecting a hidden candidate un-hides it; disconnecting leaves the hidden list alone", async () => {
+  const deps = fakeDeps(await freshHome());
+  await setCandidateIgnored(deps, "claude", true);
+  await setCandidateIgnored(deps, "gemini", true);
+  await connectLocalAgent(deps, "claude");
+  let meta = await readAgentsMeta(deps.home);
+  assert.deepEqual(meta.connected.map((c) => c.bin), ["claude"]);
+  assert.deepEqual(meta.ignored, ["gemini"], "the connected one left the hidden list, the other stayed");
+  await disconnectLocalAgent(deps, "claude");
+  meta = await readAgentsMeta(deps.home);
+  assert.deepEqual(meta.connected, []);
+  assert.deepEqual(meta.ignored, ["gemini"]);
+  assert.deepEqual((await agentsListing(deps)).candidates.map((c) => c.bin), ["claude"], "disconnected → a candidate again");
+});
+
+test("roster: connect is a verifying handshake, disconnect removes, both refuse malformed names", async () => {
+  const deps = fakeDeps(await freshHome());
+  const row = await connectLocalAgent(deps, "claude");
+  assert.deepEqual(row, {
+    bin: "claude", label: "Claude Code", found: true, version: "2.1.251 (Claude Code)",
+    auth: { state: "ok", detail: "claude.ai", account: "op@example.com" }, tool: "agent_claude",
+  });
+  await connectLocalAgent(deps, "claude"); // idempotent, not a duplicate
+  const listing = await agentsListing(deps);
+  assert.deepEqual(listing.local, [row]);
+  assert.deepEqual(listing.candidates.map((c) => c.bin), ["gemini"], "a connected agent leaves the candidate pool");
+
+  const zed = await connectLocalAgent(deps, "zed");
+  assert.equal(zed.label, "zed", "an unknown binary's label is its own name");
+  assert.equal(zed.tool, undefined, "no recipe → not callable");
+  assert.deepEqual(zed.auth, { state: "unknown" }, "a crashing auth probe reads as unknown");
+
+  // Refusals: a malformed name never reaches the prober; silence is a 404.
+  await assert.rejects(connectLocalAgent(deps, "../evil"), (err: { status?: number }) => err.status === 400);
+  await assert.rejects(connectLocalAgent(deps, "a/b"), (err: { status?: number }) => err.status === 400);
+  await assert.rejects(connectLocalAgent(deps, "openclaw"), (err: { status?: number }) => err.status === 404);
+  await assert.rejects(connectLocalAgent(deps, "hermes"), (err: { status?: number }) => err.status === 404);
+
+  assert.deepEqual((await disconnectLocalAgent(deps, "claude")).connected.map((c) => c.bin), ["zed"]);
+  await assert.rejects(disconnectLocalAgent(deps, "claude"), (err: { status?: number }) => err.status === 404);
+  await assert.rejects(disconnectLocalAgent(deps, "bad/name"), (err: { status?: number }) => err.status === 400);
+});
+
+test("roster file: a hand-mangled or legacy file reads as best it can", async () => {
+  const home = await freshHome();
+  await mkdir(join(home, "face"), { recursive: true });
+  await writeFile(join(home, "face", "agents.json"), JSON.stringify({
+    connected: [{ bin: "claude" }, { bin: "../evil", label: "x" }, "junk", { label: "nobin" }, { bin: "claude", label: "dup" }],
+    ignored: ["gemini", "a/b", 7, "gemini"],
+  }));
+  assert.deepEqual(await readAgentsMeta(home), { connected: [{ bin: "claude", label: "claude" }], ignored: ["gemini"] });
+  await writeFile(join(home, "face", "agents.json"), JSON.stringify({ connected: [{ bin: "codex", label: "Codex" }] }));
+  assert.deepEqual(await readAgentsMeta(home), { connected: [{ bin: "codex", label: "Codex" }], ignored: [] }, "pre-ignore files");
+  await writeFile(join(home, "face", "agents.json"), "not json");
+  assert.deepEqual(await readAgentsMeta(home), { connected: [], ignored: [] });
+});
+
+/* ====================================================================== */
+/* the recipes and the runner seams                                        */
+/* ====================================================================== */
+
+test("scrubbedEnv drops credential overrides, endpoint redirects and workbench secrets; keeps the operator's own sign-in", () => {
+  assert.deepEqual(
+    scrubbedEnv({
+      PATH: "/bin", HOME: "/h", CLAUDE_CODE_OAUTH_TOKEN: "keep", CLAUDE_CONFIG_DIR: "/c", CODEX_HOME: "/x",
+      ANTHROPIC_API_KEY: "a", ANTHROPIC_AUTH_TOKEN: "t", ANTHROPIC_BASE_URL: "u", ANTHROPIC_CUSTOM_HEADERS: "h",
+      OPENAI_API_KEY: "o", CODEX_API_KEY: "c", OPENAI_BASE_URL: "ou",
+      CLAUDE_CODE_USE_BEDROCK: "1", CLAUDE_CODE_USE_VERTEX: "1", CLAUDE_CODE_USE_FOUNDRY: "1",
+      APCA_API_KEY_ID: "k", APCA_API_SECRET_KEY: "s", DEEPSEEK_API_KEY: "d",
+    }),
+    { PATH: "/bin", HOME: "/h", CLAUDE_CODE_OAUTH_TOKEN: "keep", CLAUDE_CONFIG_DIR: "/c", CODEX_HOME: "/x" });
+});
+
+test("parseClaudeRun / parseCodexRun fold the documented shapes and degrade to raw text", () => {
+  assert.deepEqual(
+    parseClaudeRun('{"type":"result","subtype":"success","is_error":false,"duration_ms":4200,"num_turns":1,"result":"**ok**","session_id":"11111111-2222-4333-8444-555555555555","total_cost_usd":0.0123}'),
+    { text: "**ok**", session: "11111111-2222-4333-8444-555555555555", isError: false, cost: 0.0123, turns: 1 });
+  assert.deepEqual(parseClaudeRun("not json at all"), { text: "not json at all", isError: false });
+  assert.equal(parseClaudeRun('{"type":"result","is_error":true,"result":"boom"}').isError, true);
+  // The error variant carries no `result` — its cause must still reach the caller.
+  const failed = parseClaudeRun('{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["boom"],"num_turns":2,"session_id":"11111111-2222-4333-8444-555555555555","total_cost_usd":0.01}');
+  assert.equal(failed.text, "boom");
+  assert.equal(failed.isError, true);
+  assert.equal(failed.turns, 2);
+
+  const events = [
+    '{"type":"thread.started","thread_id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}',
+    "some non-json noise line",
+    '{"type":"item.completed","item":{"type":"agent_message","text":"from the events"}}',
+    '{"type":"turn.completed","usage":{"input_tokens":10}}',
+  ].join("\n");
+  assert.deepEqual(parseCodexRun(events, "from the file\n"),
+    { text: "from the file", session: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", isError: false });
+  assert.equal(parseCodexRun(events, undefined).text, "from the events", "no scratch file → the events' message");
+  assert.deepEqual(parseCodexRun("", undefined), { text: "", session: undefined, isError: false });
+});
+
+test("runAgentRecipe: gates, fixed argv, prompt on stdin, scrubbed env, session cwd, resume, one per agent", async () => {
+  const home = await freshHome();
+  await mkdir(join(home, "strategies", "alpha"), { recursive: true });
+  const calls: { bin: string; argv: string[]; opts: { cwd: string; input: string; env: NodeJS.ProcessEnv; signal?: AbortSignal } }[] = [];
+  const deps: PanelDeps = {
+    ...fakeDeps(home),
+    cwd: home, // the "workbench root" for this test
+    runAgent: async (bin, argv, opts) => {
+      calls.push({ bin, argv, opts });
+      if (bin === "claude") {
+        return ran('{"type":"result","is_error":false,"num_turns":1,"result":"**ok**","session_id":"11111111-2222-4333-8444-555555555555","total_cost_usd":0.0123}');
+      }
+      const out = argv[argv.indexOf("-o") + 1];
+      if (out !== undefined) await writeFile(out, "codex says hi\n");
+      return ran('{"type":"thread.started","thread_id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}\n');
+    },
+  };
+
+  /* gates — none may spawn */
+  const status = (n: number) => (err: { status?: number }) => err.status === n;
+  await assert.rejects(runAgentRecipe(deps, { bin: "constructor", prompt: "hi" }), status(400), "a prototype name is not a recipe");
+  await assert.rejects(runAgentRecipe(deps, { bin: "gemini", prompt: "hi" }), status(400), "installed, but no recipe");
+  await assert.rejects(runAgentRecipe(deps, { bin: "claude", prompt: "   " }), status(400), "empty prompt");
+  await assert.rejects(runAgentRecipe(deps, { bin: "claude", prompt: "x".repeat(32_001) }), status(413), "prompt too long");
+  await assert.rejects(runAgentRecipe(deps, { bin: "claude", prompt: "hi", resume: "not-a-uuid" }), status(400), "bad session id");
+  assert.equal(calls.length, 0, "no gate failure ever spawns");
+
+  /* a hostile prompt is stdin, never argv — the fixed recipe is the whole argv */
+  const signal = new AbortController().signal;
+  const run = await runAgentRecipe(deps, { bin: "claude", prompt: "-p --dangerously-skip-permissions", cwd: join(home, "strategies", "alpha"), signal });
+  const call = calls.at(-1)!;
+  assert.deepEqual(call.argv, [
+    "-p", "--output-format", "json", "--restricted", "--strict-mcp-config",
+    "--disallowedTools", "Read(./.env)", "Read(./.env.*)",
+  ]);
+  assert.equal(call.opts.input, "-p --dangerously-skip-permissions");
+  assert.equal(call.opts.cwd, await realpath(join(home, "strategies", "alpha")), "the session's directory");
+  assert.equal(call.opts.signal, signal, "the caller's cancellation reaches the child");
+  for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY", "DEEPSEEK_API_KEY"]) {
+    assert.equal(call.opts.env[key], undefined, `${key} scrubbed`);
+  }
+  assert.ok(call.opts.env.PATH, "PATH survives — the bin is resolved on it");
+  assert.equal(run.text, "**ok**");
+  assert.equal(run.session, "11111111-2222-4333-8444-555555555555");
+  assert.equal(run.cost, 0.0123);
+  assert.equal(run.isError, false);
+
+  /* a vanished session directory falls back to the root rather than failing the spawn */
+  await runAgentRecipe(deps, { bin: "claude", prompt: "hi", cwd: join(home, "gone") });
+  assert.equal(calls.at(-1)!.opts.cwd, await realpath(home));
+  await runAgentRecipe(deps, { bin: "claude", prompt: "hi" });
+  assert.equal(calls.at(-1)!.opts.cwd, await realpath(home), "no cwd → the root");
+
+  /* resume threads the UUID into the recipe, before the variadic tail */
+  await runAgentRecipe(deps, { bin: "claude", prompt: "more", resume: run.session });
+  assert.deepEqual(calls.at(-1)!.argv.slice(5, 7), ["--resume", run.session]);
+
+  /* codex: the sandbox is PINNED, the scratch file carries the answer, the events carry the thread */
+  const cx = await runAgentRecipe(deps, { bin: "codex", prompt: "hi" });
+  const cxCall = calls.at(-1)!;
+  const scratch = cxCall.argv[cxCall.argv.indexOf("-o") + 1];
+  assert.deepEqual(cxCall.argv, ["exec", "--sandbox", "read-only", "--json", "--skip-git-repo-check", "-o", scratch, "-"]);
+  assert.equal(cx.text, "codex says hi");
+  assert.equal(cx.session, "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
+  await runAgentRecipe(deps, { bin: "codex", prompt: "again", resume: cx.session });
+  const resumed = calls.at(-1)!.argv;
+  assert.deepEqual(resumed.slice(0, 4), ["exec", "resume", "--sandbox", "read-only"]);
+  assert.deepEqual(resumed.slice(-2), [cx.session, "-"]);
+
+  /* one run per agent: a second is refused while the first is in flight.
+   * The fake signals when it has been ENTERED — waiting on a timer instead
+   * would race the first run's own fs work and let the second spawn too. */
+  let release!: () => void;
+  let entered!: () => void;
+  const spawned = new Promise<void>((resolve) => { entered = resolve; });
+  deps.runAgent = () => new Promise((resolve) => {
+    release = () => resolve(ran(""));
+    entered();
+  });
+  const first = runAgentRecipe(deps, { bin: "claude", prompt: "slow" });
+  await spawned;
+  await assert.rejects(runAgentRecipe(deps, { bin: "claude", prompt: "second" }), status(409), "in flight");
+  release();
+  await first;
+  deps.runAgent = async () => ran("");
+  await runAgentRecipe(deps, { bin: "claude", prompt: "after" }); // the slot is free again
+
+  /* a failed child: nonzero exit → isError, stderr tail carried; a cut child is an error too */
+  deps.runAgent = async () => ran("", { code: 1, stderr: "something broke\n" });
+  const failed = await runAgentRecipe(deps, { bin: "claude", prompt: "hi" });
+  assert.equal(failed.isError, true);
+  assert.equal(failed.stderr, "something broke");
+  deps.runAgent = async () => ran("x", { code: null, truncated: true });
+  assert.equal((await runAgentRecipe(deps, { bin: "claude", prompt: "hi" })).isError, true);
+});
+
+/* ====================================================================== */
+/* connected ⇒ callable: the agent tools                                   */
+/* ====================================================================== */
+
+/** A tool registry fake: records definitions, counts disposals. */
+function fakeRegistry(): { defs: Map<string, AgentToolDefinition>; disposed: string[]; registerTool: PanelDeps["registerTool"] } {
+  const defs = new Map<string, AgentToolDefinition>();
+  const disposed: string[] = [];
+  return {
+    defs, disposed,
+    registerTool: (def) => {
+      if (defs.has(def.name)) throw new Error(`duplicate tool ${def.name}`);
+      defs.set(def.name, def);
+      return () => { defs.delete(def.name); disposed.push(def.name); };
+    },
+  };
+}
+
+test("agentToolDefinition: the tool Kairos gets — schema, read card, session cwd, cancellation, error propagation", async () => {
+  const home = await freshHome();
+  await mkdir(join(home, "strategies", "alpha"), { recursive: true });
+  const calls: { argv: string[]; opts: { cwd: string; input: string; signal?: AbortSignal } }[] = [];
+  const deps: PanelDeps = {
+    ...fakeDeps(home),
+    cwd: home,
+    runAgent: async (_bin, argv, opts) => {
+      calls.push({ argv, opts });
+      if (opts.input === "fail") return ran('{"type":"result","is_error":true,"errors":["model refused"]}');
+      return ran('{"type":"result","is_error":false,"num_turns":1,"result":"the tree has 3 files","session_id":"11111111-2222-4333-8444-555555555555","total_cost_usd":0.02}');
+    },
+  };
+  const tool = agentToolDefinition(deps, "claude", "Claude Code");
+  assert.equal(tool.name, "agent_claude");
+  assert.match(tool.description, /READ-ONLY/);
+  assert.deepEqual((tool.parameters as { required: string[] }).required, ["prompt"]);
+  assert.equal(tool.timeoutMs, 600_000);
+  assert.deepEqual(tool.presentCall({ prompt: "what is here?" }), { card: "generic", title: "Ask Claude Code", kind: "read", rawInput: "what is here?" });
+
+  const controller = new AbortController();
+  const exec = { agent: { session: { header: { cwd: join(home, "strategies", "alpha") } } }, signal: controller.signal };
+  const value = await tool.execute({ prompt: "what is here?" }, exec) as Record<string, unknown>;
+  assert.equal(calls[0]!.opts.cwd, await realpath(join(home, "strategies", "alpha")), "runs in the CALLING SESSION's directory");
+  assert.equal(calls[0]!.opts.input, "what is here?");
+  assert.equal(calls[0]!.opts.signal, controller.signal);
+  assert.deepEqual(Object.keys(value).sort(), ["cost", "durationMs", "isError", "session", "text", "turns"], "exactly the declared output shape");
+  assert.equal(value.text, "the tree has 3 files");
+  const rendered = tool.output.render({ prompt: "x" }, value);
+  assert.equal(rendered.length, 1);
+  assert.match(rendered[0]!.text, /^the tree has 3 files\n\n\[Claude Code session 11111111-2222-4333-8444-555555555555 — pass resume="11111111-/);
+
+  /* a session-less call (no agent on the exec) runs at the root */
+  await tool.execute({ prompt: "again", resume: "11111111-2222-4333-8444-555555555555" }, { signal: controller.signal });
+  assert.equal(calls[1]!.opts.cwd, await realpath(home));
+  assert.deepEqual(calls[1]!.argv.slice(5, 7), ["--resume", "11111111-2222-4333-8444-555555555555"]);
+
+  /* a failed run throws, so the registry hands Kairos an error result with the cause */
+  await assert.rejects(tool.execute({ prompt: "fail" }, exec), /model refused/);
+  await assert.rejects(tool.execute({}, exec), /prompt required/);
+  await assert.rejects(tool.execute({ prompt: "x", resume: "nope" }, exec), /invalid session id/);
+});
+
+test("syncAgentTools: registered tools follow the roster — at boot, on connect, on disconnect; no recipe, no tool", async () => {
+  const home = await freshHome();
+  const reg = fakeRegistry();
+  const deps: PanelDeps = { ...fakeDeps(home), registerTool: reg.registerTool };
+  const registry: AgentToolRegistry = new Map();
+
+  assert.deepEqual(await syncAgentTools(deps, registry), { added: [], removed: [] });
+  await connectLocalAgent(deps, "claude");
+  await connectLocalAgent(deps, "gemini"); // installed, no recipe
+  assert.deepEqual(await syncAgentTools(deps, registry), { added: ["claude"], removed: [] });
+  assert.deepEqual([...reg.defs.keys()], ["agent_claude"], "gemini has no recipe and gets no tool");
+  assert.deepEqual(await syncAgentTools(deps, registry), { added: [], removed: [] }, "idempotent");
+
+  await disconnectLocalAgent(deps, "claude");
+  assert.deepEqual(await syncAgentTools(deps, registry), { added: [], removed: ["claude"] });
+  assert.deepEqual(reg.disposed, ["agent_claude"], "the exact disposer ran");
+  assert.equal(reg.defs.size, 0);
+
+  /* a fresh process over an existing roster registers at boot */
+  await connectLocalAgent(deps, "claude");
+  const boot: AgentToolRegistry = new Map();
+  assert.deepEqual(await syncAgentTools(deps, boot), { added: ["claude"], removed: [] });
+  assert.equal(hasExec("claude") && hasExec("codex") && !hasExec("gemini") && !hasExec("constructor"), true);
+});
+
+/* ====================================================================== */
+/* memory and plugin listings                                              */
+/* ====================================================================== */
+
 test("skillGroup: pack directory wins, source is the fallback", () => {
   assert.equal(skillGroup(row("a", "mechanics")), "mechanics");
   assert.equal(skillGroup(row("b", "style-kairos")), "style-kairos");
@@ -251,9 +484,9 @@ test("skillGroup: pack directory wins, source is the fallback", () => {
 test("memoryListing groups by pack, mechanics first, wire fields only", async () => {
   const listing = await memoryListing(fakeDeps());
   assert.deepEqual(listing.groups.map((group) => group.name), ["mechanics", "style-kairos", "bundled"]);
-  const mechanics = listing.groups[0].skills as Record<string, unknown>[];
+  const mechanics = listing.groups[0]!.skills as Record<string, unknown>[];
   assert.deepEqual(mechanics.map((skill) => skill.name), ["backtest-rules", "alpaca-kit-guide"]);
-  assert.deepEqual(Object.keys(mechanics[0]).sort(),
+  assert.deepEqual(Object.keys(mechanics[0]!).sort(),
     ["description", "modelInvocable", "name", "userInvocable", "whenToUse"]);
 });
 
@@ -268,7 +501,7 @@ test("skillDetail: body through, bad name 400, unknown 404", async () => {
   await assert.rejects(skillDetail(deps, "absent-skill"), (err: { status?: number }) => err.status === 404);
 });
 
-test("pluginListing: rows projected, groups and root dropped, MCP paired with its tools", () => {
+test("pluginListing: rows projected, groups and root dropped, MCP paired with its tools, agent tools listed", () => {
   const listing = pluginListing(fakeDeps());
   assert.deepEqual(listing.rows.map((entry) => entry.id), [
     "include:token-meter", "include:hmr", "include:broken", "include:mcp-alpaca-kit",
@@ -282,60 +515,20 @@ test("pluginListing: rows projected, groups and root dropped, MCP paired with it
   assert.equal(byId.get("include:broken")?.phase, "failed");
 
   assert.equal(listing.mcp.length, 1);
-  assert.equal(listing.mcp[0].server, "alpaca-kit");
-  assert.equal(listing.mcp[0].phase, "active");
-  assert.deepEqual(listing.mcp[0].tools.map((tool) => tool.name),
+  assert.equal(listing.mcp[0]!.server, "alpaca-kit");
+  assert.equal(listing.mcp[0]!.phase, "active");
+  assert.deepEqual(listing.mcp[0]!.tools.map((tool) => tool.name),
     ["mcp__alpaca-kit__screen", "mcp__alpaca-kit__breadth"]);
+  assert.deepEqual(listing.agentTools.map((tool) => tool.name), ["agent_claude"]);
 
   /* The MCP row's config holds the operator's keys; nothing but serverName
    * may survive into the payload. */
   assert.doesNotMatch(JSON.stringify(listing), /SECRET-KEY-VALUE|APCA_API_KEY_ID/);
 });
 
-test("agents roster: starts empty, connect is a verifying handshake, disconnect removes", async () => {
-  const home = await mkdtemp(join(tmpdir(), "face-agents-"));
-  const deps = fakeDeps(home);
-
-  const empty = await agentsListing(deps);
-  assert.deepEqual(empty.main, { name: "Kairos", runtime: `dsh ${DSH_PIN}` });
-  assert.deepEqual(empty.local, [], "nothing is fixed in place — the roster starts empty");
-  // Candidates = known suggestions that ANSWER and are not yet connected; a
-  // prober that throws (hermes) reads as no answer, never a failed listing.
-  assert.deepEqual(empty.candidates, [
-    { bin: "claude", label: "Claude Code", version: "2.1.251 (Claude Code)" },
-    { bin: "gemini", label: "Gemini CLI", version: "gemini 0.9.0" },
-  ]);
-
-  const row = await connectLocalAgent(deps, "claude");
-  assert.deepEqual(row, {
-    bin: "claude", label: "Claude Code", found: true, version: "2.1.251 (Claude Code)",
-    auth: { state: "ok", detail: "claude.ai", account: "op@example.com" }, exec: true,
-  });
-  await connectLocalAgent(deps, "claude"); // idempotent, not a duplicate
-  const listing = await agentsListing(deps);
-  assert.deepEqual(listing.local, [row]);
-  assert.deepEqual(listing.candidates.map((c) => c.bin), ["gemini"], "a connected agent leaves the candidate pool");
-
-  // Refusals: a malformed name never reaches the prober; silence is a 404.
-  await assert.rejects(connectLocalAgent(deps, "../evil"), (err: { status?: number }) => err.status === 400);
-  await assert.rejects(connectLocalAgent(deps, "a/b"), (err: { status?: number }) => err.status === 400);
-  await assert.rejects(connectLocalAgent(deps, "openclaw"), (err: { status?: number }) => err.status === 404);
-  await assert.rejects(connectLocalAgent(deps, "hermes"), (err: { status?: number }) => err.status === 404);
-
-  assert.deepEqual(await disconnectLocalAgent(deps, "claude"), { connected: [] });
-  await assert.rejects(disconnectLocalAgent(deps, "claude"), (err: { status?: number }) => err.status === 404);
-  await assert.rejects(disconnectLocalAgent(deps, "bad/name"), (err: { status?: number }) => err.status === 400);
-});
-
-test("agents meta: a hand-mangled roster file reads as best it can", async () => {
-  const home = await mkdtemp(join(tmpdir(), "face-agents-"));
-  await mkdir(join(home, "face"), { recursive: true });
-  await writeFile(join(home, "face", "agents.json"),
-    JSON.stringify({ connected: [{ bin: "claude" }, { bin: "../evil", label: "x" }, "junk", { label: "nobin" }] }));
-  assert.deepEqual(await readAgentsMeta(home), { connected: [{ bin: "claude", label: "claude" }] });
-});
-
-/* ---------- the routes ---------- */
+/* ====================================================================== */
+/* the routes                                                              */
+/* ====================================================================== */
 
 function fakeRes(): { out: { status: number; body: string }; res: ServerResponse } {
   const out = { status: 0, body: "" };
@@ -361,116 +554,115 @@ function postReq(body: string, host = "127.0.0.1:3090", headers: Record<string, 
   return req;
 }
 
-test("routes: register, fence, and answer", async () => {
-  const routes: WebRoute[] = [];
-  const home = await mkdtemp(join(tmpdir(), "face-agents-"));
-  const spawns: string[] = [];
+test("routes: register, boot-sync, fence, and the roster round-trip with its tools", async () => {
+  const home = await freshHome();
+  await mkdir(join(home, "face"), { recursive: true });
+  await writeFile(join(home, "face", "agents.json"), JSON.stringify({ connected: [{ bin: "codex", label: "Codex" }] }));
+  const reg = fakeRegistry();
+  const probes: string[] = [];
+  const base = fakeDeps(home);
   const deps: PanelDeps = {
-    ...fakeDeps(home),
-    cwd: home,
-    runAgent: async (bin) => {
-      spawns.push(bin);
-      return { code: 0, timedOut: false, truncated: false, stderr: "",
-        stdout: '{"type":"result","is_error":false,"result":"ok","session_id":"11111111-2222-4333-8444-555555555555"}' };
-    },
+    ...base,
+    registerTool: reg.registerTool,
+    probeAgent: async (bin) => { probes.push(bin); return base.probeAgent(bin); },
   };
-  registerPanelRoutes({ register: (route) => routes.push(route) }, deps);
+  const routes: WebRoute[] = [];
+  await registerPanelRoutes({ register: (route) => routes.push(route) }, deps);
   const byPath = new Map(routes.map((r) => [r.path, r]));
   assert.deepEqual([...byPath.keys()].sort(), [
-    "/data/agents.json", "/data/agents/connect", "/data/agents/disconnect", "/data/agents/rescan",
-    "/data/agents/run", "/data/memory.json", "/data/memory/skill", "/data/plugins.json",
+    "/data/agents.json", "/data/agents/connect", "/data/agents/disconnect", "/data/agents/ignore",
+    "/data/agents/rescan", "/data/memory.json", "/data/memory/skill", "/data/plugins.json",
   ]);
+  assert.deepEqual([...reg.defs.keys()], ["agent_codex"], "an agent already on the roster is callable from boot");
 
-  /* rescan answers with a fresh listing (same shape as agents.json) */
-  const rescan = fakeRes();
-  await byPath.get("/data/agents/rescan")!.handler(postReq("{}"), rescan.res);
-  assert.equal(rescan.out.status, 200);
-  const rescanned = JSON.parse(rescan.out.body) as { ok: boolean; local: unknown[]; candidates: { bin: string }[] };
-  assert.equal(rescanned.ok, true);
-  assert.deepEqual(rescanned.candidates.map((c) => c.bin), ["claude", "gemini"]);
-
-  /* the roster round-trips through the routes: connect → listed → disconnect */
+  /* the browser fence and the media-type gate, on a side-effectful route */
   const connect = byPath.get("/data/agents/connect")!;
-  const made = fakeRes();
-  await connect.handler(postReq(JSON.stringify({ bin: "claude" })), made.res);
-  assert.equal(made.out.status, 200);
-  assert.equal((JSON.parse(made.out.body) as { agent: { version: string } }).agent.version, "2.1.251 (Claude Code)");
-  const refused = fakeRes();
-  await connect.handler(postReq(JSON.stringify({ bin: "openclaw" })), refused.res);
-  assert.equal(refused.out.status, 404);
-
-  const agents = byPath.get("/data/agents.json")!;
-  const roster = fakeRes();
-  await agents.handler(getReq(), roster.res);
-  assert.equal(roster.out.status, 200);
-  const rosterBody = JSON.parse(roster.out.body) as { ok: boolean; local: { bin: string; found: boolean }[] };
-  assert.equal(rosterBody.ok, true);
-  assert.equal(rosterBody.local.find((agent) => agent.bin === "claude")?.found, true);
-
-  /* the run route: the browser fence, the media-type gate, the method gate,
-   * its own body limit — none of which may reach a spawn */
-  const run = byPath.get("/data/agents/run")!;
-  const task = JSON.stringify({ bin: "claude", prompt: "hi" });
+  const task = JSON.stringify({ bin: "claude" });
   const cases: [IncomingMessage, number, string][] = [
     [postReq(task, "evil.example.com"), 403, "forged Host"],
     [postReq(task, "127.0.0.1:3090", { origin: "http://evil.example.com" }), 403, "cross-origin page, loopback Host"],
     [postReq(task, "127.0.0.1:3090", { "sec-fetch-site": "cross-site" }), 403, "Fetch-Metadata cross-site"],
     [postReq(task, "127.0.0.1:3090", { "content-type": "text/plain" }), 415, "a no-preflight simple POST"],
     [getReq(), 405, "GET"],
-    [postReq(JSON.stringify({ bin: "claude", prompt: "x".repeat(200_000) })), 413, "over the run body limit"],
   ];
   for (const [req, status, label] of cases) {
     const out = fakeRes();
-    await run.handler(req, out.res);
+    await connect.handler(req, out.res);
     assert.equal(out.out.status, status, label);
   }
-  assert.deepEqual(spawns, [], "no refused request spawned anything");
-  const ok = fakeRes();
-  await run.handler(postReq(task, "127.0.0.1:3090", { origin: "http://127.0.0.1:3090" }), ok.res);
-  assert.equal(ok.out.status, 200, "the face's own page: same-origin, JSON");
-  assert.deepEqual(spawns, ["claude"]);
-  const cjk = fakeRes();
-  await run.handler(postReq(JSON.stringify({ bin: "claude", prompt: "存".repeat(32_000) })), cjk.res);
-  assert.equal(cjk.out.status, 200, "a maximal CJK prompt is bounded by the prompt cap, not the body cap");
+  assert.deepEqual([...reg.defs.keys()], ["agent_codex"], "no refused request changed anything");
 
+  /* connect → listed, tool registered; the probe cache answers the listing without re-probing */
+  const made = fakeRes();
+  await connect.handler(postReq(task, "127.0.0.1:3090", { origin: "http://127.0.0.1:3090" }), made.res);
+  assert.equal(made.out.status, 200, "the face's own page: same-origin, JSON");
+  assert.equal((JSON.parse(made.out.body) as { agent: { tool: string } }).agent.tool, "agent_claude");
+  assert.deepEqual([...reg.defs.keys()].sort(), ["agent_claude", "agent_codex"]);
+  const refused = fakeRes();
+  await connect.handler(postReq(JSON.stringify({ bin: "openclaw" })), refused.res);
+  assert.equal(refused.out.status, 404);
+
+  const agents = byPath.get("/data/agents.json")!;
+  const before = probes.length;
+  const roster = fakeRes();
+  await agents.handler(getReq(), roster.res);
+  assert.equal(roster.out.status, 200);
+  const listing = JSON.parse(roster.out.body) as { ok: boolean; local: { bin: string; found: boolean }[]; candidates: { bin: string }[] };
+  assert.equal(listing.ok, true);
+  assert.deepEqual(listing.local.map((a) => [a.bin, a.found]), [["codex", false], ["claude", true]], "codex is on the roster but not installed here");
+  assert.deepEqual(listing.candidates.map((c) => c.bin), ["gemini"]);
+  const afterFirst = probes.length;
+  assert.ok(afterFirst > before, "the first listing probes");
+  await agents.handler(getReq(), fakeRes().res);
+  assert.equal(probes.length, afterFirst, "a second listing inside the minute probes nothing");
+
+  /* hide a candidate, then the refresh forgets the cache and re-probes */
+  const ignore = byPath.get("/data/agents/ignore")!;
+  const hid = fakeRes();
+  await ignore.handler(postReq(JSON.stringify({ bin: "gemini", ignored: true })), hid.res);
+  assert.equal(hid.out.status, 200);
+  const rescan = byPath.get("/data/agents/rescan")!;
+  const fresh = fakeRes();
+  await rescan.handler(postReq("{}"), fresh.res);
+  assert.equal(fresh.out.status, 200);
+  assert.ok(probes.length > afterFirst, "refresh re-probes");
+  const rescanned = JSON.parse(fresh.out.body) as { candidates: { bin: string }[]; ignored: { bin: string }[] };
+  assert.deepEqual(rescanned.candidates, [], "the hidden candidate stays hidden through a refresh");
+  assert.deepEqual(rescanned.ignored.map((h) => h.bin), ["gemini"]);
+  const shown = fakeRes();
+  await ignore.handler(postReq(JSON.stringify({ bin: "gemini", ignored: false })), shown.res);
+  assert.deepEqual((JSON.parse(shown.out.body) as { ignored: string[] }).ignored, []);
+  const bad = fakeRes();
+  await ignore.handler(postReq(JSON.stringify({ bin: "a/b", ignored: true })), bad.res);
+  assert.equal(bad.out.status, 400);
+
+  /* disconnect → tool disposed */
   const disconnect = byPath.get("/data/agents/disconnect")!;
   const dropped = fakeRes();
   await disconnect.handler(postReq(JSON.stringify({ bin: "claude" })), dropped.res);
   assert.equal(dropped.out.status, 200);
-  assert.deepEqual((JSON.parse(dropped.out.body) as { connected: unknown[] }).connected, []);
+  assert.deepEqual(reg.disposed, ["agent_claude"]);
+  assert.deepEqual([...reg.defs.keys()], ["agent_codex"]);
 
+  /* the memory routes, unchanged */
   const memory = byPath.get("/data/memory.json")!;
   const forged = fakeRes();
   await memory.handler(getReq("evil.example.com"), forged.res);
   assert.equal(forged.out.status, 403);
-
   const listed = fakeRes();
   await memory.handler(getReq(), listed.res);
-  assert.equal(listed.out.status, 200);
-  const listing = JSON.parse(listed.out.body) as { ok: boolean; groups: { name: string }[] };
-  assert.equal(listing.ok, true);
-  assert.equal(listing.groups[0].name, "mechanics");
-
+  assert.equal((JSON.parse(listed.out.body) as { groups: { name: string }[] }).groups[0]!.name, "mechanics");
   const skill = byPath.get("/data/memory/skill")!;
   const detail = fakeRes();
   await skill.handler(postReq(JSON.stringify({ name: "doctrine" })), detail.res);
-  assert.equal(detail.out.status, 200);
   assert.match(detail.out.body, /# doctrine/);
-  const bad = fakeRes();
-  await skill.handler(postReq("not json"), bad.res);
-  assert.equal(bad.out.status, 400);
   const missing = fakeRes();
   await skill.handler(postReq(JSON.stringify({ name: "absent-skill" })), missing.res);
   assert.equal(missing.out.status, 404);
   const wrongMethod = fakeRes();
   await skill.handler(getReq(), wrongMethod.res);
   assert.equal(wrongMethod.out.status, 405);
-
-  const plugins = byPath.get("/data/plugins.json")!;
-  const answered = fakeRes();
-  await plugins.handler(getReq(), answered.res);
-  assert.equal(answered.out.status, 200);
-  const body = JSON.parse(answered.out.body) as { ok: boolean; mcp: { server: string }[] };
-  assert.equal(body.ok, true);
-  assert.equal(body.mcp[0].server, "alpaca-kit");
+  const plugins = fakeRes();
+  await byPath.get("/data/plugins.json")!.handler(getReq(), plugins.res);
+  assert.equal((JSON.parse(plugins.out.body) as { mcp: { server: string }[] }).mcp[0]!.server, "alpaca-kit");
 });
