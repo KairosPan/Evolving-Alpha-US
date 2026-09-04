@@ -8,8 +8,9 @@
  * membership, and order. See docs/superpowers/specs/2026-09-03-channels-design.md.
  * @module
  */
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { load } from "js-yaml";
 
 /** The copy source every new channel starts from, and never a channel. */
 const TEMPLATE = "_template";
@@ -58,4 +59,67 @@ export async function listChannelDirs(root: string): Promise<ChannelDir[]> {
   }
   found.sort((a, b) => a.name.localeCompare(b.name));
   return [...dirs, ...found];
+}
+
+/** The one thing the old regex could read, kept as the floor a broken file
+ * degrades to: first line-anchored `status:`, first non-space run. */
+const STATUS_RE = /(?:^|\n)status:\s*(\S+)/;
+
+/** The channel card's header, every key optional. A channel that fills none
+ * of them behaves exactly as it did before this existed. */
+export interface ChannelStatus {
+  /** Lifecycle: idea | researching | validated | paper | retired. */
+  status?: string;
+  /** The current conclusion, one sentence. */
+  one_line?: string;
+  /** The next step. */
+  next?: string;
+  /** Free key-value figures, stringified for display. */
+  numbers?: Record<string, string>;
+}
+
+const str = (v: unknown): string | undefined =>
+  typeof v === "string" && v.trim() !== "" ? v.trim() : undefined;
+
+/**
+ * Read `<dir>/status.yaml`. Absent or unreadable is `{}`; malformed YAML
+ * falls back to the `status:` regex, because a hand-mangled file must never
+ * remove a channel from the index — status is a badge, not a gate.
+ */
+export async function readChannelStatus(dir: string): Promise<ChannelStatus> {
+  let text: string;
+  try {
+    text = await readFile(join(dir, "status.yaml"), "utf8");
+  } catch {
+    return {};
+  }
+  const floor: ChannelStatus = {};
+  const word = STATUS_RE.exec(text)?.[1];
+  if (word !== undefined) floor.status = word;
+
+  let doc: unknown;
+  try {
+    doc = load(text);
+  } catch {
+    return floor; // malformed: the regex reading is all we honestly have
+  }
+  if (doc === null || typeof doc !== "object") return floor;
+
+  const raw = doc as Record<string, unknown>;
+  const out: ChannelStatus = {};
+  const status = str(raw.status) ?? floor.status;
+  if (status !== undefined) out.status = status;
+  const one = str(raw.one_line);
+  if (one !== undefined) out.one_line = one;
+  const next = str(raw.next);
+  if (next !== undefined) out.next = next;
+  if (raw.numbers !== null && typeof raw.numbers === "object" && !Array.isArray(raw.numbers)) {
+    const numbers: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw.numbers as Record<string, unknown>)) {
+      if (v === null || typeof v === "object") continue;
+      numbers[k] = String(v);
+    }
+    if (Object.keys(numbers).length > 0) out.numbers = numbers;
+  }
+  return out;
 }
