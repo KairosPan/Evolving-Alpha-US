@@ -502,6 +502,27 @@ test("routes: POST /data/channels creates once, then conflicts; bad JSON is a 40
   assert.equal(junkBody.out.status, 400);
 });
 
+test("routes: POST /data/channels stays 200 even when the reconcile AFTER creation fails (I3)", async () => {
+  const root = await makeRoot();
+  const { registry } = fakeRegistry();
+  const routes: WebRoute[] = [];
+  registerChannelRoutes({ register: (route) => routes.push(route) }, {
+    registry, root, home: await mkdtemp(join(tmpdir(), "face-rt7-")),
+    listSessions: async () => [],
+    // Fails BEFORE reconcileChannels/registry.create ever runs (reconcile()
+    // awaits this first) - simulates the EACCES/lock-timeout/EIO class I3
+    // is about, entirely decoupled from directory creation itself.
+    connectedBins: async () => { throw new Error("EACCES: permission denied"); },
+  });
+  const create = new Map(routes.map((r) => [r.path, r])).get("/data/channels")!;
+
+  const out = fakeRes();
+  await create.handler(postReq('{"name":"delta"}'), out.res);
+  assert.equal(out.out.status, 200, "the directory is already on disk; a reconcile failure must not be reported as create failed");
+  assert.equal((JSON.parse(out.out.body) as { ok: boolean }).ok, true);
+  await stat(join(root, "strategies", "delta")); // the channel really was created, not just claimed to be
+});
+
 /* The name-validation cases carry over from strategies.test.ts:36-72. The NUL
  * case is built with String.fromCharCode and the two normalizations with
  * escapes, so this file has no literal control characters. */

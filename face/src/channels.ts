@@ -535,14 +535,27 @@ export function registerChannelRoutes(webServer: RouteRegistrar, deps: ChannelRo
     path: "/data/channels",
     handler: async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
       if (!guardPost(req, res)) return;
+      let made: ChannelDir;
       try {
-        const made = await createChannel(deps.root, (await bodyOf(req)).name);
-        await reconcile(); // adopt it and seed its roster before the client asks
-        return send(res, 200, { ok: true, ...made });
+        made = await createChannel(deps.root, (await bodyOf(req)).name);
       } catch (err) {
         if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
         return send(res, 500, { ok: false, error: "create failed" });
       }
+      /* I3: the directory is ON DISK once createChannel above returns - the
+       * channel exists whether or not this reconcile succeeds. A throw here
+       * (EACCES out of listChannelDirs, a withFileLock timeout in
+       * seedRoster, an EIO in ws.status()) must NOT be reported as "create
+       * failed": that would be a successful creation answered as a 500, the
+       * client showing no row, and a retry hitting 409 "channel already
+       * exists" - the face contradicting its own filesystem. Adoption and
+       * roster-seeding are a convenience that also runs on every ordinary
+       * listing, so a failure here just means the NEXT listing does the
+       * adopting instead - never fatal to this response. */
+      try {
+        await reconcile(); // adopt it and seed its roster before the client asks
+      } catch { /* surfaced on the next listing, same as any other reconcile failure */ }
+      return send(res, 200, { ok: true, ...made });
     },
   });
 }
