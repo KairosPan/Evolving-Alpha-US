@@ -32,14 +32,21 @@ export interface ChannelDir {
  * The channel directories: the repo root first, then every directory under
  * `<root>/strategies` except the template and hidden names.
  * @param root - absolute workbench repo root.
+ * @throws Error if `strategies` exists but is not a directory, or if access is denied.
  */
 export async function listChannelDirs(root: string): Promise<ChannelDir[]> {
   const dirs: ChannelDir[] = [{ name: WORKBENCH, dir: root, isRoot: true }];
   let entries: import("node:fs").Dirent[] = [];
   try {
     entries = await readdir(join(root, "strategies"), { withFileTypes: true });
-  } catch {
-    /* no arena yet — the workbench is still a channel */
+  } catch (err) {
+    /* No arena yet is a real state: the workbench is still a channel. Any
+     * OTHER readdir failure - EACCES, ENOTDIR - is NOT "no channels", and
+     * reporting it as an empty list would make every channel vanish from
+     * the sidebar with nothing saying why (charter Rule 5). Let it throw:
+     * the route turns it into a failed listing, which the client degrades
+     * on rather than rendering as zero channels. */
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     return dirs;
   }
   const found: ChannelDir[] = [];

@@ -31,3 +31,12 @@ test("listChannelDirs: a missing strategies/ still yields the workbench", async 
   const root = await mkdtemp(join(tmpdir(), "face-empty-"));
   assert.deepEqual((await listChannelDirs(root)).map((d) => d.name), ["workbench"]);
 });
+
+test("listChannelDirs: strategies as a file (not directory) throws ENOTDIR", async () => {
+  const root = await mkdtemp(join(tmpdir(), "face-enotdir-"));
+  await writeFile(join(root, "strategies"), "not a directory");
+  await assert.rejects(
+    () => listChannelDirs(root),
+    (err: NodeJS.ErrnoException) => err.code === "ENOTDIR",
+  );
+});
