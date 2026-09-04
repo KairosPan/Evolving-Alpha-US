@@ -7,7 +7,7 @@ import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import {
-  createChannel, listChannelDirs, readChannelStatus, readChannelBody,
+  createChannel, listChannelDirs, mergeSessionHeads, readChannelStatus, readChannelBody,
   reconcileChannels, registerChannelRoutes,
 } from "../src/channels.ts";
 import { rosterFor, setRoster } from "../src/roster.ts";
@@ -314,6 +314,55 @@ test("reconcileChannels: a directory vanishing between readdir and create skips 
     ["workbench", "市场情绪"],
     "the vanished channel is skipped; the rest of the listing still renders",
   );
+});
+
+/* ---------- C1: the reconcile must see persisted history, not only live
+ * sessions (main.ts's `listSessions` now feeds it `mergeSessionHeads`) ---------- */
+
+test("mergeSessionHeads: a persisted-only session is kept, and a live entry wins over a stale persisted one", () => {
+  const persisted = [
+    { sessionId: "persisted-only", cwd: "/repo/strategies/alpha" },
+    { sessionId: "both", cwd: "/stale/cwd" },
+  ];
+  const live = [{ sessionId: "both", cwd: "/fresh/cwd" }];
+  assert.deepEqual(mergeSessionHeads(persisted, live), [
+    { sessionId: "persisted-only", cwd: "/repo/strategies/alpha" },
+    { sessionId: "both", cwd: "/fresh/cwd" },
+  ], "the persisted-only session survives, and the live cwd wins for the shared id");
+});
+
+test("mergeSessionHeads: neither list is favoured for ORDER, only live wins on a shared id", () => {
+  assert.deepEqual(mergeSessionHeads([], []), []);
+  assert.deepEqual(
+    mergeSessionHeads([{ sessionId: "a", cwd: "/x" }], []),
+    [{ sessionId: "a", cwd: "/x" }],
+    "persisted alone still surfaces",
+  );
+  assert.deepEqual(
+    mergeSessionHeads([], [{ sessionId: "a", cwd: "/x" }]),
+    [{ sessionId: "a", cwd: "/x" }],
+    "live alone still surfaces",
+  );
+});
+
+test("reconcileChannels attaches a session that ONLY the persisted listing reports - exactly what main.ts now feeds it", async () => {
+  const root = await makeRoot();
+  const home = await mkdtemp(join(tmpdir(), "face-home8-"));
+  const { registry, attaches } = fakeRegistry();
+  const alphaDir = join(root, "strategies", "alpha");
+  // Mirrors main.ts's real wiring: sessionPersistence.list() (durable
+  // history) merged with sessions.list() (live only) via mergeSessionHeads.
+  // Nothing is live here - the session is on disk only, which is exactly
+  // the C1 gap: feeding the reconcile from `sessions.list()` alone would
+  // report zero sessions and never attach it.
+  const persistedOnly = mergeSessionHeads(
+    [{ sessionId: "session-from-disk", cwd: alphaDir }],
+    [],
+  );
+  const out = await reconcileChannels({ registry, root, home, sessions: persistedOnly, connectedBins: [] });
+  const alpha = out.channels.find((c) => c.name === "alpha")!;
+  assert.deepEqual(attaches, [`${alpha.workspaceId}:session-from-disk`], "a persisted-only session is attached");
+  assert.deepEqual(out.ungrouped, [], "it is not left ungrouped just because it was never live");
 });
 
 /* ---------- the routes (Task 7) ---------- */

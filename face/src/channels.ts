@@ -246,6 +246,34 @@ export interface SessionHeadLike {
   cwd?: string;
 }
 
+/**
+ * Union a persisted session listing with a live one, live winning on a
+ * shared id. `sessions.list()` (dsh-session) answers only "All live
+ * sessions, in creation order" (`dsh-session/lib/types/index.d.ts:395`) —
+ * sessions loaded into THIS process — never the durable history; feeding the
+ * reconcile from that alone means a session attaches only if it happens to be
+ * live at the moment the sidebar polls, which strands most of the operator's
+ * past sessions in `ungrouped` (C1). `sessionPersistence.list()`
+ * (`dsh-session-persistence/lib/types/index.d.ts:176`) is the seam that
+ * answers the durable listing instead; `dsh-workspace`'s own registry
+ * bootstrap reads both this way, live indexed after persisted so a live
+ * header overrides a possibly-stale persisted one for the same id
+ * (`dsh-workspace/lib/index.js:320-325`).
+ *
+ * Order is `[...persisted, ...live]` folded through a `Map`, so live entries
+ * — later in the array — overwrite a same-id persisted entry rather than the
+ * reverse: a just-created session may not be flushed to persistence yet, and
+ * a live header is never staler than a persisted one.
+ * @param persisted - every materialized session (`sessionPersistence.list()`, mapped).
+ * @param live - every session held live by this process (`sessions.list()`, mapped).
+ */
+export function mergeSessionHeads(
+  persisted: readonly SessionHeadLike[],
+  live: readonly SessionHeadLike[],
+): SessionHeadLike[] {
+  return [...new Map([...persisted, ...live].map((s) => [s.sessionId, s] as const)).values()];
+}
+
 /** One channel as the sidebar and the picker see it. */
 export interface ChannelRow {
   workspaceId: string;

@@ -17,7 +17,7 @@ import { bootFace } from "./boot.ts";
 import { registerDataRoutes } from "./data.ts";
 import { registerStatic } from "./static.ts";
 import { registerSessionRoutes } from "./sessions.ts";
-import { registerChannelRoutes, type RegistryLike } from "./channels.ts";
+import { mergeSessionHeads, registerChannelRoutes, type RegistryLike } from "./channels.ts";
 import { hasExec, panelDeps, readAgentsMeta, registerPanelRoutes } from "./panels.ts";
 
 /** Diagnostic label, the same string boot.ts uses for `BIN`. Not imported
@@ -112,29 +112,42 @@ registerDataRoutes(booted.ctx.webServer);
  * resolves it (sessions.ts, panels.ts): independently, from the same
  * unchanging env state, rather than threaded as a shared value.
  *
- * `workspaceRegistry` and `sessions` are read through `ctx.get`, not property
- * access: `dsh-workspace` and `dsh-session` each declare a
+ * `workspaceRegistry`, `sessions` and `sessionPersistence` are read through
+ * `ctx.get`, not property access: `dsh-workspace`, `dsh-session` and
+ * `dsh-session-persistence` each declare a
  * `declare module "@deepseek-ai/cordis" { interface Context { ... } }`
- * augmentation for their service, but nothing in this program imports either
- * package's TYPES (only their names, in comments and strings) - so tsc never
- * loads those augmentations and never learns `Context` carries them. Same
- * cast-through-`get` pattern boot.ts and panels.ts already use for
+ * augmentation for their service, but nothing in this program imports any of
+ * those packages' TYPES (only their names, in comments and strings) - so tsc
+ * never loads those augmentations and never learns `Context` carries them.
+ * Same cast-through-`get` pattern boot.ts and panels.ts already use for
  * `approval`/`userQuestions`/`skills`/`tools`/`loader`. */
 const dshHome = resolveDshHome(undefined);
 const workspaceRegistry = booted.ctx.get("workspaceRegistry") as RegistryLike;
 const sessions = booted.ctx.get("sessions") as { list(): { id: unknown; header: { cwd?: string } }[] };
+/* `sessionPersistence` is guaranteed present whenever `workspaceRegistry` is:
+ * the registry's own `static inject` names it as a hard dependency
+ * (dsh-workspace/lib/index.js:290), so Cordis cannot have composed the
+ * registry above without it. C1: `sessions.list()` alone answers "All live
+ * sessions" (dsh-session/lib/types/index.d.ts:395) — sessions loaded into
+ * THIS process — never the durable history, so feeding the reconcile from it
+ * alone strands every session that is not live at the moment the sidebar
+ * polls in `ungrouped` (measured: 15 channel-eligible sessions on disk, 5
+ * attached). `sessionPersistence.list()` is the durable listing
+ * (dsh-session-persistence/lib/types/index.d.ts:176); `mergeSessionHeads`
+ * unions it with the live one, live winning, the same order
+ * `dsh-workspace`'s own bootstrap indexes them in
+ * (dsh-workspace/lib/index.js:320-325). */
+const sessionPersistence = booted.ctx.get("sessionPersistence") as {
+  list(): Promise<{ id: unknown; cwd?: string }[]>;
+};
 registerChannelRoutes(booted.ctx.webServer, {
   registry: workspaceRegistry,
   root: process.cwd(),
   home: dshHome,
-  /* `session.list`, host-side: every session the tree currently holds live,
-   * reduced to the id/cwd pair the reconcile needs to attach it to a
-   * channel. `sessions.list()` is synchronous and `header` is never absent
-   * (dsh-session/lib/types/index.d.ts:118-119,398) — the `async` wrapper
-   * exists only to satisfy `ChannelRouteDeps.listSessions`'s Promise return. */
-  listSessions: async () => sessions.list().map((s) => ({
-    sessionId: String(s.id), cwd: s.header.cwd,
-  })),
+  listSessions: async () => mergeSessionHeads(
+    (await sessionPersistence.list()).map((h) => ({ sessionId: String(h.id), cwd: h.cwd })),
+    sessions.list().map((s) => ({ sessionId: String(s.id), cwd: s.header.cwd })),
+  ),
   /* Only a bin with a recipe can become an `agent_<bin>` tool (`hasExec`), so
    * only those are worth seeding into a newly adopted channel's roster. */
   connectedBins: async () => (await readAgentsMeta(dshHome)).connected
