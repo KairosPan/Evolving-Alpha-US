@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, realpath, stat, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listChannelDirs, readChannelStatus, readChannelBody, reconcileChannels } from "../src/channels.ts";
@@ -152,32 +152,56 @@ test("readChannelBody: the file list skips __pycache__ and directories", async (
   assert.deepEqual(body.files.map((f) => f.name), ["screen.py"]);
 });
 
-/** A registry standing in for ctx.workspaceRegistry: the same create
- * idempotence and the same membership early-out the real one has. Exported
- * because Task 7 reuses it. */
-export function fakeRegistry(): { registry: any; attaches: string[] } {
-  const byPath = new Map<string, any>();
+/** A registry standing in for ctx.workspaceRegistry: the same path
+ * canonicalization (via `fs.realpath`) and the same rejection of a
+ * nonexistent/non-directory path that the real `create` has, the same
+ * create idempotence, the same membership early-out on `attachSession`, and
+ * a `status()` that genuinely checks the directory rather than being told
+ * what to answer. `attachSession` additionally rejects any session id named
+ * in `rejectSessionIds`, standing in for the real header-cwd-mismatch
+ * rejection. Exported because Task 7 reuses it. */
+export function fakeRegistry(opts: { rejectSessionIds?: readonly string[] } = {}): { registry: any; attaches: string[] } {
+  const rejectSessionIds = new Set(opts.rejectSessionIds ?? []);
+  const byRealPath = new Map<string, any>();
   const attaches: string[] = [];
   let next = 0;
   const registry = {
     archivedSessionIds: [] as string[],
-    list: () => [...byPath.values()],
+    list: () => [...byRealPath.values()],
     async create(path: string, title?: string) {
-      const had = byPath.get(path);
+      // The real registry canonicalizes via fs.realpath and rejects a
+      // nonexistent or non-directory path outright (it throws before ever
+      // recording anything) - mirror both, so a reconcile racing a deleted
+      // directory, or leaning on the raw `join()` spelling instead of the
+      // canonical one, can't pass by accident here and only fail for real.
+      const real = await realpath(path);
+      if (!(await stat(real)).isDirectory()) throw new Error(`not a directory: ${path}`);
+      const had = byRealPath.get(real);
       if (had !== undefined) return had; // idempotent; title unchanged
       const ws = {
         id: `ws-${++next}`,
-        path,
-        title: title ?? path.split("/").pop(),
+        path: real,
+        title: title ?? real.split("/").pop(),
         sessionIds: [] as string[],
         async attachSession(sessionId: string) {
           if (ws.sessionIds.includes(sessionId)) return; // membership early-out
+          if (rejectSessionIds.has(sessionId)) {
+            throw new Error(`cwd mismatch: ${sessionId} does not belong to ${ws.path}`);
+          }
           attaches.push(`${ws.id}:${sessionId}`);
           ws.sessionIds.push(sessionId);
         },
-        async status() { return "ok" as const; },
+        async status() {
+          // A workspace's directory can vanish after it was created; report
+          // that instead of throwing, same as the real registry.
+          try {
+            return (await stat(ws.path)).isDirectory() ? "ok" as const : "missing-dir" as const;
+          } catch {
+            return "missing-dir" as const;
+          }
+        },
       };
-      byPath.set(path, ws);
+      byRealPath.set(real, ws);
       return ws;
     },
   };
@@ -222,8 +246,13 @@ test("reconcileChannels carries status and reports a missing directory instead o
   const root = await makeRoot();
   const home = await mkdtemp(join(tmpdir(), "face-home3-"));
   const { registry } = fakeRegistry();
-  const ghost = await registry.create(join(root, "strategies", "vanished"));
-  ghost.status = async () => "missing-dir" as const;
+  // A missing-dir workspace arises only by deleting a directory AFTER a
+  // successful create - the real registry rejects `create` on a directory
+  // that never existed, so that is the only honest way to set this up.
+  const vanishedDir = join(root, "strategies", "vanished");
+  await mkdir(vanishedDir, { recursive: true });
+  await registry.create(vanishedDir);
+  await rm(vanishedDir, { recursive: true, force: true });
 
   const out = await reconcileChannels({ registry, root, home, sessions: [], connectedBins: [] });
   assert.equal(out.channels.find((c) => c.name === "alpha")?.status, "researching");
@@ -240,4 +269,42 @@ test("reconcileChannels attaches only sessions whose cwd IS the channel director
     sessions: [{ sessionId: "session-deep", cwd: join(root, "strategies", "alpha", "backtests") }],
   });
   assert.deepEqual(attaches, [], "a subdirectory is not the channel; the host would reject the attach anyway");
+});
+
+test("reconcileChannels: a session the host refuses to attach falls into ungrouped, not vanishes", async () => {
+  const root = await makeRoot();
+  const home = await mkdtemp(join(tmpdir(), "face-home6-"));
+  const { registry, attaches } = fakeRegistry({ rejectSessionIds: ["session-bad"] });
+  const sessions = [{ sessionId: "session-bad", cwd: join(root, "strategies", "alpha") }];
+
+  const out = await reconcileChannels({ registry, root, home, sessions, connectedBins: [] });
+  assert.deepEqual(attaches, [], "the host's rejection is not forced through");
+  assert.deepEqual(
+    out.ungrouped.map((s) => s.sessionId),
+    ["session-bad"],
+    "a session the host refuses to attach is reported, never silently dropped (Rule 5)",
+  );
+});
+
+test("reconcileChannels: a directory vanishing between readdir and create skips only that channel", async () => {
+  const root = await makeRoot();
+  const home = await mkdtemp(join(tmpdir(), "face-home7-"));
+  const { registry: base } = fakeRegistry();
+  const alphaDir = join(root, "strategies", "alpha");
+  // Simulate the readdir→create race the defensive catch exists for: by the
+  // time `create` runs for this one directory, it is already gone.
+  const registry = {
+    ...base,
+    create: async (path: string, title?: string) => {
+      if (path === alphaDir) await rm(alphaDir, { recursive: true, force: true });
+      return base.create(path, title);
+    },
+  };
+
+  const out = await reconcileChannels({ registry, root, home, sessions: [], connectedBins: [] });
+  assert.deepEqual(
+    out.channels.map((c) => c.name),
+    ["workbench", "市场情绪"],
+    "the vanished channel is skipped; the rest of the listing still renders",
+  );
 });

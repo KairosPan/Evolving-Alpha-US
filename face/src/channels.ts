@@ -271,7 +271,13 @@ export async function reconcileChannels(deps: {
   const { registry, root, home, sessions, connectedBins } = deps;
 
   const dirs = await listChannelDirs(root);
-  const byDir = new Map(dirs.map((d) => [d.dir, d]));
+  /* The real registry canonicalizes `path` (e.g. via fs.realpath) on create,
+   * so the record it hands back can spell a directory differently than the
+   * string we walked (a symlinked tmp dir or mount point, `..` segments,
+   * ...) - macOS alone does this for every `os.tmpdir()` path. Track BOTH
+   * spellings for every adopted channel: neither the attach match nor the
+   * orphan scan below may assume the two are the same string. */
+  const knownPaths = new Set<string>();
   const rows: ChannelRow[] = [];
   const claimed = new Set<string>();
 
@@ -284,11 +290,22 @@ export async function reconcileChannels(deps: {
        * sees it as gone, which is already a defined state */
       continue;
     }
+    const paths = new Set([d.dir, ws.path]);
+    for (const p of paths) knownPaths.add(p);
+
     for (const session of sessions) {
-      if (session.cwd !== d.dir) continue; // the channel dir itself, never a subdirectory
-      claimed.add(session.sessionId);
+      if (session.cwd === undefined || !paths.has(session.cwd)) continue; // the channel dir itself, never a subdirectory
       try {
         await ws.attachSession(session.sessionId);
+        /* Claimed only once the attach actually lands. The real host
+         * validates the session header's cwd against the workspace path and
+         * REJECTS a mismatch without writing (caught below) - marking the
+         * session claimed before that call, as an earlier version of this
+         * function did, would silently drop a refused session from every
+         * surface: not in `sessionIds`, not in `ungrouped` either. Falling
+         * through to `ungrouped` on rejection is the correct report
+         * (charter Rule 5: what is never surfaced is never governed). */
+        claimed.add(session.sessionId);
       } catch { /* the host validates the header cwd and refuses; not ours to force */ }
     }
     await seedRoster(home, ws.id, connectedBins);
@@ -305,7 +322,7 @@ export async function reconcileChannels(deps: {
   /* Registered workspaces whose directory is no longer a channel: keep them
    * visible so nothing the operator made disappears silently. */
   for (const ws of registry.list()) {
-    if (byDir.has(ws.path)) continue;
+    if (knownPaths.has(ws.path)) continue;
     for (const id of ws.sessionIds) claimed.add(id);
     rows.push({
       workspaceId: ws.id,
