@@ -718,7 +718,7 @@ body {
    --bg (tool output, code) get their own step so they stay visible on the
    now-white cards. */
 .sidebar { background: var(--side-bg); }
-.tool-out, .md-fence, .md-code { background: var(--inset); }
+.tool-out, .md-fence, .md-code, .ch-raw { background: var(--inset); }
 
 /* pretty ⇄ raw: the head's `raw` becomes a real toggle once a pretty view
    exists; without one the pre stays visible and `raw` stays the inert label
@@ -1272,3 +1272,161 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- channel page ---------- (Task 11) -----------------------------
+   The landing page a channel's name opens to: everything it has produced,
+   before you enter a conversation. Renders inside `.detail-inner`, same as
+   every other detail page — no page-level scroller of its own. Seven blocks:
+   header (title + status + roster chips), the headline card, thesis, latest
+   evidence (a flattened table beside the ALWAYS-present full-JSON <details>,
+   Rule 5), journal, files, and the channel's sessions. */
+
+.ch-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 10px; }
+.ch-title {
+  margin: 0;
+  font: 650 20px/1.3 var(--sans);
+  cursor: pointer;
+}
+.ch-title:hover { color: var(--accent); }
+.ch-badge {
+  flex: none;
+  font: 500 9.5px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  color: var(--dim);
+}
+.ch-badge[data-status="paper"] { color: var(--accent); border-color: currentColor; }
+.ch-badge[data-status="validated"] { color: var(--green); border-color: currentColor; }
+.ch-badge[data-status="retired"] { color: var(--red); border-color: currentColor; }
+.ch-warn {
+  flex: none;
+  font: 600 9.5px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border: 1px solid var(--red);
+  border-radius: var(--r-chip);
+  color: var(--red);
+}
+.ch-path {
+  flex-basis: 100%;
+  margin-top: -4px;
+  font: 10.5px/1.5 var(--mono);
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ch-chips {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 2px;
+}
+.ch-chips-label {
+  flex: none;
+  font: 500 10px/1 var(--sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-right: 2px;
+}
+.ch-chip {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--dim);
+  border-radius: var(--r-chip);
+  font: 500 11.5px var(--mono);
+  padding: 3px 11px;
+  cursor: pointer;
+}
+.ch-chip:hover { border-color: var(--accent); color: var(--accent); }
+.ch-chip.on { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.ch-none { font: 11.5px/1.5 var(--sans); color: var(--dim); }
+
+/* the headline card: status.yaml's one_line/next/numbers, when any exist */
+.ch-card {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+.ch-oneline { margin: 0 0 6px; font: 14.5px/1.5 var(--sans); }
+.ch-oneline:last-child { margin-bottom: 0; }
+.ch-next { margin: 0; font: 12px/1.5 var(--mono); color: var(--dim); }
+.ch-numbers { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 10px; }
+.ch-fig-v { font: 600 17px/1.3 var(--mono); }
+.ch-fig-k {
+  font: 500 10px/1.3 var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-top: 2px;
+}
+
+/* every remaining block: thesis, evidence, journal, files, sessions */
+.ch-sec { margin: 24px 0 0; }
+.ch-sec h3 {
+  font: 600 10px/1 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 0 0 10px;
+}
+.ch-file {
+  font: 12px/1.7 var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ch-file.dim { color: var(--dim); }
+
+/* the full-JSON fallback beside the flattened table — collapsed, never
+   absent, for a parseable payload same as a broken one (Rule 5). */
+.ch-sec details { margin-top: 10px; }
+.ch-sec details > summary {
+  cursor: pointer;
+  font: 11px var(--mono);
+  color: var(--accent);
+  user-select: none;
+}
+.ch-raw {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  max-height: 420px;
+  overflow: auto;
+  border-radius: 6px;
+  font: 12px/1.6 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.ch-journal { display: flex; gap: 10px; padding: 3px 0; font: 12.5px/1.5 var(--sans); }
+.ch-date { flex: none; font: 11px var(--mono); color: var(--dim); }
+
+.ch-new {
+  margin-bottom: 10px;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--accent);
+  font: 600 12px var(--sans);
+  cursor: pointer;
+}
+.ch-new:hover { border-color: var(--accent); }
+.ch-session {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: 13.5px/1.5 var(--sans);
+}
+.ch-session:hover { background: var(--active-bg); }
+.ch-session.archived { color: var(--dim); }
+.ch-session-title { min-width: 0; }

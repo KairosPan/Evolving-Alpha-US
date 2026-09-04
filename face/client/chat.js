@@ -37,6 +37,7 @@ import { rpc, respond, openMux } from "./api.js";
 import { mapFrame } from "./mapper.js";
 import { renderResult } from "./render.js";
 import { renderMarkdown } from "./markdown.js";
+import { renderChannelPage } from "./channels.js";
 
 /** Rendered in place of a value the host did not give us. */
 const EM = "—";
@@ -1463,13 +1464,102 @@ function closeDetail() {
   markActive(); // restore the session's name to the topbar
 }
 
-/** Open one channel's landing page. Placeholder only — Task 11 replaces this
- * body with the real seven-block overview; for now it proves the chevron/name
- * split actually navigates somewhere. @param {Record<string, any>} channel */
+/**
+ * Open one channel's landing page: what it has produced, before you enter it.
+ * Everything shown was derived server-side by `channels.ts` (Task 4) and
+ * handed over whole by `POST /data/channels/overview` — this only fetches,
+ * joins the session rows to the sidebar's own titles, and hands the result to
+ * `renderChannelPage`, which draws it (Task 11's contract). The two-phase
+ * `openDetail` (a loading placeholder, then the real page once the fetch
+ * settles) is the same idiom `openAgentMain`/`openSkill` already use, guarded
+ * by the same `token !== detailSeq` check: a slow fetch that loses the race
+ * to a later navigation renders into a detached, never-shown node instead of
+ * clobbering whatever the operator moved on to.
+ * @param {Record<string, any>} channel - a `ChannelRow` from `channelIndex.channels`.
+ */
 async function openChannel(channel) {
+  const token = openDetail(channel.title, (inner) => {
+    inner.append(el("div", "detail-title", channel.title));
+    inner.append(el("div", "detail-path", channel.dir));
+    inner.append(el("div", "sp-note", "loading…"));
+  });
+
+  /** @type {Record<string, any>} */
+  let payload;
+  try {
+    payload = await panelData("/data/channels/overview", { workspaceId: channel.workspaceId });
+    /* `/data/agents.json` answers {main, local, candidates}; only a `local`
+     * row with a `tool` can ever become an `agent_<bin>` call, so only those
+     * are offerable on the channel's roster — a chip for a bin with no exec
+     * recipe would be a lie the operator could click and nothing would answer. */
+    payload.allBins = ((await panelData("/data/agents.json")).local ?? [])
+      .filter((row) => row.tool !== undefined).map((row) => row.bin);
+  } catch (err) {
+    if (token !== detailSeq) return; // the operator moved on mid-fetch
+    openDetail(channel.title, (inner) => {
+      inner.append(el("div", "detail-title", channel.title));
+      inner.append(panelError(err, "channel overview"));
+    });
+    return;
+  }
+  if (token !== detailSeq) return; // the operator moved on mid-fetch
+
+  /* The effective archive fold: the face's own reversible set UNION the
+   * host's one-way one (a host-archived session can never be un-archived at
+   * this pin — same rule `refreshSessions` applies to the sidebar). Session
+   * TITLES come from the sidebar's last `session.list` (`lastSessions`), the
+   * one place titles are known; a channel session not yet in that snapshot
+   * (freshly attached) shows as "untitled" rather than blocking the page. */
+  const hostArchived = new Set(channelIndex?.archived ?? []);
+  payload.sessions = payload.channel.sessionIds.map((id) => {
+    const summary = lastSessions.find((s) => String(s.sessionId) === id);
+    return {
+      sessionId: id,
+      title: summary === undefined ? undefined : titleOf(summary),
+      archived: archivedSet.has(id) || hostArchived.has(id),
+    };
+  });
+
   openDetail(channel.title, (inner) => {
-    inner.append(el("div", "detail-title", String(channel.title)));
-    inner.append(el("div", "detail-path", String(channel.dir)));
+    renderChannelPage(inner, payload, {
+      onRename: async (title) => {
+        try {
+          await rpc("workspace.rename", { workspaceId: channel.workspaceId, title });
+          await loadChannelIndex();
+          await refreshSessions();
+          void openChannel({ ...channel, title });
+        } catch (err) {
+          failed(err, "workspace.rename");
+        }
+      },
+      onToggleAgent: async (bin, on) => {
+        try {
+          const next = on ? [...payload.agents, bin] : payload.agents.filter((b) => b !== bin);
+          await panelData("/data/channels/agents", { workspaceId: channel.workspaceId, agents: next });
+          void openChannel(channel);
+        } catch (err) {
+          failed(err, "channel agents");
+        }
+      },
+      onNewRound: () => {
+        /* Same reset `newSession()` does for the "+ new" button, minus the
+         * picker: `activeSession` must go back to null here, or `send()`'s
+         * `if (activeSession === null)` branch never runs and a prompt
+         * silently continues whatever session was on screen before the
+         * operator opened this channel page, instead of creating a fresh one
+         * attached to THIS channel — the opposite of what "new round" says. */
+        openSeq += 1; // orphan any in-flight history load
+        loadingSession = null;
+        activeSession = null;
+        pendingWorkspaceId = channel.workspaceId;
+        pendingCwd = undefined;
+        closeDetail();
+        resetFlow();
+        markActive();
+        status(`new session · ${channel.title} · type below`);
+      },
+      onOpenSession: (id) => { closeDetail(); void openSession(id); },
+    });
   });
 }
 
