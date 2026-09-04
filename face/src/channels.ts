@@ -8,7 +8,7 @@
  * membership, and order. See docs/superpowers/specs/2026-09-03-channels-design.md.
  * @module
  */
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { load } from "js-yaml";
 
@@ -122,4 +122,86 @@ export async function readChannelStatus(dir: string): Promise<ChannelStatus> {
     if (Object.keys(numbers).length > 0) out.numbers = numbers;
   }
   return out;
+}
+
+/** The template's H1 and its placeholder question, byte-exact. A channel
+ * born from `_template` and never written is detected here so its page says
+ * "no thesis yet" instead of presenting the placeholder as a thesis. */
+const TEMPLATE_H1 = "# <strategy name>";
+const TEMPLATE_BODY = "What market behavior does this capture, and why does it exist?";
+
+/** A journal line: `- YYYY-MM-DD: text`. */
+const JOURNAL_RE = /^-\s*(\d{4}-\d{2}-\d{2})\s*:\s*(.*)$/;
+
+/** A dated backtest filename: `YYYY-MM-DD-<label>.json`. */
+const BACKTEST_RE = /^(\d{4}-\d{2}-\d{2})-.*\.json$/;
+
+/** Everything the landing page derives from a channel's own files. */
+export interface ChannelBody {
+  thesis: { markdown: string; isTemplate: boolean } | null;
+  journal: { date: string; text: string }[];
+  backtests: { file: string; bytes: number }[];
+  latest: { file: string; json: unknown } | null;
+  files: { name: string; bytes: number; mtime: string }[];
+}
+
+/**
+ * Read one channel directory into the landing page's payload. Every block is
+ * independent: a missing or broken file yields that block's empty value and
+ * never fails the others, so one bad artifact cannot blank a channel's page.
+ */
+export async function readChannelBody(dir: string): Promise<ChannelBody> {
+  const body: ChannelBody = { thesis: null, journal: [], backtests: [], latest: null, files: [] };
+
+  try {
+    const markdown = await readFile(join(dir, "THESIS.md"), "utf8");
+    const isTemplate = markdown.includes(TEMPLATE_H1) && markdown.includes(TEMPLATE_BODY);
+    body.thesis = { markdown, isTemplate };
+  } catch { /* no thesis yet */ }
+
+  try {
+    const text = await readFile(join(dir, "journal.md"), "utf8");
+    for (const line of text.split("\n")) {
+      const m = JOURNAL_RE.exec(line.trim());
+      if (m !== null) body.journal.push({ date: m[1], text: m[2].trim() });
+    }
+    /* newest first; a stable sort keeps same-day entries in file order */
+    body.journal.sort((a, b) => b.date.localeCompare(a.date));
+  } catch { /* no journal yet */ }
+
+  try {
+    const entries = await readdir(join(dir, "backtests"), { withFileTypes: true });
+    const rows: { file: string; bytes: number; dated: string | null }[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile() || entry.name.startsWith(".")) continue;
+      const info = await stat(join(dir, "backtests", entry.name));
+      rows.push({ file: entry.name, bytes: info.size, dated: BACKTEST_RE.exec(entry.name)?.[1] ?? null });
+    }
+    /* dated JSONs newest-first, then everything else by name */
+    rows.sort((a, b) => {
+      if (a.dated !== null && b.dated !== null) return b.dated.localeCompare(a.dated) || a.file.localeCompare(b.file);
+      if (a.dated !== null) return -1;
+      if (b.dated !== null) return 1;
+      return a.file.localeCompare(b.file);
+    });
+    body.backtests = rows.map((r) => ({ file: r.file, bytes: r.bytes }));
+    const newest = rows.find((r) => r.dated !== null);
+    if (newest !== undefined) {
+      try {
+        body.latest = { file: newest.file, json: JSON.parse(await readFile(join(dir, "backtests", newest.file), "utf8")) };
+      } catch { /* the file still lists; only the rendered summary is lost */ }
+    }
+  } catch { /* no backtests/ yet */ }
+
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || entry.name === "__pycache__") continue;
+      const info = await stat(join(dir, entry.name));
+      body.files.push({ name: entry.name, bytes: info.size, mtime: info.mtime.toISOString() });
+    }
+    body.files.sort((a, b) => a.name.localeCompare(b.name));
+  } catch { /* unreadable directory — the page still renders its header */ }
+
+  return body;
 }

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listChannelDirs, readChannelStatus } from "../src/channels.ts";
+import { listChannelDirs, readChannelStatus, readChannelBody } from "../src/channels.ts";
 
 /** A throwaway workbench root: strategies/{_template, alpha, 市场情绪,
  * .hidden, __pycache__} plus a stray FILE that must never list. */
@@ -82,4 +82,71 @@ test("readChannelStatus: no file at all is an empty reading, never a throw", asy
 test("readChannelStatus: numbers is stringified, and a non-object numbers is dropped", async () => {
   assert.deepEqual((await readChannelStatus(await statusDir("numbers:\n  n: 526\n"))).numbers, { n: "526" });
   assert.equal((await readChannelStatus(await statusDir("numbers: 7\n"))).numbers, undefined);
+});
+
+const TEMPLATE_THESIS = "# <strategy name>\n\n**Status:** idea\n\n## Thesis\n\nWhat market behavior does this capture, and why does it exist?\n";
+
+test("readChannelBody: an untouched template thesis is flagged, not presented as content", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "face-body-"));
+  await writeFile(join(dir, "THESIS.md"), TEMPLATE_THESIS);
+  const body = await readChannelBody(dir);
+  assert.equal(body.thesis?.isTemplate, true);
+});
+
+test("readChannelBody: a written thesis is not flagged", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "face-body2-"));
+  await writeFile(join(dir, "THESIS.md"), "# 市场情绪\n\n## Thesis\n\nBreadth leads price.\n");
+  const body = await readChannelBody(dir);
+  assert.equal(body.thesis?.isTemplate, false);
+  assert.match(body.thesis?.markdown ?? "", /Breadth leads price/);
+});
+
+test("readChannelBody: no THESIS.md is null, not an empty string", async () => {
+  assert.equal((await readChannelBody(await mkdtemp(join(tmpdir(), "face-body3-")))).thesis, null);
+});
+
+test("readChannelBody: journal entries parse newest first, prose without a date is ignored", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "face-body4-"));
+  await writeFile(join(dir, "journal.md"), [
+    "# Journal",
+    "",
+    "- 2026-09-01: built the composite.",
+    "- 2026-09-02: falsified; cold +0.82%.",
+    "some loose prose",
+    "",
+  ].join("\n"));
+  const body = await readChannelBody(dir);
+  assert.deepEqual(body.journal.map((e) => e.date), ["2026-09-02", "2026-09-01"]);
+  assert.equal(body.journal[0].text, "falsified; cold +0.82%.");
+});
+
+test("readChannelBody: the newest backtest by FILENAME date is picked and parsed", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "face-body5-"));
+  await mkdir(join(dir, "backtests"), { recursive: true });
+  await writeFile(join(dir, "backtests", "2026-09-02-sentiment.json"), JSON.stringify({ n_days: 526 }));
+  await writeFile(join(dir, "backtests", "2026-08-11-run.json"), JSON.stringify({ n_days: 1 }));
+  await writeFile(join(dir, "backtests", "sentiment_series.csv"), "day,score\n");
+  await writeFile(join(dir, "backtests", ".gitkeep"), "");
+  const body = await readChannelBody(dir);
+  assert.deepEqual(body.backtests.map((b) => b.file), ["2026-09-02-sentiment.json", "2026-08-11-run.json", "sentiment_series.csv"]);
+  assert.equal(body.latest?.file, "2026-09-02-sentiment.json");
+  assert.deepEqual(body.latest?.json, { n_days: 526 });
+});
+
+test("readChannelBody: an unparseable backtest never throws — latest is null, the file still lists", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "face-body6-"));
+  await mkdir(join(dir, "backtests"), { recursive: true });
+  await writeFile(join(dir, "backtests", "2026-09-02-broken.json"), "{not json");
+  const body = await readChannelBody(dir);
+  assert.equal(body.latest, null);
+  assert.deepEqual(body.backtests.map((b) => b.file), ["2026-09-02-broken.json"]);
+});
+
+test("readChannelBody: the file list skips __pycache__ and directories", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "face-body7-"));
+  await mkdir(join(dir, "__pycache__"), { recursive: true });
+  await mkdir(join(dir, "backtests"), { recursive: true });
+  await writeFile(join(dir, "screen.py"), "print(1)\n");
+  const body = await readChannelBody(dir);
+  assert.deepEqual(body.files.map((f) => f.name), ["screen.py"]);
 });
