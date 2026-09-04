@@ -230,11 +230,36 @@ export interface WorkspaceLike {
 }
 
 /** `ctx.workspaceRegistry`, narrowed to what the reconcile needs. NOTE:
- * `attachSession` and the `title` argument of `create` are service-only -
- * neither is on the RPC surface, which is why this runs in the face host and
- * not in the browser. */
+ * `attachSession` and `resolveByPath` are service-only - neither is on the RPC
+ * surface, which is why this runs in the face host and not in the browser. */
 export interface RegistryLike {
-  create(path: string, title?: string): Promise<WorkspaceLike>;
+  /**
+   * Adopt a directory, or hand back the record that already owns it.
+   *
+   * The real signature takes a second `title`, and this one deliberately does
+   * not narrow it in. That argument is honored ONLY when `create` MAKES the
+   * record - "repeated calls for the same canonical path return the existing
+   * entity without changing its title"
+   * (`dsh-workspace/lib/types/index.d.ts:71-76`) - so a title passed from here
+   * would land on a channel's very first listing and be silently ignored on
+   * every listing after, for the whole life of the record.
+   *
+   * That fire-and-forget write is not worth having, because the title is not
+   * the face's to set: it is a renameable display field decoupled from the
+   * folder name (this module's header), the operator reaches it through
+   * `/api/workspace.rename` -> `Workspace.setTitle`, and the channel design
+   * spells the listing rule `workspaceRegistry.create(path)` with no title at
+   * all, recording the repo root's own title as "evolving-alpha-us" while
+   * still calling it the workbench entry (the channels-design spec's section 2
+   * "Existence rule", lines 63-82). The face's {@link WORKBENCH} names the
+   * DIRECTORY side - `ChannelRow.name` - and the two fields may differ.
+   *
+   * The alternative - `setTitle` whenever title and name diverge - was
+   * rejected: divergence is exactly what a rename produces, so correcting it
+   * on every sidebar poll would overwrite the operator's own rename. The face
+   * reads the title and never writes it.
+   */
+  create(path: string): Promise<WorkspaceLike>;
   list(): readonly WorkspaceLike[];
   readonly archivedSessionIds: readonly string[];
   /** Look up by canonical directory path without creating or mutating
@@ -319,7 +344,9 @@ export interface ChannelRow {
   workspaceId: string;
   /** Directory basename (or "workbench") - the git-visible identity. */
   name: string;
-  /** The registry's display title; defaults to the basename at create. */
+  /** The registry's display title: the operator's field, defaulting to the
+   * basename at create and changed only through `/api/workspace.rename`. Read
+   * here, never written - see {@link RegistryLike.create}. */
   title: string;
   dir: string;
   isRoot: boolean;
@@ -333,9 +360,10 @@ export interface ChannelRow {
  * Make the registry match the directories, then answer with the channel list.
  *
  * Idempotent by construction: `create` returns an existing record for a
- * canonical path without changing its title, `attachSession` early-outs on
- * membership before any validation, and `seedRoster` is a no-op once an entry
- * exists. Safe on every listing; in the steady state it performs no writes.
+ * canonical path and is passed no title to change, `attachSession` early-outs
+ * on membership before any validation, and `seedRoster` is a no-op once an
+ * entry exists. Safe on every listing; in the steady state it performs no
+ * writes.
  *
  * A workspace whose directory has vanished is REPORTED, never deleted -
  * deleting it would silently drop the operator's history.
@@ -363,7 +391,7 @@ export async function reconcileChannels(deps: {
   for (const d of dirs) {
     let ws: WorkspaceLike;
     try {
-      ws = await registry.create(d.dir, d.name);
+      ws = await registry.create(d.dir); // the directory only; the title is the operator's
     } catch {
       /* the directory vanished between readdir and create - the next listing
        * sees it as gone, which is already a defined state */

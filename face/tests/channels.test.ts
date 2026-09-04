@@ -8,7 +8,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import {
   createChannel, listChannelDirs, listSessionHeads, mergeSessionHeads, readChannelStatus,
-  readChannelBody, reconcileChannels, registerChannelRoutes,
+  readChannelBody, reconcileChannels, registerChannelRoutes, WORKBENCH,
 } from "../src/channels.ts";
 import { rosterFor, setRoster } from "../src/roster.ts";
 import { HttpError } from "../src/http.ts";
@@ -166,7 +166,11 @@ test("readChannelBody: the file list skips __pycache__ and directories", async (
  * a `status()` that genuinely checks the directory rather than being told
  * what to answer. `attachSession` additionally rejects any session id named
  * in `rejectSessionIds`, standing in for the real header-cwd-mismatch
- * rejection. Exported because Task 7 reuses it. */
+ * rejection. `setTitle` is here because the real entity has it
+ * (`dsh-workspace/lib/types/types.d.ts:49`)
+ * and `/api/workspace.rename` is how the operator reaches it - a fake without
+ * it could not tell "the reconcile does not rename" from "nothing can rename".
+ * Exported because Task 7 reuses it. */
 export function fakeRegistry(opts: { rejectSessionIds?: readonly string[] } = {}): { registry: any; attaches: string[] } {
   const rejectSessionIds = new Set(opts.rejectSessionIds ?? []);
   const byRealPath = new Map<string, any>();
@@ -190,6 +194,9 @@ export function fakeRegistry(opts: { rejectSessionIds?: readonly string[] } = {}
         path: real,
         title: title ?? real.split("/").pop(),
         sessionIds: [] as string[],
+        async setTitle(next: string) {
+          ws.title = next;
+        },
         async attachSession(sessionId: string) {
           if (ws.sessionIds.includes(sessionId)) return; // membership early-out
           if (rejectSessionIds.has(sessionId)) {
@@ -233,6 +240,43 @@ test("reconcileChannels adopts every channel dir plus the repo root, and is idem
   const second = await reconcileChannels({ registry, root, home, sessions, connectedBins: ["claude", "codex"] });
   assert.equal(attaches.length, 2, "a repeat listing attaches nothing new");
   assert.deepEqual(second.channels.map((c) => c.workspaceId), first.channels.map((c) => c.workspaceId), "ids are stable");
+});
+
+/* The reconcile names nothing. `title` is the operator's field, reachable
+ * only through `/api/workspace.rename`; `name` is the directory's. These two
+ * tests are the fence around that split - the first that the face never seeds
+ * a title, the second that it never corrects one. */
+
+test("reconcileChannels leaves the display title to the registry, so the repo root keeps the basename default", async () => {
+  const root = await mkdtemp(join(tmpdir(), "face-title-"));
+  const home = await mkdtemp(join(tmpdir(), "face-home-title-"));
+  const { registry } = fakeRegistry();
+
+  const out = await reconcileChannels({ registry, root, home, sessions: [], connectedBins: [] });
+  const workbench = out.channels.find((c) => c.isRoot)!;
+
+  assert.equal(workbench.name, WORKBENCH, "the directory-side identity is still the code's");
+  assert.equal(
+    workbench.title,
+    (await realpath(root)).split("/").pop(),
+    "the display title is the registry's own basename default - the face passes no title, because a title it passed would be honored on a first listing and silently dropped on every one after",
+  );
+});
+
+test("reconcileChannels never overwrites a title the operator renamed", async () => {
+  const root = await makeRoot();
+  const home = await mkdtemp(join(tmpdir(), "face-home-rename-"));
+  const { registry } = fakeRegistry();
+  const first = await reconcileChannels({ registry, root, home, sessions: [], connectedBins: [] });
+  const alpha = first.channels.find((c) => c.name === "alpha")!;
+
+  // exactly what `/api/workspace.rename` does: Workspace.setTitle
+  await registry.list().find((ws: { id: string }) => ws.id === alpha.workspaceId)!.setTitle("动量");
+
+  const second = await reconcileChannels({ registry, root, home, sessions: [], connectedBins: [] });
+  const renamed = second.channels.find((c) => c.name === "alpha")!;
+  assert.equal(renamed.title, "动量", "a listing is a read of the title, never a write");
+  assert.equal(renamed.name, "alpha", "and the rename never touched the directory-side name");
 });
 
 test("reconcileChannels seeds each channel's roster once, from the connected bins", async () => {
