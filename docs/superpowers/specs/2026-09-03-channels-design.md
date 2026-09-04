@@ -65,7 +65,7 @@ if it looks. Nothing in this design depends on it not looking.
 **The directory is the truth of existence; the workspace is an identity record, created lazily.**
 
 `listChannels()` = `readdir(strategies/)`, **skipping `_template` and any name starting `.` or
-`__`** — the filter carried verbatim from `face/src/strategies.ts:66`, because the copy source
+`__`** — the filter carried verbatim from the pre-rename `face/src/strategies.ts:66`, because the copy source
 must never become a channel — **plus the repo root itself** → for each such directory
 `workspaceRegistry.create(path)` → merge the registry's `title` / `sessionIds` / order. `create` is idempotent: it canonicalizes
 via `fs.realpath`, keeps at most one record per canonical path, and "repeated calls for that
@@ -210,7 +210,7 @@ numbers:
   最大回撤: -18.98%
 ```
 
-`numbers` is nested, so the current scrape — `/(?:^|\n)status:\s*(\S+)/` at
+`numbers` is nested, so the scrape as it stood — `/(?:^|\n)status:\s*(\S+)/` at the pre-rename
 `face/src/strategies.ts:69-72` — cannot read it. Promote **`js-yaml`** (already resolved at
 `4.3.2` in `node_modules`, and `@types/js-yaml` is already an orphan devDependency that nothing
 imports) to a direct dependency.
@@ -243,7 +243,7 @@ assembly only. This keeps every new judgement in this change under test instead 
 visible on its page.
 
 Enforcement point: `agent_<bin>`'s `execute` already reads the calling session's cwd
-(`face/src/panels.ts:668-676`). It resolves the workspace, compares against the roster, and on a
+(`face/src/agents.ts:458`). It resolves the workspace (`:469`, gated at `:470`), compares against the roster, and on a
 miss **throws** — naming the current roster and where to change it. The tool pipeline
 (`dsh-tools`) catches a thrown `execute` and converts it into an `isError` **tool result** carrying
 that message, so what the model sees is a result, never a crash — but the mechanism at the
@@ -255,8 +255,9 @@ and it cannot fall out of sync.
 ### The honest limits — to be stated in the spec, the README, and the code
 
 1. **dsh tool registration is tree-wide.** There is no per-session scoping seam: `ctx.tools.register`
-   (`face/src/panels.ts:711-731`) publishes one flat name per bin (`agent_<bin>`,
-   `face/src/panels.ts:302`) that every session sees. A non-member agent's *schema* is still
+   (reached through the `registerTool` dep, `face/src/panels.ts:345`, and driven by `syncAgentTools`,
+   `face/src/agents.ts:527`) publishes one flat name per bin (`agent_<bin>`, minted by `toolNameFor`,
+   `face/src/agents.ts:84`) that every session sees. A non-member agent's *schema* is still
    visible in every channel; only the call is refused.
 2. **Kairos has a shell.** One shell turn can invoke `claude` directly. Per Rule 2 — "enforce
    below the layer that runs arbitrary code — or admit the gate is prose" — **this roster is a
@@ -275,7 +276,8 @@ and it cannot fall out of sync.
    So **one un-escalated shell turn can rewrite `channels.json` via `POST /data/channels/agents`,
    or rename/delete a workspace via `/api/workspace.*`** — no approval card (nothing escalates),
    no git diff, no session event. This is not introduced here: `POST /data/agents/connect`
-   (`face/src/panels.ts:1147-1155`) already writes `$DSH_HOME/face/agents.json` and registers the
+   (route at `face/src/panels.ts:672`, writing through `writeAgentsMeta`,
+   `face/src/panels.ts:228-231`) already writes `$DSH_HOME/face/agents.json` and registers the
    tool live by the same path. It does mean the charter's "structurally unreachable, not merely
    forbidden" (`Kairos-Design.md:90`) is **narrower than it reads whenever the face runs**, and
    §11 must not claim otherwise.
@@ -289,8 +291,8 @@ and it cannot fall out of sync.
    not only in a code comment.
 
 Also note the pre-existing constraint the roster does not change: the agent-run mutex is a
-module-level `Set<string>` keyed by bin alone (`face/src/panels.ts:527-529`), so two channels
-calling the same agent concurrently still collide with a 409. Re-keying it is out of scope.
+module-level `Set<string>` keyed by bin alone (`face/src/agents.ts:311`), so two channels
+calling the same agent concurrently still collide with a 409 (`face/src/agents.ts:333`). Re-keying it is out of scope.
 
 ---
 
@@ -319,8 +321,8 @@ Because the directory name does not change, every existing `cwd` stays valid and
 is recoverable.
 
 **The reconcile writes, so its writes must be safe.** The face's existing state files are plain
-unserialized read-modify-write (`writeMeta` at `face/src/sessions.ts:70-73`, `writeAgentsMeta` at
-`face/src/panels.ts:219-222`) — safe only because every writer today is a POST, serialized by the
+unserialized read-modify-write (`writeMeta` at `face/src/sessions.ts:81-84`, `writeAgentsMeta` at
+`face/src/panels.ts:228-231`) — safe only because every writer today is a POST, serialized by the
 human. Step 3 puts a read-modify-write on the **GET** path, where a sidebar poll mid-reconcile can
 silently revert an operator's roster toggle. Three rules: (a) both `channels.json` writers go
 through `withFileLock` + `writeFileAtomic` from `@deepseek-ai/dsh-atomic-write` (already resolved
@@ -368,7 +370,7 @@ and the header's `cwd` is the first JSONL record.
 
 - `face/src/strategies.ts` → **`face/src/channels.ts`**: directory discovery, workspace
   adoption, roster read/write, landing-page derivation, the four routes.
-- Extract `readBody` and `StrategyError` (imported today by `sessions.ts:26` and `panels.ts:45`)
+- Extract `readBody` and `StrategyError` (at the time of writing, imported by `sessions.ts` and `panels.ts`)
   into **`face/src/http.ts`** first, so the rename does not drag two unrelated modules.
 - Split **`face/src/agents.ts`** out of `panels.ts` (1177 lines carrying roster + agent
   execution + memory + plugin): `EXEC_SPECS`, `runAgent`, `agentToolDefinition`,
