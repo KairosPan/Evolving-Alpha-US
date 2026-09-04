@@ -252,8 +252,9 @@ into the channel's own `AGENTS.md`, which is Kairos-writable and would drift
 from the operator-owned file. A channel with no roster entry yet (created
 straight through the registry, before a listing has seeded it) reads as "no
 roster yet" and refuses; an unparseable `channels.json` reads as "no rosters"
-and refuses every call — fail CLOSED, never fail open onto every connected
-agent.
+and refuses every call — fail CLOSED, *within a resolved channel*. What
+happens when there is no channel to resolve in the first place is honest
+limit 2, below.
 
 **Deleting a channel** needs no new route and no button: remove the
 directory (Kairos's own write map, or the operator's shell), then call
@@ -274,10 +275,25 @@ down this file:
    bin (`agent_<bin>`, `toolNameFor` at `src/agents.ts:84`) that every session
    sees. A non-member agent's SCHEMA is still visible in every channel; only
    the call is refused.
-2. **Kairos has a shell.** One shell turn can invoke `claude` directly. This
+2. **The roster check only runs inside a resolved channel — a session in NO
+   channel is not roster-checked at all.** `agent_<bin>`'s `execute` reads
+   `const channel = await deps.channelFor(cwd)` and gates the entire roster
+   read behind `if (channel !== null)` (`src/agents.ts:469-470`); when
+   `channel` is `null` there is no `else`, and control falls straight through
+   to `runAgentRecipe` — every connected agent callable, unconditionally. This
+   is deliberate, not an oversight: `channelFor`'s own docstring says "the
+   caller fails open either way" (`src/panels.ts:349-353`), because there is
+   no roster to consult and tools are registered tree-wide regardless of
+   channel. It is also cheap to reach, not a rare edge case: the picker's
+   **`choose a local folder…`** row creates a session straight from a raw
+   `cwd`, never a `workspaceId` (`client/chat.js:1283-1300`), so that session
+   resolves to no channel and is never roster-checked; a channel directory
+   that exists on disk but has not yet been through a reconcile lands in the
+   same place.
+3. **Kairos has a shell.** One shell turn can invoke `claude` directly. This
    roster is a MENU, not a fence — it reduces noise and states intent; it
    does not contain.
-3. **One un-escalated shell turn can `curl` `POST /data/channels/agents` or
+4. **One un-escalated shell turn can `curl` `POST /data/channels/agents` or
    `/api/workspace.*` — no approval card, no git diff, no session event.**
    The sandbox confines FILE effects only: the emitted Seatbelt profile is
    `(allow default) (deny file-write*)` plus write allow-lists
