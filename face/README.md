@@ -145,29 +145,52 @@ any other bed and the rail is replaced by "warmup boundaries unknown for this
 bed": those dates describe THAT capture, and drawing them over a different one
 would be a lie.
 
-## Strategy workspaces (src/strategies.ts + the session picker)
+## Channels (src/channels.ts + src/roster.ts + the session picker)
 
-A session's dsh workspace IS a strategy: a new session starts with a picker —
-the `strategies/*` directories (names only; a strategy's status.yaml status
-is on hover), `workbench` (the repo root, for non-strategy chores), and a
-create field that births a new strategy from `strategies/_template` on the
-spot. The first prompt creates the
-session with the picked directory as `cwd`, and the sidebar groups sessions by
-strategy (derived from each session's `cwd`; foreign directories group by
-basename). Two same-origin-fenced routes feed it: `GET /data/strategies.json` and
-`POST /data/strategies` (validated name, template copy, never overwrites).
-The picker's `choose a local folder…` row opens the OS's own directory dialog
-through `host.pickDirectory` (the directory-picker-auto row the overlay
-mounts); the chosen path becomes the session's workspace and groups by its
-basename. Cancel returns null and changes nothing. Every folder an existing
-session has worked in that is neither the repo root nor a `strategies/`
-directory comes back in the picker as a row of its own, its path on hover
-(derived from `session.list`'s cwds, so the picker offers exactly the groups
-the sidebar shows); the strategy index must have loaded first, since without its root a
-strategy directory cannot be told from a folder.
+A channel is one directory, given an identity by the host and a roster by the
+operator. Three layers, split by who may write them:
 
-Groups fold (chevron on the header; view state per browser), and each row
-carries four hover actions: rename and fork are the host's own RPCs
+| Layer | Lives in | Writer |
+|---|---|---|
+| **Body** (content) | `strategies/<dir>/`, or the repo root | Kairos, freely |
+| **Identity** (container) | the dsh workspace registry (`~/.dsh/storages/workspace.json`) | host-owned, only through `/api/workspace.*` |
+| **Roster** (runtime) | `$DSH_HOME/face/channels.json` | the operator, on the channel page |
+
+The directory is the truth of existence, not the registry: `listChannelDirs`
+(`src/channels.ts:43`) walks `strategies/*`, skipping `_template` and any name
+starting `.` or `__`, and adds the repo root by hand (it has no `strategies/`
+parent, so it stays the `workbench` entry). `workspaceRegistry.create` is
+idempotent — canonical path, at most one record per path, a repeat call
+returns the existing title unchanged — so a channel Kairos makes with a plain
+`mkdir` becomes a channel on the very next listing.
+
+**The reconcile** (`reconcileChannels`, `src/channels.ts:275`) runs on every
+listing — both the `GET` that feeds the sidebar and picker and the `POST`
+that feeds a channel's own page — and is idempotent by construction: `create`
+is a no-op past its first call, `attachSession` early-outs on membership
+before validating anything, and seeding a roster (`seedRoster`) is a no-op
+once the channel has one. A steady-state listing performs no writes at all.
+Because it CAN write on a `GET`, `channels.json`'s two writers — the
+reconcile's seed and the operator's roster edit — both go through
+`withFileLock` + `writeFileAtomic`, reading the file *inside* the lock, so a
+sidebar poll racing an operator's toggle cannot silently revert it. A
+workspace whose directory has vanished is reported greyed (`missing-dir`),
+never deleted; its sessions stay attached and reachable.
+
+**The picker and the sidebar are registry-driven now, not directory-scanned.**
+`+ new` still opens the same picker (`showStrategyPicker`,
+`client/chat.js:1256`), but its rows come from `/data/channels.json` instead
+of guessing from `cwd`s, plus a `choose a local folder…` row through the OS's
+own dialog (`host.pickDirectory`) for anything outside a channel. The sidebar
+groups sessions by channel MEMBERSHIP, not by path prefix: a session no
+channel claims folds into a counted `ungrouped` bucket — never dropped,
+charter Rule 5 — and the archive fold is the UNION of the face's own
+reversible set (`archived.json`) and the host's one-way
+`workspaceRegistry.archivedSessionIds`, because the two already disagree on
+disk and neither alone is honest about what is archived.
+
+Groups fold (chevron on the header; view state per browser), and each session
+row carries four hover actions: rename and fork are the host's own RPCs
 (`session.rename`, `session.fork` — a fork opens immediately); archive and
 delete are face routes, because the host has neither at this pin. Archive is
 metadata in `$DSH_HOME/face/archived.json` — the session still exists, folded
@@ -177,14 +200,119 @@ a running session, no undo) and tombstones the id: a session deleted while
 its agent is still attached keeps listing from host memory until the next
 face restart — and write-behind can even re-persist its directory — so the
 sidebar hides tombstoned ids unconditionally and the ghost dies with the
-restart.
+restart. `deleteSession` also now constrains itself to sessions whose `cwd`
+resolves inside this repo, not merely to an id it happens to find, closing a
+pre-existing gap where the delete button could reach another project's
+session directory.
 
-The sandbox boundary follows the workspace — deliberately: a strategy session
+The sandbox boundary follows the workspace — deliberately: a channel session
 writes its own `strategies/<name>/` freely, and anything outside (the repo's
 `.git` included) only through a Gate-2 escalation card. The write map's
 "Kairos works strategies/ freely" becomes code, and a `git commit` from a
-strategy session is an approval the operator answers — accepted trade,
+channel session is an approval the operator answers — accepted trade,
 2026-09-01.
+
+Four routes feed all of this, every one behind the same `isTrustedDataRequest`
+fence as `/data` everywhere else — read "the honest limits" below before
+treating that fence as authentication:
+
+| Route | What |
+|---|---|
+| `GET /data/channels.json` | the reconciled list, the `ungrouped` bucket, the archive set |
+| `POST /data/channels/overview` | one channel's landing-page payload — `{workspaceId}` in |
+| `POST /data/channels/agents` | the operator's roster write — `{workspaceId, agents}` in |
+| `POST /data/channels` | create — `{name}`, copies `strategies/_template`, then reconciles |
+
+**The landing page** (`client/channels.js`) opens on clicking a channel's
+title in the sidebar's group header — the chevron still only folds it. Seven
+blocks, every one quietly skipped when its source is absent: header (title,
+inline-rename, status badge, a `missing-dir` warning, the roster's agent
+chips, the directory path); the optional `status.yaml` headline (`one_line`,
+`next`, `numbers` — see `AGENTS.md`); the thesis (`THESIS.md`, with an
+untouched `_template` copy detected byte-exact and shown as "no thesis yet"
+rather than presented as content); latest evidence (the newest
+`backtests/*.json`, flattened to a summary table, with the FULL json always
+reachable in a collapsed `<details>` alongside it — nothing is dropped
+because nothing is hidden); the journal (`journal.md`'s `- YYYY-MM-DD:` lines
+as a timeline); files (one level of the directory, `__pycache__` filtered);
+and sessions (the channel's own, joined against `session.list`, plus "new
+round").
+
+**The roster**, `$DSH_HOME/face/channels.json` (`src/roster.ts`), keyed by
+workspace id so a directory rename never loses it:
+`{"version":1,"channels":{"<workspaceId>":{"agents":["codex"]}}}`. A newly
+adopted channel is seeded from whichever agents are connected at that
+moment — there is no "absent means everything" rule; a channel's roster is a
+definite, visible set at every moment. The enforcement point is
+`agent_<bin>`'s own `execute` (`src/agents.ts:458-488`): it reads the calling
+session's cwd, resolves its channel, and on a miss returns a TOOL RESULT —
+never a thrown error — naming the channel and its current roster verbatim.
+That refusal message IS the roster's contract; it is deliberately not written
+into the channel's own `AGENTS.md`, which is Kairos-writable and would drift
+from the operator-owned file. A channel with no roster entry yet (created
+straight through the registry, before a listing has seeded it) reads as "no
+roster yet" and refuses; an unparseable `channels.json` reads as "no rosters"
+and refuses every call — fail CLOSED, never fail open onto every connected
+agent.
+
+**Deleting a channel** needs no new route and no button: remove the
+directory (Kairos's own write map, or the operator's shell), then call
+`/api/workspace.delete` — there is no UI for this second step yet, it is a
+raw RPC call, not wired to a click. Order matters: `workspaceRegistry.create`
+rejects a nonexistent path, so once the directory is gone the reconcile can
+no longer resurrect the record. `delete` never touches the directory or the
+session logs; the channel's sessions simply fall into `ungrouped`.
+
+### The honest limits — the roster is a menu, not a fence
+
+Charter Rule 3 requires recording a residual rather than shipping a guarantee
+that fails at code level. In the same register as the Gate-2 note further
+down this file:
+
+1. **dsh tool registration is tree-wide.** There is no per-session scoping
+   seam — `tools.register` (`src/panels.ts:345`) publishes one flat name per
+   bin (`agent_<bin>`, `toolNameFor` at `src/agents.ts:84`) that every session
+   sees. A non-member agent's SCHEMA is still visible in every channel; only
+   the call is refused.
+2. **Kairos has a shell.** One shell turn can invoke `claude` directly. This
+   roster is a MENU, not a fence — it reduces noise and states intent; it
+   does not contain.
+3. **One un-escalated shell turn can `curl` `POST /data/channels/agents` or
+   `/api/workspace.*` — no approval card, no git diff, no session event.**
+   The sandbox confines FILE effects only: the emitted Seatbelt profile is
+   `(allow default) (deny file-write*)` plus write allow-lists
+   (`node_modules/@deepseek-ai/dsh-sandbox-local/lib/index.js:66-72`), and
+   `dsh-bash-sandbox`'s own README says outright "Network stays unrestricted."
+   Both loopback surfaces are REACHABILITY FENCES, not authentication:
+   `src/data.ts:116-117` — "A request with no Origin (curl, the tests, …)
+   passes on Host alone" — and `dsh-client-connection`'s README — "The fence
+   is a reachability policy, not authentication." Verified against the
+   running face: a `curl` POST to `/data/strategies` (this route's name
+   before the rename to `/data/channels`; the fence itself is unchanged)
+   cleared the 403 and the 415 and reached the handler, refused only by name
+   validation, while a forged `Host` still 403'd; a `curl` RPC
+   `workspace.list` returned the real registry, HTTP 200. This is not
+   introduced here — `POST /data/agents/connect` (`src/panels.ts:670-679`)
+   already writes `$DSH_HOME/face/agents.json` and registers a tool live by
+   the same path, and predates this design entirely. **The mitigation is
+   visibility, not prevention**: a roster write appends a dated line to the
+   face's own log (`src/channels.ts:494`), so a change is SEEN even though it
+   cannot be stopped. Building a token would be new security machinery
+   against the charter's §7.4; recording this is what Rule 3 actually asks
+   for instead.
+
+**Two residuals, out of scope, recorded per Rule 3 (spec §10).** Neither is
+caused by this change; both are recorded because it touches their
+neighbourhood:
+
+1. **The alpaca-kit MCP server is a child of the face PROCESS, not of a
+   session**, so its writes never pass `ctx.sandboxPolicy`. Evidence on disk:
+   `data/.screen_cache/` was written at the repo root during 2026-09-02
+   strategy work, with no approval card.
+2. **`system-prompt.persona` is empty.** It is `''` in `dsh-base` and set by
+   neither `src/overlay.ts` nor the operator's `cordis.patch.yml` — the model
+   is never told it is Kairos. "Kairos" is a UI literal and a directory name,
+   not a composed property.
 
 ## The master rail (src/panels.ts + the sidebar's four faces)
 
@@ -235,7 +363,8 @@ split by data source:
   connected agent the face has a recipe for is registered in the dsh tree as
   a tool, `agent_<bin>` (`ctx.tools.register`, synced at boot and after every
   roster write, disposed on disconnect), so **Kairos calls it from any
-  strategy session** — `agent_claude(prompt, resume?)`. The tool spawns the
+  channel that offers it on its roster** (see "Channels" above) —
+  `agent_claude(prompt, resume?)`. The tool spawns the
   operator's own UNMODIFIED CLI as a child in the calling session's directory
   (`exec.agent.session.header.cwd` — the strategy's workspace), forwards the
   call's cancellation to the child, and hands the answer back as the tool

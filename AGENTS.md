@@ -12,7 +12,10 @@ strategies/.
 - strategies/<name>/ — one directory per strategy: THESIS.md, screen.py, backtest.py,
   backtests/, journal.md, status.yaml. Lifecycle, declared in status.yaml:
   idea | researching | validated | paper | retired — paper is a reserved forward-testing
-  state, meaningful only once the order gate opens. Copy strategies/_template to start one.
+  state, meaningful only once the order gate opens. status.yaml also carries three optional
+  headline keys the face's channel landing page renders when present: one_line (the current
+  conclusion, one sentence), next (the next step), numbers (free key-value figures) — none
+  required; fill them in when there is something worth a line. Copy strategies/_template to start one.
   Commit your own iterations; git log is the audit trail.
   A new strategy starts with one batched ask_user_question, not with code: the thesis
   and the falsification terms that would retire it, which bed and which window (warmup
