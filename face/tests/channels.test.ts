@@ -434,6 +434,25 @@ test("routes: the roster write replaces the set and refuses an unknown channel",
   assert.equal(junk.out.status, 400);
 });
 
+test("routes: POST /data/channels creates once, then conflicts; bad JSON is a 400", async () => {
+  const root = await makeRoot();
+  const routes = await routesFor(root, await mkdtemp(join(tmpdir(), "face-rt6-")));
+  const create = routes.get("/data/channels")!;
+
+  const first = fakeRes();
+  await create.handler(postReq('{"name":"gamma"}'), first.res);
+  assert.equal(first.out.status, 200);
+  await stat(join(root, "strategies", "gamma"));
+
+  const again = fakeRes();
+  await create.handler(postReq('{"name":"gamma"}'), again.res);
+  assert.equal(again.out.status, 409);
+
+  const junkBody = fakeRes();
+  await create.handler(postReq("not json"), junkBody.res);
+  assert.equal(junkBody.out.status, 400);
+});
+
 /* The name-validation cases carry over from strategies.test.ts:36-72. The NUL
  * case is built with String.fromCharCode and the two normalizations with
  * escapes, so this file has no literal control characters. */
