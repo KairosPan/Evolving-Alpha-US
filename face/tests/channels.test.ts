@@ -7,8 +7,8 @@ import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import {
-  createChannel, listChannelDirs, mergeSessionHeads, readChannelStatus, readChannelBody,
-  reconcileChannels, registerChannelRoutes,
+  createChannel, listChannelDirs, listSessionHeads, mergeSessionHeads, readChannelStatus,
+  readChannelBody, reconcileChannels, registerChannelRoutes,
 } from "../src/channels.ts";
 import { rosterFor, setRoster } from "../src/roster.ts";
 import { HttpError } from "../src/http.ts";
@@ -329,6 +329,31 @@ test("mergeSessionHeads: a persisted-only session is kept, and a live entry wins
     { sessionId: "persisted-only", cwd: "/repo/strategies/alpha" },
     { sessionId: "both", cwd: "/fresh/cwd" },
   ], "the persisted-only session survives, and the live cwd wins for the shared id");
+});
+
+test("listSessionHeads: a durable-read failure degrades to live-only, and is reported not swallowed", async () => {
+  const boom = new Error("corrupt header frame");
+  const seen: unknown[] = [];
+  const heads = await listSessionHeads(
+    () => Promise.reject(boom),
+    () => [{ sessionId: "live-1", cwd: "/repo" }],
+    (err) => seen.push(err),
+  );
+  // Grouping is INCOMPLETE, never absent: the live sessions still bucket.
+  assert.deepEqual(heads, [{ sessionId: "live-1", cwd: "/repo" }]);
+  // Rule 5: the failure is surfaced, not eaten.
+  assert.deepEqual(seen, [boom]);
+});
+
+test("listSessionHeads: the durable listing is unioned in when it works, and nothing is reported", async () => {
+  const seen: unknown[] = [];
+  const heads = await listSessionHeads(
+    () => Promise.resolve([{ sessionId: "old-1", cwd: "/repo/a" }]),
+    () => [{ sessionId: "live-1", cwd: "/repo/b" }],
+    (err) => seen.push(err),
+  );
+  assert.deepEqual(heads.map((h) => h.sessionId), ["old-1", "live-1"]);
+  assert.equal(seen.length, 0);
 });
 
 test("mergeSessionHeads: neither list is favoured for ORDER, only live wins on a shared id", () => {

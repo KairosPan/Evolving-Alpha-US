@@ -17,6 +17,11 @@ import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 import { FORBIDDEN, HttpError, readBody } from "./http.ts";
 import { logRosterWrite, rosterFor, seedRoster, setRoster } from "./roster.ts";
 
+/** Diagnostic label, the same string every other `${BIN}:`-prefixed line in this
+ * program uses (`roster.ts:24`, `main.ts:26`) - copied rather than imported,
+ * because it is a label rather than a contract. */
+const BIN = "kairos-face";
+
 /** The copy source every new channel starts from, and never a channel. */
 const TEMPLATE = "_template";
 
@@ -272,6 +277,41 @@ export function mergeSessionHeads(
   live: readonly SessionHeadLike[],
 ): SessionHeadLike[] {
   return [...new Map([...persisted, ...live].map((s) => [s.sessionId, s] as const)).values()];
+}
+
+/** The listing the reconcile runs on: the durable one unioned with the live one,
+ * degrading to live-only if the durable read fails.
+ *
+ * `sessionPersistence.list()` can throw where `sessions.list()` never could - a
+ * legacy flat layout, a corrupt header frame, an id collision. Unguarded, that
+ * throw fails the whole reconcile, so `/data/channels.json` answers 500 and the
+ * sidebar loses ALL grouping until the store is repaired. Falling back to the
+ * live listing leaves grouping merely INCOMPLETE for this listing - which is
+ * what the face saw before it read persisted sessions at all - and the failure
+ * is reported rather than swallowed (charter Rule 5: what is never surfaced is
+ * never governed).
+ *
+ * Cost, since this runs on every listing and the sidebar polls: the durable read
+ * is O(sessions on disk across ALL projects), each costing a bounded header read,
+ * and it only grows. Nothing caches it today; if that starts to bite, cache here
+ * rather than making the reconcile conditional.
+ * @param persisted - the durable listing, mapped.
+ * @param live - this process's live listing, mapped. Read before the durable one
+ *   so a throw cannot cost us the sessions we already had.
+ * @param onPersistedError - told about a durable-read failure; never swallowed.
+ */
+export async function listSessionHeads(
+  persisted: () => Promise<readonly SessionHeadLike[]>,
+  live: () => readonly SessionHeadLike[],
+  onPersistedError: (err: unknown) => void,
+): Promise<SessionHeadLike[]> {
+  const liveHeads = live();
+  try {
+    return mergeSessionHeads(await persisted(), liveHeads);
+  } catch (err) {
+    onPersistedError(err);
+    return [...liveHeads];
+  }
 }
 
 /** One channel as the sidebar and the picker see it. */
@@ -554,7 +594,11 @@ export function registerChannelRoutes(webServer: RouteRegistrar, deps: ChannelRo
        * adopting instead - never fatal to this response. */
       try {
         await reconcile(); // adopt it and seed its roster before the client asks
-      } catch { /* surfaced on the next listing, same as any other reconcile failure */ }
+      } catch (err) {
+        /* Not fatal to this response - the next listing adopts it instead - but
+         * the codebase says a swallowed failure still gets a line. */
+        console.warn(`${BIN}: created ${made.name}, but adopting it now failed; the next listing will:`, err);
+      }
       return send(res, 200, { ok: true, ...made });
     },
   });

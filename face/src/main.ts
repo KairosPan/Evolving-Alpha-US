@@ -17,7 +17,7 @@ import { bootFace } from "./boot.ts";
 import { registerDataRoutes } from "./data.ts";
 import { registerStatic } from "./static.ts";
 import { registerSessionRoutes } from "./sessions.ts";
-import { mergeSessionHeads, registerChannelRoutes, type RegistryLike } from "./channels.ts";
+import { listSessionHeads, registerChannelRoutes, type RegistryLike } from "./channels.ts";
 import { hasExec, panelDeps, readAgentsMeta, registerPanelRoutes } from "./panels.ts";
 
 /** Diagnostic label, the same string boot.ts uses for `BIN`. Not imported
@@ -144,9 +144,10 @@ registerChannelRoutes(booted.ctx.webServer, {
   registry: workspaceRegistry,
   root: process.cwd(),
   home: dshHome,
-  listSessions: async () => mergeSessionHeads(
-    (await sessionPersistence.list()).map((h) => ({ sessionId: String(h.id), cwd: h.cwd })),
-    sessions.list().map((s) => ({ sessionId: String(s.id), cwd: s.header.cwd })),
+  listSessions: () => listSessionHeads(
+    async () => (await sessionPersistence.list()).map((h) => ({ sessionId: String(h.id), cwd: h.cwd })),
+    () => sessions.list().map((s) => ({ sessionId: String(s.id), cwd: s.header.cwd })),
+    (err) => console.error(`${BIN}: the durable session listing failed; this listing groups only live sessions:`, err),
   ),
   /* Only a bin with a recipe can become an `agent_<bin>` tool (`hasExec`), so
    * only those are worth seeding into a newly adopted channel's roster. */

@@ -149,7 +149,8 @@ export async function logRosterWrite(home: string, workspaceId: string, agents: 
   console.log(`${BIN}: ${line}`);
   try {
     await mkdir(join(home, ROSTER_LOG_FILE[0]), { recursive: true });
-    await appendFile(join(home, ...ROSTER_LOG_FILE), `${line}\n`, "utf8");
+    /* 0o600 to match channels.json beside it - mode applies on creation only. */
+    await appendFile(join(home, ...ROSTER_LOG_FILE), `${line}\n`, { encoding: "utf8", mode: 0o600 });
   } catch (err) {
     console.error(`${BIN}: failed to append to ${join(home, ...ROSTER_LOG_FILE)} - the roster write itself still stands:`, err);
   }
