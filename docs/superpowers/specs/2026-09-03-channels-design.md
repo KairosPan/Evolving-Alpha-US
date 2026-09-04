@@ -18,8 +18,8 @@ An 8-reader survey plus a completeness critic (2026-09-03) established the load-
 that reshapes the design: **dsh already ships the channel object, and the face declines it.**
 `@deepseek-ai/dsh-workspace` is mounted at `face/src/overlay.ts:52` and its state is live at
 `~/.dsh/storages/workspace.json`, but the face never uses its capability — the client sends
-`session.create({cwd})` (`face/client/chat.js:1319`), so every face-created session is
-permanently **Ungrouped** in the host's own registry. The registry offers exactly the four
+`session.create({cwd})` (pre-channels `face/client/chat.js:1319`), so every face-created session
+was permanently **Ungrouped** in the host's own registry. The registry offers exactly the four
 things the current model lacks: a stable UUID decoupled from the path, a display `title`
 decoupled from the directory name, a durable `sessionIds` membership index, and manual order.
 
@@ -136,7 +136,7 @@ but the **group header becomes the channel entry**:
 - the header's **chevron keeps the fold gesture** — collapsing must not be lost, and the synthetic
   `archived` / `ungrouped` headers (which carry no `workspaceId`) stay fold-only, with no page
 - click a **session row** → the conversation (today's behaviour, unchanged)
-- **+ new** still opens the existing picker (`showStrategyPicker`, `face/client/chat.js:1210`);
+- **+ new** still opens the existing picker (`showStrategyPicker`, `face/client/chat.js:1291`);
   only its row source changes, from directory-scan-plus-cwd-guessing to the registry
 
 Sessions stay on the sidebar deliberately: routing every conversation switch through a landing
@@ -172,8 +172,10 @@ round". No CSS rule is overturned.
    a conformance point.
 
    So the rule is: **the full JSON is always reachable** in a collapsed `<details><pre>`
-   alongside any summary — for parseable payloads too, not only unparseable ones (the pattern
-   already used at `face/client/chat.js:341-343`). Nothing is dropped because nothing is hidden.
+   alongside any summary — for parseable payloads too, not only unparseable ones. This is a NEW
+   pattern here, not an inherited one: the card's existing `raw` toggle keeps the full text in the
+   DOM (`face/client/chat.js:343`) but *swaps* it for the summary rather than showing both
+   (`face/client/chat.css:726-728`). Nothing is dropped because nothing is hidden.
    The summary view above it is a recursive walk flattening nested objects to dotted paths
    (`score_stats.max_drawdown`, `discarded.spy_days_missing`) and rendering arrays as a count
    plus a short preview, with a meta line naming anything elided. Generic is mandatory: the
@@ -348,16 +350,18 @@ adoption its page honestly reads "no thesis yet". That is the correct outcome, n
 | Session in the host archive set (one exists today: `session-d1a8a9ff…`) | attached by the reconcile as normal, then folded by the effective archive set on every surface |
 | A session whose cwd resolves to no channel | falls into the counted ungrouped bucket; the roster check has no channel to consult, so it fails **open** — which equals today's behaviour, since tools are registered tree-wide with no per-session gate |
 
-Today those foreign sessions are worse than ungrouped: `session.list` is globally scoped, so
-`strategyLabel` (`face/client/chat.js:1169`) buckets them as if they were strategies and the
-picker offers their directories as workspaces for a new Kairos session. A registry-driven index
-fixes both.
+Before this change those foreign sessions were worse than ungrouped: `session.list` is globally
+scoped, so `strategyLabel` (pre-registry `face/client/chat.js:1169`, removed in `a45d104`) bucketed
+them as if they were strategies and the picker offered their directories as workspaces for a new
+Kairos session. The registry-driven index fixes both — bucketing now runs through `bucketFor`
+(`face/client/grouping.js:40`).
 
-### One correctness fix in the code being touched
+### One correctness fix in the code being touched (shipped in `42fea60`)
 
-`deleteSession` (`face/src/sessions.ts:89-117`) matches on session id alone and scans **every**
-project slug before `rm -rf`, so the face's delete button can reach another project's session
-directory. Since the sidebar becomes registry-driven in this change, constrain the delete to sessions whose
+`deleteSession` (pre-fix at `face/src/sessions.ts:89-117`) matched on session id alone and scanned
+**every** project slug before `rm -rf`, so the face's delete button could reach another project's
+session directory. It now takes the repo root and refuses anything outside it — the function at
+`face/src/sessions.ts:179-211`, the guard at `:198`. Since the sidebar becomes registry-driven in this change, constrain the delete to sessions whose
 `cwd` is **inside this repo** — not "or in the registry", which would re-widen exactly what the
 constraint closes. The cwd is available: `deleteSession` already resolves the session directory,
 and the header's `cwd` is the first JSONL record.
@@ -378,8 +382,8 @@ and the header's `cwd` is the first JSONL record.
   plugin panels are not refactored.
 - `face/src/main.ts`: `registerChannelRoutes(booted.ctx.webServer, booted.ctx, process.cwd())`
   — the ctx is now needed for `workspaceRegistry`.
-- `face/src/sessions.ts`: constrain `deleteSession` (`:89-117`) to sessions whose header `cwd` is
-  inside this repo (§6), and correct the docstring at `:4-17` (dsh **does** expose
+- `face/src/sessions.ts`: constrain `deleteSession` (pre-fix `:89-117`) to sessions whose header `cwd`
+  is inside this repo (§6), and correct the docstring at `:4-17` (dsh **does** expose
   `workspace.archiveSession` at this pin) and record the real reason `archived.json` stays —
   the host's archive is add-only with no un-archive method, while `setArchived(home, id, false)`
   can reverse.
@@ -405,7 +409,8 @@ and the header's `cwd` is the first JSONL record.
 pure functions each get cases: thesis-template detection · journal parsing · newest-backtest
 selection · YAML parse and its regex fallback · roster seeding and toggling · directory↔workspace
 reconciliation · `missing-dir` · **`_template` and `.`/`__`-prefixed names never adopted** (the
-behaviour `face/tests/strategies.test.ts:28` pins today, which the rewrite must not lose) · **the
+behaviour `face/tests/strategies.test.ts:28` pinned at the time of writing, which the rewrite must
+not lose — it is pinned now by `face/tests/channels.test.ts:28`) · **the
 repo root adopted as the workbench channel** · **concurrent seed-vs-toggle on `channels.json`** ·
 **an unparseable `channels.json` failing closed without re-seeding** · **the effective archive set
 (face ∪ host) and the refusal to un-archive a host-archived id**. `sessions.test.ts` gains a case
@@ -422,7 +427,7 @@ both `/data` fence drills and the `ask_user_question` assertion do not run by de
 ("a guard that has never been drilled is presumed broken") and debt D6 ("a new guard ships with
 its drill in the same change") therefore require: the roster refusal and the three new
 `/data/channels*` routes get their drills **in the default suite**, following the forged-Host →
-403 pattern at `face/tests/sessions.test.ts:65-98`, not only inside the gated smoke test.
+403 pattern at `face/tests/sessions.test.ts:125-159`, not only inside the gated smoke test.
 
 ---
 

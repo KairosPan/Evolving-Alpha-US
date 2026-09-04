@@ -164,7 +164,7 @@ idempotent — canonical path, at most one record per path, a repeat call
 returns the existing title unchanged — so a channel Kairos makes with a plain
 `mkdir` becomes a channel on the very next listing.
 
-**The reconcile** (`reconcileChannels`, `src/channels.ts:275`) runs on every
+**The reconcile** (`reconcileChannels`, `src/channels.ts:303`) runs on every
 listing — both the `GET` that feeds the sidebar and picker and the `POST`
 that feeds a channel's own page — and is idempotent by construction: `create`
 is a no-op past its first call, `attachSession` early-outs on membership
@@ -179,7 +179,7 @@ never deleted; its sessions stay attached and reachable.
 
 **The picker and the sidebar are registry-driven now, not directory-scanned.**
 `+ new` still opens the same picker (`showStrategyPicker`,
-`client/chat.js:1256`), but its rows come from `/data/channels.json` instead
+`client/chat.js:1291`), but its rows come from `/data/channels.json` instead
 of guessing from `cwd`s, plus a `choose a local folder…` row through the OS's
 own dialog (`host.pickDirectory`) for anything outside a channel. The sidebar
 groups sessions by channel MEMBERSHIP, not by path prefix: a session no
@@ -289,7 +289,7 @@ down this file:
    no roster to consult and tools are registered tree-wide regardless of
    channel. It is also cheap to reach, not a rare edge case: the picker's
    **`choose a local folder…`** row creates a session straight from a raw
-   `cwd`, never a `workspaceId` (`client/chat.js:1283-1300`), so that session
+   `cwd`, never a `workspaceId` (`client/chat.js:1311-1336`), so that session
    resolves to no channel and is never roster-checked; a channel directory
    that exists on disk but has not yet been through a reconcile lands in the
    same place.
