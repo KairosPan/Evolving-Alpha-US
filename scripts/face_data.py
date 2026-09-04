@@ -165,8 +165,12 @@ def gate_state(env) -> dict:
         "gate1_registered": env.get("ALPACA_KIT_ENABLE_ORDERS") == "1" and has_keys,
         "gate1_rule": "ALPACA_KIT_ENABLE_ORDERS=1 AND APCA keys present",
         "gate2_validated": False,
-        "gate2_note": "per-order human approval - intent until the drill in "
-                      "face/README.md passes on a live face",
+        "gate2_note": "per-order human approval - ABSENT, not merely unproven. "
+                      "The approval CHANNEL is drilled and in daily use, but its only "
+                      "producer is a sandbox escalation, and an MCP call never takes "
+                      "that path; nothing in the composed tree asks for one. Gate 1 "
+                      "(registration) is the only thing holding orders today. See "
+                      "'Never drill with the order tools' in face/README.md.",
         # Mirrors alpaca_kit.account.PAPER_HOSTNAME; a test fences the two against drift.
         "paper_pin": "hostname == paper-api.alpaca.markets enforced in code",
     }

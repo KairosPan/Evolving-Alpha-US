@@ -632,12 +632,30 @@ concluding the seam is broken.
 **Never drill with the order tools.** `ALPACA_KIT_ENABLE_ORDERS` stays unset.
 Gate 1 — registration — is what keeps `place_order` / `cancel_order` out of the
 toolset entirely, and a drill that arms the flag to exercise Gate 2 has disarmed
-Gate 1 to do it. Any harmless denied-then-escalated file write proves the same
-seam.
+Gate 1 to do it.
 
-Until this drill passes on a live face, the face does not claim Gate 2.
+**And a file-write drill does not stand in for one.** What it proves is the
+approval CHANNEL — request → answerer → card → outcome → audit pair — which is
+real and in daily use. It does not prove a PRODUCER for an MCP tool call, and
+this tree has none. What raises the card is a *sandbox escalation*; an MCP call
+never takes that path. Four checks, each independent, re-run 2026-09-04: no
+`dsh-hooks*` package under `face/node_modules`; no `{kind:'ask'}` producer in
+any composed package; `dsh-permission-presets` registers only `session/created`
+(preset application) and an `internal/dispatch` event *validator*, neither of
+which can ask for a tool call; and `dsh-mcp-client` carries zero references to
+approval, sandbox or pre-execute.
 
-**Drilled and PASSED 2026-08-31** on the live face with the workbench toolset mounted:
+So for orders Gate 2 is not unproven — it is **absent**. The moment
+`ALPACA_KIT_ENABLE_ORDERS=1`, `place_order` executes with no card and no
+`approval/asked` event. Gate 1 is the only thing between the model and a paper
+order today, and a registration flag is not an approval. Charter Rule 3 forbids
+publishing a guarantee that fails at code level, so this is recorded here rather
+than implied away.
+
+Until the channel drill passes on a live face, the face does not claim even that
+half.
+
+**The approval-channel drill: PASSED 2026-08-31** on the live face with the workbench toolset mounted:
 deny (command did not run; the model saw a rejection result, never the card) and approve
 (`allowed-once`, one-shot) both exercised, with paired `approval/asked` +
 `approval/decided` records in the session log. Re-run after any face or dsh change, per
