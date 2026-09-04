@@ -232,6 +232,12 @@ export interface RegistryLike {
   create(path: string, title?: string): Promise<WorkspaceLike>;
   list(): readonly WorkspaceLike[];
   readonly archivedSessionIds: readonly string[];
+  /** Look up by canonical directory path without creating or mutating
+   * anything — the same `fs.realpath` canonicalization `create` applies, but
+   * a missing path rejects instead of being adopted as a new channel. This is
+   * the lookup a session's cwd needs (panels.ts's `channelFor`): asking which
+   * channel a directory belongs to must never conjure one into existence. */
+  resolveByPath(path: string): Promise<WorkspaceLike | undefined>;
 }
 
 /** The two header fields the reconcile reads off a session summary. */

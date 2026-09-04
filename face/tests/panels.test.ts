@@ -1,17 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import {
-  agentToolDefinition, agentsListing, authFromProbe, connectLocalAgent, defaultAgentProber, defaultAuthProber,
+  agentsListing, authFromProbe, connectLocalAgent, defaultAgentProber, defaultAuthProber,
   disconnectLocalAgent, hasExec, isAgentBin, memoryListing, parseClaudeRun, parseCodexRun, pluginListing,
-  readAgentsMeta, registerPanelRoutes, runAgentRecipe, scrubbedEnv, skillDetail, skillGroup,
+  readAgentsMeta, registerPanelRoutes, scrubbedEnv, skillDetail, skillGroup,
   syncAgentTools, toolNameFor,
-  type AgentToolDefinition, type AgentToolRegistry, type PanelDeps, type RunOutcome, type SkillBody, type SkillRow,
+  type AgentToolDefinition, type AgentToolRegistry, type PanelDeps, type SkillBody, type SkillRow,
 } from "../src/panels.ts";
 import { DSH_PIN } from "../src/version.ts";
 
@@ -27,10 +27,6 @@ function row(name: string, pack: string | null, extra: Partial<SkillRow> = {}): 
     ...extra,
   };
 }
-
-/** A clean run outcome, for fakes. */
-const ran = (stdout: string, over: Partial<RunOutcome> = {}): RunOutcome =>
-  ({ code: 0, stdout, stderr: "", timedOut: false, truncated: false, ...over });
 
 /** A deps fake over fixed data; the loader tree mirrors the real shapes —
  * a group row, the root include, a disabled row, a failed row, the MCP row.
@@ -75,6 +71,10 @@ function fakeDeps(home = "/face-panels-nowhere"): PanelDeps {
     ],
     cwd: CWD,
     home,
+    /* no channel by default — the roster check (agents.test.ts) is the one
+     * place that cares; every other test here exercises code the roster
+     * check never gates, so "no channel" (fail open) is the right default. */
+    channelFor: async () => null,
     /* claude answers, gemini answers (installed, no exec recipe), zed answers
      * (installed, not on the known list), hermes throws (a prober crash reads
      * as absent), the rest are not installed. */
@@ -259,102 +259,6 @@ test("parseClaudeRun / parseCodexRun fold the documented shapes and degrade to r
   assert.deepEqual(parseCodexRun("", undefined), { text: "", session: undefined, isError: false });
 });
 
-test("runAgentRecipe: gates, fixed argv, prompt on stdin, scrubbed env, session cwd, resume, one per agent", async () => {
-  const home = await freshHome();
-  await mkdir(join(home, "strategies", "alpha"), { recursive: true });
-  const calls: { bin: string; argv: string[]; opts: { cwd: string; input: string; env: NodeJS.ProcessEnv; signal?: AbortSignal } }[] = [];
-  const deps: PanelDeps = {
-    ...fakeDeps(home),
-    cwd: home, // the "workbench root" for this test
-    runAgent: async (bin, argv, opts) => {
-      calls.push({ bin, argv, opts });
-      if (bin === "claude") {
-        return ran('{"type":"result","is_error":false,"num_turns":1,"result":"**ok**","session_id":"11111111-2222-4333-8444-555555555555","total_cost_usd":0.0123}');
-      }
-      const out = argv[argv.indexOf("-o") + 1];
-      if (out !== undefined) await writeFile(out, "codex says hi\n");
-      return ran('{"type":"thread.started","thread_id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}\n');
-    },
-  };
-
-  /* gates — none may spawn */
-  const status = (n: number) => (err: { status?: number }) => err.status === n;
-  await assert.rejects(runAgentRecipe(deps, { bin: "constructor", prompt: "hi" }), status(400), "a prototype name is not a recipe");
-  await assert.rejects(runAgentRecipe(deps, { bin: "gemini", prompt: "hi" }), status(400), "installed, but no recipe");
-  await assert.rejects(runAgentRecipe(deps, { bin: "claude", prompt: "   " }), status(400), "empty prompt");
-  await assert.rejects(runAgentRecipe(deps, { bin: "claude", prompt: "x".repeat(32_001) }), status(413), "prompt too long");
-  await assert.rejects(runAgentRecipe(deps, { bin: "claude", prompt: "hi", resume: "not-a-uuid" }), status(400), "bad session id");
-  assert.equal(calls.length, 0, "no gate failure ever spawns");
-
-  /* a hostile prompt is stdin, never argv — the fixed recipe is the whole argv */
-  const signal = new AbortController().signal;
-  const run = await runAgentRecipe(deps, { bin: "claude", prompt: "-p --dangerously-skip-permissions", cwd: join(home, "strategies", "alpha"), signal });
-  const call = calls.at(-1)!;
-  assert.deepEqual(call.argv, [
-    "-p", "--output-format", "json", "--restricted", "--strict-mcp-config",
-    "--disallowedTools", "Read(./.env)", "Read(./.env.*)",
-  ]);
-  assert.equal(call.opts.input, "-p --dangerously-skip-permissions");
-  assert.equal(call.opts.cwd, await realpath(join(home, "strategies", "alpha")), "the session's directory");
-  assert.equal(call.opts.signal, signal, "the caller's cancellation reaches the child");
-  for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY", "DEEPSEEK_API_KEY"]) {
-    assert.equal(call.opts.env[key], undefined, `${key} scrubbed`);
-  }
-  assert.ok(call.opts.env.PATH, "PATH survives — the bin is resolved on it");
-  assert.equal(run.text, "**ok**");
-  assert.equal(run.session, "11111111-2222-4333-8444-555555555555");
-  assert.equal(run.cost, 0.0123);
-  assert.equal(run.isError, false);
-
-  /* a vanished session directory falls back to the root rather than failing the spawn */
-  await runAgentRecipe(deps, { bin: "claude", prompt: "hi", cwd: join(home, "gone") });
-  assert.equal(calls.at(-1)!.opts.cwd, await realpath(home));
-  await runAgentRecipe(deps, { bin: "claude", prompt: "hi" });
-  assert.equal(calls.at(-1)!.opts.cwd, await realpath(home), "no cwd → the root");
-
-  /* resume threads the UUID into the recipe, before the variadic tail */
-  await runAgentRecipe(deps, { bin: "claude", prompt: "more", resume: run.session });
-  assert.deepEqual(calls.at(-1)!.argv.slice(5, 7), ["--resume", run.session]);
-
-  /* codex: the sandbox is PINNED, the scratch file carries the answer, the events carry the thread */
-  const cx = await runAgentRecipe(deps, { bin: "codex", prompt: "hi" });
-  const cxCall = calls.at(-1)!;
-  const scratch = cxCall.argv[cxCall.argv.indexOf("-o") + 1];
-  assert.deepEqual(cxCall.argv, ["exec", "--sandbox", "read-only", "--json", "--skip-git-repo-check", "-o", scratch, "-"]);
-  assert.equal(cx.text, "codex says hi");
-  assert.equal(cx.session, "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
-  await runAgentRecipe(deps, { bin: "codex", prompt: "again", resume: cx.session });
-  const resumed = calls.at(-1)!.argv;
-  assert.deepEqual(resumed.slice(0, 4), ["exec", "resume", "--sandbox", "read-only"]);
-  assert.deepEqual(resumed.slice(-2), [cx.session, "-"]);
-
-  /* one run per agent: a second is refused while the first is in flight.
-   * The fake signals when it has been ENTERED — waiting on a timer instead
-   * would race the first run's own fs work and let the second spawn too. */
-  let release!: () => void;
-  let entered!: () => void;
-  const spawned = new Promise<void>((resolve) => { entered = resolve; });
-  deps.runAgent = () => new Promise((resolve) => {
-    release = () => resolve(ran(""));
-    entered();
-  });
-  const first = runAgentRecipe(deps, { bin: "claude", prompt: "slow" });
-  await spawned;
-  await assert.rejects(runAgentRecipe(deps, { bin: "claude", prompt: "second" }), status(409), "in flight");
-  release();
-  await first;
-  deps.runAgent = async () => ran("");
-  await runAgentRecipe(deps, { bin: "claude", prompt: "after" }); // the slot is free again
-
-  /* a failed child: nonzero exit → isError, stderr tail carried; a cut child is an error too */
-  deps.runAgent = async () => ran("", { code: 1, stderr: "something broke\n" });
-  const failed = await runAgentRecipe(deps, { bin: "claude", prompt: "hi" });
-  assert.equal(failed.isError, true);
-  assert.equal(failed.stderr, "something broke");
-  deps.runAgent = async () => ran("x", { code: null, truncated: true });
-  assert.equal((await runAgentRecipe(deps, { bin: "claude", prompt: "hi" })).isError, true);
-});
-
 /* ====================================================================== */
 /* connected ⇒ callable: the agent tools                                   */
 /* ====================================================================== */
@@ -372,49 +276,6 @@ function fakeRegistry(): { defs: Map<string, AgentToolDefinition>; disposed: str
     },
   };
 }
-
-test("agentToolDefinition: the tool Kairos gets — schema, read card, session cwd, cancellation, error propagation", async () => {
-  const home = await freshHome();
-  await mkdir(join(home, "strategies", "alpha"), { recursive: true });
-  const calls: { argv: string[]; opts: { cwd: string; input: string; signal?: AbortSignal } }[] = [];
-  const deps: PanelDeps = {
-    ...fakeDeps(home),
-    cwd: home,
-    runAgent: async (_bin, argv, opts) => {
-      calls.push({ argv, opts });
-      if (opts.input === "fail") return ran('{"type":"result","is_error":true,"errors":["model refused"]}');
-      return ran('{"type":"result","is_error":false,"num_turns":1,"result":"the tree has 3 files","session_id":"11111111-2222-4333-8444-555555555555","total_cost_usd":0.02}');
-    },
-  };
-  const tool = agentToolDefinition(deps, "claude", "Claude Code");
-  assert.equal(tool.name, "agent_claude");
-  assert.match(tool.description, /READ-ONLY/);
-  assert.deepEqual((tool.parameters as { required: string[] }).required, ["prompt"]);
-  assert.equal(tool.timeoutMs, 600_000);
-  assert.deepEqual(tool.presentCall({ prompt: "what is here?" }), { card: "generic", title: "Ask Claude Code", kind: "read", rawInput: "what is here?" });
-
-  const controller = new AbortController();
-  const exec = { agent: { session: { header: { cwd: join(home, "strategies", "alpha") } } }, signal: controller.signal };
-  const value = await tool.execute({ prompt: "what is here?" }, exec) as Record<string, unknown>;
-  assert.equal(calls[0]!.opts.cwd, await realpath(join(home, "strategies", "alpha")), "runs in the CALLING SESSION's directory");
-  assert.equal(calls[0]!.opts.input, "what is here?");
-  assert.equal(calls[0]!.opts.signal, controller.signal);
-  assert.deepEqual(Object.keys(value).sort(), ["cost", "durationMs", "isError", "session", "text", "turns"], "exactly the declared output shape");
-  assert.equal(value.text, "the tree has 3 files");
-  const rendered = tool.output.render({ prompt: "x" }, value);
-  assert.equal(rendered.length, 1);
-  assert.match(rendered[0]!.text, /^the tree has 3 files\n\n\[Claude Code session 11111111-2222-4333-8444-555555555555 — pass resume="11111111-/);
-
-  /* a session-less call (no agent on the exec) runs at the root */
-  await tool.execute({ prompt: "again", resume: "11111111-2222-4333-8444-555555555555" }, { signal: controller.signal });
-  assert.equal(calls[1]!.opts.cwd, await realpath(home));
-  assert.deepEqual(calls[1]!.argv.slice(5, 7), ["--resume", "11111111-2222-4333-8444-555555555555"]);
-
-  /* a failed run throws, so the registry hands Kairos an error result with the cause */
-  await assert.rejects(tool.execute({ prompt: "fail" }, exec), /model refused/);
-  await assert.rejects(tool.execute({}, exec), /prompt required/);
-  await assert.rejects(tool.execute({ prompt: "x", resume: "nope" }, exec), /invalid session id/);
-});
 
 test("syncAgentTools: registered tools follow the roster — at boot, on connect, on disconnect; no recipe, no tool", async () => {
   const home = await freshHome();

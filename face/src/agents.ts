@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HttpError } from "./http.ts";
 import { isAgentBin, readAgentsMeta, type PanelDeps } from "./panels.ts";
+import { rosterFor } from "./roster.ts";
 
 /** What one run reads out of the child's output. */
 export interface RunParse {
@@ -403,11 +404,12 @@ export interface AgentToolValue {
 }
 
 /**
- * The tool Kairos gets for one connected agent. `execute` runs the recipe in
- * the CALLING SESSION's directory (a strategy's workspace), forwards the
- * call's cancellation to the child, and throws on a failed run so the
- * registry hands Kairos an error result with the cause. The rendered text
- * carries the CLI's session id so Kairos can continue the conversation.
+ * The tool Kairos gets for one connected agent. `execute` first checks the
+ * calling session's channel roster (see the module docstring), then runs the
+ * recipe in the CALLING SESSION's directory (a strategy's workspace),
+ * forwards the call's cancellation to the child, and throws on a failed run
+ * so the registry hands Kairos an error result with the cause. The rendered
+ * text carries the CLI's session id so Kairos can continue the conversation.
  * @param deps - the process seams.
  * @param bin - a connected bin with a recipe.
  * @param label - its pretty label, for the description and the card title.
@@ -453,10 +455,31 @@ export function agentToolDefinition(deps: PanelDeps, bin: string, label: string)
     },
     timeoutMs: RUN_TIMEOUT_MS,
     async execute(args, exec) {
+      const cwd = exec.agent?.session.header.cwd;
+      /* The channel's roster. NOT a fence: dsh registers tools tree-wide with
+       * no per-session scope, and a shell turn can invoke the same CLI
+       * directly. This refusal is a MENU - it states the operator's intent
+       * and keeps an off-roster agent out of the way. The message IS the
+       * roster contract, so it names the channel and the current set; that
+       * is how the model learns the roster without a prompt that could
+       * drift from the operator's file. A session in NO channel (`null`)
+       * fails OPEN — there is no roster to consult, and tools are tree-wide
+       * anyway, so refusing there would be a behaviour change with no
+       * safety story. */
+      const channel = await deps.channelFor(cwd);
+      if (channel !== null) {
+        const roster = await rosterFor(deps.home, channel.workspaceId);
+        if (roster === null) {
+          throw new Error(`the channel roster is unreadable, so ${label} is refused here; repair ${join(deps.home, "face", "channels.json")}`);
+        }
+        if (!roster.includes(bin)) {
+          throw new Error(`${label} is not on this channel's roster. Channel "${channel.name}" currently offers: ${roster.length === 0 ? "(none)" : roster.join(", ")}. The operator adds agents on the channel page.`);
+        }
+      }
       const a = (args !== null && typeof args === "object" ? args : {}) as Record<string, unknown>;
       const run = await runAgentRecipe(deps, {
         bin, prompt: a.prompt, resume: a.resume,
-        cwd: exec.agent?.session.header.cwd, signal: exec.signal,
+        cwd, signal: exec.signal,
       });
       if (run.isError) {
         throw new Error(run.text !== "" ? run.text : run.stderr ?? (run.timedOut ? `${label} timed out` : `${label} reported an error`));

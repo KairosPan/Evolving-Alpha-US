@@ -39,10 +39,11 @@ import type { Context } from "@deepseek-ai/cordis";
 import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import type { RouteRegistrar } from "./static.ts";
 import {
-  agentToolDefinition, defaultAgentRunner, hasExec, runAgentRecipe, scrubbedEnv, syncAgentTools, toolNameFor,
+  agentToolDefinition, defaultAgentRunner, hasExec, scrubbedEnv, syncAgentTools, toolNameFor,
   parseClaudeRun, parseCodexRun,
   type AgentToolDefinition, type AgentToolRegistry, type RunOptions, type RunOutcome,
 } from "./agents.ts";
+import type { RegistryLike } from "./channels.ts";
 import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 import { FORBIDDEN, HttpError, readBody } from "./http.ts";
 import { DSH_PIN } from "./version.ts";
@@ -52,10 +53,9 @@ import { DSH_PIN } from "./version.ts";
  * module's docstring describes), but nothing outside this pair of files
  * needs to know that. */
 export {
-  agentToolDefinition, hasExec, parseClaudeRun, parseCodexRun, runAgentRecipe, scrubbedEnv, syncAgentTools,
-  toolNameFor,
+  agentToolDefinition, hasExec, parseClaudeRun, parseCodexRun, scrubbedEnv, syncAgentTools, toolNameFor,
 };
-export type { AgentToolDefinition, AgentToolRegistry, RunOutcome };
+export type { AgentToolDefinition, AgentToolRegistry };
 
 /** Exactly a dsh skill name (`isSkillName`, dsh-tool-skill 0.1.1-rc.2):
  * kebab-case, which is what makes it safe to hand to a registry lookup. */
@@ -259,6 +259,9 @@ export interface PanelDeps {
   cwd: string;
   /** The harness home holding the face's agents.json roster file. */
   home: string;
+  /** Which channel a session's directory belongs to, or `null` when it
+   * belongs to none. Injected so the agent tools need no registry import. */
+  channelFor(cwd: string | undefined): Promise<{ workspaceId: string; name: string } | null>;
   /** Run one local-agent probe: `<bin> --version`, first stdout line, `null`
    * when the binary is absent or refuses. Every `bin` that reaches this has
    * passed {@link AGENT_BIN_RE} — a bare PATH token, never a path. */
@@ -309,7 +312,7 @@ export function defaultAuthProber(): PanelDeps["probeAuth"] {
  * Build the real {@link PanelDeps} from the booted root context.
  *
  * Fails loud at boot rather than 500 at first click: a tree missing any of
- * these services is a composition error (`dsh-base` mounts all three), and a
+ * these services is a composition error (`dsh-base` mounts all four), and a
  * panel that comes up dead with nothing on stderr saying why is the failure
  * mode this check exists to prevent.
  * @param ctx - the settled root context `bootFace` returned.
@@ -323,12 +326,17 @@ export function panelDeps(ctx: Context, cwd: string, home = resolveDshHome(undef
     register(definition: AgentToolDefinition): () => void;
   } | undefined;
   const loader = ctx.get("loader") as { entries(): ReturnType<PanelDeps["loaderEntries"]> } | undefined;
+  /* `ctx.get`, not property access: this module doesn't import dsh-workspace's
+   * TYPES (only its name, in this comment), so tsc never learns `Context`
+   * carries `workspaceRegistry` — the same reason main.ts reads it this way. */
+  const workspaceRegistry = ctx.get("workspaceRegistry") as RegistryLike | undefined;
   const missing = [
     ...(skills === undefined ? ["skills"] : []),
     ...(tools === undefined ? ["tools"] : []),
     ...(loader === undefined ? ["loader"] : []),
+    ...(workspaceRegistry === undefined ? ["workspaceRegistry"] : []),
   ];
-  if (skills === undefined || tools === undefined || loader === undefined) {
+  if (skills === undefined || tools === undefined || loader === undefined || workspaceRegistry === undefined) {
     throw new Error(`kairos-face: panel services missing from the composed tree: ${missing.join(", ")}`);
   }
   return {
@@ -338,6 +346,17 @@ export function panelDeps(ctx: Context, cwd: string, home = resolveDshHome(undef
     loaderEntries: () => loader.entries(),
     cwd,
     home,
+    /* `resolveByPath`, not `create`: this is a LOOKUP (Task 6/8's lesson —
+     * the real registry canonicalizes via fs.realpath, and a session cwd
+     * must never conjure a channel into existence just by being asked
+     * about it). A vanished directory or an existing-but-unadopted one both
+     * read as "no channel" — the caller fails open either way. */
+    channelFor: async (sessionCwd) => {
+      if (typeof sessionCwd !== "string" || sessionCwd === "") return null;
+      const ws = await workspaceRegistry.resolveByPath(sessionCwd).catch(() => undefined);
+      if (ws === undefined) return null;
+      return { workspaceId: ws.id, name: ws.path.split("/").filter((p) => p !== "").pop() ?? ws.title };
+    },
     probeAgent: defaultAgentProber(),
     probeAuth: defaultAuthProber(),
     runAgent: defaultAgentRunner(),
