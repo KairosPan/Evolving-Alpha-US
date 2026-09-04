@@ -38,6 +38,7 @@ import { mapFrame } from "./mapper.js";
 import { renderResult } from "./render.js";
 import { renderMarkdown } from "./markdown.js";
 import { renderChannelPage } from "./channels.js";
+import { ARCHIVED_KEY, bucketFor, UNGROUPED_KEY } from "./grouping.js";
 
 /** Rendered in place of a value the host did not give us. */
 const EM = "—";
@@ -956,7 +957,13 @@ async function refreshSessions() {
    * (charter Rule 5). Items arrive updatedAt-desc, so live group order is the
    * recency of each group's freshest session, and rows inside a group keep
    * that order too.
-   * @type {Map<string, {channel: Record<string, any>|null, items: Record<string, any>[]}>} */
+   *
+   * Keyed by `bucketFor`'s `key` (a `workspaceId`, or the `__archived`/
+   * `__ungrouped` sentinel) — NEVER by the channel's display `label` (M2): a
+   * title is renameable and carries no identity, so two channels renamed to
+   * the same string used to merge into one group here, one silently hiding
+   * the other's sessions behind its own header.
+   * @type {Map<string, {channel: Record<string, any>|null, label: string, items: Record<string, any>[]}>} */
   const buckets = new Map();
   /* The effective archive set: the face's own reversible `archivedSet` UNION
    * the host's one-way `channelIndex.archived`. */
@@ -968,22 +975,21 @@ async function refreshSessions() {
     // Attached sessions list with a projections block — seed the usage store.
     seedProjections(id, summary.projections);
     const archived = archivedSet.has(id) || hostArchived.has(id);
-    const channel = channelOf(id);
-    const label = archived ? "archived" : channel !== null ? channel.title : "ungrouped";
-    let bucket = buckets.get(label);
+    const { key, label, channel } = bucketFor(channelOf(id), archived);
+    let bucket = buckets.get(key);
     if (bucket === undefined) {
-      bucket = { channel: archived ? null : channel, items: [] };
-      buckets.set(label, bucket);
+      bucket = { channel, label, items: [] };
+      buckets.set(key, bucket);
     }
     bucket.items.push(summary);
   }
-  const order = [...buckets.keys()].filter((label) => label !== "ungrouped" && label !== "archived");
-  if (buckets.has("ungrouped")) order.push("ungrouped");
-  if (buckets.has("archived")) order.push("archived");
-  for (const label of order) {
-    const bucket = buckets.get(label);
+  const order = [...buckets.keys()].filter((key) => key !== UNGROUPED_KEY && key !== ARCHIVED_KEY);
+  if (buckets.has(UNGROUPED_KEY)) order.push(UNGROUPED_KEY);
+  if (buckets.has(ARCHIVED_KEY)) order.push(ARCHIVED_KEY);
+  for (const key of order) {
+    const bucket = buckets.get(key);
     const box = el("div");
-    list.append(groupHeader(label, bucket.items.length, box, bucket.channel), box);
+    list.append(groupHeader(key, bucket.label, bucket.items.length, box, bucket.channel), box);
     for (const summary of bucket.items) {
       const row = convRow(summary);
       row.dataset.title = titleOf(summary);
@@ -1163,16 +1169,40 @@ async function loadSessionsMeta() {
   } catch { /* the archive fold degrades to "nothing archived" */ }
 }
 
-/** Sidebar groups the operator folded — view state, per browser. `archived`
- * and `ungrouped` both start folded the first time they ever appear — the two
- * synthetic buckets nobody asked to see by default; the operator's own fold
- * choices past that always win. @type {Set<string>} */
+/** Sidebar groups the operator folded — view state, per browser, keyed by
+ * `bucketFor`'s `key` (a `workspaceId`, or the `__archived`/`__ungrouped`
+ * sentinel — M2). The two synthetic buckets start folded the first time they
+ * ever appear; the operator's own fold choices past that always win.
+ *
+ * MIGRATION DECISION (M2 changed what this Set is keyed by): a pre-fix
+ * install may have `"archived"`/`"ungrouped"` (the old sentinel spelling, no
+ * leading `__`) sitting in this key from before the split, or a real
+ * channel's OLD TITLE (a per-channel bucket used to be keyed by its
+ * renameable title, which is exactly the bug M2 fixes). The two sentinels
+ * are migrated below, one time, to their new spelling — losing that fold
+ * choice would be a visible regression for no reason. A title-keyed entry is
+ * NOT migrated: there is no way to recover which `workspaceId` it meant (the
+ * title was never a stable identity — that is the bug), so it is simply
+ * dropped. That channel's group opens expanded once — a one-time, harmless
+ * view-state reset, not data loss: nothing the operator curated lives here,
+ * only which groups happen to be visually collapsed.
+ * @type {Set<string>} */
 const collapsedGroups = new Set(/** @type {string[]} */ ((() => {
+  let raw;
   try {
-    return JSON.parse(localStorage.getItem("face.collapsed-groups") ?? '["archived","ungrouped"]');
+    raw = JSON.parse(localStorage.getItem("face.collapsed-groups") ?? `["${ARCHIVED_KEY}","${UNGROUPED_KEY}"]`);
   } catch {
-    return ["archived", "ungrouped"];
+    return [ARCHIVED_KEY, UNGROUPED_KEY];
   }
+  if (!Array.isArray(raw)) return [ARCHIVED_KEY, UNGROUPED_KEY];
+  // A workspaceId is a UUID (dsh-workspace mints it via randomUUID()) - a
+  // surviving non-UUID, non-sentinel entry can only be a pre-M2 title, and
+  // per the decision above it is dropped rather than carried forward as dead
+  // weight that can never match a bucket key again.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return raw
+    .map((k) => (k === "archived" ? ARCHIVED_KEY : k === "ungrouped" ? UNGROUPED_KEY : k))
+    .filter((k) => typeof k === "string" && (k === ARCHIVED_KEY || k === UNGROUPED_KEY || UUID_RE.test(k)));
 })()));
 
 function persistCollapsed() {
@@ -1186,19 +1216,24 @@ function persistCollapsed() {
  * losing the fold gesture there would be a regression, so the chevron keeps
  * it. The synthetic `archived` and `ungrouped` headers have no channel, so
  * their name folds too, same as before this split.
- * @param {string} label @param {number} count @param {HTMLElement} box
+ *
+ * `key` (a `workspaceId`, or the `__archived`/`__ungrouped` sentinel) is the
+ * collapse-state identity; `label` is only ever DISPLAYED — never used to
+ * look anything up. Two channels can render the identical label and still
+ * fold independently, which is the entire fix (M2).
+ * @param {string} key @param {string} label @param {number} count @param {HTMLElement} box
  * @param {Record<string, any>|null} [channel] */
-function groupHeader(label, count, box, channel) {
+function groupHeader(key, label, count, box, channel) {
   const head = el("div", "conv-group");
-  const chev = el("span", "chev", collapsedGroups.has(label) ? "▸" : "▾");
+  const chev = el("span", "chev", collapsedGroups.has(key) ? "▸" : "▾");
   const name = el("span", "conv-group-name", label);
   head.append(chev, name, el("span", "conv-group-n", String(count)));
-  box.hidden = collapsedGroups.has(label);
+  box.hidden = collapsedGroups.has(key);
   const fold = () => {
-    if (collapsedGroups.has(label)) collapsedGroups.delete(label);
-    else collapsedGroups.add(label);
+    if (collapsedGroups.has(key)) collapsedGroups.delete(key);
+    else collapsedGroups.add(key);
     persistCollapsed();
-    box.hidden = collapsedGroups.has(label);
+    box.hidden = collapsedGroups.has(key);
     chev.textContent = box.hidden ? "▸" : "▾";
   };
   chev.addEventListener("click", fold);
