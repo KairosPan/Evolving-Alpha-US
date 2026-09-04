@@ -15,7 +15,7 @@ import { load } from "js-yaml";
 import type { RouteRegistrar } from "./static.ts";
 import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 import { FORBIDDEN, HttpError, readBody } from "./http.ts";
-import { rosterFor, seedRoster, setRoster } from "./roster.ts";
+import { logRosterWrite, rosterFor, seedRoster, setRoster } from "./roster.ts";
 
 /** The copy source every new channel starts from, and never a channel. */
 const TEMPLATE = "_template";
@@ -518,8 +518,10 @@ export function registerChannelRoutes(webServer: RouteRegistrar, deps: ChannelRo
         await setRoster(deps.home, id, agents as string[]);
         /* The roster is operator-owned, but the surface that writes it is an
          * unauthenticated loopback route (spec section 5, limit 3). What
-         * cannot be prevented is at least made VISIBLE - Rule 5. */
-        console.log(`face: roster ${id} = [${(agents as string[]).join(", ")}]`);
+         * cannot be prevented is at least made VISIBLE - Rule 5 - via a
+         * dated line in a durable face log (I2; see roster.ts's
+         * `logRosterWrite`), not just a bare, undated stdout line. */
+        await logRosterWrite(deps.home, id, agents as string[]);
         return send(res, 200, { ok: true, agents: await rosterFor(deps.home, id) ?? [] });
       } catch (err) {
         if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });

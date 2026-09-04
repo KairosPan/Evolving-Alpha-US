@@ -311,11 +311,13 @@ down this file:
    introduced here — `POST /data/agents/connect` (`src/panels.ts:670-679`)
    already writes `$DSH_HOME/face/agents.json` and registers a tool live by
    the same path, and predates this design entirely. **The mitigation is
-   visibility, not prevention**: a roster write appends a dated line to the
-   face's own log (`src/channels.ts:494`), so a change is SEEN even though it
-   cannot be stopped. Building a token would be new security machinery
-   against the charter's §7.4; recording this is what Rule 3 actually asks
-   for instead.
+   visibility, not prevention**: a roster write appends a dated line to a
+   durable face log, `$DSH_HOME/face/roster.log` (`src/roster.ts`'s
+   `logRosterWrite`, called from `src/channels.ts:524`), naming the
+   workspace, the resulting agent list and an ISO timestamp, so a change is
+   SEEN even though it cannot be stopped. Building a token would be new
+   security machinery against the charter's §7.4; recording this is what
+   Rule 3 actually asks for instead.
 
 **Two residuals, out of scope, recorded per Rule 3 (spec §10).** Neither is
 caused by this change; both are recorded because it touches their

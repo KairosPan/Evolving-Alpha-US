@@ -13,12 +13,24 @@
  * network. The roster is a menu that states intent; see spec §5.
  * @module
  */
-import { mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { withFileLock, writeFileAtomic } from "@deepseek-ai/dsh-atomic-write";
 import { HttpError } from "./http.ts";
 
+/** Diagnostic label, the same string every other `${BIN}:`-prefixed line in
+ * this program uses (main.ts's own copy, `main.ts:26`, carries the same
+ * rationale: not imported, because it is a label rather than a contract). */
+const BIN = "kairos-face";
+
 const ROSTER_FILE = ["face", "channels.json"] as const;
+
+/** Durable, append-only record of every operator roster write - I2: the
+ * README and spec §5 promise "a dated line to a face log" as the roster
+ * write's ONLY Rule-5 answer (it openly cannot be PREVENTED - honest limit
+ * 4), so the record needs to actually be one: dated, on disk, under the
+ * operator-owned `$DSH_HOME/face/` side, not a bare undated stdout line. */
+const ROSTER_LOG_FILE = ["face", "roster.log"] as const;
 
 /** The on-disk shape. `version` exists so a later change can migrate rather
  * than guess. */
@@ -117,6 +129,30 @@ export async function setRoster(home: string, workspaceId: string, bins: readonl
     }
     return { ...rosters, [workspaceId]: { agents: [...new Set(bins)] } };
   });
+}
+
+/**
+ * Record one operator roster write: a stdout line (the `${BIN}:` prefix
+ * convention every other diagnostic in this program uses) plus a timestamped
+ * line appended to `$DSH_HOME/face/roster.log` — the durable half spec §5
+ * and the README promise. A record, not a gate: a write failure here (a full
+ * disk, a permissions problem) is logged to stderr and swallowed, never
+ * thrown — it must not turn an already-committed roster write into a failed
+ * response. Call AFTER {@link setRoster} resolves, never before: this logs
+ * what was written, not what was attempted.
+ * @param home - the harness home holding `face/`.
+ * @param workspaceId - the channel whose roster changed.
+ * @param agents - the resulting roster, verbatim.
+ */
+export async function logRosterWrite(home: string, workspaceId: string, agents: readonly string[]): Promise<void> {
+  const line = `${new Date().toISOString()} roster ${workspaceId} = [${agents.join(", ")}]`;
+  console.log(`${BIN}: ${line}`);
+  try {
+    await mkdir(join(home, ROSTER_LOG_FILE[0]), { recursive: true });
+    await appendFile(join(home, ...ROSTER_LOG_FILE), `${line}\n`, "utf8");
+  } catch (err) {
+    console.error(`${BIN}: failed to append to ${join(home, ...ROSTER_LOG_FILE)} - the roster write itself still stands:`, err);
+  }
 }
 
 /** This channel's roster, or `null` when none is known — an unadopted

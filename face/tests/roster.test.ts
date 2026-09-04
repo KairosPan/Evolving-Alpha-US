@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readRosters, rosterFor, seedRoster, setRoster } from "../src/roster.ts";
+import { logRosterWrite, readRosters, rosterFor, seedRoster, setRoster } from "../src/roster.ts";
 
 const home = (): Promise<string> => mkdtemp(join(tmpdir(), "face-roster-"));
 
@@ -81,4 +81,25 @@ test("bins are stored as given but junk entries are dropped on read", async () =
     version: 1, channels: { "ws-1": { agents: ["codex", 7, null, "codex"] } },
   }));
   assert.deepEqual(await rosterFor(h, "ws-1"), ["codex"], "non-strings and duplicates drop");
+});
+
+test("logRosterWrite appends a dated, append-only line naming the workspace and the resulting roster (I2)", async () => {
+  const h = await home();
+  await logRosterWrite(h, "ws-1", ["claude", "codex"]);
+  const first = (await readFile(join(h, "face", "roster.log"), "utf8")).trim().split("\n");
+  assert.equal(first.length, 1);
+  assert.match(first[0]!, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z roster ws-1 = \[claude, codex\]$/);
+
+  await logRosterWrite(h, "ws-1", []);
+  const second = (await readFile(join(h, "face", "roster.log"), "utf8")).trim().split("\n");
+  assert.equal(second.length, 2, "append-only: a second write grows the log, never replaces it");
+  assert.match(second[1]!, /roster ws-1 = \[\]$/);
+});
+
+test("logRosterWrite swallows a write failure - the log is a record, never a gate on the roster write it follows (I2)", async () => {
+  const h = await home();
+  // A FILE named "face" blocks `mkdir(home/face, {recursive:true})` with
+  // ENOTDIR - the write failure the durable half of this log can hit for real.
+  await writeFile(join(h, "face"), "not a directory");
+  await assert.doesNotReject(logRosterWrite(h, "ws-1", ["claude"]));
 });
