@@ -140,8 +140,15 @@ registerChannelRoutes(booted.ctx.webServer, {
   connectedBins: async () => (await readAgentsMeta(dshHome)).connected
     .map((row) => row.bin).filter((bin) => hasExec(bin)),
 });
-/* Delete + archive, which the host's own RPC surface lacks at this pin. */
-registerSessionRoutes(booted.ctx.webServer);
+/* Delete + archive, which the host's own RPC surface lacks at this pin.
+ * `root` is the same repo-root commitment `registerChannelRoutes` above got,
+ * and for the same reason: `deleteSession` refuses any session whose header
+ * cwd falls outside it — ids are unique across every project under
+ * `$DSH_HOME/sessions/`, not just this repo's. `hostArchive` is the already-
+ * resolved `workspaceRegistry`, reused here rather than re-fetched: its
+ * `archivedSessionIds` is what tells `setArchived` an un-archive click is one
+ * the host's own add-only archive has no way to honour. */
+registerSessionRoutes(booted.ctx.webServer, { root: process.cwd(), home: dshHome, hostArchive: workspaceRegistry });
 /* The master rail's feeds: in-process reads of the booted tree (skills /
  * tools / loader), which have no RPC at this pin, plus the local-agent
  * roster — awaited, because every agent already on the roster is registered
