@@ -205,6 +205,16 @@ resolves inside this repo, not merely to an id it happens to find, closing a
 pre-existing gap where the delete button could reach another project's
 session directory.
 
+Deleting a session does NOT detach it from its channel: the id stays in the
+registry's `sessionIds`, because the host's workspace RPC at this pin offers
+`create` / `delete` / `rename` / `archiveSession` / `insertBefore` /
+`insertSessionBefore` / `list` and no way to remove one session from a
+workspace. The orphan is inert — nothing resolves it, so nothing renders it,
+and the sidebar counts rendered rows rather than `sessionIds` — but
+`/data/channels.json` does carry dead ids, and a reader counting that array
+will over-count. Drilled 2026-09-04: deleting a session left its id under
+`storage-chain` with its persistence directory gone.
+
 The sandbox boundary follows the workspace — deliberately: a channel session
 writes its own `strategies/<name>/` freely, and anything outside (the repo's
 `.git` included) only through a Gate-2 escalation card. The write map's
