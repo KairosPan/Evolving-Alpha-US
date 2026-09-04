@@ -661,6 +661,57 @@ deny (command did not run; the model saw a rejection result, never the card) and
 `approval/decided` records in the session log. Re-run after any face or dsh change, per
 the heading above.
 
+## The order-approval drill (run before ever arming ALPACA_KIT_ENABLE_ORDERS)
+
+Since 2026-09-04 a per-order gate exists (`face/src/orders.ts`, registered in
+`bootFace`). Two registrations, because neither alone suffices: a
+`tools/pre-execute` listener returning `{kind:'ask'}` is the only thing that can
+RAISE a card (a `ToolGuard` returns `string | undefined` — deny-only), and a
+guard is the only thing that is MONOTONIC, evaluated on every allow including
+the one `allowed-once` becomes. The listener is registered `prepend` so it is
+outermost; the guard denies any order tool that reached dispatch without the
+listener seeing it.
+
+**The automated half runs in CI-ish form already:** `FACE_SMOKE=1 npm test`
+boots a real tree and fires `tools/pre-execute` at `mcp__drill__place_order`,
+asserting it is claimed, that `mcp__drill__orders` is not, and that a renamed
+server (`mcp__whatever_they_call_it__place_order`) is still caught. Drilled
+2026-09-04, mutation-proven: removing the registration fails it.
+
+**The manual half — the card — needs your eyes**, because an ask with no
+connected browser blocks rather than denying, so it cannot be automated. With
+the face live and a session open:
+
+1. Arm Gate 1 in a **scratch** harness home, never your real one: an
+   `ALPACA_KIT_ENABLE_ORDERS: "1"` line in that home's alpaca-kit row plus the
+   paper keys. Boot the face against it. The boot log prints
+   `kairos-face: order gate armed for mcp__alpaca-kit__place_order, ...` — if it
+   does not, the tools did not register and there is nothing to drill.
+2. Ask Kairos to place one paper order.
+3. PASS, part one: an `approval` card renders, naming the tool. **Deny it.** The
+   order does not go out; the model sees a rejection result, never the card.
+4. PASS, part two: `approval/asked` and `approval/decided` appear paired in the
+   session log.
+5. Only if you want the approve path: repeat and approve. That places a real
+   PAPER order — your call, not the drill's.
+6. Tear down the scratch home. Your real harness keeps
+   `ALPACA_KIT_ENABLE_ORDERS` unset.
+
+**The one setting that disarms every other approval does not disarm this one.**
+Under `DSH_PERMISSION_MODE=danger-full-access` — or a runtime switch to the
+`danger-full-access` preset — `ApprovalService` short-circuits to `rejected`
+before any answerer runs, and `dsh-tools` renders that as `the user rejected
+tool "..."`, which is false: nobody was asked. The gate denies in its own words
+instead, and says so.
+
+**And this is a gate, not containment.** `tools/execute` runs AFTER the guard,
+is handed the execution as mutable, and the body re-resolves the tool by its
+current name — so a `tools/execute` wrapper could rename a guard-approved call
+into `place_order`. Kairos also has an unrestricted shell. Per charter Rule 2,
+this stops the model's ordinary tool calls; it is not a boundary that holds
+against code trying to get around it. Gate 1 — not registering the tools at all
+— remains the thing that actually holds.
+
 ## The ask-user drill (run after any face or dsh change)
 
 The same rule, for the seam that carries Kairos's own questions.

@@ -59,6 +59,10 @@ import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import { DSH_LAUNCH_ENVIRONMENT_KEY } from "@deepseek-ai/dsh-launch-environment";
 import { provideCmdline } from "@deepseek-ai/dsh-cmdline";
 import { faceOverlay } from "./overlay.ts";
+import {
+  auditOrderTools, effectiveApprovalPolicy, isOrderTool, orderApprovalDecision,
+  type ApprovalPolicyLike, type PreToolDecision, type ToolSchemaLike,
+} from "./orders.ts";
 
 /** Diagnostic prefix dsh-app-boot puts on every error and warning raised from
  * here. Purely a label (nothing branches on it), so it names the face rather
@@ -253,13 +257,91 @@ export async function bootFace(opts: FaceBootOptions): Promise<{ ctx: Context; d
    * (`tools`, `userQuestions`) leaves the row's fiber pending with the entry
    * list unchanged, so a composition test reads healthy on a tree that
    * registered nothing. */
-  const tools = ctx.get("tools") as { schemas(): { name: string }[] } | undefined;
+  const tools = ctx.get("tools") as
+    | {
+      schemas(): ToolSchemaLike[];
+      guard(check: (exec: { name: string }) => string | undefined): () => void;
+    }
+    | undefined;
   if (tools?.schemas().some((schema) => schema.name === ASK_USER_TOOL) !== true) {
     await dispose();
     throw new Error(
       `${BIN}: ${ASK_USER_TOOL} is not registered - Kairos would have no way to ask the operator` +
         ` anything, silently (the \`tool-ask-user\` overlay row mounts it)`,
     );
+  }
+  /* GATE 2 FOR ORDERS. Two registrations, because neither alone is enough:
+   * only a `tools/pre-execute` listener can return `ask` (a guard is deny-only,
+   * `dsh-tools` ToolGuard = (exec) => string | undefined), and only a guard is
+   * monotonic — it is evaluated on EVERY allow (`dsh-tools/lib/index.js:3116`),
+   * including the allow that `allowed-once` becomes.
+   *
+   * `prepend` puts the listener outermost: cordis runs a waterfall
+   * outermost-first (`cordis/lib/index.js:317-325`) and each listener is free to
+   * ignore what `next()` returned, so a listener registered outside ours could
+   * otherwise take our `ask` and hand back `allow`. Outermost, we simply never
+   * call `next()` for an order tool.
+   *
+   * The guard then catches the case the listener cannot: an order tool reaching
+   * dispatch that our listener never saw. It is conditional on `witnessed`, NOT
+   * a flat name deny — `allowed-once` becomes `{kind:'allow'}` and then hits the
+   * guard, so a flat deny would kill the very call the operator just approved. */
+  const witnessed = new WeakSet<object>();
+  const approval = ctx.get("approval") as
+    | {
+      overrideOf(session: unknown): ApprovalPolicyLike | undefined;
+      config?: { policy?: ApprovalPolicyLike };
+    }
+    | undefined;
+  const gateCtx = ctx as unknown as {
+    on(
+      name: "tools/pre-execute",
+      listener: (
+        exec: { name: string; agent?: { session: unknown } },
+        next: () => Promise<PreToolDecision>,
+      ) => Promise<PreToolDecision>,
+      options?: { prepend?: boolean },
+    ): () => boolean;
+  };
+  gateCtx.on("tools/pre-execute", async (exec, next) => {
+    /* No approval service is already fatal above; without a session there is
+     * nobody to ask, and `serviceAsk` would deny anyway (`:3311-3318`) - deny in
+     * our own words rather than letting it report a refusal nobody made. */
+    const session = exec.agent?.session;
+    if (!isOrderTool(exec.name)) return next();
+    if (approval === undefined || session === undefined) {
+      witnessed.add(exec);
+      return {
+        kind: "deny",
+        reason: `${exec.name} needs a per-order approval card and this call has no session to ask in`,
+      };
+    }
+    const decision = orderApprovalDecision(exec.name, effectiveApprovalPolicy(approval, session));
+    if (decision === null) return next();
+    witnessed.add(exec);
+    return decision;
+  }, { prepend: true });
+  tools.guard((exec) =>
+    isOrderTool(exec.name) && !witnessed.has(exec)
+      ? `${exec.name} reached dispatch without passing the face's order gate`
+      : undefined
+  );
+  /* The flag that arms the order tools lives in the operator's cordis patch, in
+   * the alpaca-kit row's own `env:` - NOT in this process - so it cannot be
+   * asserted on. The registry can: a tool alpaca-kit marked `(operator-gated)`
+   * whose name this gate does not match means one side was renamed and the gate
+   * now covers nothing, which is exactly the silent hole it exists to close. */
+  const audit = auditOrderTools(tools.schemas());
+  if (audit.ungated.length > 0) {
+    await dispose();
+    throw new Error(
+      `${BIN}: ${audit.ungated.join(", ")} ${audit.ungated.length === 1 ? "is" : "are"} marked` +
+        ` operator-gated but would not stop at the order gate - Gate 2 would cover nothing while` +
+        ` looking healthy (a renamed tool or MCP server; see face/src/orders.ts)`,
+    );
+  }
+  if (audit.gated.length > 0) {
+    console.log(`${BIN}: order gate armed for ${audit.gated.join(", ")}`);
   }
   return { ctx, dispose };
 }
