@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listChannelDirs, readChannelStatus, readChannelBody } from "../src/channels.ts";
+import { listChannelDirs, readChannelStatus, readChannelBody, reconcileChannels } from "../src/channels.ts";
+import { rosterFor, setRoster } from "../src/roster.ts";
 
 /** A throwaway workbench root: strategies/{_template, alpha, 市场情绪,
  * .hidden, __pycache__} plus a stray FILE that must never list. */
@@ -149,4 +150,94 @@ test("readChannelBody: the file list skips __pycache__ and directories", async (
   await writeFile(join(dir, "screen.py"), "print(1)\n");
   const body = await readChannelBody(dir);
   assert.deepEqual(body.files.map((f) => f.name), ["screen.py"]);
+});
+
+/** A registry standing in for ctx.workspaceRegistry: the same create
+ * idempotence and the same membership early-out the real one has. Exported
+ * because Task 7 reuses it. */
+export function fakeRegistry(): { registry: any; attaches: string[] } {
+  const byPath = new Map<string, any>();
+  const attaches: string[] = [];
+  let next = 0;
+  const registry = {
+    archivedSessionIds: [] as string[],
+    list: () => [...byPath.values()],
+    async create(path: string, title?: string) {
+      const had = byPath.get(path);
+      if (had !== undefined) return had; // idempotent; title unchanged
+      const ws = {
+        id: `ws-${++next}`,
+        path,
+        title: title ?? path.split("/").pop(),
+        sessionIds: [] as string[],
+        async attachSession(sessionId: string) {
+          if (ws.sessionIds.includes(sessionId)) return; // membership early-out
+          attaches.push(`${ws.id}:${sessionId}`);
+          ws.sessionIds.push(sessionId);
+        },
+        async status() { return "ok" as const; },
+      };
+      byPath.set(path, ws);
+      return ws;
+    },
+  };
+  return { registry, attaches };
+}
+
+test("reconcileChannels adopts every channel dir plus the repo root, and is idempotent", async () => {
+  const root = await makeRoot();
+  const home = await mkdtemp(join(tmpdir(), "face-home-"));
+  const { registry, attaches } = fakeRegistry();
+  const sessions = [
+    { sessionId: "session-a", cwd: root },
+    { sessionId: "session-b", cwd: join(root, "strategies", "alpha") },
+    { sessionId: "session-c", cwd: "/Users/pan/Desktop/trend-dragon" },
+  ];
+  const first = await reconcileChannels({ registry, root, home, sessions, connectedBins: ["claude", "codex"] });
+
+  assert.deepEqual(first.channels.map((c) => c.name), ["workbench", "alpha", "市场情绪"]);
+  assert.deepEqual(first.ungrouped.map((s) => s.sessionId), ["session-c"], "a foreign session is counted, never dropped");
+  assert.equal(attaches.length, 2, "session-a to the workbench, session-b to alpha");
+
+  const second = await reconcileChannels({ registry, root, home, sessions, connectedBins: ["claude", "codex"] });
+  assert.equal(attaches.length, 2, "a repeat listing attaches nothing new");
+  assert.deepEqual(second.channels.map((c) => c.workspaceId), first.channels.map((c) => c.workspaceId), "ids are stable");
+});
+
+test("reconcileChannels seeds each channel's roster once, from the connected bins", async () => {
+  const root = await makeRoot();
+  const home = await mkdtemp(join(tmpdir(), "face-home2-"));
+  const { registry } = fakeRegistry();
+  const run = () => reconcileChannels({ registry, root, home, sessions: [], connectedBins: ["codex"] });
+  const first = await run();
+  const alpha = first.channels.find((c) => c.name === "alpha")!;
+  assert.deepEqual(await rosterFor(home, alpha.workspaceId), ["codex"]);
+
+  await setRoster(home, alpha.workspaceId, []);
+  await run();
+  assert.deepEqual(await rosterFor(home, alpha.workspaceId), [], "a second listing never re-seeds over the operator");
+});
+
+test("reconcileChannels carries status and reports a missing directory instead of deleting it", async () => {
+  const root = await makeRoot();
+  const home = await mkdtemp(join(tmpdir(), "face-home3-"));
+  const { registry } = fakeRegistry();
+  const ghost = await registry.create(join(root, "strategies", "vanished"));
+  ghost.status = async () => "missing-dir" as const;
+
+  const out = await reconcileChannels({ registry, root, home, sessions: [], connectedBins: [] });
+  assert.equal(out.channels.find((c) => c.name === "alpha")?.status, "researching");
+  const gone = out.channels.find((c) => c.dir.endsWith("vanished"));
+  assert.equal(gone?.missingDir, true, "a registered workspace whose directory is gone still lists, greyed");
+});
+
+test("reconcileChannels attaches only sessions whose cwd IS the channel directory", async () => {
+  const root = await makeRoot();
+  const home = await mkdtemp(join(tmpdir(), "face-home4-"));
+  const { registry, attaches } = fakeRegistry();
+  await reconcileChannels({
+    registry, root, home, connectedBins: [],
+    sessions: [{ sessionId: "session-deep", cwd: join(root, "strategies", "alpha", "backtests") }],
+  });
+  assert.deepEqual(attaches, [], "a subdirectory is not the channel; the host would reject the attach anyway");
 });

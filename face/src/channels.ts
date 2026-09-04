@@ -11,6 +11,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { load } from "js-yaml";
+import { seedRoster } from "./roster.ts";
 
 /** The copy source every new channel starts from, and never a channel. */
 const TEMPLATE = "_template";
@@ -204,4 +205,119 @@ export async function readChannelBody(dir: string): Promise<ChannelBody> {
   } catch { /* unreadable directory — the page still renders its header */ }
 
   return body;
+}
+
+/** One workspace as this module uses it - structural, matching
+ * `@deepseek-ai/dsh-workspace`'s `Workspace` (lib/types/types.d.ts:20-90),
+ * so the tests drive the reconcile without booting a harness. */
+export interface WorkspaceLike {
+  readonly id: string;
+  readonly path: string;
+  readonly title: string;
+  readonly sessionIds: readonly string[];
+  attachSession(sessionId: string): Promise<void>;
+  status(): Promise<"ok" | "missing-dir">;
+}
+
+/** `ctx.workspaceRegistry`, narrowed to what the reconcile needs. NOTE:
+ * `attachSession` and the `title` argument of `create` are service-only -
+ * neither is on the RPC surface, which is why this runs in the face host and
+ * not in the browser. */
+export interface RegistryLike {
+  create(path: string, title?: string): Promise<WorkspaceLike>;
+  list(): readonly WorkspaceLike[];
+  readonly archivedSessionIds: readonly string[];
+}
+
+/** The two header fields the reconcile reads off a session summary. */
+export interface SessionHeadLike {
+  sessionId: string;
+  cwd?: string;
+}
+
+/** One channel as the sidebar and the picker see it. */
+export interface ChannelRow {
+  workspaceId: string;
+  /** Directory basename (or "workbench") - the git-visible identity. */
+  name: string;
+  /** The registry's display title; defaults to the basename at create. */
+  title: string;
+  dir: string;
+  isRoot: boolean;
+  status?: string;
+  /** The directory is gone but the record remains - greyed, never deleted. */
+  missingDir: boolean;
+  sessionIds: string[];
+}
+
+/**
+ * Make the registry match the directories, then answer with the channel list.
+ *
+ * Idempotent by construction: `create` returns an existing record for a
+ * canonical path without changing its title, `attachSession` early-outs on
+ * membership before any validation, and `seedRoster` is a no-op once an entry
+ * exists. Safe on every listing; in the steady state it performs no writes.
+ *
+ * A workspace whose directory has vanished is REPORTED, never deleted -
+ * deleting it would silently drop the operator's history.
+ */
+export async function reconcileChannels(deps: {
+  registry: RegistryLike;
+  root: string;
+  home: string;
+  sessions: readonly SessionHeadLike[];
+  connectedBins: readonly string[];
+}): Promise<{ channels: ChannelRow[]; ungrouped: SessionHeadLike[] }> {
+  const { registry, root, home, sessions, connectedBins } = deps;
+
+  const dirs = await listChannelDirs(root);
+  const byDir = new Map(dirs.map((d) => [d.dir, d]));
+  const rows: ChannelRow[] = [];
+  const claimed = new Set<string>();
+
+  for (const d of dirs) {
+    let ws: WorkspaceLike;
+    try {
+      ws = await registry.create(d.dir, d.name);
+    } catch {
+      /* the directory vanished between readdir and create - the next listing
+       * sees it as gone, which is already a defined state */
+      continue;
+    }
+    for (const session of sessions) {
+      if (session.cwd !== d.dir) continue; // the channel dir itself, never a subdirectory
+      claimed.add(session.sessionId);
+      try {
+        await ws.attachSession(session.sessionId);
+      } catch { /* the host validates the header cwd and refuses; not ours to force */ }
+    }
+    await seedRoster(home, ws.id, connectedBins);
+    const status = await readChannelStatus(d.dir);
+    const row: ChannelRow = {
+      workspaceId: ws.id, name: d.name, title: ws.title, dir: d.dir, isRoot: d.isRoot,
+      missingDir: (await ws.status()) === "missing-dir",
+      sessionIds: [...ws.sessionIds],
+    };
+    if (status.status !== undefined) row.status = status.status;
+    rows.push(row);
+  }
+
+  /* Registered workspaces whose directory is no longer a channel: keep them
+   * visible so nothing the operator made disappears silently. */
+  for (const ws of registry.list()) {
+    if (byDir.has(ws.path)) continue;
+    for (const id of ws.sessionIds) claimed.add(id);
+    rows.push({
+      workspaceId: ws.id,
+      name: ws.path.split("/").filter((p) => p !== "").pop() ?? ws.title,
+      title: ws.title, dir: ws.path, isRoot: false,
+      missingDir: (await ws.status()) === "missing-dir",
+      sessionIds: [...ws.sessionIds],
+    });
+  }
+
+  /* Rule 5: what is never surfaced is never governed. Sessions belonging to
+   * no channel are RETURNED and counted, not filtered away. */
+  const ungrouped = sessions.filter((s) => !claimed.has(s.sessionId));
+  return { channels: rows, ungrouped };
 }
