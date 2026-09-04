@@ -8,10 +8,14 @@
  * membership, and order. See docs/superpowers/specs/2026-09-03-channels-design.md.
  * @module
  */
-import { readdir, readFile, stat } from "node:fs/promises";
+import { cp, readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { load } from "js-yaml";
-import { seedRoster } from "./roster.ts";
+import type { RouteRegistrar } from "./static.ts";
+import { isJsonBody, isTrustedDataRequest } from "./data.ts";
+import { FORBIDDEN, HttpError, readBody } from "./http.ts";
+import { rosterFor, seedRoster, setRoster } from "./roster.ts";
 
 /** The copy source every new channel starts from, and never a channel. */
 const TEMPLATE = "_template";
@@ -54,7 +58,8 @@ export async function listChannelDirs(root: string): Promise<ChannelDir[]> {
   const found: ChannelDir[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    /* verbatim from strategies.ts:66 — the copy source is never a channel */
+    /* the copy source is never a channel (same exclusion createChannel's
+     * NAME_RE enforces on the write side, below) */
     if (entry.name === TEMPLATE || entry.name.startsWith(".") || entry.name.startsWith("__")) continue;
     found.push({ name: entry.name, dir: join(root, "strategies", entry.name), isRoot: false });
   }
@@ -337,4 +342,171 @@ export async function reconcileChannels(deps: {
    * no channel are RETURNED and counted, not filtered away. */
   const ungrouped = sessions.filter((s) => !claimed.has(s.sessionId));
   return { channels: rows, ungrouped };
+}
+
+/* ---------- creating a channel, and the four routes over all of the above
+ * (Task 7) ---------- */
+
+/** Exactly a channel directory name: one path segment of letters and digits
+ * in ANY script (a Chinese name is a name) plus `-` and `_`, 1-41 code
+ * points, opening with a letter or digit - so `.`/`..`, dotfiles, separators,
+ * spaces and control characters never reach a path. Compared and created in
+ * NFC, so one word typed in two normalizations is one directory. */
+const NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N}\p{M}_-]{0,40}$/u;
+
+/** Birth `strategies/<name>` from the template. Refuses a malformed name, a
+ * taken name, and a missing template - never overwrites anything. */
+export async function createChannel(root: string, rawName: unknown): Promise<ChannelDir> {
+  const name = typeof rawName === "string" ? rawName.normalize("NFC") : rawName;
+  if (typeof name !== "string" || !NAME_RE.test(name) || name === TEMPLATE) {
+    throw new HttpError(400, "invalid channel name (letters or digits in any script, plus - and _; no spaces, dots or slashes; up to 41 characters)");
+  }
+  const template = join(root, "strategies", TEMPLATE);
+  try {
+    await stat(template);
+  } catch {
+    throw new HttpError(500, "strategies/_template missing");
+  }
+  const target = join(root, "strategies", name);
+  let exists = true;
+  try {
+    await stat(target);
+  } catch {
+    exists = false;
+  }
+  if (exists) throw new HttpError(409, "channel already exists");
+  await cp(template, target, { recursive: true, filter: (src) => !src.includes("__pycache__") });
+  return { name, dir: target, isRoot: false };
+}
+
+/** What the routes need of the booted tree. Injected so the tests drive them
+ * without a harness. */
+export interface ChannelRouteDeps {
+  registry: RegistryLike;
+  /** Absolute workbench repo root. */
+  root: string;
+  /** The harness home holding `face/channels.json`. */
+  home: string;
+  /** Every visible session's id and cwd - `session.list`, host-side. */
+  listSessions(): Promise<SessionHeadLike[]>;
+  /** The bins a newly adopted channel's roster is seeded from. */
+  connectedBins(): Promise<string[]>;
+}
+
+/** Mount the four channel routes. Same trust posture as data.ts: the fence
+ * runs FIRST on every route, the refusal body is fixed text, and nothing
+ * attacker-controlled is ever echoed. A workspace id from a body is only ever
+ * COMPARED against the reconciled list - it never becomes a path. */
+export function registerChannelRoutes(webServer: RouteRegistrar, deps: ChannelRouteDeps): void {
+  const send = (res: ServerResponse, status: number, body: unknown): void => {
+    res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+    res.end(typeof body === "string" ? body : JSON.stringify(body));
+  };
+
+  const reconcile = async (): Promise<{ channels: ChannelRow[]; ungrouped: SessionHeadLike[] }> =>
+    reconcileChannels({
+      registry: deps.registry, root: deps.root, home: deps.home,
+      sessions: await deps.listSessions(), connectedBins: await deps.connectedBins(),
+    });
+
+  /** The guard the three writing routes share. */
+  const guardPost = (req: IncomingMessage, res: ServerResponse): boolean => {
+    if (!isTrustedDataRequest(req)) { send(res, 403, FORBIDDEN); return false; }
+    if (req.method !== "POST") { send(res, 405, { ok: false, error: "POST only" }); return false; }
+    if (!isJsonBody(req)) { send(res, 415, { ok: false, error: "application/json only" }); return false; }
+    return true;
+  };
+
+  const bodyOf = async (req: IncomingMessage): Promise<Record<string, unknown>> => {
+    try {
+      const parsed: unknown = JSON.parse(await readBody(req));
+      return parsed !== null && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
+    } catch (err) {
+      if (err instanceof HttpError) throw err;
+      throw new HttpError(400, "body must be JSON");
+    }
+  };
+
+  webServer.register({
+    kind: "exact",
+    path: "/data/channels.json",
+    handler: async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+      if (!isTrustedDataRequest(req)) return send(res, 403, FORBIDDEN);
+      try {
+        const { channels, ungrouped } = await reconcile();
+        return send(res, 200, {
+          ok: true, root: deps.root, channels, ungrouped,
+          archived: [...deps.registry.archivedSessionIds],
+        });
+      } catch {
+        /* nothing from the filesystem error reaches the body */
+        return send(res, 500, { ok: false, error: "listing failed" });
+      }
+    },
+  });
+
+  webServer.register({
+    kind: "exact",
+    path: "/data/channels/overview",
+    handler: async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+      if (!guardPost(req, res)) return;
+      try {
+        const { workspaceId } = await bodyOf(req);
+        const { channels } = await reconcile();
+        const channel = channels.find((c) => c.workspaceId === workspaceId);
+        if (channel === undefined) return send(res, 404, { ok: false, error: "no such channel" });
+        return send(res, 200, {
+          ok: true, channel,
+          status: await readChannelStatus(channel.dir),
+          body: await readChannelBody(channel.dir),
+          agents: await rosterFor(deps.home, channel.workspaceId) ?? [],
+        });
+      } catch (err) {
+        if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
+        return send(res, 500, { ok: false, error: "overview failed" });
+      }
+    },
+  });
+
+  webServer.register({
+    kind: "exact",
+    path: "/data/channels/agents",
+    handler: async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+      if (!guardPost(req, res)) return;
+      try {
+        const { workspaceId, agents } = await bodyOf(req);
+        const { channels } = await reconcile();
+        if (!channels.some((c) => c.workspaceId === workspaceId)) return send(res, 404, { ok: false, error: "no such channel" });
+        if (!Array.isArray(agents) || agents.some((a) => typeof a !== "string")) {
+          return send(res, 400, { ok: false, error: "agents must be an array of bin names" });
+        }
+        const id = workspaceId as string;
+        await setRoster(deps.home, id, agents as string[]);
+        /* The roster is operator-owned, but the surface that writes it is an
+         * unauthenticated loopback route (spec section 5, limit 3). What
+         * cannot be prevented is at least made VISIBLE - Rule 5. */
+        console.log(`face: roster ${id} = [${(agents as string[]).join(", ")}]`);
+        return send(res, 200, { ok: true, agents: await rosterFor(deps.home, id) ?? [] });
+      } catch (err) {
+        if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
+        return send(res, 500, { ok: false, error: "roster write failed" });
+      }
+    },
+  });
+
+  webServer.register({
+    kind: "exact",
+    path: "/data/channels",
+    handler: async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+      if (!guardPost(req, res)) return;
+      try {
+        const made = await createChannel(deps.root, (await bodyOf(req)).name);
+        await reconcile(); // adopt it and seed its roster before the client asks
+        return send(res, 200, { ok: true, ...made });
+      } catch (err) {
+        if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
+        return send(res, 500, { ok: false, error: "create failed" });
+      }
+    },
+  });
 }

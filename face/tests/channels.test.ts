@@ -3,8 +3,15 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, realpath, stat, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listChannelDirs, readChannelStatus, readChannelBody, reconcileChannels } from "../src/channels.ts";
+import { Readable } from "node:stream";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
+import {
+  createChannel, listChannelDirs, readChannelStatus, readChannelBody,
+  reconcileChannels, registerChannelRoutes,
+} from "../src/channels.ts";
 import { rosterFor, setRoster } from "../src/roster.ts";
+import { HttpError } from "../src/http.ts";
 
 /** A throwaway workbench root: strategies/{_template, alpha, 市场情绪,
  * .hidden, __pycache__} plus a stray FILE that must never list. */
@@ -307,4 +314,162 @@ test("reconcileChannels: a directory vanishing between readdir and create skips 
     ["workbench", "市场情绪"],
     "the vanished channel is skipped; the rest of the listing still renders",
   );
+});
+
+/* ---------- the routes (Task 7) ---------- */
+
+function fakeRes(): { out: { status: number; body: string }; res: ServerResponse } {
+  const out = { status: 0, body: "" };
+  const res = {
+    writeHead(status: number) { out.status = status; return res; },
+    end(body?: string | Buffer) { out.body = String(body ?? ""); return res; },
+  };
+  return { out, res: res as unknown as ServerResponse };
+}
+
+function getReq(host?: string): IncomingMessage {
+  return { headers: host === undefined ? {} : { host }, method: "GET" } as unknown as IncomingMessage;
+}
+
+function postReq(body: string, host = "127.0.0.1:3090"): IncomingMessage {
+  const req = Readable.from([Buffer.from(body)]) as unknown as IncomingMessage;
+  (req as { headers: unknown }).headers = { host, "content-type": "application/json" };
+  (req as { method: string }).method = "POST";
+  return req;
+}
+
+async function routesFor(root: string, home: string): Promise<Map<string, WebRoute>> {
+  const { registry } = fakeRegistry();
+  const routes: WebRoute[] = [];
+  registerChannelRoutes({ register: (route) => routes.push(route) }, {
+    registry, root, home,
+    listSessions: async () => [],
+    connectedBins: async () => ["codex"],
+  });
+  return new Map(routes.map((r) => [r.path, r]));
+}
+
+/** Read the listing and find one channel by name - several tests need an id. */
+async function channelNamed(routes: Map<string, WebRoute>, name: string): Promise<{ workspaceId: string }> {
+  const out = fakeRes();
+  await routes.get("/data/channels.json")!.handler(getReq("127.0.0.1:3090"), out.res);
+  const payload = JSON.parse(out.out.body) as { channels: { name: string; workspaceId: string }[] };
+  return payload.channels.find((c) => c.name === name)!;
+}
+
+test("routes: exactly four paths, and every one refuses a forged Host FIRST", async () => {
+  const routes = await routesFor(await makeRoot(), await mkdtemp(join(tmpdir(), "face-rt-")));
+  assert.deepEqual([...routes.keys()].sort(), [
+    "/data/channels", "/data/channels.json", "/data/channels/agents", "/data/channels/overview",
+  ]);
+  for (const [path, route] of routes) {
+    const forged = fakeRes();
+    await route.handler(postReq('{"name":"x"}', "evil.example.com"), forged.res);
+    assert.equal(forged.out.status, 403, path);
+    assert.equal(forged.out.body, '{"ok":false,"error":"forbidden"}', `${path} echoes nothing`);
+  }
+});
+
+test("routes: the POSTs are POST-only and application/json-only", async () => {
+  const routes = await routesFor(await makeRoot(), await mkdtemp(join(tmpdir(), "face-rt2-")));
+  for (const path of ["/data/channels", "/data/channels/agents", "/data/channels/overview"]) {
+    const wrongMethod = fakeRes();
+    await routes.get(path)!.handler(getReq("127.0.0.1:3090"), wrongMethod.res);
+    assert.equal(wrongMethod.out.status, 405, path);
+
+    const req = postReq("{}");
+    (req as unknown as { headers: Record<string, string> }).headers["content-type"] = "text/plain";
+    const wrongType = fakeRes();
+    await routes.get(path)!.handler(req, wrongType.res);
+    assert.equal(wrongType.out.status, 415, path);
+  }
+});
+
+test("routes: the listing carries channels, the ungrouped count, and the archive set", async () => {
+  const routes = await routesFor(await makeRoot(), await mkdtemp(join(tmpdir(), "face-rt3-")));
+  const ok = fakeRes();
+  await routes.get("/data/channels.json")!.handler(getReq("127.0.0.1:3090"), ok.res);
+  assert.equal(ok.out.status, 200);
+  const payload = JSON.parse(ok.out.body) as { ok: boolean; channels: { name: string }[]; ungrouped: unknown[]; archived: unknown[] };
+  assert.equal(payload.ok, true);
+  assert.deepEqual(payload.channels.map((c) => c.name), ["workbench", "alpha", "市场情绪"]);
+  assert.deepEqual(payload.ungrouped, []);
+  assert.deepEqual(payload.archived, []);
+});
+
+test("routes: overview answers by workspace id, and a body value never becomes a path", async () => {
+  const routes = await routesFor(await makeRoot(), await mkdtemp(join(tmpdir(), "face-rt4-")));
+  const alpha = await channelNamed(routes, "alpha");
+
+  const good = fakeRes();
+  await routes.get("/data/channels/overview")!.handler(postReq(JSON.stringify({ workspaceId: alpha.workspaceId })), good.res);
+  assert.equal(good.out.status, 200);
+  assert.equal((JSON.parse(good.out.body) as { status: { status?: string } }).status.status, "researching");
+
+  for (const bad of [{ workspaceId: "ws-nope" }, { workspaceId: "../../etc/passwd" }, { workspaceId: 7 }, {}]) {
+    const out = fakeRes();
+    await routes.get("/data/channels/overview")!.handler(postReq(JSON.stringify(bad)), out.res);
+    assert.equal(out.out.status, 404, JSON.stringify(bad));
+  }
+});
+
+test("routes: the roster write replaces the set and refuses an unknown channel", async () => {
+  const home = await mkdtemp(join(tmpdir(), "face-rt5-"));
+  const routes = await routesFor(await makeRoot(), home);
+  const alpha = await channelNamed(routes, "alpha");
+
+  const set = fakeRes();
+  await routes.get("/data/channels/agents")!.handler(
+    postReq(JSON.stringify({ workspaceId: alpha.workspaceId, agents: ["codex", "codex"] })), set.res);
+  assert.equal(set.out.status, 200);
+  assert.deepEqual(await rosterFor(home, alpha.workspaceId), ["codex"]);
+
+  const unknown = fakeRes();
+  await routes.get("/data/channels/agents")!.handler(postReq(JSON.stringify({ workspaceId: "ws-nope", agents: [] })), unknown.res);
+  assert.equal(unknown.out.status, 404);
+
+  const junk = fakeRes();
+  await routes.get("/data/channels/agents")!.handler(
+    postReq(JSON.stringify({ workspaceId: alpha.workspaceId, agents: "codex" })), junk.res);
+  assert.equal(junk.out.status, 400);
+});
+
+/* The name-validation cases carry over from strategies.test.ts:36-72. The NUL
+ * case is built with String.fromCharCode and the two normalizations with
+ * escapes, so this file has no literal control characters. */
+
+test("createChannel copies the template, skips __pycache__, never overwrites", async () => {
+  const root = await makeRoot();
+  const template = join(root, "strategies", "_template");
+  await writeFile(join(template, "THESIS.md"), "# <strategy name>\n");
+  await mkdir(join(template, "__pycache__"), { recursive: true });
+  await writeFile(join(template, "__pycache__", "x.pyc"), "junk");
+
+  const made = await createChannel(root, "beta-1");
+  assert.equal(made.dir, join(root, "strategies", "beta-1"));
+  await stat(join(made.dir, "backtests"));
+  await assert.rejects(stat(join(made.dir, "__pycache__")));
+  await assert.rejects(createChannel(root, "beta-1"), (err: HttpError) => err.status === 409);
+  await assert.rejects(createChannel(root, "alpha"), (err: HttpError) => err.status === 409);
+});
+
+test("createChannel refuses names outside the closed class", async () => {
+  const root = await makeRoot();
+  const NUL = String.fromCharCode(0);
+  for (const bad of [
+    "", "_template", "a b", "市场 情绪", "../evil", "a/../b", "市场/情绪",
+    "a.b", ".hidden", "-lead", "_lead", `a${NUL}b`, "x".repeat(42), 42, null,
+  ]) {
+    await assert.rejects(createChannel(root, bad), (err: HttpError) => err.status === 400, JSON.stringify(bad));
+  }
+});
+
+test("createChannel takes a name in any script and creates it in NFC", async () => {
+  const root = await makeRoot();
+  const NFD = `cafe${String.fromCharCode(0x301)}`; // e + combining acute
+  const NFC = `caf${String.fromCharCode(0xe9)}`;   // precomposed e-acute
+  assert.equal((await createChannel(root, NFD)).name, NFC, "created in NFC");
+  await assert.rejects(createChannel(root, NFC), (err: HttpError) => err.status === 409, "one word, two normalizations, one directory");
+  assert.equal((await createChannel(root, "Upper-Case_9")).name, "Upper-Case_9", "case is the operator's to choose");
+  assert.equal((await createChannel(root, "存储超级周期")).name, "存储超级周期", "a Chinese name is a name");
 });

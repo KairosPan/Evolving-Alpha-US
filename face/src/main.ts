@@ -12,12 +12,13 @@
  */
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import { bootFace } from "./boot.ts";
 import { registerDataRoutes } from "./data.ts";
 import { registerStatic } from "./static.ts";
 import { registerSessionRoutes } from "./sessions.ts";
-import { registerStrategyRoutes } from "./strategies.ts";
-import { panelDeps, registerPanelRoutes } from "./panels.ts";
+import { registerChannelRoutes, type RegistryLike } from "./channels.ts";
+import { hasExec, panelDeps, readAgentsMeta, registerPanelRoutes } from "./panels.ts";
 
 /** Diagnostic label, the same string boot.ts uses for `BIN`. Not imported
  * because boot.ts does not export it, and it is a label rather than a contract:
@@ -105,9 +106,40 @@ registerStatic(booted.ctx.webServer, clientDir);
  * `python3`) from the repo root this process just chdir'd to, and no injection
  * seam belongs on the entry point — `spawn`/`now` exist for the tests. */
 registerDataRoutes(booted.ctx.webServer);
-/* The strategy picker's data + the new-strategy copy action. `process.cwd()`
- * is the workbench repo root — the chdir above put it there. */
-registerStrategyRoutes(booted.ctx.webServer, process.cwd());
+/* The channel picker's data (sidebar + landing page) and the new-channel copy
+ * action. `process.cwd()` is the workbench repo root — the chdir above put it
+ * there. `dshHome` is resolved the same way every other route family here
+ * resolves it (sessions.ts, panels.ts): independently, from the same
+ * unchanging env state, rather than threaded as a shared value.
+ *
+ * `workspaceRegistry` and `sessions` are read through `ctx.get`, not property
+ * access: `dsh-workspace` and `dsh-session` each declare a
+ * `declare module "@deepseek-ai/cordis" { interface Context { ... } }`
+ * augmentation for their service, but nothing in this program imports either
+ * package's TYPES (only their names, in comments and strings) - so tsc never
+ * loads those augmentations and never learns `Context` carries them. Same
+ * cast-through-`get` pattern boot.ts and panels.ts already use for
+ * `approval`/`userQuestions`/`skills`/`tools`/`loader`. */
+const dshHome = resolveDshHome(undefined);
+const workspaceRegistry = booted.ctx.get("workspaceRegistry") as RegistryLike;
+const sessions = booted.ctx.get("sessions") as { list(): { id: unknown; header: { cwd?: string } }[] };
+registerChannelRoutes(booted.ctx.webServer, {
+  registry: workspaceRegistry,
+  root: process.cwd(),
+  home: dshHome,
+  /* `session.list`, host-side: every session the tree currently holds live,
+   * reduced to the id/cwd pair the reconcile needs to attach it to a
+   * channel. `sessions.list()` is synchronous and `header` is never absent
+   * (dsh-session/lib/types/index.d.ts:118-119,398) — the `async` wrapper
+   * exists only to satisfy `ChannelRouteDeps.listSessions`'s Promise return. */
+  listSessions: async () => sessions.list().map((s) => ({
+    sessionId: String(s.id), cwd: s.header.cwd,
+  })),
+  /* Only a bin with a recipe can become an `agent_<bin>` tool (`hasExec`), so
+   * only those are worth seeding into a newly adopted channel's roster. */
+  connectedBins: async () => (await readAgentsMeta(dshHome)).connected
+    .map((row) => row.bin).filter((bin) => hasExec(bin)),
+});
 /* Delete + archive, which the host's own RPC surface lacks at this pin. */
 registerSessionRoutes(booted.ctx.webServer);
 /* The master rail's feeds: in-process reads of the booted tree (skills /
