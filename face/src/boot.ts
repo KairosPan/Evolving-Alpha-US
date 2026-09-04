@@ -260,7 +260,7 @@ export async function bootFace(opts: FaceBootOptions): Promise<{ ctx: Context; d
   const tools = ctx.get("tools") as
     | {
       schemas(): ToolSchemaLike[];
-      get(name: string): { description?: string } | undefined;
+      get(name: string, scope?: unknown): { description?: string } | undefined;
       guard(check: (exec: { name: string; callId?: unknown; agent?: { session: unknown } }) => string | undefined): () => void;
     }
     | undefined;
@@ -331,7 +331,7 @@ export async function bootFace(opts: FaceBootOptions): Promise<{ ctx: Context; d
   tools.guard((exec) =>
     orderGuardReason(
       exec.name,
-      tools.get(exec.name)?.description,
+      tools.get(exec.name, exec.agent)?.description,
       (exec.agent?.session as { events?: ApprovalEventLike[] } | undefined)?.events,
       exec.callId,
     )

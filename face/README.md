@@ -671,8 +671,12 @@ Since 2026-09-04 a per-order gate exists (`face/src/orders.ts`, registered in
 RAISE a card (a `ToolGuard` returns `string | undefined` — deny-only), and a
 guard is the only thing that is MONOTONIC, evaluated on every allow including
 the one `allowed-once` becomes. The listener is registered `prepend` so it is
-outermost; the guard denies any order tool that reached dispatch without the
-listener seeing it.
+outermost; the guard denies any gated tool that reached dispatch without a
+logged `allowed-once` for that exact `callId` and tool name in the session's own
+event log. Deliberately not "without the listener seeing it": `prepend` is
+last-registrant-wins, so a listener mounted after boot sits OUTSIDE this one and
+could take its `ask` and return `allow` — a guard that trusted its own sighting
+would wave that through. Only the log proves a human said yes.
 
 **The automated half runs in CI-ish form already:** `FACE_SMOKE=1 npm test`
 boots a real tree and fires `tools/pre-execute` at `mcp__drill__place_order`,
@@ -680,12 +684,20 @@ asserting it is claimed, that `mcp__drill__orders` is not, and that a renamed
 server (`mcp__whatever_they_call_it__place_order`) is still caught. Drilled
 2026-09-04, mutation-proven: removing the registration fails it.
 
-**The manual half — the card — needs your eyes.** Not the approval round trip,
-which could be driven by a test answerer on the same `approval/request`
-waterfall; what cannot be automated is whether a human can actually READ the
-card and decide from it. An ask with no connected browser also blocks rather
-than denying, so the live path needs a client anyway. With the face live and a
-session open:
+**What is NOT drilled, and it matters.** The POSITIVE path — a grant logged,
+the guard finding it, the order dispatching — has no automated test. Everything
+above proves the gate REFUSES; nothing proves it lets an approved order through.
+So if `approval/asked` ever stopped carrying `callId`, or carried a different
+`toolName`, every approved order would be silently denied and the suite would
+stay green. This is drillable (a test answerer on the `approval/request`
+waterfall would do it) and is simply not done yet; it is the highest-value
+missing test here, and the manual drill below is currently the only thing
+covering it.
+
+**The manual half — the card — needs your eyes** for the part no answerer can
+stand in for: whether a human can actually READ the card and decide from it. An
+ask with no connected browser blocks rather than denying, so the live path needs
+a client anyway. With the face live and a session open:
 
 1. Arm Gate 1 in a **scratch** harness home, never your real one: an
    `ALPACA_KIT_ENABLE_ORDERS: "1"` line in that home's alpaca-kit row plus the
@@ -693,8 +705,11 @@ session open:
    `kairos-face: order gate armed for mcp__alpaca-kit__place_order, ...` — if it
    does not, the tools did not register and there is nothing to drill.
 2. Ask Kairos to place one paper order.
-3. PASS, part one: an `approval` card renders, naming the tool. **Deny it.** The
-   order does not go out; the model sees a rejection result, never the card.
+3. PASS, part one: an `approval` card renders **naming the order, not just the
+   tool** — symbol, side and quantity have to be on it. A card that says only
+   `place_order` is a click-through, not a decision, and this step is what would
+   catch that regression. **Deny it.** The order does not go out; the model sees
+   a rejection result, never the card.
 4. PASS, part two: `approval/asked` and `approval/decided` appear paired in the
    session log.
 5. Only if you want the approve path: repeat and approve. That places a real
@@ -715,6 +730,17 @@ the gate DENIES it. The one action that reduces risk is refused in exactly the
 session where prompting was switched off. That is the right trade (the paper pin
 bounds the stakes, and you can cancel from Alpaca's own console out of band), but
 it is a surprise worth knowing before you meet it.
+
+**The shell can answer its own card.** `POST /api/respond` carries no token —
+the same-origin check in front of it is a browser fence, and a `curl` sets any
+header it likes (the roster route has the same property, and it was demonstrated
+with a bare `curl` on 2026-09-04). The pending `rpcId` is readable off the mux
+stream. So one un-escalated shell turn can approve the order it just asked for,
+and what lands in the log is a REAL `approval/asked` + `approval/decided`
+(`allowed-once`) pair. The guard is satisfied — correctly, because a genuine
+grant was recorded. Nothing here is broken; the gate asked, and the wrong party
+answered. This is the specific hole in the property the guard was rebuilt
+around, so it is stated rather than left for someone to find.
 
 **And this is a gate, not containment.** `tools/execute` runs AFTER the guard,
 is handed the execution as mutable, and the body re-resolves the tool by its

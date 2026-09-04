@@ -121,7 +121,8 @@ test("auditOrderTools: an empty registry is empty, not an error", () => {
 
 /* --- the grant check: a sighting is not an approval ----------------------- */
 
-const asked = (id: string, callId: string) => ({ type: "approval/asked", data: { id, callId } });
+const asked = (id: string, callId: string, toolName = "mcp__x__place_order") =>
+  ({ type: "approval/asked", data: { id, callId, toolName } });
 const decided = (id: string, outcome: string) => ({ type: "approval/decided", data: { id, outcome } });
 
 test("hasApprovalGrant: a logged allowed-once for THIS call is a grant", () => {
@@ -234,6 +235,28 @@ test("orderGuardReason: a marked tool the gate cannot name is denied, and the me
   // per call. It can never be approved, so the denial must name the remedy.
   const reason = orderGuardReason("mcp__x__submit_order", "a PAPER order (operator-gated)", [], "c1");
   assert.match(reason ?? "", /ORDER_RAW_NAMES/);
+});
+
+test("hasApprovalGrant: a grant won for ANOTHER tool cannot be replayed onto an order", () => {
+  // callId is the model's own tool-call id, so it is not by itself proof of
+  // WHICH tool a human approved.
+  const events = [asked("a1", "c1", "bash"), decided("a1", "allowed-once")];
+  assert.equal(hasApprovalGrant(events, "c1", "mcp__x__place_order"), false);
+  assert.equal(hasApprovalGrant(events, "c1", "bash"), true);
+});
+
+test("hasApprovalGrant: an id-less asked event cannot pair with an id-less decision", () => {
+  const events = [
+    { type: "approval/asked", data: { callId: "c1", toolName: "mcp__x__place_order" } },
+    { type: "approval/decided", data: { outcome: "allowed-once" } },
+  ];
+  assert.equal(hasApprovalGrant(events, "c1", "mcp__x__place_order"), false);
+});
+
+test("describeOrder: a crafted field cannot run away with the operator's only line", () => {
+  const line = describeOrder("t", { symbol: "X".repeat(200) });
+  assert.ok(line.length < 80, `card line must stay readable; got ${line.length} chars`);
+  assert.match(line, /…/);
 });
 
 test("orderGuardReason: everything else passes untouched", () => {

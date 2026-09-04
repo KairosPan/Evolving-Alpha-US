@@ -145,7 +145,10 @@ export function describeOrder(name: string, args: unknown): string {
     const value = row[key];
     if (value === undefined || value === null) return undefined;
     if (typeof value === "object") return undefined;
-    return String(value);
+    /* Model-controlled text on the operator's only line of information: bound it
+     * so a crafted field cannot push a plausible sentence past the real one. */
+    const text = String(value);
+    return text.length > 40 ? `${text.slice(0, 40)}…` : text;
   };
   /* place_order(symbol, qty, side, order_type, limit_price) and
    * cancel_order(order_id) - alpaca_kit/mcp/tools.py:298-307. Unknown keys are
@@ -169,7 +172,7 @@ export function describeOrder(name: string, args: unknown): string {
 /** One session event, structurally - only the fields the grant check reads. */
 export interface ApprovalEventLike {
   type: string;
-  data?: { id?: unknown; callId?: unknown; outcome?: unknown };
+  data?: { id?: unknown; callId?: unknown; outcome?: unknown; toolName?: unknown };
 }
 
 /**
@@ -187,18 +190,28 @@ export interface ApprovalEventLike {
  * would wave that through. Only the log proves a human said yes.
  * @param events - `exec.agent.session.events`.
  * @param callId - `exec.callId`.
- * @returns true only when this call has a logged `allowed-once`.
+ * @param toolName - `exec.name`, so a grant for another tool cannot be replayed.
+ * @returns true only when this call has a logged `allowed-once` for this tool.
  */
 export function hasApprovalGrant(
   events: readonly ApprovalEventLike[],
   callId: unknown,
+  toolName?: string,
 ): boolean {
   if (callId === undefined || callId === null) return false;
   const granted = new Set<unknown>();
   for (const event of events) {
-    if (event.type === "approval/asked" && event.data?.callId === callId) {
-      granted.add(event.data?.id);
-    }
+    if (event.type !== "approval/asked") continue;
+    if (event.data?.callId !== callId) continue;
+    /* `callId` is the MODEL's tool-call id (`dsh-agent-loop` sets it from the
+     * block id), so it is not by itself proof of WHICH tool was approved. The
+     * asked event records the tool name; require it to match, so a grant won
+     * for some other approval-requiring call cannot be replayed onto an order. */
+    if (toolName !== undefined && event.data?.toolName !== toolName) continue;
+    /* An id-less asked event cannot pair with anything: skipping it stops a
+     * malformed pair from matching an equally id-less decided event. */
+    if (event.data?.id === undefined) continue;
+    granted.add(event.data.id);
   }
   if (granted.size === 0) return false;
   return events.some((event) =>
@@ -285,7 +298,7 @@ export function orderGuardReason(
   callId: unknown,
 ): string | undefined {
   if (!isGatedTool(name, description)) return undefined;
-  if (events !== undefined && hasApprovalGrant(events, callId)) return undefined;
+  if (events !== undefined && hasApprovalGrant(events, callId, name)) return undefined;
   return isOrderTool(name)
     ? `${name} reached dispatch without a logged allowed-once approval for this call`
     : `${name} is marked ${OPERATOR_GATED_MARKER} but the order gate does not recognise its name,` +
