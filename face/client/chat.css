@@ -1018,6 +1018,7 @@ body {
 .conv-group { display: flex; align-items: baseline; gap: 6px; cursor: pointer; user-select: none; }
 .conv-group .chev { flex: none; font: 10px var(--mono); color: var(--dim); }
 .conv-group-n { margin-left: auto; font: 10px var(--mono); letter-spacing: 0; color: var(--dim); }
+.conv-group-link { cursor: pointer; text-decoration: underline dotted; }
 .conv { position: relative; }
 .conv-actions {
   position: absolute;

@@ -932,12 +932,14 @@ function markActive() {
   renderAgentSession(); // the usage card follows the session on screen
 }
 
-/** Refetch the sidebar. Out-of-order answers are dropped, not rendered. */
+/** Refetch the sidebar. Out-of-order answers are dropped, not rendered. The
+ * channel index is refreshed alongside `session.list` on every call — a rename
+ * or a newly attached session must show up without a separate reload. */
 async function refreshSessions() {
   const token = ++listSeq;
   let value;
   try {
-    value = await rpc("session.list");
+    [value] = await Promise.all([rpc("session.list"), loadChannelIndex()]);
   } catch (err) {
     failed(err, "session.list");
     return;
@@ -946,32 +948,42 @@ async function refreshSessions() {
   const list = $("#conv-list");
   convRows.clear();
   list.replaceChildren();
-  /* Group by strategy (derived from each session's cwd); archived sessions
-   * fold into their own group at the BOTTOM regardless of recency. Items
-   * arrive updatedAt-desc, so live group order is the recency of each group's
-   * freshest session, and rows inside a group keep that order too.
-   * @type {Map<string, Record<string, any>[]>} */
+  /* Group by channel membership (the host's own index, reconciled from the
+   * workspace registry — never a path guess); archived sessions fold into
+   * their own group at the BOTTOM regardless of recency, and a session no
+   * channel claims folds into "ungrouped" — counted and shown, never dropped
+   * (charter Rule 5). Items arrive updatedAt-desc, so live group order is the
+   * recency of each group's freshest session, and rows inside a group keep
+   * that order too.
+   * @type {Map<string, {channel: Record<string, any>|null, items: Record<string, any>[]}>} */
   const buckets = new Map();
+  /* The effective archive set: the face's own reversible `archivedSet` UNION
+   * the host's one-way `channelIndex.archived`. */
+  const hostArchived = new Set(channelIndex?.archived ?? []);
   lastSessions = (value?.items ?? []).filter((summary) => !deletedSet.has(String(summary.sessionId)));
   for (const summary of value?.items ?? []) {
-    if (deletedSet.has(String(summary.sessionId))) continue; // a host-memory ghost
+    const id = String(summary.sessionId);
+    if (deletedSet.has(id)) continue; // a host-memory ghost
     // Attached sessions list with a projections block — seed the usage store.
-    seedProjections(String(summary.sessionId), summary.projections);
-    const label = archivedSet.has(String(summary.sessionId)) ? "archived" : strategyLabel(summary.cwd);
+    seedProjections(id, summary.projections);
+    const archived = archivedSet.has(id) || hostArchived.has(id);
+    const channel = channelOf(id);
+    const label = archived ? "archived" : channel !== null ? channel.title : "ungrouped";
     let bucket = buckets.get(label);
     if (bucket === undefined) {
-      bucket = [];
+      bucket = { channel: archived ? null : channel, items: [] };
       buckets.set(label, bucket);
     }
-    bucket.push(summary);
+    bucket.items.push(summary);
   }
-  const order = [...buckets.keys()].filter((label) => label !== "archived");
+  const order = [...buckets.keys()].filter((label) => label !== "ungrouped" && label !== "archived");
+  if (buckets.has("ungrouped")) order.push("ungrouped");
   if (buckets.has("archived")) order.push("archived");
   for (const label of order) {
-    const bucket = buckets.get(label) ?? [];
+    const bucket = buckets.get(label);
     const box = el("div");
-    list.append(groupHeader(label, bucket.length, box), box);
-    for (const summary of bucket) {
+    list.append(groupHeader(label, bucket.items.length, box, bucket.channel), box);
+    for (const summary of bucket.items) {
       const row = convRow(summary);
       row.dataset.title = titleOf(summary);
       convRows.set(String(summary.sessionId), row);
@@ -1043,43 +1055,58 @@ function newSession() {
   loadingSession = null;
   activeSession = null;
   pendingCwd = undefined;
+  pendingWorkspaceId = undefined;
   resetFlow();
   markActive();
   status("new session · pick a strategy, then type below");
   void showStrategyPicker();
 }
 
-/* ---------- the strategy picker: a session's workspace IS a strategy ---------- */
+/* ---------- the strategy picker: a session's workspace IS a channel ---------- */
 
-/** `/data/strategies.json`'s last good answer — `{root, strategies}` — used by
- * the picker and by sidebar grouping. @type {Record<string, any>|null} */
-let strategyIndex = null;
+/** `/data/channels.json`'s last good answer —
+ * `{ok, root, channels, ungrouped, archived}` — used by the picker and by
+ * sidebar grouping. @type {Record<string, any>|null} */
+let channelIndex = null;
 
 /** The `cwd` the NEXT `session.create` carries; `undefined` is the host
- * default — the workbench repo root. @type {string|undefined} */
+ * default — the workbench repo root. Only takes effect when
+ * `pendingWorkspaceId` is unset — see below. @type {string|undefined} */
 let pendingCwd;
+
+/** The workspace the NEXT `session.create` joins. Set by a channel row;
+ * `undefined` falls back to `pendingCwd`, which is how an OS-picked folder
+ * still works. `session.create` accepts workspaceId OR cwd, never both.
+ * @type {string|undefined} */
+let pendingWorkspaceId;
 
 /** The last `session.list` answer (ghosts dropped): the picker derives the
  * local folders sessions have worked in from it. @type {Record<string, any>[]} */
 let lastSessions = [];
 
 /**
- * Folders sessions have already worked in that are neither the repo root nor
- * a `strategies/` directory — the local folders picked through the OS
- * dialog, which the strategy index cannot know about. Keyed by cwd, labelled
- * by basename (the same label the sidebar groups them under), most recently
- * used first. Empty until the strategy index has loaded: without its root a
- * strategy directory cannot be told from a folder.
+ * Folders sessions have already worked in that belong to no channel — the
+ * local folders picked through the OS dialog, which the channel index
+ * cannot know about. Keyed by cwd, labelled by basename (the same label the
+ * sidebar groups them under), most recently used first. Empty until the
+ * channel index has loaded: without it, membership can't be told from a
+ * plain folder.
  * @returns {Map<string, string>} cwd → label
  */
 function knownFolders() {
-  const root = strategyIndex?.root;
   /** @type {Map<string, string>} */
   const out = new Map();
-  if (typeof root !== "string") return out;
+  if (channelIndex === null) return out;
+  /* A directory-identity check, not `channelOf(sessionId) !== null`: the
+   * host's "live" session tree (what the reconcile sees) can lag the fuller
+   * history the sidebar shows, so a channel directory's own session can be
+   * unattached yet — checking membership there would offer that same
+   * directory a second time, as a "local folder", right below its real
+   * channel row. */
+  const dirs = new Set((channelIndex.channels ?? []).map((c) => c.dir));
   for (const summary of lastSessions) {
     const cwd = summary.cwd;
-    if (typeof cwd !== "string" || cwd === "" || cwd === root || cwd.startsWith(`${root}/strategies/`)) continue;
+    if (typeof cwd !== "string" || cwd === "" || dirs.has(cwd)) continue;
     const name = cwd.split("/").filter((part) => part !== "").pop();
     if (name !== undefined && !out.has(cwd)) out.set(cwd, name);
   }
@@ -1104,13 +1131,16 @@ function syncPickerFolders() {
   }
 }
 
-async function loadStrategyIndex() {
+/** Fetch the reconciled channel listing. Swallow-and-degrade: a failed
+ * listing must leave the sidebar usable, not blank — grouping falls back to
+ * an all-"ungrouped" sidebar and the picker says the list is unavailable. */
+async function loadChannelIndex() {
   try {
-    const res = await fetch("/data/strategies.json");
+    const res = await fetch("/data/channels.json");
     const body = await res.json();
-    if (body?.ok === true) strategyIndex = body;
-  } catch { /* grouping degrades to path basenames; the picker says so */ }
-  return strategyIndex;
+    if (body?.ok === true) channelIndex = body;
+  } catch { /* grouping degrades to "ungrouped"; the picker says so */ }
+  return channelIndex;
 }
 
 /** Session ids the operator archived — face metadata from
@@ -1132,13 +1162,15 @@ async function loadSessionsMeta() {
   } catch { /* the archive fold degrades to "nothing archived" */ }
 }
 
-/** Sidebar groups the operator folded — view state, per browser. The archive
- * group starts folded the first time it ever appears. @type {Set<string>} */
+/** Sidebar groups the operator folded — view state, per browser. `archived`
+ * and `ungrouped` both start folded the first time they ever appear — the two
+ * synthetic buckets nobody asked to see by default; the operator's own fold
+ * choices past that always win. @type {Set<string>} */
 const collapsedGroups = new Set(/** @type {string[]} */ ((() => {
   try {
-    return JSON.parse(localStorage.getItem("face.collapsed-groups") ?? '["archived"]');
+    return JSON.parse(localStorage.getItem("face.collapsed-groups") ?? '["archived","ungrouped"]');
   } catch {
-    return ["archived"];
+    return ["archived", "ungrouped"];
   }
 })()));
 
@@ -1148,50 +1180,62 @@ function persistCollapsed() {
   } catch { /* view state only — losing it costs a click */ }
 }
 
-/** One clickable group header: chevron · label · count. Toggling folds the
- * given box locally; no refetch. */
-function groupHeader(label, count, box) {
+/** One clickable group header: chevron · label · count. The chevron always
+ * folds; a real channel's name instead opens its page (`channel` given) —
+ * losing the fold gesture there would be a regression, so the chevron keeps
+ * it. The synthetic `archived` and `ungrouped` headers have no channel, so
+ * their name folds too, same as before this split.
+ * @param {string} label @param {number} count @param {HTMLElement} box
+ * @param {Record<string, any>|null} [channel] */
+function groupHeader(label, count, box, channel) {
   const head = el("div", "conv-group");
   const chev = el("span", "chev", collapsedGroups.has(label) ? "▸" : "▾");
-  head.append(chev, el("span", "conv-group-name", label), el("span", "conv-group-n", String(count)));
+  const name = el("span", "conv-group-name", label);
+  head.append(chev, name, el("span", "conv-group-n", String(count)));
   box.hidden = collapsedGroups.has(label);
-  head.addEventListener("click", () => {
+  const fold = () => {
     if (collapsedGroups.has(label)) collapsedGroups.delete(label);
     else collapsedGroups.add(label);
     persistCollapsed();
     box.hidden = collapsedGroups.has(label);
     chev.textContent = box.hidden ? "▸" : "▾";
-  });
+  };
+  chev.addEventListener("click", fold);
+  if (channel === undefined || channel === null) {
+    name.addEventListener("click", fold);
+  } else {
+    name.classList.add("conv-group-link");
+    name.addEventListener("click", () => { void openChannel(channel); });
+  }
   return head;
 }
 
-/** Which sidebar group a session's cwd belongs to. */
-function strategyLabel(cwd) {
-  if (typeof cwd !== "string" || cwd === "") return "elsewhere";
-  const root = strategyIndex?.root;
-  if (typeof root === "string") {
-    if (cwd === root) return "workbench";
-    const prefix = `${root}/strategies/`;
-    if (cwd.startsWith(prefix)) {
-      const name = cwd.slice(prefix.length).split("/")[0];
-      if (name !== "") return name;
-    }
+/** Which channel a session belongs to, from the host's own membership index.
+ * The old version reverse-engineered this from a path prefix, which is why
+ * foreign projects appeared as strategies and were offered in the picker. */
+function channelOf(sessionId) {
+  for (const channel of channelIndex?.channels ?? []) {
+    if (channel.sessionIds.includes(sessionId)) return channel;
   }
-  return cwd.split("/").filter((part) => part !== "").pop() ?? "elsewhere";
+  return null;
 }
 
 /** One selectable row of the picker. @param {string|undefined} cwd - the
- * workspace it stands for; undefined = the workbench default. */
-function pickerRow(label, cwd, badge, picker) {
+ * plain folder it stands for, used only when `workspaceId` is unset.
+ * @param {string} [workspaceId] - set for a channel row: choosing it joins
+ * that workspace directly (the branch that auto-attaches the new session),
+ * never alongside `cwd`. */
+function pickerRow(label, cwd, badge, picker, workspaceId) {
   const row = el("div", "pick-row");
   row.setAttribute("role", "button");
   row.tabIndex = 0;
   row.append(el("span", "pick-name", label));
-  /* The row is the name (operator direction): a strategy's status, "repo
+  /* The row is the name (operator direction): a channel's status, "repo
    * root", "local" stay on hover only — callers with a path put that there. */
   if (badge) row.title = badge;
   const choose = () => {
-    pendingCwd = cwd;
+    pendingWorkspaceId = workspaceId;
+    pendingCwd = workspaceId === undefined ? cwd : undefined;
     for (const other of picker.querySelectorAll(".pick-row")) other.classList.toggle("sel", other === row);
     status(`new session · ${label} · type below`);
   };
@@ -1205,16 +1249,25 @@ function pickerRow(label, cwd, badge, picker) {
   return row;
 }
 
-/** Offer the strategies as workspaces for the next session. The first prompt
- * creates the session with the picked cwd; until then nothing exists. */
+/** Offer the channels as workspaces for the next session. The first prompt
+ * creates the session with the picked workspace (or cwd); until then nothing
+ * exists. */
 async function showStrategyPicker() {
-  const index = await loadStrategyIndex();
+  const index = await loadChannelIndex();
   if (activeSession !== null || flow().querySelector(".picker") !== null) return;
   const picker = el("div", "picker");
-  picker.append(el("div", "picker-title", "workspace — the strategy this session works"));
+  picker.append(el("div", "picker-title", "workspace — the channel this session works"));
   const rows = el("div", "picker-rows");
-  for (const s of index?.strategies ?? []) rows.append(pickerRow(s.name, s.cwd, s.status, picker));
-  rows.append(pickerRow("workbench", undefined, "repo root", picker));
+  /* `channels` already carries the workbench (isRoot, name "workbench") —
+   * no separate hardcoded row needed when the listing succeeded. */
+  for (const c of index?.channels ?? []) {
+    rows.append(pickerRow(c.title, undefined, c.isRoot ? "repo root" : c.status, picker, c.workspaceId));
+  }
+  if (index === null) {
+    // the listing failed — offer the bare workbench default so a session can
+    // still be created (no workspaceId: session.create falls back to the host default cwd)
+    rows.append(pickerRow("workbench", undefined, "repo root", picker));
+  }
   /* Any local folder, through the OS's own dialog — dsh's native
    * directory-picker capability, which the face's tree already mounts
    * (overlay.ts, directory-picker-auto). Cancel returns null and changes
@@ -1259,12 +1312,12 @@ async function showStrategyPicker() {
   rows.append(browse);
   picker.append(rows);
   if (index === null) {
-    picker.append(el("div", "picker-note", "strategy list unavailable — sessions fall back to the workbench"));
+    picker.append(el("div", "picker-note", "channel list unavailable — sessions fall back to the workbench"));
   } else {
     const form = el("div", "picker-new");
     const input = /** @type {HTMLInputElement} */ (el("input", "picker-input"));
     input.type = "text";
-    input.placeholder = "new strategy name (letters · digits · - _ · no spaces) — copies strategies/_template";
+    input.placeholder = "new channel name (letters · digits · - _ · no spaces) — copies strategies/_template";
     const create = /** @type {HTMLButtonElement} */ (el("button", "picker-btn", "create"));
     create.type = "button";
     create.addEventListener("click", async () => {
@@ -1272,19 +1325,22 @@ async function showStrategyPicker() {
       if (name === "") return;
       create.disabled = true;
       try {
-        const res = await fetch("/data/strategies", {
+        const res = await fetch("/data/channels", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ name }),
         });
         const body = await res.json();
         if (body?.ok !== true) throw new Error(String(body?.error ?? `HTTP ${res.status}`));
-        const row = pickerRow(body.name, body.cwd, body.status, picker);
-        rows.insertBefore(row, rows.lastElementChild); // above the workbench row
+        // the route already reconciled and adopted it — reload to learn its workspaceId
+        const fresh = await loadChannelIndex();
+        const made = fresh?.channels?.find((c) => c.dir === body.dir);
+        const row = pickerRow(made?.title ?? body.name, undefined, made?.isRoot ? "repo root" : made?.status, picker, made?.workspaceId);
+        rows.insertBefore(row, browse); // above the "choose a local folder…" row
         row.click();
         input.value = "";
       } catch (err) {
-        failed(err, "create strategy");
+        failed(err, "create channel");
       } finally {
         create.disabled = false;
       }
@@ -1316,11 +1372,15 @@ async function send() {
   input.value = "";
   try {
     if (activeSession === null) {
-      const created = await rpc("session.create", pendingCwd === undefined ? {} : { cwd: pendingCwd });
+      const payload = pendingWorkspaceId !== undefined
+        ? { workspaceId: pendingWorkspaceId }
+        : (pendingCwd === undefined ? {} : { cwd: pendingCwd });
+      const created = await rpc("session.create", payload);
       const id = created?.sessionId;
       if (typeof id !== "string") throw new Error("session.create returned no sessionId");
       activeSession = id;
       pendingCwd = undefined;
+      pendingWorkspaceId = undefined;
       flow().querySelector(".picker")?.remove();
       await refreshSessions();
       markActive();
@@ -1401,6 +1461,16 @@ function closeDetail() {
   document.querySelector(".main")?.classList.remove("detail-mode");
   $("#detail").replaceChildren();
   markActive(); // restore the session's name to the topbar
+}
+
+/** Open one channel's landing page. Placeholder only — Task 11 replaces this
+ * body with the real seven-block overview; for now it proves the chevron/name
+ * split actually navigates somewhere. @param {Record<string, any>} channel */
+async function openChannel(channel) {
+  openDetail(channel.title, (inner) => {
+    inner.append(el("div", "detail-title", String(channel.title)));
+    inner.append(el("div", "detail-path", String(channel.dir)));
+  });
 }
 
 /** Mark one index row selected within its panel. @param {HTMLElement} row */
