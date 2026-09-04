@@ -35,7 +35,7 @@ const ORDER_RAW_NAMES = ["place_order", "cancel_order"] as const;
 /** The marker alpaca-kit stamps on both mutating tools' descriptions
  * (`alpaca_kit/mcp/tools.py:303,307`). Cross-checked against the name test in
  * {@link auditOrderTools} so a rename on either side is caught by the other. */
-const OPERATOR_GATED_MARKER = "(operator-gated)";
+export const OPERATOR_GATED_MARKER = "(operator-gated)";
 
 /** Every approval policy this gate distinguishes. `never` is the one that
  * matters: it auto-rejects without reaching an answerer, so no card appears. */
@@ -101,11 +101,13 @@ export function effectiveApprovalPolicy(
  * runtime switch to the `danger-full-access` preset.
  * @param name - the registered tool name (`exec.name`).
  * @param policy - the session's effective approval policy.
+ * @param args - `exec.arguments`, rendered onto the card so the human can decide.
  * @returns the decision, or `null` when this call is none of our business.
  */
 export function orderApprovalDecision(
   name: string,
   policy: ApprovalPolicyLike,
+  args?: unknown,
 ): PreToolDecision | null {
   if (!isOrderTool(name)) return null;
   if (policy === "never") {
@@ -118,7 +120,112 @@ export function orderApprovalDecision(
         `and try again.`,
     };
   }
-  return { kind: "ask", reason: `PAPER order - operator gate (${name})` };
+  return { kind: "ask", reason: `PAPER order - ${describeOrder(name, args)}` };
+}
+
+/** One line an operator can actually decide on.
+ *
+ * The approval card renders `reason` and nothing else - `ApprovalRequest` carries
+ * agent, toolName, callId, reason and signal, and the frame the face draws from
+ * carries the same. So if the order's symbol, side and size are not IN this
+ * string, the human is approving a tool NAME, which is a click-through, not a
+ * decision.
+ *
+ * Deliberately total and defensive: this runs inside a gate, and a throw here
+ * would propagate out of the listener. Anything unexpected degrades to the tool
+ * name rather than losing the card.
+ * @param name - the registered tool name, the fallback when arguments are odd.
+ * @param args - `exec.arguments`, already frozen and JSON-safe by the registry.
+ * @returns a compact human-readable summary, never empty.
+ */
+export function describeOrder(name: string, args: unknown): string {
+  if (args === null || typeof args !== "object" || Array.isArray(args)) return name;
+  const row = args as Record<string, unknown>;
+  const scalar = (key: string): string | undefined => {
+    const value = row[key];
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === "object") return undefined;
+    return String(value);
+  };
+  /* place_order(symbol, qty, side, order_type, limit_price) and
+   * cancel_order(order_id) - alpaca_kit/mcp/tools.py:298-307. Unknown keys are
+   * appended rather than dropped, so a tool that grows a field still shows it
+   * (charter Rule 5: what is never surfaced is never governed). */
+  const known = ["side", "qty", "symbol", "order_type", "limit_price", "order_id"];
+  const parts = known.map((key) => {
+    const value = scalar(key);
+    return value === undefined ? undefined : `${key}=${value}`;
+  }).filter((part): part is string => part !== undefined);
+  const extra = Object.keys(row)
+    .filter((key) => !known.includes(key))
+    .map((key) => {
+      const value = scalar(key);
+      return value === undefined ? `${key}=?` : `${key}=${value}`;
+    });
+  const summary = [...parts, ...extra].join(" ");
+  return summary === "" ? name : `${name}: ${summary}`;
+}
+
+/** One session event, structurally - only the fields the grant check reads. */
+export interface ApprovalEventLike {
+  type: string;
+  data?: { id?: unknown; callId?: unknown; outcome?: unknown };
+}
+
+/**
+ * Did THIS call actually receive an operator grant?
+ *
+ * `ApprovalService.request` appends `approval/asked` (carrying `callId` and a
+ * fresh `id`) and then `approval/decided` (carrying that `id` and the outcome)
+ * - `dsh-user-approval/lib/index.js:147-158`. `allowed-once` is the ONLY outcome
+ * the tools layer turns into an allow (`dsh-tools/lib/index.js:3327`), so it is
+ * the only one that counts as a grant here.
+ *
+ * This is what the guard asks instead of "did my listener SEE this call". A
+ * sighting is not an approval: a `tools/pre-execute` listener registered outside
+ * this gate can take our `ask` and return `allow`, and a sighting-based guard
+ * would wave that through. Only the log proves a human said yes.
+ * @param events - `exec.agent.session.events`.
+ * @param callId - `exec.callId`.
+ * @returns true only when this call has a logged `allowed-once`.
+ */
+export function hasApprovalGrant(
+  events: readonly ApprovalEventLike[],
+  callId: unknown,
+): boolean {
+  if (callId === undefined || callId === null) return false;
+  const granted = new Set<unknown>();
+  for (const event of events) {
+    if (event.type === "approval/asked" && event.data?.callId === callId) {
+      granted.add(event.data?.id);
+    }
+  }
+  if (granted.size === 0) return false;
+  return events.some((event) =>
+    event.type === "approval/decided" &&
+    granted.has(event.data?.id) &&
+    event.data?.outcome === "allowed-once"
+  );
+}
+
+/** Is this call subject to the gate at all - by name, or by the marker on its
+ * live description? The description half is what catches a tool that registered
+ * AFTER boot (dsh-mcp-client activates even when its first connection failed,
+ * so the boot audit can run against a registry that has not filled in yet) and
+ * one whose public name took a hash suffix (dsh normalizes and hashes any name
+ * over 64 chars or carrying a character outside [A-Za-z0-9_-], so the raw-name
+ * suffix anchor does not always hold).
+ *
+ * The marker test is confined to `mcp__` names: it is a substring test on
+ * operator-supplied text, and an unrelated tool that happened to carry the
+ * phrase would otherwise be denied with a message blaming a rename.
+ * @param name - `exec.name`.
+ * @param description - the live registry's description for it, if any.
+ * @returns true when the gate must have a grant before this call dispatches.
+ */
+export function isGatedTool(name: string, description: string | undefined): boolean {
+  if (isOrderTool(name)) return true;
+  return name.startsWith("mcp__") && (description ?? "").includes(OPERATOR_GATED_MARKER);
 }
 
 /** What {@link auditOrderTools} found in the live registry. */
@@ -152,7 +259,35 @@ export function auditOrderTools(schemas: readonly ToolSchemaLike[]): OrderToolAu
   const ungated: string[] = [];
   for (const schema of schemas) {
     if (isOrderTool(schema.name)) gated.push(schema.name);
-    else if ((schema.description ?? "").includes(OPERATOR_GATED_MARKER)) ungated.push(schema.name);
+    else if (isGatedTool(schema.name, schema.description)) ungated.push(schema.name);
   }
   return { gated, ungated };
+}
+
+/**
+ * The guard's whole decision, as a pure function.
+ *
+ * Extracted so it can be drilled: a guard is evaluated on every allow and is the
+ * only monotonic layer here, which makes it the piece that most needs testing
+ * and the piece hardest to reach through the pipeline. Charter Rule 4 - a guard
+ * that has never been drilled is presumed broken.
+ * @param name - `exec.name`.
+ * @param description - the LIVE registry description, read per call rather than
+ *   snapshotted at boot: the registry fills in asynchronously.
+ * @param events - `exec.agent.session.events`, when there is a session.
+ * @param callId - `exec.callId`.
+ * @returns a denial reason, or `undefined` to let the call through.
+ */
+export function orderGuardReason(
+  name: string,
+  description: string | undefined,
+  events: readonly ApprovalEventLike[] | undefined,
+  callId: unknown,
+): string | undefined {
+  if (!isGatedTool(name, description)) return undefined;
+  if (events !== undefined && hasApprovalGrant(events, callId)) return undefined;
+  return isOrderTool(name)
+    ? `${name} reached dispatch without a logged allowed-once approval for this call`
+    : `${name} is marked ${OPERATOR_GATED_MARKER} but the order gate does not recognise its name,` +
+      ` so it can never be approved - add its raw name to ORDER_RAW_NAMES in face/src/orders.ts`;
 }

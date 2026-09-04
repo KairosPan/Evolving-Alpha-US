@@ -42,11 +42,13 @@ skills:
 # serverName namespace (line 684), so bare tool names would not match even if a top-level block
 # did bind. An unrecognised key merges SILENTLY - it fails open, quietly.
 #
-# At install, realize this intent against the CURRENT dsh docs by whichever mechanism dsh then
-# offers - a permission preset whose approval policy is `ask` (the shipped workspace-write
-# preset already is), a tools/pre-execute ask rule, or a per-tool key if one now exists - and
-# then CONFIRM that an order call actually prompts. Until it is pinned and confirmed, Gate 1
-# (registration: ALPACA_KIT_ENABLE_ORDERS plus the APCA keys, above) is the only ENFORCED layer.
+# REALIZED 2026-09-04, in code rather than in YAML: face/src/orders.ts registers a
+# tools/pre-execute listener (the seam this comment predicted) that raises an approval card for
+# place_order / cancel_order, matching on the RAW name suffix so the serverName namespace above
+# cannot slip a renamed tool past. The block below stays inert and stays here as the record of
+# what did NOT work. Note it only binds inside `face` - a dsh tree composed WITHOUT the face
+# still has Gate 1 as its only enforced layer, so confirm the gate before arming the flag in
+# any other host (face/README.md, "The order-approval drill").
 permissions:
   always_ask: [place_order, cancel_order]
 

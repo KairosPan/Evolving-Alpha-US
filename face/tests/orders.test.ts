@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  auditOrderTools, effectiveApprovalPolicy, isOrderTool, orderApprovalDecision,
+  auditOrderTools, describeOrder, effectiveApprovalPolicy, hasApprovalGrant, isGatedTool,
+  isOrderTool, orderApprovalDecision, orderGuardReason,
 } from "../src/orders.ts";
 
 /* --- which tools the gate claims ------------------------------------------ */
@@ -116,4 +117,127 @@ test("auditOrderTools: an empty registry is empty, not an error", () => {
     auditOrderTools([{ name: "mcp__alpaca-kit__account", description: "account snapshot" }]),
     { gated: [], ungated: [] },
   );
+});
+
+/* --- the grant check: a sighting is not an approval ----------------------- */
+
+const asked = (id: string, callId: string) => ({ type: "approval/asked", data: { id, callId } });
+const decided = (id: string, outcome: string) => ({ type: "approval/decided", data: { id, outcome } });
+
+test("hasApprovalGrant: a logged allowed-once for THIS call is a grant", () => {
+  assert.equal(hasApprovalGrant([asked("a1", "c1"), decided("a1", "allowed-once")], "c1"), true);
+});
+
+test("hasApprovalGrant: an ask with no decision yet is not a grant", () => {
+  assert.equal(hasApprovalGrant([asked("a1", "c1")], "c1"), false);
+});
+
+test("hasApprovalGrant: a rejection is not a grant, and neither is a cancellation", () => {
+  for (const outcome of ["rejected", "cancelled", "unavailable"]) {
+    assert.equal(hasApprovalGrant([asked("a1", "c1"), decided("a1", outcome)], "c1"), false, outcome);
+  }
+});
+
+test("hasApprovalGrant: a grant for a DIFFERENT call does not carry over", () => {
+  // The whole point of matching on callId: one approval, one dispatch.
+  const events = [asked("a1", "c1"), decided("a1", "allowed-once")];
+  assert.equal(hasApprovalGrant(events, "c2"), false);
+});
+
+test("hasApprovalGrant: an unrelated decided event cannot satisfy it", () => {
+  // A sandbox escalation approved in the same turn must not license an order.
+  const events = [asked("other", "c9"), decided("other", "allowed-once")];
+  assert.equal(hasApprovalGrant(events, "c1"), false);
+});
+
+test("hasApprovalGrant: no callId is never a grant", () => {
+  assert.equal(hasApprovalGrant([asked("a1", "c1"), decided("a1", "allowed-once")], undefined), false);
+});
+
+/* --- the per-call gate test (what the guard asks) ------------------------- */
+
+test("isGatedTool: an order name is gated whatever its description says", () => {
+  assert.equal(isGatedTool("mcp__x__place_order", undefined), true);
+  assert.equal(isGatedTool("mcp__x__place_order", "harmless"), true);
+});
+
+test("isGatedTool: a renamed tool still carrying the marker is gated", () => {
+  // The late-registration and hash-suffix cases the boot audit can miss.
+  assert.equal(isGatedTool("mcp__x__submit_order", "submit a PAPER order (operator-gated)"), true);
+  assert.equal(isGatedTool("mcp__x__place_order_a1b2c3d4e5f6", "(operator-gated)"), true);
+});
+
+test("isGatedTool: the marker only counts on mcp__ tools, so one phrase cannot brick the face", () => {
+  assert.equal(isGatedTool("bash", "runs things (operator-gated)"), false);
+  assert.equal(isGatedTool("mcp__x__orders", "list orders"), false);
+});
+
+/* --- the card has to be readable ------------------------------------------ */
+
+test("describeOrder: the card names the order, not just the tool", () => {
+  const line = describeOrder("mcp__alpaca-kit__place_order", {
+    symbol: "AAPL", qty: 10, side: "buy", order_type: "limit", limit_price: 195.5,
+  });
+  for (const fragment of ["AAPL", "qty=10", "side=buy", "limit", "195.5"]) {
+    assert.match(line, new RegExp(fragment.replace(".", "\\.")), fragment);
+  }
+});
+
+test("describeOrder: an unknown field is shown, not dropped", () => {
+  // Rule 5: a tool that grows a field must not grow a silent one.
+  assert.match(describeOrder("t", { symbol: "X", time_in_force: "gtc" }), /time_in_force=gtc/);
+});
+
+test("describeOrder: odd arguments degrade to the tool name, never throw", () => {
+  for (const args of [undefined, null, "text", 42, []]) {
+    assert.equal(describeOrder("mcp__x__place_order", args), "mcp__x__place_order");
+  }
+  assert.equal(describeOrder("t", {}), "t");
+  assert.equal(describeOrder("t", { nested: { a: 1 } }), "t: nested=?");
+});
+
+test("orderApprovalDecision: the ask reason carries the order, so the card is decidable", () => {
+  const decision = orderApprovalDecision("mcp__alpaca-kit__place_order", "ask", {
+    symbol: "TSLA", qty: 3, side: "sell",
+  });
+  assert.equal(decision?.kind, "ask");
+  assert.match(decision?.kind === "ask" ? decision.reason ?? "" : "", /TSLA/);
+});
+
+/* --- the guard: the monotonic half --------------------------------------- */
+
+const granted = [asked("g", "c1"), decided("g", "allowed-once")];
+
+test("orderGuardReason: an approved order passes", () => {
+  assert.equal(orderGuardReason("mcp__x__place_order", undefined, granted, "c1"), undefined);
+});
+
+test("orderGuardReason: an order with NO grant is denied - a sighting is not an approval", () => {
+  // The override case: a listener registered outside this gate takes our `ask`
+  // and returns `allow`. The old witnessed-WeakSet guard waved that through,
+  // having seen the call. Only the log proves a human said yes.
+  const reason = orderGuardReason("mcp__x__place_order", undefined, [], "c1");
+  assert.match(reason ?? "", /without a logged allowed-once/);
+});
+
+test("orderGuardReason: a rejected order is denied", () => {
+  const events = [asked("g", "c1"), decided("g", "rejected")];
+  assert.notEqual(orderGuardReason("mcp__x__place_order", undefined, events, "c1"), undefined);
+});
+
+test("orderGuardReason: a grant for another call does not let this one through", () => {
+  assert.notEqual(orderGuardReason("mcp__x__place_order", undefined, granted, "c2"), undefined);
+});
+
+test("orderGuardReason: a marked tool the gate cannot name is denied, and the message says how to fix it", () => {
+  // The late-registration / hash-suffix hole the boot audit cannot see, closed
+  // per call. It can never be approved, so the denial must name the remedy.
+  const reason = orderGuardReason("mcp__x__submit_order", "a PAPER order (operator-gated)", [], "c1");
+  assert.match(reason ?? "", /ORDER_RAW_NAMES/);
+});
+
+test("orderGuardReason: everything else passes untouched", () => {
+  for (const [name, description] of [["bash", "run"], ["mcp__x__orders", "list orders"]]) {
+    assert.equal(orderGuardReason(name, description, [], "c1"), undefined, name);
+  }
 });

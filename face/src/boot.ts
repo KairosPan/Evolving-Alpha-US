@@ -60,8 +60,8 @@ import { DSH_LAUNCH_ENVIRONMENT_KEY } from "@deepseek-ai/dsh-launch-environment"
 import { provideCmdline } from "@deepseek-ai/dsh-cmdline";
 import { faceOverlay } from "./overlay.ts";
 import {
-  auditOrderTools, effectiveApprovalPolicy, isOrderTool, orderApprovalDecision,
-  type ApprovalPolicyLike, type PreToolDecision, type ToolSchemaLike,
+  auditOrderTools, effectiveApprovalPolicy, isOrderTool, orderApprovalDecision, orderGuardReason,
+  type ApprovalEventLike, type ApprovalPolicyLike, type PreToolDecision, type ToolSchemaLike,
 } from "./orders.ts";
 
 /** Diagnostic prefix dsh-app-boot puts on every error and warning raised from
@@ -260,7 +260,8 @@ export async function bootFace(opts: FaceBootOptions): Promise<{ ctx: Context; d
   const tools = ctx.get("tools") as
     | {
       schemas(): ToolSchemaLike[];
-      guard(check: (exec: { name: string }) => string | undefined): () => void;
+      get(name: string): { description?: string } | undefined;
+      guard(check: (exec: { name: string; callId?: unknown; agent?: { session: unknown } }) => string | undefined): () => void;
     }
     | undefined;
   if (tools?.schemas().some((schema) => schema.name === ASK_USER_TOOL) !== true) {
@@ -273,20 +274,20 @@ export async function bootFace(opts: FaceBootOptions): Promise<{ ctx: Context; d
   /* GATE 2 FOR ORDERS. Two registrations, because neither alone is enough:
    * only a `tools/pre-execute` listener can return `ask` (a guard is deny-only,
    * `dsh-tools` ToolGuard = (exec) => string | undefined), and only a guard is
-   * monotonic — it is evaluated on EVERY allow (`dsh-tools/lib/index.js:3116`),
+   * monotonic - it is evaluated on EVERY allow (`dsh-tools/lib/index.js:3116`),
    * including the allow that `allowed-once` becomes.
    *
    * `prepend` puts the listener outermost: cordis runs a waterfall
    * outermost-first (`cordis/lib/index.js:317-325`) and each listener is free to
    * ignore what `next()` returned, so a listener registered outside ours could
-   * otherwise take our `ask` and hand back `allow`. Outermost, we simply never
-   * call `next()` for an order tool.
+   * otherwise take our `ask` and hand back `allow`.
    *
-   * The guard then catches the case the listener cannot: an order tool reaching
-   * dispatch that our listener never saw. It is conditional on `witnessed`, NOT
-   * a flat name deny — `allowed-once` becomes `{kind:'allow'}` and then hits the
-   * guard, so a flat deny would kill the very call the operator just approved. */
-  const witnessed = new WeakSet<object>();
+   * That last case is exactly why the guard asks the SESSION LOG rather than
+   * remembering what the listener saw. `prepend` is last-registrant-wins, so
+   * anything mounted after this boot sits outside us; a guard that only checked
+   * "did I see this call" would wave such an override through, having seen it.
+   * `hasApprovalGrant` cannot be satisfied by any listener decision - only by a
+   * logged `allowed-once` for this exact callId. */
   const approval = ctx.get("approval") as
     | {
       overrideOf(session: unknown): ApprovalPolicyLike | undefined;
@@ -297,40 +298,44 @@ export async function bootFace(opts: FaceBootOptions): Promise<{ ctx: Context; d
     on(
       name: "tools/pre-execute",
       listener: (
-        exec: { name: string; agent?: { session: unknown } },
+        exec: { name: string; arguments?: unknown; agent?: { session: unknown } },
         next: () => Promise<PreToolDecision>,
       ) => Promise<PreToolDecision>,
       options?: { prepend?: boolean },
     ): () => boolean;
   };
   gateCtx.on("tools/pre-execute", async (exec, next) => {
-    /* No approval service is already fatal above; without a session there is
-     * nobody to ask, and `serviceAsk` would deny anyway (`:3311-3318`) - deny in
-     * our own words rather than letting it report a refusal nobody made. */
-    const session = exec.agent?.session;
     if (!isOrderTool(exec.name)) return next();
+    /* Without a session there is nobody to ask, and `serviceAsk` would deny
+     * anyway (`dsh-tools/lib/index.js:3313-3318`) - deny in our own words rather
+     * than letting it report a refusal nobody made. */
+    const session = exec.agent?.session;
     if (approval === undefined || session === undefined) {
-      witnessed.add(exec);
       return {
         kind: "deny",
         reason: `${exec.name} needs a per-order approval card and this call has no session to ask in`,
       };
     }
-    const decision = orderApprovalDecision(exec.name, effectiveApprovalPolicy(approval, session));
-    if (decision === null) return next();
-    witnessed.add(exec);
-    return decision;
+    const decision = orderApprovalDecision(
+      exec.name,
+      effectiveApprovalPolicy(approval, session),
+      exec.arguments,
+    );
+    return decision ?? next();
   }, { prepend: true });
+  /* The backstop, evaluated per call on every allow. It reads the LIVE
+   * description rather than a boot snapshot because the registry fills in
+   * asynchronously: `dsh-mcp-client` defaults `failOnStartupError` to false, so
+   * a server whose first connection failed still activates and can register its
+   * tools after the audit below has already run. */
   tools.guard((exec) =>
-    isOrderTool(exec.name) && !witnessed.has(exec)
-      ? `${exec.name} reached dispatch without passing the face's order gate`
-      : undefined
+    orderGuardReason(
+      exec.name,
+      tools.get(exec.name)?.description,
+      (exec.agent?.session as { events?: ApprovalEventLike[] } | undefined)?.events,
+      exec.callId,
+    )
   );
-  /* The flag that arms the order tools lives in the operator's cordis patch, in
-   * the alpaca-kit row's own `env:` - NOT in this process - so it cannot be
-   * asserted on. The registry can: a tool alpaca-kit marked `(operator-gated)`
-   * whose name this gate does not match means one side was renamed and the gate
-   * now covers nothing, which is exactly the silent hole it exists to close. */
   const audit = auditOrderTools(tools.schemas());
   if (audit.ungated.length > 0) {
     await dispose();

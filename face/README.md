@@ -645,12 +645,14 @@ any composed package; `dsh-permission-presets` registers only `session/created`
 which can ask for a tool call; and `dsh-mcp-client` carries zero references to
 approval, sandbox or pre-execute.
 
-So for orders Gate 2 is not unproven — it is **absent**. The moment
-`ALPACA_KIT_ENABLE_ORDERS=1`, `place_order` executes with no card and no
-`approval/asked` event. Gate 1 is the only thing between the model and a paper
-order today, and a registration flag is not an approval. Charter Rule 3 forbids
-publishing a guarantee that fails at code level, so this is recorded here rather
-than implied away.
+So until 2026-09-04, for orders Gate 2 was not unproven — it was **absent**.
+Arming `ALPACA_KIT_ENABLE_ORDERS=1` would have run `place_order` with no card and
+no `approval/asked` event, with a registration flag the only thing in the way.
+Charter Rule 3 forbids publishing a guarantee that fails at code level, which is
+why this paragraph exists rather than being quietly deleted once the hole was
+filled. **The producer now exists** — see "The order-approval drill" below —
+but it is a `tools/pre-execute` listener this repo registers, not something the
+harness provides, so it is exactly as durable as that registration.
 
 Until the channel drill passes on a live face, the face does not claim even that
 half.
@@ -678,9 +680,12 @@ asserting it is claimed, that `mcp__drill__orders` is not, and that a renamed
 server (`mcp__whatever_they_call_it__place_order`) is still caught. Drilled
 2026-09-04, mutation-proven: removing the registration fails it.
 
-**The manual half — the card — needs your eyes**, because an ask with no
-connected browser blocks rather than denying, so it cannot be automated. With
-the face live and a session open:
+**The manual half — the card — needs your eyes.** Not the approval round trip,
+which could be driven by a test answerer on the same `approval/request`
+waterfall; what cannot be automated is whether a human can actually READ the
+card and decide from it. An ask with no connected browser also blocks rather
+than denying, so the live path needs a client anyway. With the face live and a
+session open:
 
 1. Arm Gate 1 in a **scratch** harness home, never your real one: an
    `ALPACA_KIT_ENABLE_ORDERS: "1"` line in that home's alpaca-kit row plus the
@@ -704,13 +709,28 @@ before any answerer runs, and `dsh-tools` renders that as `the user rejected
 tool "..."`, which is false: nobody was asked. The gate denies in its own words
 instead, and says so.
 
+**A cancel is gated too, and that cuts the other way.** `cancel_order` changes
+exposure, so it asks — but under policy `never`, or on a call with no session,
+the gate DENIES it. The one action that reduces risk is refused in exactly the
+session where prompting was switched off. That is the right trade (the paper pin
+bounds the stakes, and you can cancel from Alpaca's own console out of band), but
+it is a surprise worth knowing before you meet it.
+
 **And this is a gate, not containment.** `tools/execute` runs AFTER the guard,
 is handed the execution as mutable, and the body re-resolves the tool by its
 current name — so a `tools/execute` wrapper could rename a guard-approved call
 into `place_order`. Kairos also has an unrestricted shell. Per charter Rule 2,
 this stops the model's ordinary tool calls; it is not a boundary that holds
-against code trying to get around it. Gate 1 — not registering the tools at all
-— remains the thing that actually holds.
+against code trying to get around it.
+
+Gate 1 — not registering the tools at all — remains the sturdier layer, but be
+precise about what it holds: the MCP tool *surface*, not the *account*. A shell
+turn can import `alpaca_kit.account` directly and never touch either gate. What
+stands in its way there is smaller than it sounds and worth knowing: dsh does
+not hand credentials to shell children — `scrubbedParentEnv` drops every name
+matching `/KEY|PASSWORD|SECRET|TOKEN/i` — so the shell has to go and read
+`.env.alpaca` itself first. The paper-hostname pin is what actually bounds the
+damage.
 
 ## The ask-user drill (run after any face or dsh change)
 
