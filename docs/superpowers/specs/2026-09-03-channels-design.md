@@ -244,10 +244,13 @@ visible on its page.
 
 Enforcement point: `agent_<bin>`'s `execute` already reads the calling session's cwd
 (`face/src/panels.ts:668-676`). It resolves the workspace, compares against the roster, and on a
-miss **returns a tool result** — not a thrown error — naming the current roster and where to
-change it. That refusal message *is* the roster contract; it is deliberately not written into
-the channel's `AGENTS.md`, because that file is Kairos-writable and would drift from the
-operator-owned `channels.json`. One call teaches it, and it cannot fall out of sync.
+miss **throws** — naming the current roster and where to change it. The tool pipeline
+(`dsh-tools`) catches a thrown `execute` and converts it into an `isError` **tool result** carrying
+that message, so what the model sees is a result, never a crash — but the mechanism at the
+enforcement point itself is a thrown `Error`, not a returned value. That refusal message *is* the
+roster contract; it is deliberately not written into the channel's `AGENTS.md`, because that file
+is Kairos-writable and would drift from the operator-owned `channels.json`. One call teaches it,
+and it cannot fall out of sync.
 
 ### The honest limits — to be stated in the spec, the README, and the code
 

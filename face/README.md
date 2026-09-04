@@ -245,9 +245,12 @@ adopted channel is seeded from whichever agents are connected at that
 moment — there is no "absent means everything" rule; a channel's roster is a
 definite, visible set at every moment. The enforcement point is
 `agent_<bin>`'s own `execute` (`src/agents.ts:458-488`): it reads the calling
-session's cwd, resolves its channel, and on a miss returns a TOOL RESULT —
-never a thrown error — naming the channel and its current roster verbatim.
-That refusal message IS the roster's contract; it is deliberately not written
+session's cwd, resolves its channel, and on a miss THROWS — naming the
+channel and its current roster verbatim. The tool pipeline (`dsh-tools`)
+catches a thrown `execute` and turns it into an `isError` result carrying
+that message, so what Kairos actually sees is a tool result, never a crash —
+but the mechanism at the cited lines is a thrown `Error`, not a returned
+value. That refusal message IS the roster's contract; it is deliberately not written
 into the channel's own `AGENTS.md`, which is Kairos-writable and would drift
 from the operator-owned file. A channel with no roster entry yet (created
 straight through the registry, before a listing has seeded it) reads as "no
