@@ -16,6 +16,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { withFileLock, writeFileAtomic } from "@deepseek-ai/dsh-atomic-write";
+import { HttpError } from "./http.ts";
 
 const ROSTER_FILE = ["face", "channels.json"] as const;
 
@@ -98,9 +99,24 @@ export async function seedRoster(home: string, workspaceId: string, bins: readon
 }
 
 /** The operator's explicit write: this channel's roster is exactly `bins`.
- * Allowed over a corrupt file — an operator action is a repair. */
+ *
+ * REFUSES over a corrupt file rather than replacing it (I1). `rosters` reads
+ * as `{}` when the file is corrupt (unparseable, or a `channels` key that is
+ * absent or not an object — what a future `version: 2` migration would look
+ * like too), so spreading `...rosters` over that reading would silently
+ * REPLACE the whole file with this one entry: one chip click on one channel
+ * would wipe every other channel's curated roster, with nothing said. A
+ * refusal that names the file is recoverable by hand; a wipe is not. */
 export async function setRoster(home: string, workspaceId: string, bins: readonly string[]): Promise<void> {
-  await update(home, ({ rosters }) => ({ ...rosters, [workspaceId]: { agents: [...new Set(bins)] } }));
+  await update(home, ({ rosters, corrupt }) => {
+    if (corrupt) {
+      throw new HttpError(
+        409,
+        `${pathOf(home)} is corrupt and cannot be safely merged into - repair or remove it by hand, then set the roster again`,
+      );
+    }
+    return { ...rosters, [workspaceId]: { agents: [...new Set(bins)] } };
+  });
 }
 
 /** This channel's roster, or `null` when none is known — an unadopted

@@ -45,6 +45,23 @@ test("a corrupt file fails CLOSED: no rosters, and seeding never overwrites it",
   assert.equal(await readFile(join(h, "face", "channels.json"), "utf8"), "{not json", "the operator's file is never clobbered by a background seed");
 });
 
+test("setRoster REFUSES over a corrupt file - it must not replace every other channel's roster with just this one entry (I1)", async () => {
+  const h = await home();
+  await corrupt(h);
+  const path = join(h, "face", "channels.json");
+  const before = await readFile(path, "utf8");
+  await assert.rejects(
+    setRoster(h, "ws-1", ["claude"]),
+    (err: Error) => err.message.includes(path) && /corrupt/i.test(err.message),
+    "the refusal names the file's absolute path",
+  );
+  assert.equal(
+    await readFile(path, "utf8"),
+    before,
+    "the operator's bytes on disk are unchanged - a click on one channel must not wipe the others",
+  );
+});
+
 test("concurrent seed and toggle: the operator's write survives", async () => {
   const h = await home();
   await seedRoster(h, "ws-1", ["claude", "codex"]);
