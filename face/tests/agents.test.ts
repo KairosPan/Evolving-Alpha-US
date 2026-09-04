@@ -230,6 +230,32 @@ test("an agent ON the roster runs", async () => {
   assert.deepEqual(ran, ["codex"]);
 });
 
+test("execute passes channelFor the SESSION's real cwd, not something else - a guard never drilled is presumed broken (charter Rule 4)", async () => {
+  // Every other roster test above stubs channelFor to ignore its argument
+  // (`toolDeps`'s `async channelFor() { return channel; }`), so none of them
+  // actually pin that `exec.agent?.session.header.cwd` - the entire input to
+  // the roster decision - is what reaches it. A recording stub closes that.
+  const home = await freshHome();
+  const seen: (string | undefined)[] = [];
+  const deps = {
+    home,
+    cwd: home,
+    async channelFor(cwd: string | undefined) { seen.push(cwd); return null; },
+    async runAgent(bin: string) {
+      return { code: 0, stdout: JSON.stringify({ result: "hi", session_id: "s1" }), stderr: "", timedOut: false, truncated: false };
+    },
+  } as any;
+  await agentToolDefinition(deps, "codex", "Codex").execute({ prompt: "hi" }, exec("/repo/strategies/alpha"));
+  assert.deepEqual(seen, ["/repo/strategies/alpha"], "channelFor must see the exec context's own session cwd, verbatim");
+
+  // And when the exec carries no agent (a session-less call, drilled
+  // elsewhere in this file), the cwd handed to channelFor is genuinely
+  // undefined - not silently defaulted to something that would mask the
+  // no-agent case as a real session.
+  await agentToolDefinition(deps, "codex", "Codex").execute({ prompt: "hi" }, { signal: new AbortController().signal });
+  assert.deepEqual(seen, ["/repo/strategies/alpha", undefined]);
+});
+
 test("a session in no channel fails OPEN - which is exactly today's behaviour", async () => {
   const home = await freshHome();
   const { deps, ran } = toolDeps(home, null);
