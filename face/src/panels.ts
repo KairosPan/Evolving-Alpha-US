@@ -42,10 +42,8 @@ import type { Context } from "@deepseek-ai/cordis";
 import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import type { RouteRegistrar } from "./static.ts";
 import { isJsonBody, isTrustedDataRequest } from "./data.ts";
-import { readBody, StrategyError } from "./strategies.ts";
+import { FORBIDDEN, HttpError, readBody } from "./http.ts";
 import { DSH_PIN } from "./version.ts";
-
-const FORBIDDEN = '{"ok":false,"error":"forbidden"}';
 
 /** Exactly a dsh skill name (`isSkillName`, dsh-tool-skill 0.1.1-rc.2):
  * kebab-case, which is what makes it safe to hand to a registry lookup. */
@@ -540,15 +538,15 @@ const running = new Set<string>();
  */
 export async function runAgentRecipe(deps: PanelDeps, req: RunRequest): Promise<RunResult> {
   const { bin, prompt, resume } = req;
-  if (!isAgentBin(bin) || !hasExec(bin)) throw new StrategyError(400, "no exec channel for this agent");
+  if (!isAgentBin(bin) || !hasExec(bin)) throw new HttpError(400, "no exec channel for this agent");
   const spec = EXEC_SPECS[bin];
-  if (typeof prompt !== "string" || prompt.trim() === "") throw new StrategyError(400, "prompt required");
-  if (prompt.length > PROMPT_LIMIT) throw new StrategyError(413, "prompt too long");
+  if (typeof prompt !== "string" || prompt.trim() === "") throw new HttpError(400, "prompt required");
+  if (prompt.length > PROMPT_LIMIT) throw new HttpError(413, "prompt too long");
   if (resume !== undefined && (typeof resume !== "string" || !AGENT_SESSION_RE.test(resume))) {
-    throw new StrategyError(400, "invalid session id");
+    throw new HttpError(400, "invalid session id");
   }
   const workdir = await resolveRunDir(deps.cwd, req.cwd);
-  if (running.has(bin)) throw new StrategyError(409, "a run is already in progress for this agent");
+  if (running.has(bin)) throw new HttpError(409, "a run is already in progress for this agent");
   running.add(bin);
 
   let scratch: string | undefined;
@@ -897,9 +895,9 @@ export async function agentsListing(deps: PanelDeps): Promise<{
  * agent's own terminal — but the row says so. Idempotent on an
  * already-connected bin. 400 on a malformed name, 404 when nothing answers. */
 export async function connectLocalAgent(deps: PanelDeps, bin: unknown): Promise<LocalAgentRow> {
-  if (!isAgentBin(bin)) throw new StrategyError(400, "invalid binary name");
+  if (!isAgentBin(bin)) throw new HttpError(400, "invalid binary name");
   const [version, auth] = await Promise.all([probeSoft(deps, bin), authSoft(deps, bin)]);
-  if (version === null) throw new StrategyError(404, "binary did not answer on this machine");
+  if (version === null) throw new HttpError(404, "binary did not answer on this machine");
   const meta = await readAgentsMeta(deps.home);
   if (!meta.connected.some((row) => row.bin === bin)) {
     meta.connected.push({ bin, label: labelFor(bin) });
@@ -914,9 +912,9 @@ export async function connectLocalAgent(deps: PanelDeps, bin: unknown): Promise<
 /** Remove one bin from the roster. 400 on a malformed name, 404 when it was
  * not connected. The binary itself is untouched — this is the face's list. */
 export async function disconnectLocalAgent(deps: PanelDeps, bin: unknown): Promise<AgentsMeta> {
-  if (!isAgentBin(bin)) throw new StrategyError(400, "invalid binary name");
+  if (!isAgentBin(bin)) throw new HttpError(400, "invalid binary name");
   const meta = await readAgentsMeta(deps.home);
-  if (!meta.connected.some((row) => row.bin === bin)) throw new StrategyError(404, "not connected");
+  if (!meta.connected.some((row) => row.bin === bin)) throw new HttpError(404, "not connected");
   const next = { connected: meta.connected.filter((row) => row.bin !== bin) };
   await writeAgentsMeta(deps.home, next);
   return next;
@@ -962,9 +960,9 @@ export async function memoryListing(deps: PanelDeps): Promise<{ groups: { name: 
 /** One skill's full record, body included. 400 on a malformed name, 404 when
  * the registry has no such skill. */
 export async function skillDetail(deps: PanelDeps, name: unknown): Promise<object> {
-  if (typeof name !== "string" || !SKILL_NAME_RE.test(name)) throw new StrategyError(400, "invalid skill name");
+  if (typeof name !== "string" || !SKILL_NAME_RE.test(name)) throw new HttpError(400, "invalid skill name");
   const skill = await deps.skills.get(name, { cwd: deps.cwd });
-  if (skill === undefined) throw new StrategyError(404, "skill not found");
+  if (skill === undefined) throw new HttpError(404, "skill not found");
   return {
     name: skill.name,
     description: skill.description,
@@ -1066,7 +1064,7 @@ export async function registerPanelRoutes(webServer: RouteRegistrar, deps: Panel
       try {
         return send(res, 200, { ok: true, ...(await read()) });
       } catch (err) {
-        if (err instanceof StrategyError) return send(res, err.status, { ok: false, error: err.message });
+        if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
         return send(res, 500, { ok: false, error: "request failed" });
       }
     };
@@ -1085,12 +1083,12 @@ export async function registerPanelRoutes(webServer: RouteRegistrar, deps: Panel
           if (parsed === null || typeof parsed !== "object") throw new Error("not an object");
           body = parsed as Record<string, unknown>;
         } catch (err) {
-          if (err instanceof StrategyError) throw err;
-          throw new StrategyError(400, "body must be a JSON object");
+          if (err instanceof HttpError) throw err;
+          throw new HttpError(400, "body must be a JSON object");
         }
         return send(res, 200, { ok: true, ...(await act(body)) });
       } catch (err) {
-        if (err instanceof StrategyError) return send(res, err.status, { ok: false, error: err.message });
+        if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
         return send(res, 500, { ok: false, error: "request failed" });
       }
     };

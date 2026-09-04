@@ -23,9 +23,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import type { RouteRegistrar } from "./static.ts";
 import { isJsonBody, isTrustedDataRequest } from "./data.ts";
-import { readBody, StrategyError } from "./strategies.ts";
-
-const FORBIDDEN = '{"ok":false,"error":"forbidden"}';
+import { FORBIDDEN, HttpError, readBody } from "./http.ts";
 
 /** Exactly a dsh session id: the literal prefix and a uuid, nothing else —
  * what makes it safe to use as one path segment. */
@@ -46,7 +44,7 @@ export interface SessionsMeta {
 
 function assertSessionId(sessionId: unknown): asserts sessionId is string {
   if (typeof sessionId !== "string" || !SESSION_ID_RE.test(sessionId)) {
-    throw new StrategyError(400, "invalid session id");
+    throw new HttpError(400, "invalid session id");
   }
 }
 
@@ -95,7 +93,7 @@ export async function deleteSession(home: string, sessionId: unknown): Promise<S
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name);
   } catch {
-    throw new StrategyError(404, "session not found");
+    throw new HttpError(404, "session not found");
   }
   for (const slug of slugs) {
     const dir = join(sessionsRoot, slug, sessionId);
@@ -113,7 +111,7 @@ export async function deleteSession(home: string, sessionId: unknown): Promise<S
     await writeMeta(home, next);
     return next;
   }
-  throw new StrategyError(404, "session not found");
+  throw new HttpError(404, "session not found");
 }
 
 /**
@@ -142,12 +140,12 @@ export function registerSessionRoutes(webServer: RouteRegistrar, home?: string):
           if (parsed === null || typeof parsed !== "object") throw new Error("not an object");
           body = parsed as Record<string, unknown>;
         } catch (err) {
-          if (err instanceof StrategyError) throw err;
-          throw new StrategyError(400, "body must be a JSON object");
+          if (err instanceof HttpError) throw err;
+          throw new HttpError(400, "body must be a JSON object");
         }
         return send(res, 200, { ok: true, ...(await act(body)) as object });
       } catch (err) {
-        if (err instanceof StrategyError) return send(res, err.status, { ok: false, error: err.message });
+        if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
         return send(res, 500, { ok: false, error: "request failed" });
       }
     };

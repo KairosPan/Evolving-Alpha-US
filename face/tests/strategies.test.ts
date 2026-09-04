@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
-import { createStrategy, listStrategies, registerStrategyRoutes, StrategyError } from "../src/strategies.ts";
+import { createStrategy, listStrategies, registerStrategyRoutes } from "../src/strategies.ts";
+import { HttpError } from "../src/http.ts";
 
 /** A throwaway workbench root: strategies/{_template,alpha}, alpha with a
  * status.yaml, the template carrying a nested dir and a __pycache__ that must
@@ -40,8 +41,8 @@ test("createStrategy copies the template, skips __pycache__, never overwrites", 
   assert.match(await readFile(join(entry.cwd, "THESIS.md"), "utf8"), /strategy name/);
   await stat(join(entry.cwd, "backtests"));
   await assert.rejects(stat(join(entry.cwd, "__pycache__")));
-  await assert.rejects(createStrategy(root, "beta-1"), (err: StrategyError) => err.status === 409);
-  await assert.rejects(createStrategy(root, "alpha"), (err: StrategyError) => err.status === 409);
+  await assert.rejects(createStrategy(root, "beta-1"), (err: HttpError) => err.status === 409);
+  await assert.rejects(createStrategy(root, "alpha"), (err: HttpError) => err.status === 409);
 });
 
 test("createStrategy refuses names outside the closed class", async () => {
@@ -51,7 +52,7 @@ test("createStrategy refuses names outside the closed class", async () => {
     "", "_template", "a b", "市场 情绪", "../evil", "a/../b", "市场/情绪", "a.b",
     ".hidden", "-lead", "_lead", "a\u0000b", "x".repeat(42), 42, null,
   ]) {
-    await assert.rejects(createStrategy(root, bad), (err: StrategyError) => err.status === 400, JSON.stringify(bad));
+    await assert.rejects(createStrategy(root, bad), (err: HttpError) => err.status === 400, JSON.stringify(bad));
   }
 });
 
@@ -67,7 +68,7 @@ test("createStrategy takes a name in any script, and creates it in NFC", async (
   const decomposed = await createStrategy(root, NFD);
   assert.equal(decomposed.name, NFC, "created in NFC");
   assert.ok((await stat(join(root, "strategies", NFC))).isDirectory());
-  await assert.rejects(createStrategy(root, NFC), (err: StrategyError) => err.status === 409, "the NFC spelling is the same strategy");
+  await assert.rejects(createStrategy(root, NFC), (err: HttpError) => err.status === 409, "the NFC spelling is the same strategy");
   assert.equal((await createStrategy(root, "Upper-Case_9")).name, "Upper-Case_9", "case is the operator's to choose");
 });
 

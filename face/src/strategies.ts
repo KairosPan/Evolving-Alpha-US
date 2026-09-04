@@ -22,10 +22,7 @@ import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { RouteRegistrar } from "./static.ts";
 import { isJsonBody, isTrustedDataRequest } from "./data.ts";
-
-/** Body of a refused (non-loopback) request — data.ts's fixed text, restated
- * because that module keeps its own private. */
-const FORBIDDEN = '{"ok":false,"error":"forbidden"}';
+import { FORBIDDEN, HttpError, readBody } from "./http.ts";
 
 /** A strategy name: lower-case, digits, `-`/`_`, must start alphanumeric.
  * A closed class — path separators, dots, and anything shell-meaningful are
@@ -40,9 +37,6 @@ const NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N}\p{M}_-]{0,40}$/u;
 
 /** The copy source every new strategy starts from, and never a valid pick. */
 const TEMPLATE = "_template";
-
-/** Most bytes a POST body may carry; a strategy name needs far fewer. */
-const BODY_LIMIT = 4096;
 
 /** One row of the picker. */
 export interface StrategyEntry {
@@ -76,14 +70,6 @@ export async function listStrategies(root: string): Promise<{ root: string; stra
   return { root, strategies };
 }
 
-/** The error shape {@link createStrategy} throws: an http status and a fixed,
- * operator-facing reason. */
-export class StrategyError extends Error {
-  constructor(readonly status: number, message: string) {
-    super(message);
-  }
-}
-
 /** Birth `strategies/<name>` from the template. Refuses a malformed name, a
  * name already taken, and a missing template — never overwrites anything.
  * @param root - absolute workbench repo root.
@@ -92,13 +78,13 @@ export class StrategyError extends Error {
 export async function createStrategy(root: string, rawName: unknown): Promise<StrategyEntry> {
   const name = typeof rawName === "string" ? rawName.normalize("NFC") : rawName;
   if (typeof name !== "string" || !NAME_RE.test(name) || name === TEMPLATE) {
-    throw new StrategyError(400, "invalid strategy name (letters or digits in any script, plus - and _; no spaces, dots or slashes; up to 41 characters)");
+    throw new HttpError(400, "invalid strategy name (letters or digits in any script, plus - and _; no spaces, dots or slashes; up to 41 characters)");
   }
   const template = join(root, "strategies", TEMPLATE);
   try {
     await stat(template);
   } catch {
-    throw new StrategyError(500, "strategies/_template missing");
+    throw new HttpError(500, "strategies/_template missing");
   }
   const target = join(root, "strategies", name);
   let exists = true;
@@ -107,28 +93,12 @@ export async function createStrategy(root: string, rawName: unknown): Promise<St
   } catch {
     exists = false;
   }
-  if (exists) throw new StrategyError(409, "strategy already exists");
+  if (exists) throw new HttpError(409, "strategy already exists");
   await cp(template, target, {
     recursive: true,
     filter: (src) => !src.includes("__pycache__"),
   });
   return { name, cwd: target, status: "idea" };
-}
-
-/** Collect a request body up to `limit` bytes (default {@link BODY_LIMIT});
- * longer is refused. Shared with sessions.ts and panels.ts — one body reader;
- * the default limit fits ids and names, and a route that carries prose (a
- * prompt for an agent) names its own. */
-export async function readBody(req: IncomingMessage, limit: number = BODY_LIMIT): Promise<string> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of req) {
-    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    size += buf.length;
-    if (size > limit) throw new StrategyError(413, "body too large");
-    chunks.push(buf);
-  }
-  return Buffer.concat(chunks).toString("utf8");
 }
 
 /**
@@ -169,13 +139,13 @@ export function registerStrategyRoutes(webServer: RouteRegistrar, root: string):
         try {
           name = (JSON.parse(await readBody(req)) as { name?: unknown }).name;
         } catch (err) {
-          if (err instanceof StrategyError) throw err;
-          throw new StrategyError(400, "body must be JSON: {\"name\": \"...\"}");
+          if (err instanceof HttpError) throw err;
+          throw new HttpError(400, "body must be JSON: {\"name\": \"...\"}");
         }
         const entry = await createStrategy(root, name);
         return send(res, 200, { ok: true, ...entry });
       } catch (err) {
-        if (err instanceof StrategyError) return send(res, err.status, { ok: false, error: err.message });
+        if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
         return send(res, 500, { ok: false, error: "create failed" });
       }
     },
