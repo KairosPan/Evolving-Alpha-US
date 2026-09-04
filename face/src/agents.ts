@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HttpError } from "./http.ts";
 import { isAgentBin, readAgentsMeta, type PanelDeps } from "./panels.ts";
-import { rosterFor } from "./roster.ts";
+import { readRosters } from "./roster.ts";
 
 /** What one run reads out of the child's output. */
 export interface RunParse {
@@ -468,10 +468,22 @@ export function agentToolDefinition(deps: PanelDeps, bin: string, label: string)
        * safety story. */
       const channel = await deps.channelFor(cwd);
       if (channel !== null) {
-        const roster = await rosterFor(deps.home, channel.workspaceId);
-        if (roster === null) {
+        /* `readRosters`, not `rosterFor`: the two ways this can come back
+         * empty are different facts and need different messages. A file
+         * that fails to PARSE is an operator-side break - repair it. A file
+         * that parses fine but simply has no entry for this workspace yet
+         * is the ORDINARY state of a channel the reconcile hasn't seeded
+         * (created straight through the registry, before /data/channels.json
+         * ever loaded) - nothing is broken, there is just nothing to read
+         * yet, and it fills in on its own once the channel list loads. */
+        const { rosters, corrupt } = await readRosters(deps.home);
+        if (corrupt) {
           throw new Error(`the channel roster is unreadable, so ${label} is refused here; repair ${join(deps.home, "face", "channels.json")}`);
         }
+        if (!Object.hasOwn(rosters, channel.workspaceId)) {
+          throw new Error(`this channel has no roster yet, so ${label} is refused here; it gets one the first time the channel list loads, and the operator sets it on the channel page.`);
+        }
+        const roster = rosters[channel.workspaceId].agents;
         if (!roster.includes(bin)) {
           throw new Error(`${label} is not on this channel's roster. Channel "${channel.name}" currently offers: ${roster.length === 0 ? "(none)" : roster.join(", ")}. The operator adds agents on the channel page.`);
         }

@@ -246,10 +246,26 @@ test("a corrupt roster file fails CLOSED", async () => {
     agentToolDefinition(deps, "codex", "Codex").execute({ prompt: "hi" }, exec("/repo/strategies/alpha")),
     /unreadable/i,
     // Deliberately distinct from the off-roster message above: a corrupt
-    // file is not the same fact as an empty roster, and `rosterFor`'s
-    // `null` must not silently fold into `[]` and answer with "currently
-    // offers: (none)" — that would report the roster as legitimately empty
-    // instead of unreadable.
+    // file is not the same fact as an empty roster, and `readRosters`'s
+    // `corrupt` flag must not fold into "no entry for this workspace" and
+    // answer with "no roster yet" — that would report a genuinely broken
+    // file as merely unseeded.
+  );
+  assert.deepEqual(ran, []);
+});
+
+test("a channel with no roster entry yet - file present and valid, just not seeded - fails CLOSED with its own message, not 'unreadable'", async () => {
+  const home = await freshHome();
+  // A perfectly healthy file: it just has no entry for ws-1. This is the
+  // ordinary state of a workspace the dsh client created directly through
+  // the registry, before /data/channels.json (the reconcile) ever ran for
+  // it - not the same fact as a corrupt file, and the refusal must say so.
+  await setRoster(home, "ws-other", ["claude"]);
+  const { deps, ran } = toolDeps(home, { workspaceId: "ws-1", name: "alpha" });
+  await assert.rejects(
+    agentToolDefinition(deps, "codex", "Codex").execute({ prompt: "hi" }, exec("/repo/strategies/alpha")),
+    (err: Error) => /no roster yet/i.test(err.message) && !/unreadable/i.test(err.message),
+    "names the not-yet-seeded situation, and must not misdiagnose it as an unreadable file",
   );
   assert.deepEqual(ran, []);
 });
