@@ -14,6 +14,10 @@ strategies/.
   idea | researching | validated | paper | retired — paper is a reserved forward-testing
   state, meaningful only once the order gate opens. Copy strategies/_template to start one.
   Commit your own iterations; git log is the audit trail.
+  A new strategy starts with one batched ask_user_question, not with code: the thesis
+  and the falsification terms that would retire it, which bed and which window (warmup
+  moves the honest start), and what the operator wants measured. A brief that already
+  answers those is the answer. Decide the rest yourself.
 - data/pit/ — offline PIT beds (~800 symbols). Two usable windows, and only these:
   data/pit/2yr = 2024-06-03 .. 2026-07-09 (526 trading days), data/pit/broad =
   2025-11-17 .. 2026-03-27 (90 days). Each bed's trading_calendar() runs back to 2016 with no

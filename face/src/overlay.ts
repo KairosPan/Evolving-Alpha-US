@@ -58,6 +58,28 @@ export function faceOverlay(port: number, dshHome: string): FacePatchEntry[] {
         config: { host: "127.0.0.1", port } satisfies WebServerConfig },
       { id: "connection", name: "@deepseek-ai/dsh-client-connection",
         config: { trustedHosts: [] } satisfies ConnectionConfig },
+
+      /* The model-facing half of the question seam, and the one row above that
+       * the "mirror dsh-web-app's bundle patch" rule does not reach: upstream
+       * puts `ask_user_question` in no bundle at all. dsh-web-app DISABLES
+       * dsh-base's tool rows and lets each session mount an agent preset
+       * instead; ask_user rides the shipped `standard` preset, whose root sits
+       * beside the CLI app package that this face deliberately does not graft
+       * (boot.ts, divergence 4). So the face keeps dsh-base's flat tool roster
+       * and inherits its one hole: dsh-base mounts the `user-questions` SERVICE
+       * and nothing that lets a model reach it. The two halves fail
+       * INDEPENDENTLY, and that is what made the hole invisible - the tree came
+       * up healthy, `bootFace`'s Gate-2 service check passed, the model was
+       * offered its full toolset, and Kairos simply never asked anything. No
+       * error, no card, no pending question; just an agent that guesses.
+       * Measured 2026-09-02 on a real session: 35 tools offered, none of them
+       * this one. Face-owned rather than left to the operator's patch layer for
+       * the same reason `webserver` is: this overlay composes LAST, so a patch
+       * aimed at a row it owns is silently overridden - and losing the agent's
+       * voice to a silent override is the exact failure the row exists to
+       * prevent. Configless by contract (`apply(ctx)`, no exported Config), so
+       * it joins the unconfigured rows rather than the `satisfies` set. */
+      { id: "tool-ask-user", name: "@deepseek-ai/dsh-tool-ask-user" },
     ],
   }];
 }

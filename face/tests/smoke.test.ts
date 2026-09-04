@@ -75,7 +75,7 @@ function sendWithHost(port: number, path: string, host: string, body?: string): 
   });
 }
 
-test("boot smoke: face serves its pages, /api and /data answer, both fences hold", { skip: gated && "set FACE_SMOKE=1" }, async () => {
+test("boot smoke: face serves its pages, /api and /data answer, Kairos can ask, both fences hold", { skip: gated && "set FACE_SMOKE=1" }, async () => {
   const home = mkdtempSync(join(tmpdir(), "face-smoke-"));
   setupFaceProfile(home);
   const { ctx, dispose } = await bootFace({ profileName: "face", port: 0, dshHome: home });
@@ -83,6 +83,26 @@ test("boot smoke: face serves its pages, /api and /data answer, both fences hold
     const clientDir = join(dirname(fileURLToPath(import.meta.url)), "..", "client");
     registerStatic(ctx.webServer, clientDir);
     const base = `http://127.0.0.1:${ctx.webServer.port}`;
+
+    /* Kairos's VOICE, drilled. `bootFace` already refuses a tree missing the
+     * `userQuestions` SERVICE; this is its model-facing half, and the two fail
+     * INDEPENDENTLY - dsh-base mounts the service and no tool row for it, so
+     * the face booted healthy, offered the model its whole toolset, and could
+     * never ask the operator anything. `schemas()` with no scope is the global
+     * view the agent is served from, and it is the ONLY place the difference
+     * shows: an unsatisfied inject leaves the row pending with the composed
+     * entry list unchanged, and `/data/plugins.json` cannot stand in either
+     * (pluginListing projects tool names only for the `mcp__*` and `agent_*`
+     * prefixes, so that payload is byte-identical with the tool and without
+     * it). Mutation-proven in both directions on 2026-09-03: 25 tools and no
+     * `ask_user_question` before the `tool-ask-user` row, 26 with it. */
+    const tools = ctx.get("tools") as { schemas(): { name: string }[] } | undefined;
+    assert.ok(tools !== undefined, "the tools service must be in the composed tree");
+    const toolNames = tools.schemas().map((schema) => schema.name).sort();
+    assert.ok(
+      toolNames.includes("ask_user_question"),
+      `ask_user_question must be registered; saw ${toolNames.length}: ${toolNames.join(", ")}`,
+    );
 
     // the `exact /` route: the page the operator actually opens
     const index = await fetch(`${base}/`);

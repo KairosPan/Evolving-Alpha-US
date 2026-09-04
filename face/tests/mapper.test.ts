@@ -24,8 +24,8 @@ const frames: unknown[] = readFileSync(
 const views = frames.map((frame) => mapFrame(frame));
 
 test("fixture file and view list stay aligned", () => {
-  assert.equal(frames.length, 19);
-  assert.equal(views.length, 19);
+  assert.equal(frames.length, 21);
+  assert.equal(views.length, 21);
 });
 
 test("message events become bubbles, attributed by role", () => {
@@ -88,6 +88,26 @@ test("answerable frames carry the envelope rpcId as their respond id", () => {
   assert.equal(views[7].id, "r-08");
   assert.equal(views[7].sessionId, "s1");
   assert.equal(views[7].questions?.length, 1);
+});
+
+test("a gate the host settles on its own is reported, never ignored", () => {
+  /* Both resolutions are pure pushes, and they are the ONLY signal that a gate
+   * died without this client answering it — a cancelled turn, a disposed
+   * session, another answerer first. Ignoring them (as v1 did) leaves the card
+   * answerable forever, re-drawn on every session switch and every reconnect.
+   * The two name their gate differently on purpose: a question carries the wire
+   * rpcId `/api/respond` echoes, an approval carries only its audit id. */
+  assert.equal(views[19].kind, "gate-resolved");
+  assert.equal(views[19].id, "r-08", "the question's own respond id, not the push's");
+  assert.equal(views[19].approvalId, undefined);
+  assert.equal(views[19].outcome, "cancelled");
+  assert.equal(views[19].sessionId, "s1");
+
+  assert.equal(views[20].kind, "gate-resolved");
+  assert.equal(views[20].approvalId, "ap-1");
+  assert.equal(views[20].id, undefined, "approval/resolved carries no wire id at all");
+  assert.equal(views[20].outcome, "rejected");
+  assert.equal(views[20].sessionId, "s1");
 });
 
 test("log-only, control, and contentless frames are ignored", () => {

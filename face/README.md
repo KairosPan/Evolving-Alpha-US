@@ -73,8 +73,8 @@ Two things about that directory are NOT yours:
   — the inverse of the dsh CLI's layering, and deliberate: loopback-only binding
   surviving an operator patch is the point. A patch of yours aimed at
   `webserver`, `connection`, `api-gateway`, `directory-picker`,
-  `cordis-host-runner`, the storage chain (`storage`, `storage-json`,
-  `storage-domain`, `workspace`), or the `hmr` / `session-telemetry-otel`
+  `cordis-host-runner`, `tool-ask-user`, the storage chain (`storage`,
+  `storage-json`, `storage-domain`, `workspace`), or the `hmr` / `session-telemetry-otel`
   switches is accepted, overridden, and NEVER reported. Change those in
   `src/overlay.ts`. The same warning is in the patch file's own header, which is
   where an operator would actually look.
@@ -482,3 +482,109 @@ deny (command did not run; the model saw a rejection result, never the card) and
 (`allowed-once`, one-shot) both exercised, with paired `approval/asked` +
 `approval/decided` records in the session log. Re-run after any face or dsh change, per
 the heading above.
+
+## The ask-user drill (run after any face or dsh change)
+
+The same rule, for the seam that carries Kairos's own questions.
+
+**What actually holds it here.** dsh-base mounts the `user-questions` SERVICE
+and NO model-facing tool for it. The tool is a separate package,
+`@deepseek-ai/dsh-tool-ask-user`, and upstream it reaches a session through an
+agent PRESET — dsh-web-app disables dsh-base's tool rows and mounts presets
+instead, and the shipped `standard` preset carries `ask_user`. The face grafts
+no presets (`boot.ts`, divergence 4), so it keeps dsh-base's flat tool roster
+and inherits its one hole. The face fills it with its own overlay row,
+`tool-ask-user`, face-owned for the same reason `webserver` is: this layer
+composes last, so an operator patch aimed at it is accepted, overridden, and
+never reported — and an agent silently losing its voice is the failure the row
+exists to prevent.
+
+**The two halves fail INDEPENDENTLY, and that is the whole point.** A tree with
+the service and no tool comes up perfectly healthy, passes `bootFace`'s Gate-2
+service check, offers the model its full toolset, and simply never asks
+anything. No error, no card, no pending question — just an agent that guesses.
+That is what shipped from 2026-08-31 until 2026-09-02: one real session offered
+35 tools, none of them this one, and ran 83 steps on a one-line brief.
+`bootFace` now refuses to start a tree in which `ask_user_question` did not
+register, checked against the live registry rather than the composed row list —
+an unsatisfied inject leaves the row pending with the entry list unchanged.
+
+**Unlike Gate 2 this is not a gate.** Kairos asks because it chose to, and the
+answer returns as an ordinary tool RESULT — model-visible, in the context, the
+exact opposite of an approval decision, which the model never sees.
+
+**Step 0, no model, no key.** `FACE_SMOKE=1 npm test` boots the real tree and
+asserts `ctx.tools.schemas()` carries `ask_user_question`. Run it first; if it
+fails, stop — nothing below can pass and the cause is composition, not the
+model.
+
+**Step 0b, if you changed anything under `client/`.** `registerStatic` sets no
+cache headers, so the browser caches the ES modules heuristically and a restarted
+face happily serves an old `chat.js` to an open tab. Hard-reload the page before
+drilling: a stale client produced two false failures while this drill was being
+written.
+
+**The drill**, with the face live and a session open:
+
+1. Open the **plugin** panel → the composed row tree. `dsh-tool-ask-user` is
+   listed as `include:tool-ask-user`, phase **active**. A row stuck at
+   `pending` means its inject (`tools`, `userQuestions`) was never satisfied —
+   the one failure a composition test cannot see.
+2. Prompt Kairos to ask, naming the tool: *"Use ask_user_question to ask me
+   which PIT bed to use, 2yr or broad. Ask nothing else and read no files."*
+   Naming it is deliberate — this step drills the SEAM, not the judgement.
+3. PASS, part one: the question card renders, headed `kairos asks`. ONE card for
+   the whole batch, whatever the number of questions, and one Send: one `ask()`
+   is one card and one answer, never split per question.
+4. **Answer it.** The card settles to `answered`, the turn continues, and the
+   answer is back in Kairos's context as a tool result. On a
+   single-select question a typed answer and a picked option replace each other
+   — the host rejects an answer carrying both, as a bare `bad-response`.
+5. **Press Stop on a fresh question instead of answering it.** The card settles
+   to `closed · cancelled` and the sidebar's `waiting` chip clears. A card that
+   stays live after a cancel means the `question/resolved` frame is being
+   dropped again (`client/mapper.js`), and it will be re-drawn on every session
+   switch from then on.
+6. PASS, part two — the instruction half, in a FRESH session: ask for a new
+   strategy with a deliberately thin brief ("build me a strategy for storage
+   names"). Kairos asks before it builds, per `AGENTS.md`. This half is
+   behavioural, not mechanical: a turn that answers with prose is not proof the
+   seam is broken. Re-prompt once before concluding anything.
+7. The log, under `$DSH_HOME/sessions/<workspace>/session-<id>/session.jsonl.zstd`
+   (zstd-compressed JSONL). A question records as an ORDINARY TOOL PAIR —
+   `tool/call` with `data.name == "ask_user_question"` and its `tool/result` on
+   the same `callId`. There is no `question/asked` audit record and there is not
+   meant to be: `KNOWN_SESSION_EVENT_TYPES` carries `approval/asked` and
+   `approval/decided` and no question member at all, because a question is not a
+   gate. `question/requested` / `question/resolved` exist only as wire frames on
+   the mux stream. The durable proof the tool was OFFERED is `request/header`,
+   whose `header.tools` lists every schema sent that turn:
+
+   ```bash
+   zstd -dc "$F" | python3 -c 'import json,sys
+   for line in sys.stdin:
+       e = json.loads(line); d = e.get("data") or {}
+       if e["type"] == "request/header":
+           print("offered:", "ask_user_question" in [t["name"] for t in d["header"]["tools"]])
+       if e["type"] == "tool/call" and d.get("name") == "ask_user_question":
+           print("called:", d["callId"])'
+   ```
+
+Until this drill passes on a live face, the face does not claim Kairos can ask.
+
+**Drilled and PASSED 2026-09-03**, on a live face booted against a throwaway
+`$DSH_HOME` with a real model. Exercised end to end: the tool reached the model
+(`request/header` offered 26 tools including this one); Kairos called it; the
+card rendered with its options; the answer returned as the tool result
+`{"answers":[{"id":"pit_bed","selected":["2yr"]}]}` and the turn continued on it.
+Answered here the card reads `answered`; killed with Stop, `closed · cancelled`
+with the sidebar chip cleared and no resurrection on a session switch; and the
+Gate-2 approval card still reads `answered · deny`, which the settle path had to
+be taught to keep. Step 6 — the AGENTS.md instruction — is the operator's to run.
+
+**Known residuals, deliberately not fixed here.** The card has no Dismiss
+button, so the host's `ASK_CANCELLED` path is unreachable from this UI and
+plan-mode's "the user dismissed the review to speak instead" branch is dead;
+Stop is the only exit. And a question BLOCKS the turn, so an answer typed into
+the composer instead of the card is queued for the next turn rather than
+delivered — it says `sent` and nothing happens. Answer in the card.

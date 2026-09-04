@@ -10,7 +10,7 @@ import { composeFace } from "../src/boot.ts";
 /** Every row id {@link faceOverlay} owns, as the composed tree should show them. */
 const OVERLAY_ROW_IDS = [
   "api-gateway", "connection", "cordis-host-runner", "directory-picker",
-  "storage", "storage-domain", "storage-json", "webserver", "workspace",
+  "storage", "storage-domain", "storage-json", "tool-ask-user", "webserver", "workspace",
 ] as const;
 
 /** A throwaway $DSH_HOME with the face profile already laid out in it. */

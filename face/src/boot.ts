@@ -188,6 +188,10 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
  * approval would then fail closed with nothing on screen saying why. */
 const GATE_2_SERVICES = ["approval", "userQuestions"] as const;
 
+/** The model-facing tool `@deepseek-ai/dsh-tool-ask-user` registers, checked by
+ * name because its absence is the quietest failure this face has had. */
+const ASK_USER_TOOL = "ask_user_question";
+
 /**
  * Boot the face's dsh tree in-process and return it with its disposer.
  *
@@ -200,8 +204,9 @@ const GATE_2_SERVICES = ["approval", "userQuestions"] as const;
  * from the override.
  * @param opts - profile name, webserver port, optional harness home.
  * @returns the settled root context and an idempotent disposer.
- * @throws after disposing the tree when a Gate 2 service is missing, and
- * whatever `boot` throws when the plugin tree fails to load.
+ * @throws after disposing the tree when a Gate 2 service is missing or the
+ * `ask_user_question` tool did not register, and whatever `boot` throws when
+ * the plugin tree fails to load.
  */
 export async function bootFace(opts: FaceBootOptions): Promise<{ ctx: Context; dispose(): Promise<void> }> {
   if (opts.dshHome !== undefined) process.env.DSH_HOME = resolveDshHome(opts.dshHome);
@@ -234,6 +239,26 @@ export async function bootFace(opts: FaceBootOptions): Promise<{ ctx: Context; d
     throw new Error(
       `${BIN}: ${missing.join(" and ")} missing from the composed tree - Gate 2 would fail closed invisibly` +
         ` (profile ${JSON.stringify(opts.profileName)} must bundle @deepseek-ai/dsh-base)`,
+    );
+  }
+  /* The OTHER half of the question seam, and unlike the two above this one has
+   * really shipped broken: `userQuestions` is the service, `ask_user_question`
+   * is the only thing that can reach it from a model, and they fail
+   * INDEPENDENTLY. dsh-base mounts the service and no tool row for it, so from
+   * 2026-08-31 to 2026-09-02 the face came up healthy, passed the check above,
+   * offered the model 35 tools, and could not ask the operator anything -
+   * no error, no card, no pending question, just an agent that guesses.
+   * Asserted against the live REGISTRY rather than the composed row list
+   * because the two disagree exactly where it matters: an unsatisfied inject
+   * (`tools`, `userQuestions`) leaves the row's fiber pending with the entry
+   * list unchanged, so a composition test reads healthy on a tree that
+   * registered nothing. */
+  const tools = ctx.get("tools") as { schemas(): { name: string }[] } | undefined;
+  if (tools?.schemas().some((schema) => schema.name === ASK_USER_TOOL) !== true) {
+    await dispose();
+    throw new Error(
+      `${BIN}: ${ASK_USER_TOOL} is not registered - Kairos would have no way to ask the operator` +
+        ` anything, silently (the \`tool-ask-user\` overlay row mounts it)`,
     );
   }
   return { ctx, dispose };

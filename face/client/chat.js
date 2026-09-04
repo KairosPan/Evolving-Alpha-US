@@ -70,6 +70,17 @@ const toolCards = new Map();
 const gates = new Map();
 /** rpcId → its card in the CURRENT flow; cleared on every session switch. @type {Map<string, HTMLElement>} */
 const gateNodes = new Map();
+
+/** rpcIds this tab is answering right now. The host broadcasts a gate's
+ * resolution from INSIDE its respond handler, before the HTTP receipt is even
+ * serialized, so the echo normally reaches {@link acceptGateResolved} while the
+ * clicking handler is still awaiting `respond()`. Without this the echo would
+ * settle the card first, in the WIRE's vocabulary - an approval's outcome is an
+ * ApprovalOutcome and never the string `answered`, so a card the operator just
+ * approved would read `closed · allowed-once`, and `closed` is the word this
+ * client uses for a gate that died with nobody answering it. Whoever answered
+ * owns the wording. */
+const answering = new Set();
 /** sessionId → its sidebar row. @type {Map<string, HTMLElement>} */
 const convRows = new Map();
 /** Live frames held while a history page is in flight. @type {unknown[]} */
@@ -371,12 +382,17 @@ function acceptCard(view) {
 /* ---------- gates: approvals and questions ---------- */
 
 /**
- * Settle an answered gate's card: the buttons go, the outcome stays.
+ * Settle a gate's card: the buttons go, the outcome stays. Idempotent — the
+ * host echoes a resolution for the answer this client just sent, and by then
+ * there is no `.card-actions` left to replace.
  * @param {HTMLElement} node @param {string} outcome - what was sent, in the operator's words.
+ * @param {string} [verb] - `answered` when we answered it; `closed` when the host settled it for us.
  */
-function settle(node, outcome) {
+function settle(node, outcome, verb = "answered") {
   node.classList.add("answered");
-  node.querySelector(".card-actions")?.replaceWith(el("div", "card-line", `answered · ${outcome}`));
+  // A question's outcome IS the verb ("answered"), so it is said once.
+  const line = verb === outcome ? verb : `${verb} · ${outcome}`;
+  node.querySelector(".card-actions")?.replaceWith(el("div", "card-line", line));
 }
 
 /**
@@ -404,6 +420,7 @@ function approvalNode(view) {
     btn.addEventListener("click", async () => {
       const buttons = [.../** @type {NodeListOf<HTMLButtonElement>} */ (actions.querySelectorAll("button"))];
       for (const b of buttons) b.disabled = true;
+      answering.add(view.id); // claim the wording before the host can echo it back
       try {
         await respond(view.id, {
           sessionId: view.sessionId ?? activeSession,
@@ -416,6 +433,7 @@ function approvalNode(view) {
       } catch (err) {
         // A refused answer ("not-pending", a dead socket) must leave the gate
         // answerable: re-enable and say why rather than stranding the turn.
+        answering.delete(view.id);
         for (const b of buttons) b.disabled = false;
         failed(err, "respond");
       }
@@ -469,8 +487,23 @@ function questionNode(view) {
     if (question?.detail) block.append(el("div", "ask-q-detail", String(question.detail)));
 
     const options = Array.isArray(question?.options) ? question.options : [];
-    if (options.length > 0) {
-      const row = el("div", "opt-row");
+    /* On a SINGLE-select question the host rejects an answer that carries both
+     * a selection and `custom` (apiproxy `matchesQuestions`), and it rejects it
+     * as a bare `bad-response` with no reason — so the two clear each other
+     * here rather than becoming an error the operator cannot read. Multi-select
+     * is the case where they legitimately coexist: there `custom` SUPPLEMENTS
+     * the labels. Both handlers need both halves, so the row and the field are
+     * built before either is wired. */
+    const single = question?.multiSelect !== true;
+    const row = options.length > 0 ? el("div", "opt-row") : undefined;
+    // A question with no options is free text; so is the "other" box beside a
+    // menu, which `custom` exists for.
+    const input = el("input", "ask-input");
+    const field = /** @type {HTMLInputElement} */ (input);
+    field.type = "text";
+    field.placeholder = options.length > 0 ? "other…" : "your answer";
+
+    if (row) {
       for (const option of options) {
         // Options are objects; the ANSWER sends the option's label.
         const label = typeof option?.label === "string" ? option.label : String(option);
@@ -479,13 +512,17 @@ function questionNode(view) {
         if (option?.description) btn.title = String(option.description);
         btn.addEventListener("click", () => {
           const on = pick.selected.has(label);
-          if (question?.multiSelect !== true) {
+          if (single) {
             pick.selected.clear();
             for (const other of row.children) other.classList.remove("on");
           }
           if (on) pick.selected.delete(label);
           else pick.selected.add(label);
           btn.classList.toggle("on", pick.selected.has(label));
+          if (single && pick.selected.size > 0 && pick.custom !== "") {
+            pick.custom = "";
+            field.value = "";
+          }
           sync();
         });
         row.append(btn);
@@ -493,14 +530,13 @@ function questionNode(view) {
       block.append(row);
     }
 
-    // A question with no options is free text; so is the "other" box beside a
-    // menu, which `custom` exists for.
-    const input = el("input", "ask-input");
-    const field = /** @type {HTMLInputElement} */ (input);
-    field.type = "text";
-    field.placeholder = options.length > 0 ? "other…" : "your answer";
     field.addEventListener("input", () => {
       pick.custom = field.value;
+      // Typing IS the answer: on a single-select it replaces the pick.
+      if (single && field.value.trim() !== "" && pick.selected.size > 0) {
+        pick.selected.clear();
+        if (row) for (const other of row.children) other.classList.remove("on");
+      }
       sync();
     });
     block.append(input);
@@ -509,6 +545,7 @@ function questionNode(view) {
 
   submit.addEventListener("click", async () => {
     submitBtn.disabled = true;
+    answering.add(view.id); // as in approvalNode: whoever answers owns the wording
     try {
       await respond(view.id, {
         sessionId: view.sessionId ?? activeSession,
@@ -524,6 +561,7 @@ function questionNode(view) {
       settle(node, "answered");
       status("answer sent");
     } catch (err) {
+      answering.delete(view.id);
       submitBtn.disabled = false;
       failed(err, "respond");
     }
@@ -554,6 +592,48 @@ function acceptGate(view) {
     return;
   }
   renderGate(view);
+}
+
+/**
+ * A gate the HOST settled without us: the turn was cancelled, the session was
+ * disposed, or another answerer got there first. This frame is the only signal
+ * — without it `gates` keeps the entry forever, so the dead card is re-appended
+ * by {@link openSession} on every session switch and by the mux on every
+ * reconnect, its Send button stays live for a request that no longer exists
+ * (answering it earns a bare `respond: not-pending`), and the sidebar row keeps
+ * a "waiting" chip for a session waiting on nothing.
+ * @param {Record<string, any>} view - a `gate-resolved` view.
+ */
+function acceptGateResolved(view) {
+  /* A question's resolution names the wire id directly. An approval's names
+   * only the audit id — approvals.d.ts keeps those deliberately separate — so
+   * its gate is found by the `approvalId` it was rendered with. The type check
+   * on that id is load-bearing, not defensive noise: a QUESTION view has no
+   * `approvalId` field at all, so a frame that arrived without one would match
+   * `undefined === undefined` against the first pending question and close
+   * somebody else's card. The host's schema makes `approvalId` required, which
+   * is why this is cheap insurance rather than a live bug. */
+  let id = typeof view.id === "string" ? view.id : undefined;
+  if (id === undefined && typeof view.approvalId === "string") {
+    id = [...gates.entries()].find(([, gate]) => gate.approvalId === view.approvalId)?.[0];
+  }
+  if (id === undefined) return; // already answered here, or never ours
+  gates.delete(id);
+  const node = gateNodes.get(id);
+  /* The host echoes the resolution for an answer THIS tab sent too, and it
+   * normally wins the race against `respond()` returning. Such a card is left
+   * to its own handler, which settles it in the operator's words —
+   * "answered · deny", the string the Gate-2 drill documents — where this path
+   * has only the wire's (`rejected`, `allowed-once`, `answered`). An
+   * ApprovalOutcome is never the string `answered`, so deriving the verb from
+   * the outcome here would relabel every approval the operator just answered.
+   * `closed` then means exactly one thing: the gate died and nobody here
+   * answered it. */
+  if (node?.isConnected && !answering.has(id)) {
+    for (const button of node.querySelectorAll("button")) button.disabled = true;
+    settle(node, typeof view.outcome === "string" ? view.outcome : "closed", "closed");
+  }
+  scheduleListRefresh(); // the sidebar rebuilds its waiting chips from `gates`
 }
 
 /** @returns {HTMLElement} the sidebar's "this session is waiting on you" chip. */
@@ -681,6 +761,10 @@ function acceptFrame(frame) {
     acceptGate(view);
     return;
   }
+  if (view.kind === "gate-resolved") {
+    acceptGateResolved(view);
+    return;
+  }
   if (view.sessionId !== undefined && view.sessionId !== activeSession) return;
   if (typeof view.seq === "number") {
     const key = `${view.sessionId ?? activeSession}:${view.seq}`;
@@ -707,6 +791,7 @@ function resetFlow() {
   bySeq.clear();
   toolCards.clear();
   gateNodes.clear();
+  answering.clear();
   queued.length = 0;
 }
 

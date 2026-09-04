@@ -51,7 +51,7 @@
  * One frame's whole meaning to the UI. A closed `kind` vocabulary with optional
  * payload fields: a renderer switches on `kind` and reads only its own fields.
  * @typedef {object} FrameView
- * @property {"bubble"|"card"|"approval"|"question"|"pulse"|"projection"|"ignore"} kind
+ * @property {"bubble"|"card"|"approval"|"question"|"gate-resolved"|"pulse"|"projection"|"ignore"} kind
  * @property {number} [seq] - the session event's seq; the renderer's dedupe key across backfill and stream.
  * @property {string} [sessionId] - which session this belongs to (absent on a history entry that carries none).
  * @property {SurfaceOpView} [surfaceOp] - on every rendered session event: `append`, or a
@@ -71,6 +71,8 @@
  * @property {string} [callId] - approvals: the call awaiting permission.
  * @property {string} [reason] - approvals: why permission is being asked, when the host said.
  * @property {unknown[]} [questions] - questions: the AskUserQuestionItem batch (one ask, many questions, ONE answer).
+ * @property {string} [outcome] - gate-resolved: how the host settled it — `answered`
+ *   or `cancelled` for a question, an ApprovalOutcome for an approval.
  * @property {string} [key] - projections: which unit changed — `tokenUsage`,
  *   `contextPressure`, `title`, … The renderer stores whole values per key,
  *   higher `seq` winning; the frame is a state broadcast, not a delta.
@@ -283,6 +285,27 @@ export function mapFrame(frame) {
         sessionId: typeof mux.sessionId === "string" ? mux.sessionId : undefined,
         questions: Array.isArray(mux.questions) ? mux.questions : [],
       };
+    /* The settlements, and the reason they are not ignorable: a gate the host
+     * closed by itself — the turn cancelled, the session disposed, another
+     * answerer first — pushes ONLY this frame. A renderer that drops it keeps
+     * the dead card answerable forever and re-draws it on every reconnect.
+     * The two carry different ids: a question names the wire rpcId that
+     * `/api/respond` echoes, an approval names only its audit id, so the
+     * renderer finds that gate by the `approvalId` it was drawn with. */
+    case "question/resolved":
+      return {
+        kind: "gate-resolved",
+        id: typeof mux.questionRpcId === "string" ? mux.questionRpcId : undefined,
+        sessionId: typeof mux.sessionId === "string" ? mux.sessionId : undefined,
+        outcome: typeof mux.outcome === "string" ? mux.outcome : undefined,
+      };
+    case "approval/resolved":
+      return {
+        kind: "gate-resolved",
+        approvalId: typeof mux.approvalId === "string" ? mux.approvalId : undefined,
+        sessionId: typeof mux.sessionId === "string" ? mux.sessionId : undefined,
+        outcome: typeof mux.outcome === "string" ? mux.outcome : undefined,
+      };
     case "session/event":
       return mapSessionEvent(mux);
     case "session/projection": {
@@ -302,12 +325,11 @@ export function mapFrame(frame) {
       // No frame type: a session.history entry, which carries only { event, view? }.
       return isObject(mux.event) ? mapSessionEvent(mux) : ignore();
     default:
-      // session/subscribed · approval/resolved · question/resolved · session/queue ·
-      // session/jobs · stream/error. All carried, none rendered in v1: the face
-      // is a single loopback client with no queue dock, no job list, and no
-      // second answerer to be told about. stream/error is the one with a real
-      // cost — an internal stream failure stays silent — and is the first
-      // candidate when this vocabulary next grows.
+      // session/subscribed · session/queue · session/jobs · stream/error. All
+      // carried, none rendered in v1: the face is a single loopback client with
+      // no queue dock and no job list. stream/error is the one with a real cost
+      // — an internal stream failure stays silent — and is the first candidate
+      // when this vocabulary next grows.
       return ignore();
   }
 }
