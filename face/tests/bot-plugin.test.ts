@@ -29,8 +29,9 @@ test("apply registers the persona section at order 0 and one allow-list restrict
   const sections: unknown[] = [];
   const restrictions: unknown[] = [];
   const warnings: string[] = [];
+  let effects = 0;
   const ctx = {
-    effect(fn: () => unknown) { return fn(); },
+    effect(fn: () => unknown) { effects++; const d = fn(); assert.equal(typeof d, "function"); return d; },
     logger: { warn: (m: string) => { warnings.push(m); } },
     systemPrompt: { section(s: unknown) { sections.push(s); return () => {}; } },
     tools: {
@@ -41,6 +42,7 @@ test("apply registers the persona section at order 0 and one allow-list restrict
   apply(ctx, { persona: "You are Probe, a test voice.", allow: ["bash", "read", "web_search"] });
   assert.deepEqual(sections, [{ name: "deployment:persona", order: 0, text: "You are Probe, a test voice." }]);
   assert.deepEqual(restrictions, [{ allow: ["bash", "read"] }]);
+  assert.equal(effects, 2);
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /web_search/);
 });
