@@ -15,7 +15,12 @@ strategies/.
   state, meaningful only once the order gate opens. status.yaml also carries three optional
   headline keys the face's channel landing page renders when present: one_line (the current
   conclusion, one sentence), next (the next step), numbers (free key-value figures) — none
-  required; fill them in when there is something worth a line. Copy strategies/_template to start one.
+  required; fill them in when there is something worth a line. Copy strategies/_template to start one,
+  named as the face's create box names them: opening on a letter or digit in any script, then letters,
+  digits, - and _, at most 41 code points, no spaces or dots. The name becomes a path you write into
+  shell by hand and has to stay one word: a space makes zsh read `cd x y` as its two-argument form (x
+  replaced by y in $PWD) — usually an error, but where the substituted path exists it lands you in the
+  wrong directory with exit 0 (`cd aaa/bbb/ccc; cd bbb xxx` ends in `aaa/xxx/ccc`).
   Commit your own iterations; git log is the audit trail.
   A new strategy starts with one batched ask_user_question, not with code: the thesis
   and the falsification terms that would retire it, which bed and which window (warmup

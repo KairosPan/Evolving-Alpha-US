@@ -178,8 +178,8 @@ workspace whose directory has vanished is reported greyed (`missing-dir`),
 never deleted; its sessions stay attached and reachable.
 
 **The picker and the sidebar are registry-driven now, not directory-scanned.**
-`+ new` still opens the same picker (`showStrategyPicker`,
-`client/chat.js:1291`), but its rows come from `/data/channels.json` instead
+`+ new` still opens the same picker (`showStrategyPicker` in
+`client/chat.js`), but its rows come from `/data/channels.json` instead
 of guessing from `cwd`s, plus a `choose a local folder…` row through the OS's
 own dialog (`host.pickDirectory`) for anything outside a channel. The sidebar
 groups sessions by channel MEMBERSHIP, not by path prefix: a session no

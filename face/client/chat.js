@@ -40,6 +40,7 @@ import { renderMarkdown } from "./markdown.js";
 import { renderChannelPage } from "./channels.js";
 import { ARCHIVED_KEY, bucketFor, isBotKey, UNGROUPED_KEY } from "./grouping.js";
 import { proposeBotId } from "./botId.js";
+import { foldChannelName } from "./channelName.js";
 
 /** Rendered in place of a value the host did not give us. */
 const EM = "—";
@@ -1382,12 +1383,17 @@ async function showStrategyPicker() {
     const form = el("div", "picker-new");
     const input = /** @type {HTMLInputElement} */ (el("input", "picker-input"));
     input.type = "text";
-    input.placeholder = "new channel name (letters · digits · - _ · no spaces) — copies strategies/_template";
+    input.placeholder = "new channel name (letters · digits · - _ · spaces become -) — copies strategies/_template";
     const create = /** @type {HTMLButtonElement} */ (el("button", "picker-btn", "create"));
     create.type = "button";
     create.addEventListener("click", async () => {
-      const name = input.value.trim();
+      /* Spaces fold to dashes before the POST — the rule refuses them and the
+       * operator should get the channel they meant, not a 400 to retype their
+       * way out of. Written back into the box so what is being created is
+       * visible, including when the create then fails for some other reason. */
+      const name = foldChannelName(input.value);
       if (name === "") return;
+      input.value = name;
       create.disabled = true;
       try {
         const res = await fetch("/data/channels", {

@@ -1,7 +1,7 @@
 # Kairos Workbench — Development Reference
 
-**Status:** living, as-built · **Owner:** the operator · **Last full pass:** 2026-09-04 on
-branch `feat/order-approval-gate` (388 pytest, 199 face tests, typecheck clean).
+**Status:** living, as-built · **Owner:** the operator · **Last full pass:** 2026-09-07 on
+branch `feat/bots` (388 pytest, 233 face tests, typecheck clean).
 
 **Authority.** `Kairos-Design.md` (the charter) outranks this document on intent. This document
 describes mechanism *as built*: where it disagrees with the code, the code is the fact and this
@@ -392,7 +392,10 @@ Naming: the create box accepts `NAME_RE` — first code point a letter or digit,
 digits, combining marks, `_`, `-`, at most 41 code points, NFC-normalized; the browser folds
 whitespace runs to one dash before posting. `_template`, dot-leading and `__`-leading
 directories are never channels. Spaces stay refused on purpose: the name becomes a path Kairos
-writes into shell by hand, and `Ideas - part 2` is shaped like `-rf`.
+writes into shell by hand, and by the Trap above — a channel session's cwd is `strategies/<name>` —
+`cd` is the command it has to write, where two words are zsh's two-argument form (word 1 replaced by
+word 2 in `$PWD`), an error most of the time but exit 0 in the WRONG directory whenever the
+substituted path exists.
 
 State on 2026-09-04: three real strategies exist, all **untracked** in git — `市场情绪` (went
 idea → researching → retired on 2026-09-02 by its pre-registered falsification terms; carries an
@@ -861,9 +864,9 @@ lockfile.
 | Command | From | Needs | Measured 2026-09-04 |
 |---|---|---|---|
 | `python -m pytest` | repo root | nothing — offline, no keys, no bed | 388 passed, ~4 s |
-| `cd face && npm test` | `face/` | nothing — no port, no key | 199 tests, 197 pass, 2 skipped |
+| `cd face && npm test` | `face/` | nothing — no port, no key | 233 tests, 228 pass, 5 skipped |
 | `cd face && npm run typecheck` | `face/` | | clean |
-| `cd face && FACE_SMOKE=1 npm test` | `face/` | boots five real trees into `mkdtemp` homes, binds a port; still no LLM or key | the two skipped tests |
+| `cd face && FACE_SMOKE=1 npm test` | `face/` | boots five real trees into `mkdtemp` homes, binds a port; still no LLM or key | the five skipped tests; 233/233 |
 
 ### 7.2 The Python suite
 
@@ -890,7 +893,7 @@ order path.
 
 ### 7.3 The face suite
 
-224 tests (219 pass, 5 skipped without `FACE_SMOKE=1`) across `channels`, `orders` (pure gate
+233 tests (228 pass, 5 skipped without `FACE_SMOKE=1`) across `channels`, `orders` (pure gate
 logic: raw and minted names, renamed server caught, read-only listing not gated, deny under
 `never`, one-shot grants for this `callId` only, marker only on `mcp__` tools, the guard reasons),
 `panels`, `data` (TTL, single-flight, stale, 503 bodies never leak, fence), `mapper` (against
