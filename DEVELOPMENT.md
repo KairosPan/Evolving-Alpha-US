@@ -509,20 +509,22 @@ instruments, channels, the master rail, bots, the upgrade order, and the four dr
    of the process. Check the plugin panel's tool list or that stdout line; the fix is the row's
    `command` and a restart.
 7. Mount routes: static pages, `/data/{market,account}.json`, channel routes, session routes,
-   panel routes (awaited, because their registration runs `syncAgentTools`, so every connected
-   agent that has an exec recipe — `claude`, `codex` — becomes an `agent_<bin>` tool before the
-   face reports up; a connected bin without a recipe stays a roster row and gets no tool).
+   bot routes, panel routes (awaited, because their registration runs `syncAgentTools`, so every
+   connected agent that has an exec recipe — `claude`, `codex` — becomes an `agent_<bin>` tool
+   before the face reports up; a connected bin without a recipe stays a roster row and gets no
+   tool).
 8. Print `kairos-face: http://<host>:<port>/ (profile: …)` from the bound service.
 
 One `bootFace` per process: given a `dshHome` (as the tests do; `main.ts` passes none) it sets
-`process.env.DSH_HOME` permanently, which is why the two real-boot tests live in separate files.
+`process.env.DSH_HOME` permanently, which is why the five real-boot tests live in separate
+files.
 
 ### 4.2 Module table
 
 | File | Responsibility |
 |---|---|
 | `main.ts` | entry: chdir, signal handlers, boot, mount every route family, print the URL |
-| `boot.ts` | the mirror of dsh CLI's private `prepareProfile / composeProfile / runProfile` against the pinned typings; the two boot assertions; Gate 2 registration |
+| `boot.ts` | the mirror of dsh CLI's private `prepareProfile / composeProfile / runProfile` against the pinned typings; the three boot assertions (the Gate 2 services, `ask_user_question` in the live registry, a resolvable default preset); Gate 2 registration |
 | `overlay.ts` | the eleven host rows `dsh-base` does not mount, `satisfies`-checked against each plugin's own config type |
 | `orders.ts` | Gate 2 decision logic, pure: `isOrderTool`, `effectiveApprovalPolicy`, `orderApprovalDecision`, `describeOrder`, `hasApprovalGrant`, `isGatedTool`, `orderGuardReason`, `auditOrderTools`, `OPERATOR_GATED_MARKER` — depends on nothing (structural types only) |
 | `setup.ts` | one-shot `$DSH_HOME/profiles/<name>` creation; refuses to overwrite |
@@ -618,7 +620,7 @@ by the face's `WorkspaceLike`). Recorded, not fixed.
 | `DSH_TELEMETRY_DISABLED` | `boot.ts` | unset | any non-empty value (`0`, `false` included) disables the telemetry row |
 | `DSH_PERMISSION_MODE` | dsh, not the face | `workspace-write` | `danger-full-access` sets approval policy `never`: it disarms the sandbox-escalation card but **not** Gate 2, which then denies in its own words |
 | `ALPACA_KIT_ENABLE_ORDERS` | the MCP child only | unset | Gate 1; the face cannot read it and consults the tool registry instead |
-| `FACE_SMOKE` | tests | unset | `=1` enables the two real-boot tests |
+| `FACE_SMOKE` | tests | unset | `=1` enables the five real-boot tests |
 | `DEEPSEEK_API_KEY`, `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY` | dsh's credential seam; the producer; the MCP row | — | not auto-loaded from the repo's `.env.*` files |
 
 Every child the face spawns for a local agent run or probe has these scrubbed — an enumerated
@@ -706,10 +708,11 @@ is `{result:{ok:true,value}}` or `{ok:false,error:{code,message}}`; `content-typ
 application/json` is load-bearing (the host 415s anything else). Methods the client uses:
 `session.list`, `session.history`, `session.create` (`{workspaceId}`, `{cwd}`, or `{}` when
 neither was picked — the host then uses its default project directory, the repo root; never
-both), `session.prompt` (`mode:"queue"`, content parts, client time zone), `session.cancel`,
-`session.rename`, `session.fork`, `workspace.rename`, `host.pickDirectory`, and the three
-`describe` calls (`host`, `settings`, `credentials` for the three key names) that feed the agent
-page. The surface is closed by design.
+both; `agentPreset` rides beside `cwd`, never beside `workspaceId`, when the prompt opens a
+bot's home session), `session.prompt` (`mode:"queue"`, content parts, client time zone),
+`session.cancel`, `session.rename`, `session.fork`, `workspace.rename`, `host.pickDirectory`,
+and the three `describe` calls (`host`, `settings`, `credentials` for the three key names) that
+feed the agent page. The surface is closed by design.
 
 **Respond** — `POST /api/respond` with `{type:"client-response", rpcId, result:{ok:true,value}}`
 → `{accepted:true}` or `{accepted:false, reason}`. `rpcId` is taken **verbatim** from the mux
@@ -1064,5 +1067,5 @@ In order; each with what "done" is and which charter row it reopens.
 | `DSH_PERMISSION_MODE` | dsh | sandbox preset; `danger-full-access` ⇒ approval policy `never` |
 | `DSH_TELEMETRY_DISABLED` | face boot | any non-empty value disables telemetry |
 | `FACE_PORT`, `FACE_PROFILE`, `FACE_PYTHON` | face | port, profile name, producer interpreter |
-| `FACE_SMOKE` | face tests | enables the two real boots |
+| `FACE_SMOKE` | face tests | enables the five real boots |
 | `FASTMCP_LOG_LEVEL` | MCP row | `WARNING` silences FastMCP's INFO noise; never edit `server.py` for it |

@@ -358,7 +358,7 @@ flow + composer; the topbar names the open item; picking a session or
 itself. The three instrument faces are read-only, refetch on every open, and
 split by data source:
 
-- **agent** indexes three sections. *Main agent* is Kairos — the dsh runtime
+- **agent** indexes four sections. *Main agent* is Kairos — the dsh runtime
   this face hosts; its page is a card grid over RPC the client already
   reaches: `host.describe` (provider/model, cwd, attached count),
   `settings.describe` (the `agent-default-model` namespace carries
@@ -428,9 +428,10 @@ split by data source:
   the alpaca-kit tools it raises no approval card; a `tools/pre-execute`
   `ask` hook is the knob if the operator ever wants one per delegation.
   Hermes deliberately has NO recipe: its default provider config reuses those
-  tokens, so it stays a directory entry until its provider is pinned. *A2A
-  network* is a declared placeholder page — network agents land there when
-  that opens.
+  tokens, so it stays a directory entry until its provider is pinned. *Bots*
+  indexes the operator's own voices, one directory each under `bots/`, plus a
+  `+ new bot` row (see "Bots" below). *A2A network* is a declared placeholder
+  page — network agents land there when that opens.
 - **memory** indexes the skill catalog — Kairos's standing knowledge. The
   wire `skill.list` needs an attached session and drops source/path/body, so
   two face routes read `ctx.skills` in-process: `GET /data/memory.json`
