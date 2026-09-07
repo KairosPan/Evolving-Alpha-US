@@ -36,7 +36,8 @@ export function validatePersonaTemplate(text: string): string | undefined {
   }
   /* Stricter than dsh on purpose: once every complete `{{model}}`/`{{cwd}}`
    * group is removed, no brace may remain. dsh tolerates a lone `{`, but
-   * `{{{model}}}` and `{{ model }` both throw there, and persona prose has no
+   * `{{{model}}}` and `{{ model }}` both throw there (a `{{` with no later
+   * `}}` it copies through as literal text instead), and persona prose has no
    * use for a stray brace - refusing them all is the cheaper rule to explain. */
   if (/[{}]/.test(text.replace(GROUP, ""))) return "unbalanced {{ }} in persona (a brace outside a {{model}}/{{cwd}} group)";
   return undefined;

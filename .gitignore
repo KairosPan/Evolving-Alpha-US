@@ -59,3 +59,8 @@ decisions/
 deck.png
 .playwright-mcp/
 .codex/
+
+# face bot smoke roots: a real bots/ root must sit two levels above
+# face/plugins/ for the SHIPPED relative plugin path to resolve, so the smoke
+# mkdtemps one here and removes it (face/tests/bots-fixture.ts).
+.bots-smoke-*

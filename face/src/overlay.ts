@@ -101,11 +101,22 @@ export function faceOverlay(port: number, dshHome: string, botsRoot: string): Fa
        * names no preset: `kairos`, an empty composition, so Kairos's own sessions
        * keep the flat host roster unchanged (spec S3). The plugin warns on every
        * agent created outside a preset once a roster is mounted; the default
-       * makes that warning unreachable. */
+       * makes that warning unreachable.
+       *
+       * `trust: "system"`, not `"user"`: the face authors bots by its own
+       * filesystem write, so it needs no writable root, and `user` trust arms
+       * exactly the three RPCs the face does not want - `agentPreset.copy`,
+       * `.remove` and `.openDocument`, which the gateway serves on `/api` for
+       * any connected client (dsh-host-apiproxy). Under `system` each refuses
+       * with "it ships with the deployment" (`deleteComposition`,
+       * `writableRoot`), and `authorable` reads false. Trust gates nothing
+       * else: `scanRoot` merely stamps it on the row, and MOUNTING never reads
+       * it - so the roster, the broken reasons and every preset session are
+       * unchanged. Deleting a bot stays `git rm`, as face/README.md says. */
       { id: AGENT_PRESETS_ROW_ID, name: "@deepseek-ai/dsh-agent-presets",
         config: {
           default: DEFAULT_PRESET,
-          roots: [{ path: botsRoot, trust: "user" }],
+          roots: [{ path: botsRoot, trust: "system" }],
           includeUserRoot: false,
         } satisfies AgentPresetsConfig },
     ],

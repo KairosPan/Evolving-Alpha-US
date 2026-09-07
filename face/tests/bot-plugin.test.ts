@@ -25,6 +25,17 @@ test("expandAllow keeps exact names that exist, expands mcp__*__<raw> against th
   assert.deepEqual(out.missing, ["web_search", "mcp__*__orders"]);
 });
 
+/* The star is dsh's minting, not a suffix: `mcp__<server>__<raw>` is three
+ * segments. A four-segment name ends in `__earnings` too, and admitting it
+ * would hand the bot a tool the operator's list never named. */
+test("expandAllow's star matches mcp__<server>__<raw> exactly, never a longer name ending in __<raw>", () => {
+  const out = expandAllow(["mcp__*__earnings"], new Set(["mcp__a__b__earnings"]));
+  assert.deepEqual(out.allow, []);
+  assert.deepEqual(out.missing, ["mcp__*__earnings"]);
+  const server = expandAllow(["mcp__*__earnings"], new Set(["mcp____earnings", "mcp__alpaca_kit__earnings"]));
+  assert.deepEqual(server.allow, ["mcp__alpaca_kit__earnings"], "an empty server segment is not a server");
+});
+
 test("apply registers the persona section at order 0 and one allow-list restriction, both through effects", () => {
   const sections: unknown[] = [];
   const restrictions: unknown[] = [];

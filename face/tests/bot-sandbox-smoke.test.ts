@@ -1,12 +1,11 @@
 /** S4: what does a file write from a `read-only` bot session produce?
  *
- * The spec accepts two answers - the sandbox's denial, or an approval card the
- * operator can grant - and refuses one: a silently changed file. This test
- * asserts the refusal and PRINTS what happened, so the plan for rooms (plan 2)
- * can word D12 from an observation rather than a reading.
- * The approval service has no client here, so a raised card cannot be answered:
- * the execute is raced against a timeout, and a pending `approval/asked` in
- * the session log counts as "a card was raised".
+ * The spec accepted two answers - the sandbox's denial, or an approval card the
+ * operator can grant - and refused one: a silently changed file. This test
+ * PRINTS what actually happened, so the plan for rooms (plan 2) can word D12
+ * from an observation rather than a reading. The approval service has no client
+ * here, so a raised card could not be answered: the execute is raced against a
+ * timeout, and the printed verdict distinguishes that case.
  *
  * MEASURED, and it is neither of the two the spec named: the tool call
  * SUCCEEDS (`isError: false`, no card) while the write is refused by the OS
@@ -14,9 +13,12 @@
  * `[sandbox: file access denied under read-only mode]`
  * (`dsh-sandbox/lib/index.js:64`). So D12 must be worded off the CONTENT, not
  * off the result flag: a bot's write is denied loudly and visibly, but a caller
- * that reads only `isError` sees a success. That is why the assertion below
- * refuses a silent success rather than demanding an error - the promise the
- * spec makes is about the file and the report, and both hold.
+ * that reads only `isError` sees a success.
+ *
+ * That measurement is now recorded as fact (spec section 16, DEVELOPMENT.md
+ * section 9 R10), so this test PINS it rather than accepting any of the three
+ * outcomes: the sandbox marker must be in the content, and the command must
+ * have run - a schema rejection reads like a denial while proving nothing.
  * @module
  */
 import test from "node:test";
@@ -44,9 +46,17 @@ test("S4: a read-only session's write never lands silently", { skip: gated && "s
     const created = (await res.json() as { result: { value: { sessionId: string } } }).result.value;
     const agents = ctx.get("agents") as { get(id: string): { session: { events: { type: string }[] } } | undefined };
     const agent = agents.get(created.sessionId)!;
-    const permission = ctx.get("permissionPresets") as { set(session: unknown, name: string): void };
+    const permission = ctx.get("permissionPresets") as {
+      set(session: unknown, name: string): void;
+      current(events: readonly { type: string }[]): string;
+    };
     permission.set(agent.session, "read-only");
-    assert.ok(agent.session.events.some((e) => e.type === "permission/preset"), "the switch is a logged event");
+    /* The EFFECTIVE preset, not merely that an event was appended: `set` writes
+     * `permission/preset` only when the name differs from the current one, and
+     * a sighting of that row says nothing about the sandbox knob the probe
+     * below depends on. `current(events)` folds the knobs and derives the
+     * preset (dsh-permission-presets), which is the fact this test needs. */
+    assert.equal(permission.current(agent.session.events), "read-only", "the session is actually read-only before the probe");
 
     const target = join(home, "s4-should-not-exist.txt");
     const tools = ctx.get("tools") as { execute(exec: object): Promise<{ isError: boolean; content?: { text?: string }[] }> };
@@ -71,8 +81,13 @@ test("S4: a read-only session's write never lands silently", { skip: gated && "s
     console.log(`S4 observed: ${verdict}; approval/asked in log: ${asked}; result: ${text.replace(/\s+/g, " ").slice(0, 240)}`);
 
     assert.equal(existsSync(target), false, "the file must not exist");
-    assert.ok(outcome === "timeout" || outcome.isError === true || asked || denied,
-      "a denial, a raised card, or a reported sandbox refusal - never a silent success");
+    /* Pinned to the shape §16 now records as measured fact, not to the union of
+     * the three the spec was willing to accept: under `read-only` the write is
+     * refused BY THE SANDBOX and reported inside the tool's own content. A
+     * looser assertion would pass on a run where the command never executed at
+     * all, which proves nothing about the sandbox - hence the second pin. */
+    assert.ok(denied, `the sandbox refused the write inside the tool result; saw ${JSON.stringify(text.slice(0, 240))}`);
+    assert.doesNotMatch(text, /invalid arguments/i, "the command actually ran");
   } finally {
     await dispose();
   }

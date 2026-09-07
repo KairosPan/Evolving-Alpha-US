@@ -18,7 +18,10 @@ test("overlay inserts exactly the eleven rows with loopback config", () => {
   );
   assert.deepEqual(byId.get("agent-presets")!.config, {
     default: "kairos",
-    roots: [{ path: BOTS, trust: "user" }],
+    /* `system`, not `user`: the face authors by its own filesystem write, and
+     * `user` would arm the gateway's agentPreset copy/remove/openDocument RPCs
+     * over the repository's git-tracked `bots/`. */
+    roots: [{ path: BOTS, trust: "system" }],
     includeUserRoot: false,
   });
   assert.equal(byId.get("webserver")!.name, "@deepseek-ai/dsh-host-webserver");

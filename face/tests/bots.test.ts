@@ -90,14 +90,19 @@ test("createBot refuses bad ids, reserved ids, a templated soul, and a missing t
   await assert.rejects(createBot(empty, { id: "ok", name: "x" }), (err: HttpError) => err.status === 500 && /_template/.test(err.message));
 });
 
-test("updateSoul rewrites SOUL.md and the composition's persona together, and 404s an unknown bot", async () => {
+test("updateSoul rewrites SOUL.md and the composition's persona together, keeps the mask it found, and 404s an unknown bot", async () => {
   const root = await makeBotsRoot();
   await createBot(root, { id: "probe", name: "Probe", soul: "v1" });
+  /* A hand-narrowed mask: a soul save must not silently widen a bot back to
+   * DEFAULT_ALLOW. Only a composition js-yaml cannot parse falls back (below). */
+  await writeFile(join(root, "probe", "agent.cordis.yml"), renderComposition({ soul: "v1", allow: ["bash"] }));
   const after = await updateSoul(root, "probe", "v2 of Probe");
   assert.equal(after.soul, "v2 of Probe");
   assert.equal(await readFile(join(root, "probe", "SOUL.md"), "utf8"), "v2 of Probe\n");
-  const rows = load(await readFile(join(root, "probe", "agent.cordis.yml"), "utf8")) as { config: { persona: string } }[];
+  const rows = load(await readFile(join(root, "probe", "agent.cordis.yml"), "utf8")) as { config: { persona: string; allow: string[] } }[];
   assert.equal(rows[0].config.persona, "v2 of Probe");
+  assert.deepEqual(rows[0].config.allow, ["bash"], "the mask the operator narrowed survives a soul save");
+  assert.notDeepEqual(rows[0].config.allow, [...DEFAULT_ALLOW]);
   await assert.rejects(updateSoul(root, "ghost", "x"), (err: HttpError) => err.status === 404);
   await assert.rejects(updateSoul(root, "probe", "{{"), (err: HttpError) => err.status === 400);
 });
@@ -177,7 +182,8 @@ test("routes: the listing answers ok with every bot row", async () => {
   const body = JSON.parse(r.out.body) as { ok: boolean; bots: { id: string; listed: boolean }[] };
   assert.equal(body.ok, true);
   assert.deepEqual(body.bots.map((b) => b.id), ["kairos", "probe"]);
-  assert.equal(body.bots[1].listed, false); // the fake roster reports only kairos
+  assert.equal(body.bots[0].listed, true);  // the fake roster reports kairos
+  assert.equal(body.bots[1].listed, false); // and only kairos
 });
 
 test("routes: create is POST+JSON only, 400 on junk, 200 then 409", async () => {

@@ -6,20 +6,27 @@
  * composition names this file by a RELATIVE path (`../../face/plugins/bot.js`),
  * which the preset mount resolves from the preset's own directory
  * (dsh-agent-presets README, "A relative path still resolves from the preset's
- * own directory"). From `bots/` no `node_modules` is reachable, so this file
- * imports nothing: the persona goes in through `ctx.systemPrompt.section`, the
- * mask through `ctx.tools.restrict`, both registered into the CALLING context's
- * scope — the preset's standing layer — so they cover every agent joined to the
- * preset and nothing else. dsh-subagent composes a child the same way.
+ * own directory"). This file is dependency-free ON PURPOSE - not because
+ * `bots/` cannot reach a `node_modules` (Node resolves a bare specifier from
+ * the IMPORTING file, so `face/node_modules` is reachable from here), but so a
+ * preset can name it by path with nothing to install first.
+ *
+ * The persona goes in through `ctx.systemPrompt.section`, the mask through
+ * `ctx.tools.restrict`, both registered into the CALLING context's scope — the
+ * preset's standing layer — so they cover every agent joined to the preset and
+ * nothing else. dsh-subagent composes a child the same way.
  *
  * WHAT THIS IS NOT. The mask is visibility, not authority (dsh-tools README:
  * "live visibility composition, not an authority boundary"). What a bot may
  * WRITE is its session's sandbox mode; what it may ORDER is Gate 2. Spec D12.
  *
  * `allow`, not `deny`: dsh admits later-registered globals through a deny
- * mask and excludes them through an allow mask. The tools a voice must never
- * see — `agent_<bin>` on connect, `mcp__…__place_order` when the MCP server
- * comes up, `dispatch` in plan 2 — are all registered AFTER the mount.
+ * mask and excludes them through an allow mask. Two of the tools a voice must
+ * never see are registered AFTER the mount and so need the allow form -
+ * `agent_<bin>` on connect, `dispatch` in plan 2. `mcp__…__place_order` is not
+ * one of them: the operator's MCP row mounts at boot, so an order tool is
+ * already in the tree when a bot mounts and is excluded by OMISSION from the
+ * allow list, exactly as a deny list would have to name it.
  */
 export const name = "kairos-bot";
 export const inject = ["systemPrompt", "tools"];
@@ -40,7 +47,12 @@ export function validateBotConfig(config) {
 /** Resolve the allow list against the tools the tree actually has: exact names
  *  pass when present; `mcp__*__<raw>` expands to every MCP tool with that raw
  *  name whatever the operator named the server; everything else is reported,
- *  because `tools.restrict` rejects a name it does not know. */
+ *  because `tools.restrict` rejects a name it does not know.
+ *
+ *  The star matches dsh's minting EXACTLY - `mcp__<server>__<raw>`, three
+ *  non-empty `__`-separated segments - not merely a name ENDING in `__<raw>`.
+ *  An ends-with test would let `mcp__a__b__earnings` answer `mcp__*__earnings`,
+ *  admitting a tool whose raw name the operator never named. */
 export function expandAllow(allow, known) {
   const out = [];
   const missing = [];
@@ -48,7 +60,10 @@ export function expandAllow(allow, known) {
     const star = /^mcp__\*__(.+)$/.exec(entry);
     if (star !== null) {
       const raw = star[1];
-      const hits = [...known].filter((n) => /^mcp__[^_].*__/.test(n) && n.endsWith(`__${raw}`)).sort();
+      const hits = [...known].filter((n) => {
+        const parts = n.split("__");
+        return parts.length === 3 && parts[0] === "mcp" && parts[1] !== "" && parts[2] === raw;
+      }).sort();
       if (hits.length === 0) missing.push(entry);
       else out.push(...hits);
       continue;
