@@ -2,12 +2,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { load } from "js-yaml";
+import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import { makeBotsRoot } from "./bots-fixture.ts";
 import {
-  BOT_PLUGIN_RELATIVE, DEFAULT_ALLOW, TEMPLATE_SOUL, createBot, isBotId, listBots, rejectSoul,
-  renderComposition, renderPresetMeta, updateSoul,
+  BOT_PLUGIN_RELATIVE, DEFAULT_ALLOW, TEMPLATE_SOUL, createBot, isBotId, listBots,
+  registerBotRoutes, rejectSoul, renderComposition, renderPresetMeta, updateSoul,
 } from "../src/bots.ts";
 import { HttpError } from "../src/http.ts";
 
@@ -129,4 +132,74 @@ test("listBots reads every directory in the grammar, marks the default, carries 
   assert.equal(byId.get("cracked")!.name, "cracked");        // no preset.yml → id
   const unlisted = await listBots(root, noPresets);
   assert.equal(unlisted.find((b) => b.id === "probe")!.listed, false);
+});
+
+function fakeRes(): { out: { status: number; body: string }; res: ServerResponse } {
+  const out = { status: 0, body: "" };
+  const res = {
+    writeHead(status: number) { out.status = status; return res; },
+    end(body?: string | Buffer) { out.body = String(body ?? ""); return res; },
+  };
+  return { out, res: res as unknown as ServerResponse };
+}
+function getReq(host = "127.0.0.1:3090", headers: Record<string, string> = {}): IncomingMessage {
+  return { headers: { host, ...headers }, method: "GET" } as unknown as IncomingMessage;
+}
+function postReq(body: string, host = "127.0.0.1:3090", headers: Record<string, string> = {}): IncomingMessage {
+  const req = Readable.from([Buffer.from(body)]) as unknown as IncomingMessage;
+  (req as { headers: unknown }).headers = { host, "content-type": "application/json", ...headers };
+  (req as { method: string }).method = "POST";
+  return req;
+}
+function routesFor(root: string): Map<string, WebRoute> {
+  const routes: WebRoute[] = [];
+  registerBotRoutes({ register: (route) => routes.push(route) }, { botsRoot: root, listPresets: async () => [{ id: "kairos" }] });
+  return new Map(routes.map((r) => [r.path, r]));
+}
+
+test("routes: exactly three, and the fence refuses a forged host, a cross-site fetch, and a foreign origin", async () => {
+  const routes = routesFor(await makeBotsRoot());
+  assert.deepEqual([...routes.keys()].sort(), ["/data/bots", "/data/bots.json", "/data/bots/soul"]);
+  for (const req of [getReq("evil.example:3090"), getReq("127.0.0.1:3090", { "sec-fetch-site": "cross-site" }), getReq("127.0.0.1:3090", { origin: "http://evil.example" })]) {
+    const r = fakeRes();
+    await routes.get("/data/bots.json")!.handler(req, r.res);
+    assert.equal(r.out.status, 403);
+    assert.equal(r.out.body, '{"ok":false,"error":"forbidden"}');
+  }
+});
+
+test("routes: the listing answers ok with every bot row", async () => {
+  const root = await makeBotsRoot();
+  await createBot(root, { id: "probe", name: "Probe" });
+  const r = fakeRes();
+  await routesFor(root).get("/data/bots.json")!.handler(getReq(), r.res);
+  assert.equal(r.out.status, 200);
+  const body = JSON.parse(r.out.body) as { ok: boolean; bots: { id: string; listed: boolean }[] };
+  assert.equal(body.ok, true);
+  assert.deepEqual(body.bots.map((b) => b.id), ["kairos", "probe"]);
+  assert.equal(body.bots[1].listed, false); // the fake roster reports only kairos
+});
+
+test("routes: create is POST+JSON only, 400 on junk, 200 then 409", async () => {
+  const root = await makeBotsRoot();
+  const create = routesFor(root).get("/data/bots")!;
+  const get = fakeRes(); await create.handler(getReq(), get.res); assert.equal(get.out.status, 405);
+  const text = fakeRes(); await create.handler(postReq("{}", "127.0.0.1:3090", { "content-type": "text/plain" }), text.res); assert.equal(text.out.status, 415);
+  const junk = fakeRes(); await create.handler(postReq("not json"), junk.res); assert.equal(junk.out.status, 400);
+  const first = fakeRes(); await create.handler(postReq('{"name":"Probe","soul":"You are Probe."}'), first.res);
+  assert.equal(first.out.status, 200);
+  assert.equal((JSON.parse(first.out.body) as { bot: { id: string } }).bot.id, "probe");
+  await stat(join(root, "probe", "agent.cordis.yml"));
+  const again = fakeRes(); await create.handler(postReq('{"name":"Probe"}'), again.res); assert.equal(again.out.status, 409);
+});
+
+test("routes: soul update carries prose past the 4 KiB default limit and 404s an unknown bot", async () => {
+  const root = await makeBotsRoot();
+  await createBot(root, { id: "probe", name: "Probe" });
+  const soul = routesFor(root).get("/data/bots/soul")!;
+  const long = "You are Probe. " + "Argue from evidence. ".repeat(400); // ~8.6 KiB
+  const ok = fakeRes(); await soul.handler(postReq(JSON.stringify({ id: "probe", soul: long })), ok.res);
+  assert.equal(ok.out.status, 200);
+  assert.equal(await readFile(join(root, "probe", "SOUL.md"), "utf8"), `${long.trim()}\n`);
+  const missing = fakeRes(); await soul.handler(postReq('{"id":"ghost","soul":"x"}'), missing.res); assert.equal(missing.out.status, 404);
 });

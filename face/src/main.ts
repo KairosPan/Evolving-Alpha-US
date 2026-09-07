@@ -14,6 +14,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import { bootFace } from "./boot.ts";
+import { registerBotRoutes } from "./bots.ts";
+import { BOTS_ROOT } from "./overlay.ts";
 import { registerDataRoutes } from "./data.ts";
 import { registerStatic } from "./static.ts";
 import { registerSessionRoutes } from "./sessions.ts";
@@ -163,6 +165,10 @@ registerChannelRoutes(booted.ctx.webServer, {
  * `archivedSessionIds` is what tells `setArchived` an un-archive click is one
  * the host's own add-only archive has no way to honour. */
 registerSessionRoutes(booted.ctx.webServer, { root: process.cwd(), home: dshHome, hostArchive: workspaceRegistry });
+/* Bots: the preset roster's view comes from the live service the overlay
+ * mounted (boot.ts asserts it is there); the directories are read from disk. */
+const agentPresets = booted.ctx.get("agentPresets") as { list(): Promise<{ id: string; broken?: string }[]> };
+registerBotRoutes(booted.ctx.webServer, { botsRoot: BOTS_ROOT, listPresets: () => agentPresets.list() });
 /* The master rail's feeds: in-process reads of the booted tree (skills /
  * tools / loader), which have no RPC at this pin, plus the local-agent
  * roster — awaited, because every agent already on the roster is registered

@@ -195,3 +195,57 @@ export async function updateSoul(root: string, id: unknown, soul: unknown): Prom
   await writeFile(join(dir, "agent.cordis.yml"), renderComposition({ soul: text, allow }), "utf8");
   return rowFor(root, id, new Map());
 }
+
+export interface BotRouteDeps {
+  /** The `bots/` root itself - the directory holding `_template` and every bot. */
+  botsRoot: string;
+  /** `ctx.agentPresets.list()`, narrowed - dsh's view of the roster, `broken` reasons included. */
+  listPresets: PresetLister;
+}
+
+/** A soul is prose; the default 4 KiB body limit is for names and ids. */
+const SOUL_BODY_LIMIT = 65_536;
+
+export function registerBotRoutes(webServer: RouteRegistrar, deps: BotRouteDeps): void {
+  const send = (res: ServerResponse, status: number, body: unknown): void => {
+    res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+    res.end(typeof body === "string" ? body : JSON.stringify(body));
+  };
+  const get = (read: () => Promise<object>) =>
+    async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+      if (!isTrustedDataRequest(req)) return send(res, 403, FORBIDDEN);
+      try {
+        return send(res, 200, { ok: true, ...(await read()) });
+      } catch (err) {
+        if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
+        console.error(`${BIN}: bots listing failed:`, err);
+        return send(res, 500, { ok: false, error: "request failed" });
+      }
+    };
+  const post = (limit: number, act: (body: Record<string, unknown>) => Promise<object>) =>
+    async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+      if (!isTrustedDataRequest(req)) return send(res, 403, FORBIDDEN);
+      if (req.method !== "POST") return send(res, 405, { ok: false, error: "POST only" });
+      if (!isJsonBody(req)) return send(res, 415, { ok: false, error: "application/json only" });
+      try {
+        let body: Record<string, unknown>;
+        try {
+          const parsed: unknown = JSON.parse(await readBody(req, limit));
+          if (parsed === null || typeof parsed !== "object") throw new Error("not an object");
+          body = parsed as Record<string, unknown>;
+        } catch (err) {
+          if (err instanceof HttpError) throw err;
+          throw new HttpError(400, "body must be a JSON object");
+        }
+        return send(res, 200, { ok: true, ...(await act(body)) });
+      } catch (err) {
+        if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
+        console.error(`${BIN}: bots route failed:`, err);
+        return send(res, 500, { ok: false, error: "request failed" });
+      }
+    };
+
+  webServer.register({ kind: "exact", path: "/data/bots.json", handler: get(async () => ({ bots: await listBots(deps.botsRoot, deps.listPresets) })) });
+  webServer.register({ kind: "exact", path: "/data/bots", handler: post(SOUL_BODY_LIMIT, async (body) => ({ bot: await createBot(deps.botsRoot, body) })) });
+  webServer.register({ kind: "exact", path: "/data/bots/soul", handler: post(SOUL_BODY_LIMIT, async (body) => ({ bot: await updateSoul(deps.botsRoot, body.id, body.soul) })) });
+}
