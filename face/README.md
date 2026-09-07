@@ -483,9 +483,11 @@ one would fail every session instead of the boot.
 A bot's composition names one face-owned plugin, `plugins/bot.js` (`kairos-bot`), which
 registers the bot's persona section — shadowing Kairos's for that preset's agents — and an
 **allow-list** `tools.restrict`. Allow, not deny: dsh admits later-registered globals through
-a deny mask and excludes them through an allow mask, and the tools a voice must never see
-(`agent_<bin>` on connect, `mcp__…__place_order` when the MCP server comes up, `dispatch` in
-the rooms arc) are all registered after the mount. `mcp__*__<raw>` in the list expands
+a deny mask and excludes them through an allow mask, and the two tools a voice must never see
+that are registered *after* the mount — `agent_<bin>` on connect, `dispatch` in the rooms arc —
+are excluded by the allow form without being named. `mcp__…__place_order` is not one of them:
+the operator's MCP row mounts at boot, so an order tool is already in the tree when a bot
+mounts and is excluded by OMISSION from the list. `mcp__*__<raw>` in the list expands
 against the live tree (`expandAllow`), so the operator's server name does not matter; a name
 the tree does not have is warned and dropped, and a list that survives to nothing at all
 throws rather than mounting a bot with no hands.
@@ -531,6 +533,9 @@ All three stand behind `isTrustedDataRequest` (403), the two POSTs behind 405 / 
 method, content type and body, with a 64 KiB body cap because a soul is prose.
 
 **Deleting a bot** is `git rm -r bots/<id>`; there is no button. Its sessions remain history.
+The roster is mounted `trust: "system"`, so the gateway's own `agentPreset.copy` / `remove` /
+`openDocument` RPCs refuse it ("it ships with the deployment") — the face's three routes are the
+only authoring path, and no connected client can reach around them into a git-tracked directory.
 
 **Not built here (the rooms arc, plans 2–4 of the spec):** `dispatch`, member sessions, the
 participants strip, the roster's `bots[]`, a `read-only` pin for bots in rooms, and the charter

@@ -537,7 +537,7 @@ files.
 | `agents.ts` | exec recipes for `claude` and `codex` (fixed argv, prompt on stdin, scrubbed env, `--restricted` / `--sandbox read-only`), the spawn runner, the `agent_<bin>` tool with the roster check on execute, tool sync |
 | `bots.ts` | bots = `bots/<id>/` agent presets: `isBotId`, `renderComposition` (the persona text written into the composition), `createBot`, `updateSoul`, `listBots` (dsh's roster merged in, `broken`/`listed`); three routes |
 | `persona.ts` | Kairos's deployment persona: `readPersona` validates the strict `{{}}` template and refuses the boot on a bad file |
-| `plugins/bot.js` | the `kairos-bot` composition plugin: scoped `deployment:persona` section + allow-list `tools.restrict` (`expandAllow` resolves `mcp__*__<raw>` against the live tree), dependency-free — resolved by path from a preset, where no `node_modules` is reachable |
+| `plugins/bot.js` | the `kairos-bot` composition plugin: scoped `deployment:persona` section + allow-list `tools.restrict` (`expandAllow` resolves `mcp__*__<raw>` against the live tree), dependency-free — so a preset can name it by path with nothing to install (Node would resolve a bare specifier from here, but there is nothing to resolve) |
 | `panels.ts` | the master rail's feeds: local-agent roster (probe, auth, connect, disconnect), memory (skills), plugins (loader rows + tool schemas); builds `PanelDeps` from the context |
 | `version.ts` | the two pins |
 
@@ -549,7 +549,10 @@ Composed last, winning silently over the operator's patch and the home layer: `s
 `cordis-host-runner`, `webserver` (`127.0.0.1:<port>` — loopback-only is the contract),
 `connection` (`trustedHosts: []`, the `/api` Host fence), `tool-ask-user` (the model-facing half
 of `userQuestions`, in no upstream bundle), `agent-presets` (the bot roster, rooted at `bots/`
-with `includeUserRoot: false` and `default: kairos` — §3.7). A patch of the operator's aimed at
+with `trust: system`, `includeUserRoot: false` and `default: kairos` — §3.7; `system` because the
+face authors by its own filesystem write, and `user` would arm the gateway's `agentPreset.copy` /
+`remove` / `openDocument` RPCs over a git-tracked directory — trust gates nothing about mounting).
+A patch of the operator's aimed at
 any of these is accepted, overridden, and never reported; a patch matching no row is also silent
 — hence the `rows.has(…)` guards around the switches.
 
@@ -860,7 +863,7 @@ lockfile.
 | `python -m pytest` | repo root | nothing — offline, no keys, no bed | 388 passed, ~4 s |
 | `cd face && npm test` | `face/` | nothing — no port, no key | 199 tests, 197 pass, 2 skipped |
 | `cd face && npm run typecheck` | `face/` | | clean |
-| `cd face && FACE_SMOKE=1 npm test` | `face/` | boots two real trees into `mkdtemp` homes, binds a port; still no LLM or key | the two skipped tests |
+| `cd face && FACE_SMOKE=1 npm test` | `face/` | boots five real trees into `mkdtemp` homes, binds a port; still no LLM or key | the two skipped tests |
 
 ### 7.2 The Python suite
 
@@ -887,7 +890,7 @@ order path.
 
 ### 7.3 The face suite
 
-223 tests (218 pass, 5 skipped without `FACE_SMOKE=1`) across `channels`, `orders` (pure gate
+224 tests (219 pass, 5 skipped without `FACE_SMOKE=1`) across `channels`, `orders` (pure gate
 logic: raw and minted names, renamed server caught, read-only listing not gated, deny under
 `never`, one-shot grants for this `callId` only, marker only on `mcp__` tools, the guard reasons),
 `panels`, `data` (TTL, single-flight, stale, 503 bodies never leak, fence), `mapper` (against
@@ -909,11 +912,18 @@ not claim, comes back `isError` with a message naming `ORDER_RAW_NAMES` and its 
 The drill uses `mcp__drill__*` stand-ins so `ALPACA_KIT_ENABLE_ORDERS` is never armed. The three
 bot boots are `bots-smoke.test.ts` (roster listing with a broken fixture and never `_template`;
 the header's `agentPreset`; mask = allow ∩ tree; the persona shadow; the inert default's tool set
-equal to the host's; a `session.create` naming the broken preset refused by dsh's own
-`agent-preset` error),
+equal to the host's; the SHIPPED relative plugin path actually mounted — its bots root is
+`mkdtemp`'d inside the repository as `.bots-smoke-*`, gitignored and removed in `finally`, so
+`../../face/plugins/bot.js` resolves the way a real bot's does; **Gate 2 from a bot session**,
+both outcomes — a bot whose own mask NAMES the `mcp__drill__submit_order` stand-in still meets the
+tree-wide guard and comes back `isError` with the `ORDER_RAW_NAMES` message, and
+`mcp__drill__place_order` fired at the waterfall with that bot's agent returns `ask` with the
+symbol on the card, so the refusal cannot be credited to the mask; a `session.create` naming the
+broken preset refused by dsh's own `agent-preset` error),
 `bot-sandbox-smoke.test.ts` (S4) and `askuser-noclient-smoke.test.ts` (S7). The last two each
-print one `observed:` line and assert only the outcome the spec forbids — a file that silently
-changed, an answer nobody gave — because the shape they measure is what §9's R10 and R11 record.
+print one `observed:` line; S4 now PINS the shape §9's R10 records (the sandbox marker in the
+tool's content, and the command having actually run) rather than accepting any of the three
+outcomes the spec was willing to take, and S7 still asserts only the outcome it forbids.
 
 ### 7.4 Drills (`face/README.md`)
 
@@ -922,7 +932,7 @@ changed, an answer nobody gave — because the shape they measure is what §9's 
 | **Approval channel** (the README heading still reads "The Gate-2 drill"; its PASSED line calls it the approval-channel drill) — a file write outside the workspace escalates | request → answerer → card → outcome → paired `approval/asked` / `decided`; deny blocks, approve runs once | a producer for an MCP tool call | passed live 2026-08-31 |
 | **Order approval** — automated half | the listener is registered, reaches the live approval service, defaults to `ask`, catches renamed servers, leaves `orders` alone; mutation-proven (removing the registration fails it) | the positive path — a grant logged by the real approval service, the guard finding it, the order dispatching — is covered only by unit tests of `hasApprovalGrant` / `orderGuardReason` with hand-built events, never on a real tree (the README calls it the highest-value missing test); that a human can read the card; containment | passed 2026-09-04 |
 | **Order approval** — manual half (arm Gate 1 in a *scratch* home, ask for one paper order, deny, see the audit pair) | the card, end to end | | **not yet run** — the condition before the flag flips in the real home |
-| **Bots** — automated (`bots-smoke`, `bot-sandbox-smoke`, `askuser-noclient-smoke`) | roster listing incl. broken; header `agentPreset`; mask = allow ∩ tree; persona shadow; inert default; the S4/S7 observations | a bot in a room (plan 2); that a home session's write to `../SOUL.md` is refused (plan 2) | passes as of 2026-09-07 |
+| **Bots** — automated (`bots-smoke`, `bot-sandbox-smoke`, `askuser-noclient-smoke`) | roster listing incl. broken; header `agentPreset`; mask = allow ∩ tree; persona shadow; inert default; the shipped relative plugin path mounted; Gate 2 refusing an order tool the bot's own mask admits; the S4/S7 observations | a bot in a room (plan 2); that a home session's write to `../SOUL.md` is refused (plan 2); that the approval CARD renders (no client) | passes as of 2026-09-07 |
 | **Bots** — manual (`face/README.md`) | create → home → persona → tools named and not named → `{{` refused | | **not run** — run after merge |
 | **Ask-user** — `ask_user_question` offered, called, answered, cancelled | the seam | that it is a gate (the answer is model-visible); the instruction half (README step 6 — on a thin brief that does not name the tool, Kairos asks before it builds, per `AGENTS.md`), left to the operator and not run | passed 2026-09-03 with a real model, 26 tools offered |
 

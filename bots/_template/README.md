@@ -13,5 +13,6 @@ One directory = one bot = one dsh agent preset. Copied by the face's **New bot**
 | `journal/` | the bot, from its home | the only directory the bot may write |
 
 Rules: no `{{` anywhere in `SOUL.md` (the system prompt is a strict template with no escape);
-the mask in `agent.cordis.yml` is visibility, not authority — the sandbox and Gate 2 are the fences.
+the mask in `agent.cordis.yml` is visibility, not authority — the sandbox and Gate 2 are the
+fences, and neither is containment.
 Kairos never edits anything under `bots/` (AGENTS.md).

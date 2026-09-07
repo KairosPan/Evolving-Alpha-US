@@ -786,7 +786,7 @@ the header field) and S7. The scope finding produced §14.
 
 ## 16. Post-build amendments (plan 1)
 
-Plan 1 of §14 — **bots without rooms** — is built (branch `feat/bots-1`, 223 face tests, typecheck
+Plan 1 of §14 — **bots without rooms** — is built (branch `feat/bots-1`, 224 face tests, typecheck
 clean). Plans 2–4 are unbuilt and this section does not touch them. What follows is what the build
 changed about the design, and what the spikes measured. Everything else in this document stands as
 written.
@@ -800,11 +800,15 @@ written.
    composition. §2.2's `!!js` reading `SOUL.md` is moot: the face writes the persona text into
    the composition (`renderComposition`), which the spec's own fallback already allowed.
 2. **The mask is an `allow` list, not a `deny` list.** dsh-tools: deny masks admit later unnamed
-   globals, allow masks exclude later names. Every tool a bot must never have is registered
-   *after* the mount — `agent_<bin>` on connect, `mcp__…__place_order` when the MCP server comes
-   up, `dispatch` in plan 2 — so an allow list excludes them without naming them. `mcp__*__<raw>`
-   entries expand against the live tree (`expandAllow`); a name the tree does not have is warned
-   and dropped rather than passed to `restrict`, which rejects unknown names.
+   globals, allow masks exclude later names. TWO of the tools a bot must never have are
+   registered *after* the mount — `agent_<bin>` on connect, `dispatch` in plan 2 — and the allow
+   form excludes them without naming them, which is the reason for the choice. The third,
+   `mcp__…__place_order`, is NOT one of them: the operator's MCP row mounts at boot, so an order
+   tool is already in the tree when a bot mounts and is excluded by OMISSION from the list, the
+   same way a deny list would have to name it. `mcp__*__<raw>` entries expand against the live
+   tree (`expandAllow`), matching dsh's minting exactly — three `__`-separated segments, so a
+   longer name merely ending in `__<raw>` does not answer the star; a name the tree does not have
+   is warned and dropped rather than passed to `restrict`, which rejects unknown names.
 3. **S6 was not needed.** The gateway's `session.create` accepts `agentPreset` and performs the
    mount in its own `setup`, so a home session rides that path straight from the client
    (`openBotHome` → `session.create({ cwd: <journal>, agentPreset })`) with no in-process agent
@@ -815,15 +819,27 @@ written.
    `../SOUL.md` is refused needs a bash write through the real sandbox from such a session. S4
    exercises the `read-only` case only. The home-scope case goes to plan 2, beside the
    member-session pin.
+5. **The roster root is `trust: "system"`, not §2.1's `user`.** The face authors bots by its own
+   filesystem write, so it needs no writable root; `user` trust would arm nothing the face uses
+   and three RPCs it does not want — `agentPreset.copy`, `.remove` and `.openDocument`, which the
+   gateway serves on `/api` for any connected client, over a git-tracked directory whose delete
+   path §2.1 says is `git rm`. Under `system` each refuses with "it ships with the deployment"
+   and `authorable` reads false. Trust gates nothing else: `scanRoot` stamps it on the row, and
+   mounting never reads it — the roster, the broken reasons and every preset session are
+   unchanged (`bots-smoke.test.ts` passes across the flip).
 
 **Spike outcomes** (`FACE_SMOKE=1 npm test`, 2026-09-07).
 
 - **S1 — the path form works, and is what shipped.** The plugin row is a PATH, not a package
   specifier. Real presets carry the relative `../../face/plugins/bot.js` (`BOT_PLUGIN_RELATIVE`),
-  which the preset mount resolves from the preset's own directory; the smoke fixture, living in a
-  temp root that can reach no `node_modules`, uses an absolute path (`PLUGIN_ABS`). The
-  package-specifier fallback the spec kept in reserve was never needed. The persona text the face
-  wrote into the composition reaches the assembled prompt.
+  which the preset mount resolves from the preset's own directory. BOTH forms are now drilled:
+  the smoke's bots root is `mkdtemp`'d inside the repository (`.bots-smoke-*`, gitignored, removed
+  in `finally`) so a bot created with an untouched composition mounts through the shipped relative
+  path, while one fixture bot keeps an absolute path (`PLUGIN_ABS`) — a temp root two levels above
+  nothing cannot reach `face/plugins/`. Mutation-proven: pointing `BOT_PLUGIN_RELATIVE` at a
+  missing file fails the smoke with dsh's own `agent-preset-invalid`. The package-specifier
+  fallback the spec kept in reserve was never needed. The persona text the face wrote into the
+  composition reaches the assembled prompt.
 - **S2 — the mask holds, and is exactly `allow ∩ tree`.** The fixture's
   `["bash","read","ask_user_question","no_such_tool"]` yields `[ask_user_question, bash, read]` on
   a bot session. **S3** — Kairos's set equals the host's global view: the inert `kairos` default
@@ -845,6 +861,16 @@ written.
   up front with `UserQuestionError: web user interaction requires an agent-owned session`. R6
   above is reworded from this. Recorded as `DEVELOPMENT.md` §9 R11.
 - **S5** belongs to the room engine and was not run; it moves to plan 2 with S6.
+
+**Also proven in plan 1: Gate 2 from a bot session** (§8's smoke list), both outcomes, inside
+`bots-smoke.test.ts`'s single boot. A fixture bot whose allow list NAMES the stand-in
+`mcp__drill__submit_order` — registered before its session so the mask really admits it — still
+comes back `isError` with the `ORDER_RAW_NAMES` message and its body never runs; and
+`mcp__drill__place_order` fired at the `tools/pre-execute` waterfall with that bot's agent
+returns `ask` with a card naming the symbol. So the gate is tree-wide, and the refusal cannot be
+credited to the mask. The card itself is still unproven — an ask with no connected client blocks
+rather than denying — which is why the ask half goes through the waterfall and not `execute`,
+exactly as `order-gate.test.ts` does for Kairos.
 
 **Where the as-built truth now lives.** `face/README.md` "Bots" and "The bots drill";
 `DEVELOPMENT.md` §3.7 (the bot directory contract), §4.2/§4.3/§4.4/§4.5 (modules, the
