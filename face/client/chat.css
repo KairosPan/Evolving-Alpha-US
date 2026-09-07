@@ -988,6 +988,12 @@ body {
 .pick-name { font-size: 13.5px; }
 .picker-note { font: 11px var(--mono); color: var(--dim); margin-top: 8px; }
 .picker-new { display: flex; gap: 6px; margin-top: 10px; }
+/* the New-bot form: four fields over a button, not one field beside one */
+.picker-new.col { flex-direction: column; align-items: stretch; }
+/* a textarea in a column form or a panel card has no row to be flexed into, so
+   `flex: 1` leaves it at the browser's default ~20 columns; width says otherwise */
+.picker-new.col .picker-input,
+.sp-card .picker-input { width: 100%; }
 .picker-input {
   flex: 1;
   min-width: 0;

@@ -38,7 +38,7 @@ import { mapFrame } from "./mapper.js";
 import { renderResult } from "./render.js";
 import { renderMarkdown } from "./markdown.js";
 import { renderChannelPage } from "./channels.js";
-import { ARCHIVED_KEY, BOT_KEY_PREFIX, bucketFor, isBotKey, UNGROUPED_KEY } from "./grouping.js";
+import { ARCHIVED_KEY, bucketFor, isBotKey, UNGROUPED_KEY } from "./grouping.js";
 import { proposeBotId } from "./botId.js";
 
 /** Rendered in place of a value the host did not give us. */
@@ -1934,7 +1934,10 @@ function openNewBot() {
   openDetail("new bot", (inner) => {
     inner.append(el("div", "detail-title", "New bot"));
     inner.append(el("div", "detail-sub", "copies bots/_template · a voice, not a hand"));
-    const form = el("div", "picker-new");
+    /* `col`: the other two `.picker-new` forms are one input beside one button,
+     * which the row layout suits; this one is four fields over a button and has
+     * to stack (chat.css `.picker-new.col`). */
+    const form = el("div", "picker-new col");
     const name = /** @type {HTMLInputElement} */ (el("input", "picker-input"));
     name.type = "text";
     name.placeholder = "display name (any script)";
