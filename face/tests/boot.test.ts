@@ -6,10 +6,11 @@ import { join } from "node:path";
 import { composeEntries } from "@deepseek-ai/dsh-app-boot";
 import { setupFaceProfile } from "../src/setup.ts";
 import { composeFace } from "../src/boot.ts";
+import { PERSONA_PATH, readPersona } from "../src/persona.ts";
 
 /** Every row id {@link faceOverlay} owns, as the composed tree should show them. */
 const OVERLAY_ROW_IDS = [
-  "api-gateway", "connection", "cordis-host-runner", "directory-picker",
+  "agent-presets", "api-gateway", "connection", "cordis-host-runner", "directory-picker",
   "storage", "storage-domain", "storage-json", "tool-ask-user", "webserver", "workspace",
 ] as const;
 
@@ -46,15 +47,14 @@ test("composeFace: patch order ends with the face overlay; root is rewritten emp
 
 /* The exact layer count, so a lost or duplicated layer is a failure rather
  * than a silent change of shape. With the telemetry switch unset the stack is:
- * dsh-base's one insert + the (empty) profile layer + the (absent) home layer
- * + the hmr disable + the face overlay = 3 entries. */
+ * dsh-base insert + hmr disable + system-prompt persona + face overlay */
 test("composeFace stacks exactly the layers it means to", () => {
   const home = freshHome();
   const previous = process.env.DSH_TELEMETRY_DISABLED;
   try {
     delete process.env.DSH_TELEMETRY_DISABLED;
     const { patches } = composeFace({ profileName: "face", port: 3090, dshHome: home });
-    assert.equal(patches.length, 3, patches.map((p) => p.id ?? "insert").join(","));
+    assert.equal(patches.length, 4, patches.map((p) => p.id ?? "insert").join(","));
   } finally {
     if (previous === undefined) delete process.env.DSH_TELEMETRY_DISABLED;
     else process.env.DSH_TELEMETRY_DISABLED = previous;
@@ -154,4 +154,18 @@ test("composeFace resolves the home explicitly and leaves $DSH_HOME alone", () =
     if (previous === undefined) delete process.env.DSH_HOME;
     else process.env.DSH_HOME = previous;
   }
+});
+
+/* D11, asserted where it is composable: dsh-base ships `persona: ''` and the
+ * face is the deployment that fills it in. An id-targeted patch that matched
+ * nothing would be SILENT, so the check is on the COMPOSED row rather than on
+ * the patch list - the same reason the hmr and telemetry switches are guarded. */
+test("composeFace sets Kairos's persona on dsh-base's system-prompt row", () => {
+  const home = freshHome();
+  const { patches } = composeFace({ profileName: "face", port: 3090, dshHome: home });
+  const row = composeEntries([patches]).find((r) => r.id === "system-prompt");
+  assert.ok(row, "system-prompt row present");
+  const persona = (row!.config as { persona?: string }).persona ?? "";
+  assert.match(persona, /^You are Kairos/);
+  assert.equal(persona, readPersona(PERSONA_PATH));
 });

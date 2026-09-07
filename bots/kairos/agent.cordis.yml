@@ -1,0 +1,8 @@
+# bots/kairos/agent.cordis.yml
+# The default agent preset: EMPTY on purpose. Kairos is the host plane - dsh-base's
+# flat tool roster, the operator's MCP row, the face's gate and ask-user rows - and
+# a session that names no preset joins this one so that the roster plugin's
+# "published without joining" warning never fires and Kairos's tools stay exactly
+# the host's (spec S3, verified by bots-smoke.test.ts). Add nothing here: a row
+# here would reach every Kairos session.
+[]

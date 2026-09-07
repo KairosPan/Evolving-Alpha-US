@@ -36,10 +36,10 @@ const PATCH_HEADER = `# face profile patch layer. The face's own host rows (webs
 #
 # Face-owned rows are applied AFTER this file and win over it, silently: a
 # patch here targeting webserver, connection, api-gateway, directory-picker,
-# cordis-host-runner, tool-ask-user, the storage chain (storage, storage-json,
-# storage-domain, workspace), or the hmr / session-telemetry-otel switches is
-# accepted, overridden, and never reported. Change those in kairos-face's
-# overlay, not here.
+# cordis-host-runner, tool-ask-user, agent-presets, the system-prompt persona,
+# the storage chain (storage, storage-json, storage-domain, workspace), or the
+# hmr / session-telemetry-otel switches is accepted, overridden, and never
+# reported. Change those in kairos-face's overlay, not here.
 []
 `;
 

@@ -10,11 +10,13 @@
  * exported config types, not against FaceRowEntry.config — the loader types
  * every row's config as `any`, so without this an rc that renames a key or
  * narrows a value would load a silently dead config instead of failing tsc. */
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Config as WebServerConfig } from "@deepseek-ai/dsh-host-webserver";
 import type { ConnectionConfig } from "@deepseek-ai/dsh-client-connection";
 import type { Config as StorageJsonConfig } from "@deepseek-ai/dsh-storage-json";
 import type { Config as StorageDomainConfig } from "@deepseek-ai/dsh-storage-domain";
+import type { Config as AgentPresetsConfig } from "@deepseek-ai/dsh-agent-presets";
 
 export interface FaceRowEntry {
   id: string;
@@ -25,6 +27,14 @@ export interface FacePatchEntry {
   insert?: FaceRowEntry[];
 }
 
+/** The repository's bot directory — the ONLY preset root the face scans. Module-relative. */
+export const BOTS_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "bots");
+/** The inert preset every session that names none joins (spec S3). */
+export const DEFAULT_PRESET = "kairos";
+export const AGENT_PRESETS_ROW_ID = "agent-presets";
+/** dsh-base's system-prompt row, whose `persona` composeFace sets (boot.ts). */
+export const SYSTEM_PROMPT_ROW_ID = "system-prompt";
+
 /**
  * The face's patch layer: the host rows dsh-base does not mount.
  * @param port - the webserver's TCP port; `0` asks the OS for a free one.
@@ -33,8 +43,10 @@ export interface FacePatchEntry {
  * composition for an explicit home cannot write into the ambient one — the
  * `!!js dshHomePath(...)` expressions dsh-web-app uses are evaluated by the
  * tree at mount time, and the face has no expression to evaluate.
+ * @param botsRoot - the preset root the roster scans, normally {@link BOTS_ROOT};
+ * passed for the same reason `dshHome` is, so a test can point it at a fixture.
  */
-export function faceOverlay(port: number, dshHome: string): FacePatchEntry[] {
+export function faceOverlay(port: number, dshHome: string, botsRoot: string): FacePatchEntry[] {
   return [{
     insert: [
       /* The storage → domain → workspace chain. NOT optional and NOT
@@ -80,6 +92,22 @@ export function faceOverlay(port: number, dshHome: string): FacePatchEntry[] {
        * prevent. Configless by contract (`apply(ctx)`, no exported Config), so
        * it joins the unconfigured rows rather than the `satisfies` set. */
       { id: "tool-ask-user", name: "@deepseek-ai/dsh-tool-ask-user" },
+
+      /* A bot is a dsh agent preset: a directory under `bots/` holding one
+       * `agent.cordis.yml` (spec §2). The roster's only root is the repository's
+       * own `bots/` — `includeUserRoot: false` keeps `$DSH_HOME/.agent-presets`
+       * out, so a bot the repository does not carry cannot exist. `default` is
+       * REQUIRED by the plugin and is what the gateway mounts for a session that
+       * names no preset: `kairos`, an empty composition, so Kairos's own sessions
+       * keep the flat host roster unchanged (spec S3). The plugin warns on every
+       * agent created outside a preset once a roster is mounted; the default
+       * makes that warning unreachable. */
+      { id: AGENT_PRESETS_ROW_ID, name: "@deepseek-ai/dsh-agent-presets",
+        config: {
+          default: DEFAULT_PRESET,
+          roots: [{ path: botsRoot, trust: "user" }],
+          includeUserRoot: false,
+        } satisfies AgentPresetsConfig },
     ],
   }];
 }

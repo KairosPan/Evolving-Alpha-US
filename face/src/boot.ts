@@ -23,7 +23,9 @@
  *   takes that up, a late rejection surfaces as Node's default. The CLI's
  *   bounded process-shutdown controller is dropped with it (see `bootFace`);
  * - no shipped agent-presets root graft: that root ships beside the CLI's own
- *   app package, which is not in the face's dependency tree at all;
+ *   app package, which is not in the face's dependency tree at all. The face
+ *   mounts the roster over the repository's `bots/` and nothing else — see the
+ *   `agent-presets` row in {@link faceOverlay};
  * - {@link INSTALL_ANCHOR} is the FACE's package.json, not the CLI's — see there.
  * The telemetry opt-out is honored exactly as the CLI honors it.
  *
@@ -58,7 +60,9 @@ import {
 import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import { DSH_LAUNCH_ENVIRONMENT_KEY } from "@deepseek-ai/dsh-launch-environment";
 import { provideCmdline } from "@deepseek-ai/dsh-cmdline";
-import { faceOverlay } from "./overlay.ts";
+import type { Config as SystemPromptConfig } from "@deepseek-ai/dsh-system-prompt";
+import { BOTS_ROOT, DEFAULT_PRESET, SYSTEM_PROMPT_ROW_ID, faceOverlay } from "./overlay.ts";
+import { PERSONA_PATH, readPersona } from "./persona.ts";
 import {
   auditOrderTools, effectiveApprovalPolicy, isOrderTool, orderApprovalDecision, orderGuardReason,
   type ApprovalEventLike, type ApprovalPolicyLike, type PreToolDecision, type ToolSchemaLike,
@@ -118,6 +122,8 @@ export interface FaceBootOptions {
   port: number;
   /** Harness home override, highest precedence (see `resolveDshHome`). */
   dshHome?: string;
+  /** The preset root (`bots/`); tests point it at a fixture. Defaults to the repository's. */
+  botsRoot?: string;
 }
 
 /** Top-level row ids of the tree these layers compose to, through the include's
@@ -179,7 +185,22 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
   const telemetry = resolveTelemetryPatch(process.env.DSH_TELEMETRY_DISABLED, rows.has(TELEMETRY_ROW_ID));
   if (telemetry !== undefined) patches.push(telemetry);
   if (rows.has(HMR_ROW_ID)) patches.push({ id: HMR_ROW_ID, disabled: true });
-  patches.push(...faceOverlay(opts.port, home));
+  /* Kairos's persona: the one config value dsh-base leaves empty on purpose
+   * ("the deployment persona is a deployment choice"). A non-insert patch
+   * REPLACES the row's whole config (cordis-plugin-include applyEntryPatches),
+   * and dsh-base sets nothing else on this row, so nothing is lost. Guarded
+   * like hmr: an unmatched patch is silent, and a silently empty persona is
+   * D11 all over again. `readPersona` throws on a malformed template, which
+   * refuses the boot with the file named - better than a prompt that throws
+   * at every step. */
+  if (rows.has(SYSTEM_PROMPT_ROW_ID)) {
+    patches.push({
+      id: SYSTEM_PROMPT_ROW_ID,
+      name: "@deepseek-ai/dsh-system-prompt",
+      config: { persona: readPersona(PERSONA_PATH) } satisfies SystemPromptConfig,
+    });
+  }
+  patches.push(...faceOverlay(opts.port, home, opts.botsRoot ?? BOTS_ROOT));
   return { patches, rootConfig };
 }
 
@@ -208,9 +229,10 @@ const ASK_USER_TOOL = "ask_user_question";
  * from the override.
  * @param opts - profile name, webserver port, optional harness home.
  * @returns the settled root context and an idempotent disposer.
- * @throws after disposing the tree when a Gate 2 service is missing or the
- * `ask_user_question` tool did not register, and whatever `boot` throws when
- * the plugin tree fails to load.
+ * @throws after disposing the tree when a Gate 2 service is missing, the
+ * `ask_user_question` tool did not register, or the preset roster cannot
+ * supply its own default, and whatever `boot` throws when the plugin tree
+ * fails to load.
  */
 export async function bootFace(opts: FaceBootOptions): Promise<{ ctx: Context; dispose(): Promise<void> }> {
   if (opts.dshHome !== undefined) process.env.DSH_HOME = resolveDshHome(opts.dshHome);
@@ -348,5 +370,27 @@ export async function bootFace(opts: FaceBootOptions): Promise<{ ctx: Context; d
   if (audit.gated.length > 0) {
     console.log(`${BIN}: order gate armed for ${audit.gated.join(", ")}`);
   }
+  /* The preset roster: every session.create the gateway serves resolves a
+   * preset - the named one or `default` - and fails at resolution if the
+   * roster cannot supply it. Assert it here, against the LIVE service, so a
+   * missing `bots/kairos` refuses the boot instead of failing every session. */
+  const presets = ctx.get("agentPresets") as
+    | { defaultId: string; list(): Promise<{ id: string; broken?: string }[]> }
+    | undefined;
+  if (presets === undefined) {
+    await dispose();
+    throw new Error(`${BIN}: agentPresets missing from the composed tree - the agent-presets overlay row did not mount`);
+  }
+  const roster = await presets.list();
+  const fallback = roster.find((preset) => preset.id === presets.defaultId);
+  if (fallback === undefined || fallback.broken !== undefined) {
+    await dispose();
+    throw new Error(
+      `${BIN}: default agent preset "${presets.defaultId}" is ` +
+      (fallback === undefined ? `not in the roster (${roster.map((p) => p.id).join(", ") || "empty"})` : `broken: ${fallback.broken}`) +
+      ` under ${opts.botsRoot ?? BOTS_ROOT} - every session.create would fail at resolution`,
+    );
+  }
+  console.log(`${BIN}: agent presets: ${roster.map((p) => p.id + (p.broken === undefined ? "" : " (broken)")).join(", ")} (default ${presets.defaultId})`);
   return { ctx, dispose };
 }

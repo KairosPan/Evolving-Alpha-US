@@ -4,17 +4,23 @@ import { join } from "node:path";
 import { faceOverlay } from "../src/overlay.ts";
 
 const HOME = "/tmp/face-home";
+const BOTS = "/tmp/face-test-bots";
 
-test("overlay inserts exactly the ten rows with loopback config", () => {
-  const patches = faceOverlay(3090, HOME);
+test("overlay inserts exactly the eleven rows with loopback config", () => {
+  const patches = faceOverlay(3090, HOME, BOTS);
   assert.equal(patches.length, 1);
   const rows = patches[0].insert!;
   const byId = new Map(rows.map(r => [r.id, r]));
   assert.deepEqual(
     [...byId.keys()].sort(),
-    ["api-gateway", "connection", "cordis-host-runner", "directory-picker", "storage",
+    ["agent-presets", "api-gateway", "connection", "cordis-host-runner", "directory-picker", "storage",
       "storage-domain", "storage-json", "tool-ask-user", "webserver", "workspace"],
   );
+  assert.deepEqual(byId.get("agent-presets")!.config, {
+    default: "kairos",
+    roots: [{ path: BOTS, trust: "user" }],
+    includeUserRoot: false,
+  });
   assert.equal(byId.get("webserver")!.name, "@deepseek-ai/dsh-host-webserver");
   assert.deepEqual(byId.get("webserver")!.config, { host: "127.0.0.1", port: 3090 });
   assert.equal(byId.get("api-gateway")!.name, "@deepseek-ai/dsh-host-apiproxy");
@@ -35,7 +41,7 @@ test("overlay inserts exactly the ten rows with loopback config", () => {
  * registers is bootFace's own guard and the smoke test's claim, because an
  * unsatisfied inject leaves the fiber pending with this entry list unchanged. */
 test("the model-facing ask-user tool is mounted beside dsh-base's userQuestions service", () => {
-  const byId = new Map(faceOverlay(3090, HOME)[0].insert!.map(r => [r.id, r]));
+  const byId = new Map(faceOverlay(3090, HOME, BOTS)[0].insert!.map(r => [r.id, r]));
   assert.equal(byId.get("tool-ask-user")!.name, "@deepseek-ai/dsh-tool-ask-user");
 });
 
@@ -45,7 +51,7 @@ test("the model-facing ask-user tool is mounted beside dsh-base's userQuestions 
  * chain is asserted link by link because dropping any one of them reproduces
  * that failure, and only a live boot would otherwise say so. */
 test("the storage chain the api-gateway needs is mounted end to end", () => {
-  const byId = new Map(faceOverlay(3090, HOME)[0].insert!.map(r => [r.id, r]));
+  const byId = new Map(faceOverlay(3090, HOME, BOTS)[0].insert!.map(r => [r.id, r]));
   assert.equal(byId.get("storage")!.name, "@deepseek-ai/dsh-storage");
   assert.equal(byId.get("storage-json")!.name, "@deepseek-ai/dsh-storage-json");
   assert.equal(byId.get("storage-domain")!.name, "@deepseek-ai/dsh-storage-domain");
@@ -58,7 +64,7 @@ test("the storage chain the api-gateway needs is mounted end to end", () => {
  * and reading `$DSH_HOME` here instead would scatter a composition's unit files
  * into whichever home the ambient environment happened to name. */
 test("the json storage root is derived from the home it was handed", () => {
-  const byId = new Map(faceOverlay(3090, HOME)[0].insert!.map(r => [r.id, r]));
+  const byId = new Map(faceOverlay(3090, HOME, BOTS)[0].insert!.map(r => [r.id, r]));
   assert.deepEqual(byId.get("storage-json")!.config, { root: join(HOME, "storages") });
 });
 
@@ -70,7 +76,7 @@ test("the json storage root is derived from the home it was handed", () => {
 // an empty `config: {}` is not the same thing to a patch, which replaces the
 // targeted row's whole config.
 test("the overlay carries no inject and no config it does not own", () => {
-  const rows = faceOverlay(3090, HOME)[0].insert!;
+  const rows = faceOverlay(3090, HOME, BOTS)[0].insert!;
   const byId = new Map(rows.map(r => [r.id, r]));
   assert.ok(!("inject" in byId.get("connection")!), "connection row must not inject");
   for (const id of ["directory-picker", "api-gateway", "cordis-host-runner", "storage", "workspace",
