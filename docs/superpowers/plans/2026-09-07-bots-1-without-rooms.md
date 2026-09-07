@@ -324,16 +324,18 @@ export const PERSONA_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", 
  * dsh: every `{{` here must open a known variable, so a lone brace is refused too. */
 export function validatePersonaTemplate(text: string): string | undefined {
   if (text.trim() === "") return "persona is empty";
-  const opens = text.match(/\{\{/g)?.length ?? 0;
-  const closes = text.match(/\}\}/g)?.length ?? 0;
-  if (opens !== closes) return "unbalanced {{ }} in persona";
-  for (const match of text.matchAll(/\{\{([^{}]*)\}\}/g)) {
+  const GROUP = /\{\{([^{}]*)\}\}/g;
+  for (const match of text.matchAll(GROUP)) {
     const variable = match[1].trim();
     if (!PERSONA_VARIABLES.includes(variable)) {
       return `unknown persona variable {{${variable}}} (known: ${PERSONA_VARIABLES.join(", ")})`;
     }
   }
-  if ((text.match(/\{\{[^{}]*\}\}/g)?.length ?? 0) !== opens) return "unbalanced {{ }} in persona";
+  /* Stricter than dsh on purpose: once every complete `{{model}}`/`{{cwd}}`
+   * group is removed, no brace may remain. dsh tolerates a lone `{`, but
+   * `{{{model}}}` and `{{ model }` both throw there, and persona prose has no
+   * use for a stray brace - refusing them all is the cheaper rule to explain. */
+  if (/[{}]/.test(text.replace(GROUP, ""))) return "unbalanced {{ }} in persona (a brace outside a {{model}}/{{cwd}} group)";
   return undefined;
 }
 
