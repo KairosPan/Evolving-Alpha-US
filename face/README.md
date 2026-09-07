@@ -326,7 +326,8 @@ down this file:
    the same path, and predates this design entirely. **The mitigation is
    visibility, not prevention**: a roster write appends a dated line to a
    durable face log, `$DSH_HOME/face/roster.log` (`src/roster.ts`'s
-   `logRosterWrite`, called from `src/channels.ts:524`), naming the
+   `logRosterWrite`, called from the `POST /data/channels/agents` handler in
+   `src/channels.ts`), naming the
    workspace, the resulting agent list and an ISO timestamp, so a change is
    SEEN even though it cannot be stopped. Building a token would be new
    security machinery against the charter's §7.4; recording this is what

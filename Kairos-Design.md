@@ -1,82 +1,111 @@
-# Kairos — Design Charter
+# Kairos — Product Charter
 
-**Status:** living charter, 2026-08-30 · **Authority:** this charter carries intent and
-principles; mechanisms live in the workbench spec
-(`docs/superpowers/specs/2026-08-29-market-strategy-account-skeleton-design.md`)
-and in code. On a question of intent, the charter wins; on a question of mechanism, spec and
-code win. The pointer is one-way: this document never restates mechanism, so it never needs
-syncing when mechanism moves.
+**Status:** living charter, written 2026-08-30, revised 2026-09-04 · **Owner:** the operator ·
+**Authority:** this charter carries intent and principles; mechanism lives in `DEVELOPMENT.md`
+(the as-built front/back-end reference) and in code. On a question of intent, the charter
+wins; on a question of mechanism, the code is the fact and the documents follow it. The pointer
+is one-way with one honest exception: §4 names gates and surfaces by their current shape so the
+write map can be read alone, and those names are re-read against `DEVELOPMENT.md` whenever
+either changes. The 2026-09-04 revision exists because they had drifted.
 
-**Scale discipline:** this charter stays readable in one sitting. If a section needs more than
-a page, the content belongs in the spec or the docs, not here.
+**Scale discipline:** this charter stays readable in one sitting. If a section needs more than a
+page, the content belongs in `DEVELOPMENT.md` or the docs, not here.
 
 ---
 
-## 1. What Kairos is
+## 1. The product
 
-Kairos is a single trading-research agent, run by a single operator, on DeepSeek Harness
-(dsh). It works a three-layer workbench:
+Kairos is a market–strategy–account research workbench for **one operator, one machine, one
+agent**. The agent, also called Kairos, runs on DeepSeek Harness (dsh) inside the operator's
+chat face and works three layers:
 
-- **MARKET** — point-in-time US equities data (Alpaca + EDGAR), guarded against lookahead.
-- **STRATEGY** — Kairos's arena. A strategy is a git-versioned directory: a thesis with
-  falsification conditions, an executable screen, backtests, a journal, a lifecycle state.
-  Kairos researches, writes, backtests, and iterates these.
-- **ACCOUNT** — an Alpaca paper account, read-only today. Order capability exists in code but
-  is double-gated; no order reaches any market through a gate Kairos can open.
+- **MARKET** — point-in-time US equities data (Alpaca bars and corporate actions, EDGAR
+  filings, two offline PIT beds), guarded against lookahead in code.
+- **STRATEGY** — Kairos's arena. A strategy is a directory under `strategies/`, meant to be
+  git-versioned: a thesis with falsification terms, an executable screen, backtests, a journal,
+  a lifecycle state. In the face, each strategy directory is a **channel**: its conversations,
+  its landing page, its roster of helper agents. (As of 2026-09-04 only the template is
+  committed; the three live strategies are untracked, so their ledger is not yet written —
+  `DEVELOPMENT.md` §3.4.)
+- **ACCOUNT** — an Alpaca paper account, read-only by default. Order capability exists in code
+  behind two gates (§4); it has never been armed in the operator's real harness home.
 
-The operator teaches directly: trading style lives in an operator-owned skill pack; taste and
-judgment arrive through conversation and review, not through machinery. The runtime, the
-gates, and the operator's configuration live outside Kairos's reach.
+**What a working day looks like.** The operator opens the face at `127.0.0.1:3090`, picks a
+channel, and talks to Kairos. Kairos screens, backtests and reads the market through the
+`alpaca_kit` tools, then writes thesis, journal and backtest artifacts into the strategy
+directory. The operator reads the two read-only instruments (`/market`, `/account`), reads the
+git diff, and teaches: trading style lives in an operator-owned skill pack; taste and judgment
+arrive through conversation and review, not through machinery. One strategy has already been
+carried from idea to a retirement verdict this way (2026-09-02, by its own pre-registered
+falsification terms) — in the working tree; its directory has not yet been committed.
+
+**What it is not.** Not an automated trading system, not an autonomy ladder, not a hosted or
+multi-user service. Nothing runs unattended.
 
 ## 2. Founding principles
 
 **P1 — Wide hands, no self-keys.** Kairos's action space is deliberately large: shell, code,
-market tools, the whole strategy arena. Its authority over its own runtime is zero. This is
-enforced by placement, not by rules: the dsh profile, credentials, and every gate flag live in
-the harness home, outside the agent's workspace.
+market tools, the whole strategy arena. Its authority over its own runtime is meant to be zero.
+Where this is enforced by placement — the dsh profile patch and the order flag live in the
+harness home, outside the agent's workspace, and no file effect or face route can write them —
+placement holds. Where placement does not hold, the charter says so instead of pretending: the
+credential files the documented run path sources sit at the repo root; the code of the second
+order gate is inside the workspace; and the rest of the harness home (the face's own metadata,
+the workspace registry) is writable from a shell turn over loopback, which can also register a
+local CLI as a live tool (D10). Those are protected by review, tests, logs and the residual
+ledger (§5), and they are named there.
 
 **P2 — The operator is the only teacher.** The style pack (`style-kairos`) is operator-owned:
 Kairos follows it by default, and when research findings conflict with a style entry, it
-reports the conflict — never silently defers to style, never silently overrides it.
+reports the conflict — never silently defers to style, never silently overrides it. Mechanics
+skills are law, not style: findings never overrule them.
 
-**P3 — Point-in-time honesty is enforced in code, not prose.** Every dated market read passes
-a lookahead guard; the guard surfaces are pinned by name in meta-gate tests, so deleting one
-turns the suite red. A backtest that cannot be honest must fail loudly rather than succeed
-approximately.
+**P3 — Point-in-time honesty is enforced in code, not prose.** Every dated market read through
+the two sanctioned channels — `replay_days` for backtests, the MCP tools for interactive queries
+— passes a lookahead guard in code; the library seam returns a RAW source by contract, and the
+rule that backtests use the replay channel is the first backtest rule (P4). The guard surfaces
+are pinned by name in meta-gate tests, so deleting one turns the suite red. A backtest that
+cannot be honest must fail loudly rather than succeed approximately.
 
-**P4 — Honest evaluation.** The five backtest rules (workbench `docs/backtest-rules.md`)
-bind every experiment: PIT channel only; a delisting during a hold is a terminal loss, never
-dropped; returns are gross and say so; no same-day round trip; missing data is discarded and
-counted, never fabricated. Evidence fidelity extends beyond backtests: every cited number
-states what was actually measured, and vendor claims motivate but never carry load.
+**P4 — Honest evaluation.** The five backtest rules (`docs/backtest-rules.md`) bind every
+experiment: PIT channel only; a delisting during a hold is a terminal loss, never dropped;
+returns are gross unless the strategy adds a cost model and declares it in its thesis; no
+same-day round trip; missing data is discarded and counted, never fabricated. Evidence fidelity extends beyond backtests: every cited number states what
+was actually measured, and vendor claims motivate but never carry load.
 
 **P5 — The human is the steady state.** There is no autonomy ladder and no graduation
-criteria. Operator attention is the scarcest resource in the system and its binding rate
-limit; the design economizes it but never designs it away.
+criteria. Operator attention is the scarcest resource in the system and its binding rate limit;
+the design economizes it but never designs it away.
 
 ## 3. Architecture in one page
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ OPERATOR      teaches via skills · reviews via git ·        │  outside the
-│               owns ~/.dsh (profile, keys, gate flags)       │  agent's reach
-├─────────────────────────────────────────────────────────────┤
-│ KAIROS        dsh runtime · skills (mechanics + style) ·    │  the agent
-│               works strategies/ · queries via MCP tools     │
-├─────────────────────────────────────────────────────────────┤
-│ alpaca_kit    one Python package, two faces:                │  the workbench
-│               importable lib (backtests) + MCP server        │  (this repo)
-│               (interactive queries) · shared PIT guards      │
-├──────────────────────────────┬──────────────────────────────┤
-│ MARKET                       │ ACCOUNT                      │
-│ Alpaca REST · EDGAR ·        │ Alpaca paper: account /      │
-│ offline PIT beds             │ positions / orders queries   │
-│                              │ (order tools double-gated)   │
-└──────────────────────────────┴──────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│ OPERATOR   teaches via skills · reviews via git · reads the two  │  outside the
+│            instruments · owns ~/.dsh (profile patch, gate flag,  │  agent's reach
+│            LLM key); broker keys sit at the repo root (D8)       │  (except the keys)
+├──────────────────────────────────────────────────────────────────┤
+│ FACE       kairos-face, one Node process at 127.0.0.1:3090:      │  the operator's
+│            hosts dsh in-process · chat per channel · /market ·   │  surface; also
+│            /account · the per-order approval card (Gate 2)       │  where Gate 2 lives
+├──────────────────────────────────────────────────────────────────┤
+│ KAIROS     dsh runtime · skills (mechanics + style) ·            │  the agent
+│            works strategies/ · queries via MCP tools ·           │
+│            may call rostered local CLIs as tools                 │
+├──────────────────────────────────────────────────────────────────┤
+│ alpaca_kit one Python package, two faces: importable lib         │  the workbench
+│            (backtests) + MCP server (interactive queries) ·      │  (this repo)
+│            shared PIT guards · Gate 1 (registration)             │
+├────────────────────────────────┬─────────────────────────────────┤
+│ MARKET                         │ ACCOUNT                         │
+│ Alpaca REST · EDGAR ·          │ Alpaca paper: account /         │
+│ offline PIT beds               │ positions / orders queries      │
+│                                │ (order tools double-gated)      │
+└────────────────────────────────┴─────────────────────────────────┘
 ```
 
-Everything below the operator row is mechanism and lives in the spec and the code alongside
-this file. This charter does not restate tool tables, gate wiring, or bed windows.
+Everything below the operator row is mechanism and lives in `DEVELOPMENT.md` and the code
+alongside this file. This charter does not restate tool tables, route tables, or bed windows.
 
 ## 4. The write map
 
@@ -85,17 +114,24 @@ Who may change what. This table is the charter's core; everything else supports 
 | Surface | Writer | Audit / gate |
 |---|---|---|
 | `strategies/` | **Kairos, freely** | git history is the ledger; the operator reviews diffs |
+| `alpaca_kit/`, `face/`, `scripts/`, tests | normal engineering (operator and coding agents, reviewed) | offline suites, meta-gates, and the drills — this tier includes the code of both order gates |
 | `dsh/skills/mechanics/` | operator only | law, not style: backtest rules and tool mechanics; Kairos treats them as binding |
 | `dsh/skills/style-kairos/` | operator only | Kairos proposes changes in its journal or in conversation; it never edits the pack |
-| dsh profile, harness home, `ALPACA_KIT_ENABLE_ORDERS` | operator only | outside the workspace — structurally unreachable, not merely forbidden |
-| `alpaca_kit/` + tests | normal engineering (operator and coding agents, reviewed) | offline test suite + meta-gates |
-| `data/pit/` beds | nobody — read-only captured artifacts | checksums; recapture is the only legitimate write |
-| paper orders | nobody today | **Gate 1** (enforced, test-pinned): order tools register only when the operator's flag AND broker keys are both present. **Gate 2** (intent, not yet validated): per-order human approval in dsh — must be proven live before the flag ever flips |
+| `$DSH_HOME`: the profile patch, the order flag, keys, sessions | operator (the patch file); the face rewrites `cordis.yml` and its own metadata files | outside the workspace: no file effect can reach it; reachable over loopback from a shell turn (D10) |
+| a channel's agent roster | operator, through the face | every write appends a dated line to `roster.log`; a menu, not a fence (D9) |
+| `data/pit/` beds | nobody — read-only captured artifacts | a `CHECKSUMS` manifest on the 2yr bed (the broad bed predates the manifest and carries none), checked by hand; recapture is the only legitimate write |
+| paper orders | nobody today | **Gate 1** (registration; enforced, test-pinned): the order tools exist in a session only when the operator's flag AND broker keys are both present. **Gate 2** (per-order approval; built 2026-09-04, in the face): every call to an order tool stops for a card the operator must answer (under a `never` policy, or with no session to ask in, it is denied outright rather than asked), and a guard admits the call only on a logged one-shot approval for that exact call and tool. Its automated drill passed and is mutation-proven for the refusing half (the card is raised, the read-only listing is not gated, an unapproved order does not dispatch); the admitting half — a real logged grant letting an approved order through the live pipeline — is unit-tested only; its human half — a person reading the card against armed tools in a scratch home — has not been run (D3). It binds only when dsh runs inside the face (D8) |
 
-Two honesty notes the table depends on. First, Gate 2 is written down as intent because dsh
-is in developer preview and the approval mechanism gets pinned at install; until an order call
-demonstrably prompts a human, Gate 1 is the only enforced layer. Second, the workspace
-boundary protects the runtime, not the repo: mechanics skills and `alpaca_kit` are inside the
+Three honesty notes the table depends on. First, both order gates hold the MCP tool *surface*,
+not the account: the library's order function carries no flag, the broker key file is readable
+from the workspace, and a shell turn could import the client directly — the paper-hostname pin
+bounds what that can do, and D8 carries the rest. Second, Gate 2 is a gate, not containment: it
+stops the model's ordinary tool calls; a wrapper on dsh's execute seam or an unrestricted shell
+walks around it, and the same shell can answer its own card over loopback — the respond route
+carries no token — leaving a genuine one-shot approval in the log, so the guard proves that a
+grant was recorded, not who recorded it (D10; Rule 2 applied honestly). Third, the workspace
+boundary protects the runtime,
+not the repo: `alpaca_kit`, the face, the mechanics skills and Gate 2's own code are inside the
 workspace and are protected by review and tests, not by placement.
 
 ## 5. Debts, carried openly
@@ -107,11 +143,15 @@ solved would be worse than carrying them.
 |---|---|---|---|
 | D1 | The measured party writes its own measurements: Kairos produces its own `backtests/` and `journal.md` | operator reviews diffs; the rules skill binds method | before any strategy enters paper forward-testing |
 | D2 | Agent commits and operator commits are indistinguishable in git | single operator, low volume | cheap fix (distinct commit identity for Kairos) on first confusion |
-| D3 | Gate 2 unvalidated (see §4) | orders are unregistered by default | before `ALPACA_KIT_ENABLE_ORDERS` ever flips |
+| D3 | Gate 2's human half is undrilled: no person has yet read the order card against armed tools | orders are unregistered by default; the automated half is drilled | before `ALPACA_KIT_ENABLE_ORDERS` ever flips in the real harness home |
 | D4 | Mechanics skills are prose-protected only | single user; every edit reviewed | if skills ever get a second writer, including Kairos |
 | D5 | Spend (LLM + data API) is unmetered | costs are small and visible on bills | first surprise bill, or any scheduled autonomous runs |
-| D6 | The untested guards have no drills (Gate 2, mechanics red-lines) | carried rule: a new guard ships with its drill in the same change | as guards land |
+| D6 | The mechanics red-lines have no drill; no test reads the content of the skill packs | single user; every edit reviewed | carried rule: a new guard ships with its drill in the same change |
 | D7 | No instrument for net-negative drift: nothing compares "now" against "never-evolved" | strategies are few; the operator still reads everything | when an independent evaluator exists (see D1) |
+| D8 | Both order gates are prose against a shell: they hold the tool surface, the key file sits at the repo root, and Gate 2 exists only inside the face | paper account; hostname pin; the flag has never been armed | real-money intent, or any host other than the face running the profile with the flag set |
+| D9 | The channel roster is a menu, not a fence: tool schemas are tree-wide, a session in no channel is never roster-checked, and a shell turn can call a CLI directly | it reduces noise and states intent; writes are logged | if a rostered agent ever gets a capability the operator would not grant every channel |
+| D10 | The harness home and the face's own routes are reachable over loopback from inside the workspace — a fence, not authentication — including the approval-answer route, so a shell turn can approve its own order card; and the MCP server, a child of the face process, writes outside the sandbox | one operator, one machine; the writes are small and visible; the paper pin bounds an answered card | a second human, a hosted deployment, real-money intent, or the first unexplained change to `$DSH_HOME/face/*` |
+| D11 | The model is never told it is Kairos: the persona seat in the harness config is empty | the label is on the page and in the directory names | the operator's call; the config seat already exists |
 
 ## 6. Rules carried forward
 
@@ -136,12 +176,19 @@ was expensive.
 
 ## 7. What this design deliberately does not build
 
-- **No second agent.** Teaching, review, and adjudication belong to the operator. A reviewer
-  entity would add a plane of machinery to buy safety that already comes from P1.
+- **No second agent.** Teaching, review, and adjudication belong to the operator. The local
+  CLIs the operator may roster on a channel (today `claude` and `codex` carry exec recipes and
+  become callable tools; the connect list knows thirteen more that can be rostered but not
+  driven) are subordinate tools of the one agent, never peers; a reviewer entity would add a
+  plane of machinery to buy safety that already comes from P1.
 - **No proposal queue.** Change lands by editing; git is the ledger and the rollback. A
   deliberation pipeline is bureaucracy at this scale.
-- **No bespoke harness.** dsh owns the runtime — sessions, tools, approvals, sandboxing,
-  subagents. We configure it; we do not fork it or wrap it.
+- **No bespoke harness.** dsh owns the runtime — sessions, tools, sandboxing, subagents, and
+  the approval channel. The face hosts it in-process and registers the order producer on dsh's
+  published `tools/pre-execute` seam; that is configuration in code on a pinned version, not a
+  fork, and the two pins make the dependence explicit. We do not fork it or wrap its loop.
+- **No hosted face.** Loopback only, one machine, no authentication machinery on the local
+  surfaces (see D10 for what that costs).
 - **No multi-tenant, cryptographic, or kernel-level machinery.** One operator, one machine.
   The risks are named here in one line each instead of being built against: a hosted or
   multi-user deployment invalidates this charter rather than extending it.
@@ -154,8 +201,10 @@ Few and concrete. Each names the section it reopens.
 
 | Trigger | Reopens |
 |---|---|
-| Real-money intent (any non-paper order path) | §4 Gate 2 validation · D1 · D3 · broker-key rotation |
+| Arming `ALPACA_KIT_ENABLE_ORDERS` in the real harness home | D3 first (run the human half of the order drill in a scratch home) · D8 |
+| Real-money intent (any non-paper order path) | §4 both gates · D1 · D3 · D8 · broker-key rotation |
+| Running the profile in any host other than the face | D8 (Gate 2 is absent there) |
 | Kairos begins authoring reusable skills | Rule 7 → lifecycle machinery · D4 |
 | An independent evaluator is introduced | D1 · D7 (the measurement plane) |
-| dsh leaves developer preview or ships a breaking change | profile + skills format re-pin |
+| dsh leaves developer preview or ships a breaking change | the two pins · profile and skills format · the drills |
 | A second human, or any hosted deployment | this charter is the wrong document; write the next one |
