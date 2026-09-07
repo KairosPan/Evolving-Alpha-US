@@ -24,21 +24,35 @@ export const ARCHIVED_KEY = "__archived";
 /** Sentinel bucket key for sessions no channel claims — never a real `workspaceId`. */
 export const UNGROUPED_KEY = "__ungrouped";
 
+/** Sentinel PREFIX for a bot's home sessions: `bot:<id>` — never a real `workspaceId`. */
+export const BOT_KEY_PREFIX = "bot:";
+/** Whether a bucket key names a bot (the id is dsh's preset grammar). */
+export function isBotKey(key) {
+  return typeof key === "string" && /^bot:[a-z0-9][a-z0-9-]*$/.test(key);
+}
+
 /**
  * Which sidebar bucket one session belongs in, and what to show for it.
- * Archived takes priority over channel membership (an archived session's
- * channel, if any, is not what the sidebar groups it by).
+ * Archived takes priority over everything (an archived session's channel or
+ * bot, if any, is not what the sidebar groups it by), and a bot takes
+ * priority over channel membership: a bot's home session lives in its
+ * journal, which is inside no channel, but the precedence is written down
+ * rather than relied on so a bot prompted from a channel directory still
+ * files under its own voice.
  * @param {{workspaceId: string, title: string}|null} channel - the session's
  *   channel from the host's own membership index, or `null` when it belongs
  *   to none.
  * @param {boolean} archived - the session is archived (face-local ∪ host).
+ * @param {{id: string, label: string}|null} bot - the session's bot when its
+ *   `agentPreset` names one (never the default `kairos`), else `null`.
  * @returns {{key: string, label: string, channel: {workspaceId: string, title: string}|null}}
  *   `key` is the durable bucket identity to group and persist collapse state
- *   by; `label` is the display text; `channel` is `null` for both synthetic
- *   buckets (there is nothing to open by clicking their header).
+ *   by; `label` is the display text; `channel` is `null` for the synthetic
+ *   buckets and for a bot (there is nothing to open by clicking their header).
  */
-export function bucketFor(channel, archived) {
+export function bucketFor(channel, archived, bot) {
   if (archived) return { key: ARCHIVED_KEY, label: "archived", channel: null };
+  if (bot !== null && bot !== undefined) return { key: BOT_KEY_PREFIX + bot.id, label: bot.label, channel: null };
   if (channel !== null) return { key: channel.workspaceId, label: channel.title, channel };
   return { key: UNGROUPED_KEY, label: "ungrouped", channel: null };
 }

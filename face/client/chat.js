@@ -38,7 +38,8 @@ import { mapFrame } from "./mapper.js";
 import { renderResult } from "./render.js";
 import { renderMarkdown } from "./markdown.js";
 import { renderChannelPage } from "./channels.js";
-import { ARCHIVED_KEY, bucketFor, UNGROUPED_KEY } from "./grouping.js";
+import { ARCHIVED_KEY, BOT_KEY_PREFIX, bucketFor, isBotKey, UNGROUPED_KEY } from "./grouping.js";
+import { proposeBotId } from "./botId.js";
 
 /** Rendered in place of a value the host did not give us. */
 const EM = "—";
@@ -941,7 +942,7 @@ async function refreshSessions() {
   const token = ++listSeq;
   let value;
   try {
-    [value] = await Promise.all([rpc("session.list"), loadChannelIndex()]);
+    [value] = await Promise.all([rpc("session.list"), loadChannelIndex(), loadBotIndex()]);
   } catch (err) {
     failed(err, "session.list");
     return;
@@ -975,7 +976,7 @@ async function refreshSessions() {
     // Attached sessions list with a projections block — seed the usage store.
     seedProjections(id, summary.projections);
     const archived = archivedSet.has(id) || hostArchived.has(id);
-    const { key, label, channel } = bucketFor(channelOf(id), archived);
+    const { key, label, channel } = bucketFor(channelOf(id), archived, botOf(summary));
     let bucket = buckets.get(key);
     if (bucket === undefined) {
       bucket = { channel, label, items: [] };
@@ -983,7 +984,8 @@ async function refreshSessions() {
     }
     bucket.items.push(summary);
   }
-  const order = [...buckets.keys()].filter((key) => key !== UNGROUPED_KEY && key !== ARCHIVED_KEY);
+  const order = [...buckets.keys()].filter((key) => key !== UNGROUPED_KEY && key !== ARCHIVED_KEY && !isBotKey(key));
+  order.push(...[...buckets.keys()].filter((key) => isBotKey(key)).sort());
   if (buckets.has(UNGROUPED_KEY)) order.push(UNGROUPED_KEY);
   if (buckets.has(ARCHIVED_KEY)) order.push(ARCHIVED_KEY);
   for (const key of order) {
@@ -1063,6 +1065,7 @@ function newSession() {
   activeSession = null;
   pendingCwd = undefined;
   pendingWorkspaceId = undefined;
+  pendingAgentPreset = undefined;
   resetFlow();
   markActive();
   status("new session · pick a strategy, then type below");
@@ -1086,6 +1089,12 @@ let pendingCwd;
  * still works. `session.create` accepts workspaceId OR cwd, never both.
  * @type {string|undefined} */
 let pendingWorkspaceId;
+
+/** The agent preset the NEXT `session.create` names: a bot's id for its home
+ * session, `undefined` for Kairos (the gateway then mounts the default).
+ * Set with `pendingCwd = <bot>.homeCwd` by openBotHome; reset wherever the
+ * other two pendings are. @type {string|undefined} */
+let pendingAgentPreset;
 
 /** The last `session.list` answer (ghosts dropped): the picker derives the
  * local folders sessions have worked in from it. @type {Record<string, any>[]} */
@@ -1114,6 +1123,7 @@ function knownFolders() {
   for (const summary of lastSessions) {
     const cwd = summary.cwd;
     if (typeof cwd !== "string" || cwd === "" || dirs.has(cwd)) continue;
+    if (channelIndex.root && cwd.startsWith(`${channelIndex.root}/bots/`)) continue; // a bot's home, not a folder
     const name = cwd.split("/").filter((part) => part !== "").pop();
     if (name !== undefined && !out.has(cwd)) out.set(cwd, name);
   }
@@ -1148,6 +1158,24 @@ async function loadChannelIndex() {
     if (body?.ok === true) channelIndex = body;
   } catch { /* grouping degrades to "ungrouped"; the picker says so */ }
   return channelIndex;
+}
+
+/** `/data/bots.json`'s last good `bots` array - id, name, homeCwd, soul, broken?, isDefault, listed. @type {Record<string, any>[]} */
+let botIndex = [];
+async function loadBotIndex() {
+  try {
+    const body = await panelData("/data/bots.json");
+    botIndex = Array.isArray(body.bots) ? body.bots : [];
+  } catch { /* the sidebar labels a bot by id instead of name */ }
+  return botIndex;
+}
+/** The bot a session belongs to, from its own header: `agentPreset` names one
+ * and it is not the default. `null` for Kairos and for a preset-less session. */
+function botOf(summary) {
+  const id = summary?.agentPreset;
+  if (typeof id !== "string" || id === "kairos") return null;
+  const bot = botIndex.find((b) => b.id === id);
+  return { id, label: bot?.name ?? id };
 }
 
 /** Session ids the operator archived — face metadata from
@@ -1202,7 +1230,7 @@ const collapsedGroups = new Set(/** @type {string[]} */ ((() => {
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return raw
     .map((k) => (k === "archived" ? ARCHIVED_KEY : k === "ungrouped" ? UNGROUPED_KEY : k))
-    .filter((k) => typeof k === "string" && (k === ARCHIVED_KEY || k === UNGROUPED_KEY || UUID_RE.test(k)));
+    .filter((k) => typeof k === "string" && (k === ARCHIVED_KEY || k === UNGROUPED_KEY || UUID_RE.test(k) || isBotKey(k)));
 })()));
 
 function persistCollapsed() {
@@ -1272,6 +1300,7 @@ function pickerRow(label, cwd, badge, picker, workspaceId) {
   const choose = () => {
     pendingWorkspaceId = workspaceId;
     pendingCwd = workspaceId === undefined ? cwd : undefined;
+    pendingAgentPreset = undefined;
     for (const other of picker.querySelectorAll(".pick-row")) other.classList.toggle("sel", other === row);
     status(`new session · ${label} · type below`);
   };
@@ -1411,12 +1440,14 @@ async function send() {
       const payload = pendingWorkspaceId !== undefined
         ? { workspaceId: pendingWorkspaceId }
         : (pendingCwd === undefined ? {} : { cwd: pendingCwd });
+      if (pendingAgentPreset !== undefined) payload.agentPreset = pendingAgentPreset;
       const created = await rpc("session.create", payload);
       const id = created?.sessionId;
       if (typeof id !== "string") throw new Error("session.create returned no sessionId");
       activeSession = id;
       pendingCwd = undefined;
       pendingWorkspaceId = undefined;
+      pendingAgentPreset = undefined;
       flow().querySelector(".picker")?.remove();
       await refreshSessions();
       markActive();
@@ -1588,6 +1619,7 @@ async function openChannel(channel) {
         activeSession = null;
         pendingWorkspaceId = channel.workspaceId;
         pendingCwd = undefined;
+        pendingAgentPreset = undefined;
         closeDetail();
         resetFlow();
         markActive();
@@ -1802,11 +1834,144 @@ async function refreshAgentPanel() {
     panel.append(indexRow(add, () => void openConnectPage()));
   }
 
+  /* -- bots: the operator's own voices, one directory each under bots/ -- */
+  panel.append(spGroup("bots"));
+  const bots = await loadBotIndex();
+  if (activePanel !== "agent") return; // the operator moved on mid-fetch
+  const voices = bots.filter((b) => b.isDefault !== true);
+  for (const bot of voices) {
+    const line = el("div", "sp-plug");
+    line.append(phaseDot(bot.broken ? "failed" : bot.listed === false ? "warn" : "active"), el("span", "sp-plug-name", String(bot.name)));
+    line.title = bot.broken ? `broken: ${bot.broken}` : bot.listed === false ? "on disk, not reported by the preset roster" : String(bot.description ?? "");
+    panel.append(indexRow(line, () => openBot(bot)));
+  }
+  if (voices.length === 0) panel.append(el("div", "sp-note", "no bots yet"));
+  const addBot = el("div", "sp-plug sp-add");
+  addBot.append(el("span", "sp-plug-name", "+ new bot"));
+  panel.append(indexRow(addBot, () => openNewBot()));
+
   /* -- a2a network: declared, not yet open -- */
   panel.append(spGroup("a2a network"));
   const a2a = el("div", "sp-plug off");
   a2a.append(phaseDot("disabled"), el("span", "sp-plug-name", "A2A network"));
   panel.append(indexRow(a2a, openA2A));
+}
+
+/** Arm the next prompt to create this bot's HOME session: cwd = its journal
+ * (the only directory the bot may write), agentPreset = its id (the gateway
+ * mounts the preset). Mirrors onNewRound; no session exists until the prompt. */
+function openBotHome(bot) {
+  openSeq += 1;
+  loadingSession = null;
+  activeSession = null;
+  pendingWorkspaceId = undefined;
+  pendingCwd = String(bot.homeCwd);
+  pendingAgentPreset = String(bot.id);
+  closeDetail();
+  resetFlow();
+  markActive();
+  status(`new session · ${bot.name} at home · type below`);
+}
+
+/** One bot's page: what it is, where it lives, its home sessions, its soul.
+ * The soul is editable here and nowhere else in the client. */
+function openBot(bot) {
+  openDetail(`bot · ${bot.name}`, (inner) => {
+    inner.append(el("div", "detail-title", String(bot.name)));
+    inner.append(el("div", "detail-sub", `${bot.id} · ${bot.description || "no description"}`));
+    if (bot.broken) inner.append(el("div", "sp-note err", `dsh cannot mount this bot: ${bot.broken}`));
+    else if (bot.listed === false) inner.append(el("div", "sp-note err", "the preset roster does not report this directory - is its agent.cordis.yml present?"));
+    inner.append(el("div", "detail-path", String(bot.dir)));
+
+    const actions = el("div", "detail-actions");
+    const home = el("button", "picker-btn", "open home");
+    home.type = "button";
+    home.disabled = Boolean(bot.broken);
+    home.addEventListener("click", () => openBotHome(bot));
+    actions.append(home);
+    inner.append(actions);
+
+    const homes = lastSessions.filter((s) => s.agentPreset === bot.id);
+    const card = panelCard(`home sessions · ${homes.length}`);
+    for (const s of homes) {
+      const row = el("div", "ch-session");
+      row.setAttribute("role", "button");
+      row.tabIndex = 0;
+      row.append(el("span", "ch-session-title", titleOf(s)));
+      row.addEventListener("click", () => { closeDetail(); void openSession(String(s.sessionId)); });
+      card.append(row);
+    }
+    if (homes.length === 0) card.append(el("div", "sp-note", "none yet - open home and say something"));
+    inner.append(card);
+
+    const soulCard = panelCard("soul");
+    const soul = /** @type {HTMLTextAreaElement} */ (el("textarea", "picker-input"));
+    soul.rows = 8;
+    soul.value = String(bot.soul ?? "");
+    const save = el("button", "picker-btn", "save soul");
+    save.type = "button";
+    save.addEventListener("click", async () => {
+      save.disabled = true;
+      try {
+        const body = await panelData("/data/bots/soul", { id: bot.id, soul: soul.value });
+        bot = body.bot;
+        status(`saved soul of ${bot.name} - a fresh session will carry it (a running one keeps its prompt)`);
+      } catch (err) {
+        failed(err, "save soul");
+      } finally {
+        save.disabled = false;
+      }
+    });
+    soulCard.append(soul, save);
+    inner.append(soulCard);
+  });
+}
+
+/** The New-bot form. The id is PROPOSED from the display name and stays
+ * editable - a name in a script with no ASCII letters proposes nothing, and
+ * the server then refuses the empty id rather than inventing one. */
+function openNewBot() {
+  openDetail("new bot", (inner) => {
+    inner.append(el("div", "detail-title", "New bot"));
+    inner.append(el("div", "detail-sub", "copies bots/_template · a voice, not a hand"));
+    const form = el("div", "picker-new");
+    const name = /** @type {HTMLInputElement} */ (el("input", "picker-input"));
+    name.type = "text";
+    name.placeholder = "display name (any script)";
+    const id = /** @type {HTMLInputElement} */ (el("input", "picker-input"));
+    id.type = "text";
+    id.placeholder = "id - lowercase letters, digits, - (proposed from the name)";
+    name.addEventListener("input", () => { id.value = proposeBotId(name.value); });
+    const description = /** @type {HTMLInputElement} */ (el("input", "picker-input"));
+    description.type = "text";
+    description.placeholder = "one line - the stance this voice argues";
+    const soul = /** @type {HTMLTextAreaElement} */ (el("textarea", "picker-input"));
+    soul.rows = 6;
+    soul.placeholder = "persona (optional; the template's if empty; no {{ }})";
+    const create = el("button", "picker-btn", "create");
+    create.type = "button";
+    create.addEventListener("click", async () => {
+      create.disabled = true;
+      try {
+        const payload = { name: name.value.trim(), id: id.value.trim(), description: description.value.trim() };
+        if (soul.value.trim() !== "") payload.soul = soul.value;
+        const body = await panelData("/data/bots", payload);
+        /* Open the FRESH index row, not the one the POST returned: the roster
+         * re-scans on every list, so the created row carries `listed: false`
+         * and its page would warn about a bot dsh reports perfectly well. */
+        await refreshAgentPanel();
+        openBot(botIndex.find((b) => b.id === body.bot.id) ?? body.bot);
+      } catch (err) {
+        failed(err, "create bot");
+      } finally {
+        create.disabled = false;
+      }
+    });
+    form.append(name, id, description, soul, create);
+    inner.append(form);
+    inner.append(el("div", "sp-note",
+      "The mask in the composition is visibility, not authority: what a bot may write is its session's sandbox, what it may order is Gate 2."));
+  });
 }
 
 /** The main agent's page: identity, model, host, keys, live session usage.
