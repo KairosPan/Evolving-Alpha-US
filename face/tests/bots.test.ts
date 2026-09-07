@@ -99,6 +99,19 @@ test("updateSoul rewrites SOUL.md and the composition's persona together, and 40
   await assert.rejects(updateSoul(root, "probe", "{{"), (err: HttpError) => err.status === 400);
 });
 
+test("updateSoul regenerates a composition js-yaml cannot parse, instead of throwing the parser's error", async () => {
+  const root = await makeBotsRoot();
+  await createBot(root, { id: "probe", name: "Probe", soul: "v1" });
+  await writeFile(join(root, "probe", "agent.cordis.yml"), "- id: bot\n  config: [\n");   // truncated: load() throws
+  const after = await updateSoul(root, "probe", "repaired");
+  assert.equal(after.soul, "repaired");
+  assert.equal(await readFile(join(root, "probe", "SOUL.md"), "utf8"), "repaired\n");
+  const rows = load(await readFile(join(root, "probe", "agent.cordis.yml"), "utf8")) as { config: { persona: string; allow: string[] } }[];
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].config.persona, "repaired");
+  assert.deepEqual(rows[0].config.allow, [...DEFAULT_ALLOW]);
+});
+
 test("listBots reads every directory in the grammar, marks the default, carries dsh's broken reason, and flags a bot the roster does not report", async () => {
   const root = await makeBotsRoot();
   await createBot(root, { id: "probe", name: "Probe", description: "a test voice", soul: "You are Probe." });

@@ -183,7 +183,12 @@ export async function updateSoul(root: string, id: unknown, soul: unknown): Prom
   const text = rejectSoul(soul);
   const dir = join(root, id);
   if (!(await exists(join(dir, "agent.cordis.yml")))) throw new HttpError(404, "no such bot");
-  const current = load(await readFile(join(dir, "agent.cordis.yml"), "utf8")) as { id?: string; config?: { allow?: unknown } }[] | null;
+  // A composition too broken for js-yaml is exactly the one the operator is here to repair
+  // (Rule 5 lists it): read it for the mask if it parses, otherwise regenerate from DEFAULT_ALLOW.
+  const raw = await readFile(join(dir, "agent.cordis.yml"), "utf8");
+  type MaskRows = { id?: string; config?: { allow?: unknown } }[] | null;
+  let current: MaskRows = null;
+  try { current = load(raw) as MaskRows; } catch { current = null; }
   const allowRow = Array.isArray(current) ? current.find((r) => r?.id === "bot") : undefined;
   const allow = Array.isArray(allowRow?.config?.allow) ? (allowRow!.config!.allow as string[]) : [...DEFAULT_ALLOW];
   await writeFile(join(dir, "SOUL.md"), `${text}\n`, "utf8");
