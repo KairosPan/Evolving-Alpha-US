@@ -725,10 +725,12 @@ fails; drop the `room/member` check and the fold test admits a fork.
   or `skills/` does not until the face rewrites the YAML or the process restarts. Documented in
   `face/README.md`.
 - **R5 — No cross-channel memory** (§7).
-- **R6 — A member's pending gate with no client connected** waits until the hard cap cancels the
-  member. The approval card's no-client behavior is documented (`face/README.md:698-700`, "blocks
-  rather than denying"); whether `ask_user_question` behaves identically with no client is
-  **[spike S7]**, to be recorded in the ask-user drill either way.
+- **R6 — A member's pending gate with no client connected** blocks until the hard cap cancels it.
+  The approval card's no-client behavior was already documented ("blocks rather than denying");
+  S7 measured the question seam and found it identical: `userQuestions.ask()` from an agent-owned
+  session with no client neither answers nor rejects, it parks until the caller aborts. It does not
+  fail loud. (An agentless *host* ask is the other branch and is rejected up front — no member ever
+  takes it.) Recorded in `DEVELOPMENT.md` §9 R11.
 - **R7 — The three face JSON files are not plugins** (§11).
 - **R8 — Escalation cards** (S4) let the operator grant a room bot a file write; every such grant is
   logged on the member's session. The asymmetry is enforced-with-a-human-exception, not absolute.
@@ -779,3 +781,74 @@ the deny list, now enumerated). Contradictions resolved: home write scope (now `
 vs continuations, `@` delta, strip states vs log truth (coarse events logged, fine states live),
 channel-scoped 1:1 (dropped), gate-pending vs hard cap. New spikes from the pass: S6 (the join is not
 the header field) and S7. The scope finding produced §14.
+
+---
+
+## 16. Post-build amendments (plan 1)
+
+Plan 1 of §14 — **bots without rooms** — is built (branch `feat/bots-1`, 223 face tests, typecheck
+clean). Plans 2–4 are unbuilt and this section does not touch them. What follows is what the build
+changed about the design, and what the spikes measured. Everything else in this document stands as
+written.
+
+**Deviations from the design.**
+
+1. **One face-owned plugin instead of `@deepseek-ai/dsh-persona` + `kairos-face/bot-mask`.**
+   `dsh-persona` is not in the face's bundle; the mask needs a face plugin anyway; and dsh's own
+   `dsh-subagent` composes a child exactly this way — a scoped `deployment:persona` section plus
+   `tools.restrict`. So `face/plugins/bot.js` (`kairos-bot`) does both, in one row of the
+   composition. §2.2's `!!js` reading `SOUL.md` is moot: the face writes the persona text into
+   the composition (`renderComposition`), which the spec's own fallback already allowed.
+2. **The mask is an `allow` list, not a `deny` list.** dsh-tools: deny masks admit later unnamed
+   globals, allow masks exclude later names. Every tool a bot must never have is registered
+   *after* the mount — `agent_<bin>` on connect, `mcp__…__place_order` when the MCP server comes
+   up, `dispatch` in plan 2 — so an allow list excludes them without naming them. `mcp__*__<raw>`
+   entries expand against the live tree (`expandAllow`); a name the tree does not have is warned
+   and dropped rather than passed to `restrict`, which rejects unknown names.
+3. **S6 was not needed.** The gateway's `session.create` accepts `agentPreset` and performs the
+   mount in its own `setup`, so a home session rides that path straight from the client
+   (`openBotHome` → `session.create({ cwd: <journal>, agentPreset })`) with no in-process agent
+   creation. S6 moves to plan 2, where member sessions need `parentSession` and the `read-only`
+   pin.
+4. **The home-scope sandbox test is not in plan 1.** A home session is `workspace-write` with
+   `cwd = journal/`, which the sandbox grants by construction; proving that a write to
+   `../SOUL.md` is refused needs a bash write through the real sandbox from such a session. S4
+   exercises the `read-only` case only. The home-scope case goes to plan 2, beside the
+   member-session pin.
+
+**Spike outcomes** (`FACE_SMOKE=1 npm test`, 2026-09-07).
+
+- **S1 — the path form works, and is what shipped.** The plugin row is a PATH, not a package
+  specifier. Real presets carry the relative `../../face/plugins/bot.js` (`BOT_PLUGIN_RELATIVE`),
+  which the preset mount resolves from the preset's own directory; the smoke fixture, living in a
+  temp root that can reach no `node_modules`, uses an absolute path (`PLUGIN_ABS`). The
+  package-specifier fallback the spec kept in reserve was never needed. The persona text the face
+  wrote into the composition reaches the assembled prompt.
+- **S2 — the mask holds, and is exactly `allow ∩ tree`.** The fixture's
+  `["bash","read","ask_user_question","no_such_tool"]` yields `[ask_user_question, bash, read]` on
+  a bot session. **S3** — Kairos's set equals the host's global view: the inert `kairos` default
+  adds and removes nothing.
+- **S4 — a sandboxed write is refused inside the tool's content, not as an error.** Observed:
+
+      SANDBOX-DENIED (tool call ok, write refused in content); approval/asked in log: false;
+      result: [stderr] bash: <tmp>/s4-should-not-exist.txt: Operation not permitted
+      [sandbox: file access denied under read-only mode] [sandbox: escalation available — retry
+      this exact comman…
+
+  (the printed result is truncated). So: under `read-only` the call itself is not an error, no
+  `approval/asked` is logged, the file does not exist, and the content advertises an escalation
+  retry. **D12 in plan 2 must be worded off the tool CONTENT** — "refused in content, escalation
+  offered" — not off `isError` and not off a card. Recorded as `DEVELOPMENT.md` §9 R10.
+- **S7 — a question with no client blocks.** Observed: `timeout`. `userQuestions.ask()` from an
+  agent-owned session with no client connected parks like the approval card until the caller
+  aborts; it never answers and never rejects. Also observed: an agentless (host) ask is rejected
+  up front with `UserQuestionError: web user interaction requires an agent-owned session`. R6
+  above is reworded from this. Recorded as `DEVELOPMENT.md` §9 R11.
+- **S5** belongs to the room engine and was not run; it moves to plan 2 with S6.
+
+**Where the as-built truth now lives.** `face/README.md` "Bots" and "The bots drill";
+`DEVELOPMENT.md` §3.7 (the bot directory contract), §4.2/§4.3/§4.4/§4.5 (modules, the
+`agent-presets` overlay row, the three routes, `bots/<id>/` as written state), §5.1 (the client
+files and the bucket precedence), §7.3/§7.4 (the suite and the drill rows), §8 (the never-edit
+list and the mask-is-visibility rule), §9 R6/R10/R11, §10 item 9 (rooms). `AGENTS.md`'s never-edit
+line now carries `bots/`. The charter's D11 and §7.1 amendment ride plan 4, as §14 says.

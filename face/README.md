@@ -462,6 +462,79 @@ removed when the run ends. `panelDeps` fails loud at boot when
 `skills`/`tools`/`loader` are missing from the tree — a dead panel with
 nothing on stderr is the failure mode it exists to prevent.
 
+## Bots (src/bots.ts + plugins/bot.js + bots/)
+
+A bot is a dsh **agent preset**: one directory under `bots/` holding `agent.cordis.yml`
+(the composition dsh mounts), `preset.yml` (`name`, `description`), `SOUL.md` (the persona
+SOURCE), `skills/` (its stance pack, a dsh skill root) and `journal/` (the one directory it
+may write, from its home). The face mounts `@deepseek-ai/dsh-agent-presets` with `bots/` as
+its only root (`faceOverlay`, `AGENT_PRESETS_ROW_ID`, `includeUserRoot: false` — a bot the
+repository does not carry cannot exist) and `kairos` — an EMPTY composition — as the default
+every session joins when it names none, so Kairos's own sessions keep the host's flat roster
+unchanged (`bots-smoke.test.ts` pins the two tool sets equal). `bootFace` refuses to start if
+the roster service is missing, if the roster cannot be read, or if the default preset is
+absent or broken: every `session.create` resolves a preset, so a roster that cannot supply
+one would fail every session instead of the boot.
+
+**Kairos is the host plane; a bot is a mask.** Kairos is told who it is by the
+`system-prompt` row's `persona`, set from `dsh/profile/persona.md` by `composeFace`
+(D11 closed; a malformed template refuses the boot with the file named — `readPersona`).
+A bot's composition names one face-owned plugin, `plugins/bot.js` (`kairos-bot`), which
+registers the bot's persona section — shadowing Kairos's for that preset's agents — and an
+**allow-list** `tools.restrict`. Allow, not deny: dsh admits later-registered globals through
+a deny mask and excludes them through an allow mask, and the tools a voice must never see
+(`agent_<bin>` on connect, `mcp__…__place_order` when the MCP server comes up, `dispatch` in
+the rooms arc) are all registered after the mount. `mcp__*__<raw>` in the list expands
+against the live tree (`expandAllow`), so the operator's server name does not matter; a name
+the tree does not have is warned and dropped, and a list that survives to nothing at all
+throws rather than mounting a bot with no hands.
+
+**The mask is visibility, not authority.** dsh says so of every scope ("live visibility
+composition, not an authority boundary"). What a bot may write is its session's sandbox mode;
+what it may order is Gate 2, which is tree-wide. Neither changes when a bot is masked, and
+neither is containment.
+
+**Authoring is the face's own copy.** The **New bot** form (agent face → bots → `+ new bot`;
+`POST /data/bots`) copies `bots/_template`, writes `preset.yml` and `SOUL.md`, and RENDERS
+`agent.cordis.yml` so the persona row's text is the soul's (`renderComposition`) — dsh's
+`!!js` cannot read a sibling file. A soul saved on the bot page (`POST /data/bots/soul`,
+`updateSoul`) rewrites both. `renderComposition` writes the same two rows every time — the
+`kairos-bot` row and the bot's own skill root — so a third row the operator added by hand does
+not survive a soul save, and a composition `js-yaml` cannot parse is regenerated from
+`DEFAULT_ALLOW`, its hand-edited mask discarded. A hand edit to `SOUL.md` reaches nothing
+until the face saves it again, and a running session keeps the prompt it started with: the
+preset's generation is keyed on `agent.cordis.yml` alone and never reclaimed until restart
+(dsh-agent-presets README, "A superseded generation is never reclaimed"). No `{{` anywhere in
+a soul: the prompt is a strict template with no escape, and both write paths (`rejectSoul`, on
+the way in) and the plugin itself (`validateBotConfig`, at mount) refuse it.
+
+**A bot's home** is a session created with `cwd = bots/<id>/journal` and `agentPreset = <id>`
+— the client's `openBotHome` arms the next prompt exactly as a channel's "new round" does,
+and the gateway's own `session.create` mounts the preset (no in-process agent creation).
+The sidebar buckets a bot's sessions under its name from the session summary's `agentPreset`
+(`grouping.js` `bucketFor`, `BOT_KEY_PREFIX`); the strategy picker never offers a journal as a
+"local folder" (`knownFolders` skips every cwd under `bots/`). Ids are dsh's preset grammar
+`[a-z0-9][a-z0-9-]*`, bounded here to 64 code points (`BOT_ID_RE`); the form proposes one from
+the display name (`botId.js` `proposeBotId`, the browser twin of the server's — `botId.test.ts`
+pins that a non-empty proposal is always an id `isBotId` accepts) and the server refuses anything
+else — `kairos` by name (`RESERVED_IDS`) and `_template` by the grammar, which admits no leading
+underscore (both through `isBotId`).
+
+| Route | What |
+|---|---|
+| `GET /data/bots.json` | every directory in the grammar under `bots/`, with dsh's roster merged in: `broken` reasons shown, a directory the roster does not report flagged `listed: false` (Rule 5) |
+| `POST /data/bots` | create — `{name?, id?, description?, soul?}`, the id the one given or `proposeBotId(name)`; 400 an id outside the grammar or a soul carrying `{{`, 409 exists, 500 `_template` missing. The returned row always reads `listed: false` (it is built without the roster); the next GET reports the bot, because dsh re-scans on every `list()` |
+| `POST /data/bots/soul` | `{id, soul}` — rewrites `SOUL.md` and the composition together; 400 a bad id or a soul carrying `{{`, 404 unknown bot |
+
+All three stand behind `isTrustedDataRequest` (403), the two POSTs behind 405 / 415 / 400 for
+method, content type and body, with a 64 KiB body cap because a soul is prose.
+
+**Deleting a bot** is `git rm -r bots/<id>`; there is no button. Its sessions remain history.
+
+**Not built here (the rooms arc, plans 2–4 of the spec):** `dispatch`, member sessions, the
+participants strip, the roster's `bots[]`, a `read-only` pin for bots in rooms, and the charter
+amendment. Until then a bot has a home and a mask, and nothing else.
+
 ## Chat rendering (client/render.js + the collapsed process rows)
 
 The transcript renders dsh-style calm: every tool call and every injected
@@ -505,7 +578,7 @@ dropped and the table's meta line says so.
 ```bash
 npm test                  # offline unit tests - no keys, no network, no port
 npm run typecheck         # strict tsc against the pinned .d.ts - the contract test
-FACE_SMOKE=1 npm test     # + the one real boot (throwaway $DSH_HOME, no LLM call)
+FACE_SMOKE=1 npm test     # + the five real boots (throwaway $DSH_HOME, no LLM call)
 ```
 
 `npm test` works on seams: the composed patch stack, a recorder standing in for
@@ -864,3 +937,36 @@ plan-mode's "the user dismissed the review to speak instead" branch is dead;
 Stop is the only exit. And a question BLOCKS the turn, so an answer typed into
 the composer instead of the card is queued for the next turn rather than
 delivered — it says `sent` and nothing happens. Answer in the card.
+
+## The bots drill (run after any face or dsh change)
+
+A mask never pulled is presumed decorative.
+
+**Step 0, no model, no key.** `FACE_SMOKE=1 npm test` boots the real tree three extra times.
+`bots-smoke.test.ts` proves the roster lists a broken fixture with its reason and never
+`_template`, that a session created with `agentPreset` carries it on its header, that the bot
+sees exactly its allow-list ∩ the tree while Kairos sees the host's whole roster unchanged, that
+the bot's prompt opens with its own persona while Kairos's opens with `persona.md`, and that a
+session naming the broken preset is refused at `session.create` with dsh's own `agent-preset`
+error code.
+`bot-sandbox-smoke.test.ts` and `askuser-noclient-smoke.test.ts` print one `observed:` line each
+(S4, S7); their findings are recorded in the spec's amendments block.
+
+**Step 0b, if you changed anything under `client/`.** Hard-reload; `registerStatic` sets no
+cache headers.
+
+**The drill**, with the face live:
+
+1. Agent face → **bots** → `+ new bot`. Type a display name with spaces and capitals; PASS,
+   part one: the id field shows the folded proposal, lowercase with dashes.
+2. Create. PASS, part two: the bot page opens; `bots/<id>/` exists with `agent.cordis.yml`,
+   `preset.yml`, `SOUL.md`, `README.md`, `skills/README.md`, `journal/notes.md`; the boot line
+   of a restart, `agent presets: …`, lists the id.
+3. `open home`, say something. PASS, part three: the sidebar shows the session under the bot's
+   name, not under `ungrouped`; the reply speaks in the bot's persona, not Kairos's.
+4. Ask the bot to list its tools. PASS, part four: it names the shell, file and web tools and
+   `ask_user_question`, and does not name `subagent`, `place_order`, or any `agent_<bin>` — and
+   if the alpaca-kit MCP server is connected, it names the market-data reads and not `orders`.
+5. On the bot page, edit the soul to include `{{` and save. PASS, part five: refused with the
+   strict-template message; the file is unchanged.
+6. Clean up: `git rm -r bots/<id>` (or keep it — it is yours).

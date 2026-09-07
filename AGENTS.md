@@ -35,4 +35,5 @@ strategies/.
 - docs/backtest-rules.md — the five honest-eval rules. Every backtest follows them.
 - Tests: python -m pytest (offline, no keys; -q is already the default). Keep it green.
 
-Never edit: data/pit/ contents, dsh/ profile installed copies, or anything under docs/research/.
+Never edit: data/pit/ contents, dsh/ profile installed copies, anything under bots/ (the operator's
+voices; propose a bot in conversation, never create or change one), or anything under docs/research/.
