@@ -12,6 +12,7 @@ test("validatePersonaTemplate accepts model and cwd, refuses everything else the
   assert.match(validatePersonaTemplate("Hello {{date}}") ?? "", /unknown persona variable \{\{date\}\}/);
   assert.match(validatePersonaTemplate("Hello {{ model }") ?? "", /unbalanced/);
   assert.match(validatePersonaTemplate("Hello {{{model}}}") ?? "", /unbalanced|unknown/);
+  assert.match(validatePersonaTemplate("Hello {{ model }}") ?? "", /unknown persona variable/);
 });
 
 test("readPersona returns the trimmed file and throws with the path on a bad template", async () => {

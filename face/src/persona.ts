@@ -25,8 +25,11 @@ export const PERSONA_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", 
 export function validatePersonaTemplate(text: string): string | undefined {
   if (text.trim() === "") return "persona is empty";
   const GROUP = /\{\{([^{}]*)\}\}/g;
+  /* The name is the RAW text between the braces, never trimmed - dsh takes
+   * `group[0].slice(2, -2)` and tests it against `/^[a-z][a-z0-9_]*$/` (lib/index.js).
+   * So `{{ model }}` is malformed there, and trimming here would pass it. */
   for (const match of text.matchAll(GROUP)) {
-    const variable = match[1].trim();
+    const variable = match[1];
     if (!PERSONA_VARIABLES.includes(variable)) {
       return `unknown persona variable {{${variable}}} (known: ${PERSONA_VARIABLES.join(", ")})`;
     }
