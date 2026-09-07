@@ -381,7 +381,17 @@ export async function bootFace(opts: FaceBootOptions): Promise<{ ctx: Context; d
     await dispose();
     throw new Error(`${BIN}: agentPresets missing from the composed tree - the agent-presets overlay row did not mount`);
   }
-  const roster = await presets.list();
+  let roster: { id: string; broken?: string }[];
+  try {
+    roster = await presets.list();
+  } catch (err) {
+    await dispose();
+    throw new Error(
+      `${BIN}: agent presets: the roster under ${opts.botsRoot ?? BOTS_ROOT} could not be read - ` +
+      `${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
+  }
   const fallback = roster.find((preset) => preset.id === presets.defaultId);
   if (fallback === undefined || fallback.broken !== undefined) {
     await dispose();
