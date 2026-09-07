@@ -632,16 +632,131 @@ concluding the seam is broken.
 **Never drill with the order tools.** `ALPACA_KIT_ENABLE_ORDERS` stays unset.
 Gate 1 — registration — is what keeps `place_order` / `cancel_order` out of the
 toolset entirely, and a drill that arms the flag to exercise Gate 2 has disarmed
-Gate 1 to do it. Any harmless denied-then-escalated file write proves the same
-seam.
+Gate 1 to do it.
 
-Until this drill passes on a live face, the face does not claim Gate 2.
+**And a file-write drill does not stand in for one.** What it proves is the
+approval CHANNEL — request → answerer → card → outcome → audit pair — which is
+real and in daily use. It does not prove a PRODUCER for an MCP tool call, and
+this tree has none. What raises the card is a *sandbox escalation*; an MCP call
+never takes that path. Four checks, each independent, re-run 2026-09-04: no
+`dsh-hooks*` package under `face/node_modules`; no `{kind:'ask'}` producer in
+any composed package; `dsh-permission-presets` registers only `session/created`
+(preset application) and an `internal/dispatch` event *validator*, neither of
+which can ask for a tool call; and `dsh-mcp-client` carries zero references to
+approval, sandbox or pre-execute.
 
-**Drilled and PASSED 2026-08-31** on the live face with the workbench toolset mounted:
+So until 2026-09-04, for orders Gate 2 was not unproven — it was **absent**.
+Arming `ALPACA_KIT_ENABLE_ORDERS=1` would have run `place_order` with no card and
+no `approval/asked` event, with a registration flag the only thing in the way.
+Charter Rule 3 forbids publishing a guarantee that fails at code level, which is
+why this paragraph exists rather than being quietly deleted once the hole was
+filled. **The producer now exists** — see "The order-approval drill" below —
+but it is a `tools/pre-execute` listener this repo registers, not something the
+harness provides, so it is exactly as durable as that registration.
+
+Until the channel drill passes on a live face, the face does not claim even that
+half.
+
+**The approval-channel drill: PASSED 2026-08-31** on the live face with the workbench toolset mounted:
 deny (command did not run; the model saw a rejection result, never the card) and approve
 (`allowed-once`, one-shot) both exercised, with paired `approval/asked` +
 `approval/decided` records in the session log. Re-run after any face or dsh change, per
 the heading above.
+
+## The order-approval drill (run before ever arming ALPACA_KIT_ENABLE_ORDERS)
+
+Since 2026-09-04 a per-order gate exists (`face/src/orders.ts`, registered in
+`bootFace`). Two registrations, because neither alone suffices: a
+`tools/pre-execute` listener returning `{kind:'ask'}` is the only thing that can
+RAISE a card (a `ToolGuard` returns `string | undefined` — deny-only), and a
+guard is the only thing that is MONOTONIC, evaluated on every allow including
+the one `allowed-once` becomes. The listener is registered `prepend` so it is
+outermost; the guard denies any gated tool that reached dispatch without a
+logged `allowed-once` for that exact `callId` and tool name in the session's own
+event log. Deliberately not "without the listener seeing it": `prepend` is
+last-registrant-wins, so a listener mounted after boot sits OUTSIDE this one and
+could take its `ask` and return `allow` — a guard that trusted its own sighting
+would wave that through. Only the log proves a human said yes.
+
+**The automated half runs in CI-ish form already:** `FACE_SMOKE=1 npm test`
+boots a real tree and fires `tools/pre-execute` at `mcp__drill__place_order`,
+asserting it is claimed, that `mcp__drill__orders` is not, and that a renamed
+server (`mcp__whatever_they_call_it__place_order`) is still caught. Drilled
+2026-09-04, mutation-proven: removing the registration fails it.
+
+**What is NOT drilled, and it matters.** The POSITIVE path — a grant logged,
+the guard finding it, the order dispatching — has no automated test. Everything
+above proves the gate REFUSES; nothing proves it lets an approved order through.
+So if `approval/asked` ever stopped carrying `callId`, or carried a different
+`toolName`, every approved order would be silently denied and the suite would
+stay green. This is drillable (a test answerer on the `approval/request`
+waterfall would do it) and is simply not done yet; it is the highest-value
+missing test here, and the manual drill below is currently the only thing
+covering it.
+
+**The manual half — the card — needs your eyes** for the part no answerer can
+stand in for: whether a human can actually READ the card and decide from it. An
+ask with no connected browser blocks rather than denying, so the live path needs
+a client anyway. With the face live and a session open:
+
+1. Arm Gate 1 in a **scratch** harness home, never your real one: an
+   `ALPACA_KIT_ENABLE_ORDERS: "1"` line in that home's alpaca-kit row plus the
+   paper keys. Boot the face against it. The boot log prints
+   `kairos-face: order gate armed for mcp__alpaca-kit__place_order, ...` — if it
+   does not, the tools did not register and there is nothing to drill.
+2. Ask Kairos to place one paper order.
+3. PASS, part one: an `approval` card renders **naming the order, not just the
+   tool** — symbol, side and quantity have to be on it. A card that says only
+   `place_order` is a click-through, not a decision, and this step is what would
+   catch that regression. **Deny it.** The order does not go out; the model sees
+   a rejection result, never the card.
+4. PASS, part two: `approval/asked` and `approval/decided` appear paired in the
+   session log.
+5. Only if you want the approve path: repeat and approve. That places a real
+   PAPER order — your call, not the drill's.
+6. Tear down the scratch home. Your real harness keeps
+   `ALPACA_KIT_ENABLE_ORDERS` unset.
+
+**The one setting that disarms every other approval does not disarm this one.**
+Under `DSH_PERMISSION_MODE=danger-full-access` — or a runtime switch to the
+`danger-full-access` preset — `ApprovalService` short-circuits to `rejected`
+before any answerer runs, and `dsh-tools` renders that as `the user rejected
+tool "..."`, which is false: nobody was asked. The gate denies in its own words
+instead, and says so.
+
+**A cancel is gated too, and that cuts the other way.** `cancel_order` changes
+exposure, so it asks — but under policy `never`, or on a call with no session,
+the gate DENIES it. The one action that reduces risk is refused in exactly the
+session where prompting was switched off. That is the right trade (the paper pin
+bounds the stakes, and you can cancel from Alpaca's own console out of band), but
+it is a surprise worth knowing before you meet it.
+
+**The shell can answer its own card.** `POST /api/respond` carries no token —
+the same-origin check in front of it is a browser fence, and a `curl` sets any
+header it likes (the roster route has the same property, and it was demonstrated
+with a bare `curl` on 2026-09-04). The pending `rpcId` is readable off the mux
+stream. So one un-escalated shell turn can approve the order it just asked for,
+and what lands in the log is a REAL `approval/asked` + `approval/decided`
+(`allowed-once`) pair. The guard is satisfied — correctly, because a genuine
+grant was recorded. Nothing here is broken; the gate asked, and the wrong party
+answered. This is the specific hole in the property the guard was rebuilt
+around, so it is stated rather than left for someone to find.
+
+**And this is a gate, not containment.** `tools/execute` runs AFTER the guard,
+is handed the execution as mutable, and the body re-resolves the tool by its
+current name — so a `tools/execute` wrapper could rename a guard-approved call
+into `place_order`. Kairos also has an unrestricted shell. Per charter Rule 2,
+this stops the model's ordinary tool calls; it is not a boundary that holds
+against code trying to get around it.
+
+Gate 1 — not registering the tools at all — remains the sturdier layer, but be
+precise about what it holds: the MCP tool *surface*, not the *account*. A shell
+turn can import `alpaca_kit.account` directly and never touch either gate. What
+stands in its way there is smaller than it sounds and worth knowing: dsh does
+not hand credentials to shell children — `scrubbedParentEnv` drops every name
+matching `/KEY|PASSWORD|SECRET|TOKEN/i` — so the shell has to go and read
+`.env.alpaca` itself first. The paper-hostname pin is what actually bounds the
+damage.
 
 ## The ask-user drill (run after any face or dsh change)
 

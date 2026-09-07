@@ -165,8 +165,13 @@ def gate_state(env) -> dict:
         "gate1_registered": env.get("ALPACA_KIT_ENABLE_ORDERS") == "1" and has_keys,
         "gate1_rule": "ALPACA_KIT_ENABLE_ORDERS=1 AND APCA keys present",
         "gate2_validated": False,
-        "gate2_note": "per-order human approval - intent until the drill in "
-                      "face/README.md passes on a live face",
+        "gate2_note": "per-order human approval - a tools/pre-execute gate exists "
+                      "since 2026-09-04 (face/src/orders.ts) and is drilled on a real "
+                      "booted tree; it raises an approval card naming the order, and "
+                      "denies rather than asking under an approval policy of 'never'. "
+                      "Still False here because the MANUAL half - a human reading the "
+                      "card and deciding - has not been run against armed order tools. "
+                      "See 'The order-approval drill' in face/README.md.",
         # Mirrors alpaca_kit.account.PAPER_HOSTNAME; a test fences the two against drift.
         "paper_pin": "hostname == paper-api.alpaca.markets enforced in code",
     }

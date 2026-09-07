@@ -225,3 +225,23 @@ def test_frame_converts_nan_to_null():
     out = _frame(pd.DataFrame({"symbol": ["X"], "short_interest": [float("nan")]}))
     assert out["rows"][0]["short_interest"] is None
     json.dumps(out, allow_nan=False)
+
+
+def test_mutating_tools_keep_the_marker_the_face_gate_cross_checks():
+    """`(operator-gated)` is load-bearing OUTSIDE this repo's language.
+
+    face/src/orders.ts gates a tool when its name matches OR its description
+    carries this marker, and refuses to boot when a marked tool's name does not
+    match - that cross-check is what catches a rename of either side. Reword the
+    descriptions without this literal and the face's boot assertion silently
+    stops catching anything, with nothing in the Python suite to say so.
+    """
+    flagged = {"ALPACA_KIT_ENABLE_ORDERS": "1",
+               "APCA_API_KEY_ID": "k", "APCA_API_SECRET_KEY": "s"}
+    tools = build_tools(env=flagged)
+    for name in ("place_order", "cancel_order"):
+        assert "(operator-gated)" in tools[name].description, (
+            f"{name}'s description must keep the marker face/src/orders.ts matches on"
+        )
+    # ...and the read-only listing must NOT carry it, or the face denies a harmless query.
+    assert "(operator-gated)" not in tools["orders"].description
