@@ -1,6 +1,6 @@
 # Kairos — Product Charter
 
-**Status:** living charter, written 2026-08-30, revised 2026-09-04 · **Owner:** the operator ·
+**Status:** living charter, written 2026-08-30, revised 2026-09-04, §9 added 2026-09-08 · **Owner:** the operator ·
 **Authority:** this charter carries intent and principles; mechanism lives in `DEVELOPMENT.md`
 (the as-built front/back-end reference) and in code. On a question of intent, the charter
 wins; on a question of mechanism, the code is the fact and the documents follow it. The pointer
@@ -208,3 +208,22 @@ Few and concrete. Each names the section it reopens.
 | An independent evaluator is introduced | D1 · D7 (the measurement plane) |
 | dsh leaves developer preview or ships a breaking change | the two pins · profile and skills format · the drills |
 | A second human, or any hosted deployment | this charter is the wrong document; write the next one |
+| Starting the interface migration in §9 | §3 (the FACE row) · §7 "No bespoke harness" and "No hosted face" · the two pins · the row inventory of the face's tree against the CLI's (R13 is its first symptom) |
+
+## 9. Forward
+
+Directions the operator has set that are not yet designed. Each is intent only: a spec comes
+before any build, and §6 and §7 hold until that spec says otherwise.
+
+- **The face absorbs dsh's operator surface; dsh's own frontends are retired** (set
+  2026-09-08). Every interface dsh offers the operator today — the `dsh` command's terminal UI
+  and `dsh web` — moves onto the face, and those frontends stop being used for this workbench.
+  dsh stays the runtime, hosted in-process, exactly as §7 "No bespoke harness" says; what
+  changes is that the face becomes the only client of dsh's gateway the operator ever opens.
+  Recorded so the spec starts from the tree, not from the idea: the face's composition must
+  carry every row the operator today gets from the CLI's tree (R13, the missing projection
+  cache, is the first symptom of a row the CLI has and the face lacks); every gateway RPC the
+  retired frontends used needs a home in the face's client or a recorded reason it has none;
+  the two-pin upgrade path stays; D10 and the roster-as-menu residuals are unchanged by the
+  move. Open for the spec: whether the face keeps sharing `$DSH_HOME` with the dsh the operator
+  runs in other projects, or gets a home of its own. Not designed; no spec; nothing built.
