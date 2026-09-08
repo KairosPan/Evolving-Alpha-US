@@ -740,7 +740,7 @@ harness provides, so it is exactly as durable as that registration.
 Until the channel drill passes on a live face, the face does not claim even that
 half.
 
-**The approval-channel drill: PASSED 2026-08-31** on the live face with the workbench toolset mounted:
+**The approval-channel drill: PASSED 2026-08-31, re-run and PASSED 2026-09-08** on the live face with the workbench toolset mounted:
 deny (command did not run; the model saw a rejection result, never the card) and approve
 (`allowed-once`, one-shot) both exercised, with paired `approval/asked` +
 `approval/decided` records in the session log. Re-run after any face or dsh change, per
@@ -931,7 +931,8 @@ written.
 Until this drill passes on a live face, the face does not claim Kairos can ask.
 
 **Drilled and PASSED 2026-09-03**, on a live face booted against a throwaway
-`$DSH_HOME` with a real model. Exercised end to end: the tool reached the model
+`$DSH_HOME` with a real model, and again 2026-09-08 on the operator's own face
+(34 tools offered). Exercised end to end: the tool reached the model
 (`request/header` offered 26 tools including this one); Kairos called it; the
 card rendered with its options; the answer returned as the tool result
 `{"answers":[{"id":"pit_bed","selected":["2yr"]}]}` and the turn continued on it.
@@ -979,3 +980,13 @@ cache headers.
 5. On the bot page, edit the soul to include `{{` and save. PASS, part five: refused with the
    strict-template message; the file is unchanged.
 6. Clean up: `git rm -r bots/<id>` (or keep it — it is yours).
+
+**Drilled and PASSED 2026-09-07 and again 2026-09-08** on the operator's own face (real
+`$DSH_HOME`, the alpaca-kit server connected; `main` @ `b6dbce0` the second time). Second run:
+`Growth Momentum Scout` folded to `growth-momentum-scout`; six files; the restart's boot line
+listed it; the home session bucketed under the bot; the reply opened in its persona; the tools it
+named were exactly the allow-list ∩ the tree — 18 offered in `request/header`, the seven
+market-data reads among them and no `subagent`, `agent_<bin>` or order tool; the `{{` soul was
+refused with both files byte-identical. The speaker label (R12) held on the `who` element, the
+composer, the topbar and the status pulse across session switches, a reload and a restart. One
+observation → R13 in `DEVELOPMENT.md` §9: every cold session lists as `untitled`.

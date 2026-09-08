@@ -1,7 +1,7 @@
 # Kairos Workbench — Development Reference
 
-**Status:** living, as-built · **Owner:** the operator · **Last full pass:** 2026-09-07 on
-branch `feat/bots` (388 pytest, 233 face tests, typecheck clean).
+**Status:** living, as-built · **Owner:** the operator · **Last full pass:** 2026-09-08 on
+`main` @ `b6dbce0` (388 pytest; 239 face tests, 234 pass + 5 skipped without `FACE_SMOKE`; typecheck clean).
 
 **Authority.** `Kairos-Design.md` (the charter) outranks this document on intent. This document
 describes mechanism *as built*: where it disagrees with the code, the code is the fact and this
@@ -951,12 +951,12 @@ outcomes the spec was willing to take, and S7 still asserts only the outcome it 
 
 | Drill | Proves | Does not prove | Status |
 |---|---|---|---|
-| **Approval channel** (the README heading still reads "The Gate-2 drill"; its PASSED line calls it the approval-channel drill) — a file write outside the workspace escalates | request → answerer → card → outcome → paired `approval/asked` / `decided`; deny blocks, approve runs once | a producer for an MCP tool call | passed live 2026-08-31 |
+| **Approval channel** (the README heading still reads "The Gate-2 drill"; its PASSED line calls it the approval-channel drill) — a file write outside the workspace escalates | request → answerer → card → outcome → paired `approval/asked` / `decided`; deny blocks, approve runs once | a producer for an MCP tool call | passed live 2026-08-31; re-run 2026-09-08 on `main`, passed (deny blocked, approve ran once, paired records) |
 | **Order approval** — automated half | the listener is registered, reaches the live approval service, defaults to `ask`, catches renamed servers, leaves `orders` alone; mutation-proven (removing the registration fails it) | the positive path — a grant logged by the real approval service, the guard finding it, the order dispatching — is covered only by unit tests of `hasApprovalGrant` / `orderGuardReason` with hand-built events, never on a real tree (the README calls it the highest-value missing test); that a human can read the card; containment | passed 2026-09-04 |
 | **Order approval** — manual half (arm Gate 1 in a *scratch* home, ask for one paper order, deny, see the audit pair) | the card, end to end | | **not yet run** — the condition before the flag flips in the real home |
 | **Bots** — automated (`bots-smoke`, `bot-sandbox-smoke`, `askuser-noclient-smoke`) | roster listing incl. broken; header `agentPreset`; mask = allow ∩ tree; persona shadow; inert default; the shipped relative plugin path mounted; Gate 2 refusing an order tool the bot's own mask admits; the S4/S7 observations | a bot in a room (plan 2); that a home session's write to `../SOUL.md` is refused (plan 2); that the approval CARD renders (no client) | passes as of 2026-09-07 |
-| **Bots** — manual (`face/README.md`) | create → home → persona → tools named and not named → `{{` refused; the sidebar buckets the home session under the bot; a restart's boot line lists the id | that the transcript names the speaker — the R12 fix landed after this run, and only `speaker.test.ts` covers it | passes as of 2026-09-07 |
-| **Ask-user** — `ask_user_question` offered, called, answered, cancelled | the seam | that it is a gate (the answer is model-visible); the instruction half (README step 6 — on a thin brief that does not name the tool, Kairos asks before it builds, per `AGENTS.md`), left to the operator and not run | passed 2026-09-03 with a real model, 26 tools offered |
+| **Bots** — manual (`face/README.md`) | create → home → persona → tools named and not named → `{{` refused; the sidebar buckets the home session under the bot; a restart's boot line lists the id; the transcript names the speaker on all four surfaces (second run) | per-message attribution in a room (plan 3); no automated test pins the four naming surfaces or the reconnect path | passes as of 2026-09-07; re-run 2026-09-08 on `main` with the R12 fix in, passed |
+| **Ask-user** — `ask_user_question` offered, called, answered, cancelled | the seam | that it is a gate (the answer is model-visible); the instruction half (README step 6 — on a thin brief that does not name the tool, Kairos asks before it builds, per `AGENTS.md`), left to the operator and not run | passed 2026-09-03 with a real model, 26 tools offered; re-run 2026-09-08 on `main`, passed (34 tools offered; answered, then Stop → `closed · cancelled`) |
 
 ---
 
@@ -1052,9 +1052,23 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   status pulse, whose phrases (`PULSE_PHRASE`) no longer carry a name at all (§5.1). It is also
   re-derived from every `session.list` that lands (`refreshSessions`), so neither a mux reconnect
   nor a roster that arrives late can leave a stale name over a live transcript. Per-message
-  attribution — several voices in one room log — stays plan 3. Unproven in a browser:
-  `speaker.test.ts` pins the decision, nothing pins the four surfaces or the reconnect path, and
-  the manual drill has not been re-run.
+  attribution — several voices in one room log — stays plan 3. Browser-proven 2026-09-08
+  (manual bots drill, second run): the bot's name held on all four surfaces across session
+  switches, a reload and a face restart with the tab parked on the bot's session. Still,
+  `speaker.test.ts` pins only the decision; no automated test pins the four surfaces or the
+  reconnect path.
+- **R13 — Every cold session lists as `untitled`.** The sidebar row and the topbar take a
+  session's title from the `projections` column of `session.list` (`titleOf` in `client/chat.js`),
+  and that column is filled by `listProjectionsFor` in `dsh-host-apiproxy`: an attached session
+  cuts `sessionProjections.snapshot`, a cold one reads `sessionProjectionCache.cachedSnapshot`.
+  dsh-base composes `session-projection` and NOT `dsh-session-projection-cache`, and the face adds
+  no such row, so the cold branch finds no service and the column is absent. Measured 2026-09-08
+  on a fresh boot: `session.list` returned 24 sessions, none with a projections block, while their
+  logs carry provider `session/title` events; `$DSH_HOME/storages/session_projcache.json` holds
+  three stale records the face never wrote. A title shows only while its session stays attached
+  in the boot that titled it; every restart resets the whole sidebar to `untitled`. Pre-existing,
+  not a bots regression. The fix is the one row the cache's README prescribes (`writeEveryEvents`,
+  `writeIntervalMs`) as a face overlay row, plus a cold-listing test; not applied.
 
 ---
 
