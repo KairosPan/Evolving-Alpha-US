@@ -708,7 +708,14 @@ files under can never disagree. `chat.js` holds the answer in one module-level `
 `send` (from the summary `session.create` answers with, which always carries `agentPreset`) and
 `openBotHome` (armed, before a session exists) — and reset at the three other sites that clear
 `pendingAgentPreset`: `newSession`, the strategy picker's row, and a channel page's new round.
-`setSpeaker` also rewrites the composer placeholder, the one naming surface already on screen.
+`refreshSessions` re-derives it for the active session from every `session.list` that lands, which
+is what makes the label survive a mux reconnect (`onOpen` reopens the active session against the
+pre-reconnect snapshot) and what turns a bare id into a bot's name once `loadBotIndex` answers;
+`openSession` correspondingly leaves the label alone when it reopens the session already on screen
+and the list carries no row for it. Four surfaces read the answer: the `who` element over an
+assistant bubble (`bubbleNode`), the ask card's head (`questionNode`) and the status pulse
+(`pulse`) read `speaker` as they render, and `setSpeaker` rewrites the composer placeholder, the
+one naming surface already on screen when the voice changes.
 
 `bucketFor` orders its buckets archived → bot → channel → ungrouped, so a session whose
 `agentPreset` names a bot files under that bot even when its cwd is a channel directory. Not
@@ -912,8 +919,9 @@ channel, fail-closed on a corrupt roster), `static`, `boot`, `setup`, `overlay` 
 rows, loopback config), `grouping`, `http`, `version`, `bots` (the id grammar and reserved names,
 the rendered composition, create-never-overwrites, the soul rewrite and its `{{` refusal, the
 roster merge), `botId` (the browser twin proposes only ids the server accepts), `speaker` (the transcript's
-name for a session: the host for no preset and for `kairos`, a rostered bot's display name, the
-id when the roster has no name for it — and the fallback is never the host), `bot-plugin` (both
+name for a session: the host for no preset, for `kairos` and for a blank one, a rostered bot's
+display name, the id when the roster has no name for it or never loaded at all — and the FALLBACK
+is never the host, though a roster that names a bot `Kairos` is obeyed), `bot-plugin` (both
 registrations ride `ctx.effect` and return disposers; `expandAllow`), `persona`, and the five
 `FACE_SMOKE` boots: `smoke.test.ts` (the real tree serves the page, the RPC, the mux upgrade, the
 forged-Host 403 via `node:http` because `fetch` silently drops a forged `Host`, the stub producer)
@@ -1039,10 +1047,14 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   `Kairos` the message renderer in `chat.js` writes into the `who` element, not the session's
   `agentPreset`. Cosmetic today (one voice per session); it becomes a truth problem the moment a
   room shows several voices in one log (plan 3). Fixed 2026-09-07: the label is per SESSION
-  (`speakerFor` in `client/speaker.js`, from the summary's `agentPreset`), carried by the `who`
-  element, the ask card's head and the composer placeholder alike (§5.1). Per-message attribution
-  — several voices in one room log — stays plan 3. Unproven in a browser: `speaker.test.ts` pins
-  the decision, nothing pins the three DOM sites, and the manual drill has not been re-run.
+  (`speakerFor` in `client/speaker.js`, from the summary's `agentPreset`), carried by all four
+  naming surfaces alike — the `who` element, the ask card's head, the composer placeholder and the
+  status pulse, whose phrases (`PULSE_PHRASE`) no longer carry a name at all (§5.1). It is also
+  re-derived from every `session.list` that lands (`refreshSessions`), so neither a mux reconnect
+  nor a roster that arrives late can leave a stale name over a live transcript. Per-message
+  attribution — several voices in one room log — stays plan 3. Unproven in a browser:
+  `speaker.test.ts` pins the decision, nothing pins the four surfaces or the reconnect path, and
+  the manual drill has not been re-run.
 
 ---
 

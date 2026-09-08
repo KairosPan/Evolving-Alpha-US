@@ -664,11 +664,15 @@ function renderGate(view) {
 
 /* ---------- frame intake ---------- */
 
-/** What each live block opening reads as on the status line. */
-const PULSE_TEXT = {
-  reasoning: "Kairos is thinking…",
-  text: "Kairos is writing…",
-  "tool-call": "Kairos is preparing a tool call…",
+/** What each live block opening reads as on the status line — the PHRASE only.
+ * The name in front of it is read from `speaker` at pulse time, not baked in
+ * here, so a bot's turn pulses under the bot's name (R12): the status line is
+ * the fourth naming surface, alongside the `who` element, the ask card's head
+ * and the composer placeholder. */
+const PULSE_PHRASE = {
+  reasoning: "thinking…",
+  text: "writing…",
+  "tool-call": "preparing a tool call…",
 };
 
 /** Whether the status line currently shows a pulse — so the reset on the next
@@ -678,7 +682,7 @@ let pulsing = false;
 
 /** @param {string|undefined} mode - the block kind that just opened. */
 function pulse(mode) {
-  status(PULSE_TEXT[mode ?? ""] ?? "Kairos is working…");
+  status(`${speaker} is ${PULSE_PHRASE[mode ?? ""] ?? "working…"}`);
   pulsing = true;
 }
 
@@ -974,6 +978,16 @@ async function refreshSessions() {
    * the host's one-way `channelIndex.archived`. */
   const hostArchived = new Set(channelIndex?.archived ?? []);
   lastSessions = (value?.items ?? []).filter((summary) => !deletedSet.has(String(summary.sessionId)));
+  /* Re-derive the active session's voice from the list that just landed. Two
+   * races need it, and neither is reachable from `setSpeaker`'s own call sites:
+   * a mux reconnect reopens the active session against the PRE-reconnect
+   * snapshot (`onOpen` fires `refreshSessions` and `openSession` back to back,
+   * and only the latter is synchronous), and the roster — `loadBotIndex`, in
+   * the same `Promise.all` above — may only now have arrived to turn a bare
+   * `buffett-type` into `Buffett Type`. A session this list does not carry is
+   * left alone: keep the label on screen rather than reset it to the host. */
+  const activeRow = lastSessions.find((s) => String(s.sessionId) === activeSession);
+  if (activeRow !== undefined) setSpeaker(activeRow);
   for (const summary of value?.items ?? []) {
     const id = String(summary.sessionId);
     if (deletedSet.has(id)) continue; // a host-memory ghost
@@ -1028,13 +1042,23 @@ function scheduleListRefresh() {
 async function openSession(id) {
   const token = ++openSeq;
   closeDetail(); // picking a session always brings the chat back
+  const previousActive = activeSession;
   activeSession = id;
   /* Before the history replay, not after: every bubble the replay builds reads
    * `speaker` as it renders, so a session opened cold would otherwise write
    * the PREVIOUS session's name over a whole transcript. The summary is the
    * sidebar's own row - a session the list has not caught up with yet is the
-   * host, which is what an unknown session was already labelled. */
-  setSpeaker(lastSessions.find((s) => String(s.sessionId) === id) ?? null);
+   * host, which is what an unknown session was already labelled.
+   *
+   * The exception is REOPENING the session already on screen (the mux's
+   * reconnect path): its label was set from a summary the list may not carry
+   * yet - `openBotHome` arms a preset before any session exists, and a
+   * reconnect's `session.list` has not landed. Resetting it to the host there
+   * would relabel a live bot transcript as Kairos, so a same-session reopen
+   * with no row keeps what is on screen; `refreshSessions` heals it when the
+   * list does land. */
+  const row = lastSessions.find((s) => String(s.sessionId) === id);
+  if (row !== undefined || id !== previousActive) setSpeaker(row ?? null);
   resetFlow();
   markActive();
   loadingSession = id;
@@ -1196,11 +1220,13 @@ function botOf(summary) {
  * @type {string} */
 let speaker = HOST_NAME;
 
-/** Point every naming surface at one session's voice: the `who` element over
- * each assistant bubble and the ask card's head read `speaker` when they
- * render, and the composer placeholder is rewritten here because it is the
- * one surface that is already on screen. Call it BEFORE anything renders for
- * a session; `null` means no session, which is the host.
+/** Point the four naming surfaces at one session's voice. Three read `speaker`
+ * at the moment they render — the `who` element over an assistant bubble
+ * (`bubbleNode`), the ask card's `… asks` head (`questionNode`) and the status
+ * pulse (`pulse`) — so they need nothing but the assignment below. The fourth,
+ * the composer placeholder, is rewritten here because it is the one surface
+ * already on screen when the voice changes. Call it BEFORE anything renders
+ * for a session; `null` means no session, which is the host.
  * @param {{agentPreset?: unknown}|null|undefined} summary */
 function setSpeaker(summary) {
   speaker = speakerFor(summary, botIndex);

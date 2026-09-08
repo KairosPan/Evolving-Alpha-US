@@ -1,11 +1,11 @@
 /** The transcript names the voice: whose name goes over an assistant turn.
  *
  * THE BUG THIS CLOSES (R12). A bot's home session answers in the bot's
- * persona and the sidebar files it under the bot's name, but every surface
- * that NAMED the speaker was the literal `Kairos`: the `who` element over each
- * assistant bubble, the ask card's `kairos asks` head, and the composer
- * placeholder. The operator running two bots saw three panes all claiming to
- * be Kairos.
+ * persona and the sidebar files it under the bot's name, but the four surfaces
+ * in `chat.js` that NAME the speaker each wrote the literal `Kairos`: the
+ * `who` element over an assistant bubble, the ask card's `… asks` head, the
+ * composer placeholder, and the status pulse. The operator running two bots
+ * saw every pane claiming to be Kairos.
  *
  * WHAT IT IS NOT. It is not attribution. Nothing here decides which agent
  * actually produced a frame — it reads the SESSION's own `agentPreset` header,
@@ -35,6 +35,10 @@ test("no preset - or the default one - is the host speaking", () => {
   assert.equal(speakerFor(undefined, bots), HOST_NAME);
   assert.equal(speakerFor({}, bots), HOST_NAME);
   assert.equal(speakerFor({ agentPreset: "kairos" }, bots), HOST_NAME);
+  // A header field PRESENT but blank is no preset at all - never a session
+  // labelled with the empty string, and never a lookup for the id "".
+  assert.equal(speakerFor({ agentPreset: "" }, bots), HOST_NAME);
+  assert.equal(speakerFor({ agentPreset: "   " }, bots), HOST_NAME);
 });
 
 test("a non-string agentPreset is the host, not a crash and not a label", () => {
@@ -60,9 +64,16 @@ test("a bot with no usable name falls back to its id", () => {
 test("an unlisted preset is its own id - a deleted bot, or a roster that never loaded", () => {
   assert.equal(speakerFor({ agentPreset: "ghost" }, bots), "ghost");
   assert.equal(speakerFor({ agentPreset: "ghost" }, []), "ghost");
+  // "a roster that never loaded" is literally this: the `Array.isArray` guard,
+  // not an empty array. No caller in the tree reaches it today - `botIndex`
+  // starts `[]` and `loadBotIndex` fails closed to `[]` - so the guard is
+  // defensive, and this is what pins it: a non-array degrades to the id
+  // instead of throwing inside a render.
+  assert.equal(speakerFor({ agentPreset: "ghost" }, undefined as any), "ghost");
+  assert.equal(speakerFor({ agentPreset: "ghost" }, null as any), "ghost");
 });
 
-test("the fallback is never the host: no bot ever answers as Kairos", () => {
+test("the FALLBACK is never the host: no bot is labelled Kairos by DEFAULT", () => {
   // Every id here is dsh's preset grammar `[a-z0-9][a-z0-9-]*` minus `kairos`
   // — the closed domain `createBot` (src/bots.ts) admits. The id fallback is
   // safe precisely because a lowercase-only id can never BE the host's name.
@@ -73,4 +84,8 @@ test("the fallback is never the host: no bot ever answers as Kairos", () => {
       assert.notEqual(speakerFor({ agentPreset: preset }, roster), HOST_NAME, `${preset} in ${roster.length}-row roster`);
     }
   }
+  // Not a property of the OUTPUT: a roster may legitimately name a bot Kairos,
+  // and then Kairos is what the transcript writes. That is the roster's own
+  // choice, deliberate and visible, not this function falling back to it.
+  assert.equal(speakerFor({ agentPreset: "x" }, [{ id: "x", name: HOST_NAME }]), HOST_NAME);
 });

@@ -6,10 +6,11 @@
  * a browser.
  *
  * THE BUG THIS CLOSES (R12). A bot's home session answered in the bot's
- * persona and the sidebar filed it under the bot's name, but every surface
- * that NAMED the speaker was a literal `Kairos`: the `who` element over each
- * assistant bubble, the ask card's `kairos asks` head, and the composer
- * placeholder. Three panes, one name, three different agents.
+ * persona and the sidebar filed it under the bot's name, but the four surfaces
+ * in `chat.js` that NAME the speaker each wrote a literal `Kairos`: the `who`
+ * element over an assistant bubble, the ask card's `… asks` head, the composer
+ * placeholder, and the status pulse. Four surfaces, one name, as many agents
+ * as the operator had bots.
  *
  * WHAT IT IS NOT. It is not attribution. It reads the SESSION's own header,
  * the same `agentPreset` field `botOf` (chat.js) buckets the sidebar by, so
@@ -29,8 +30,9 @@ export const HOST_NAME = "Kairos";
 
 /**
  * The voice a session speaks with: a bot's display name when `agentPreset`
- * names one (never the default `kairos`), the bot's id when the roster has no
- * name for it, else Kairos.
+ * names one (never the default `kairos`, and never a blank string — a header
+ * field present but empty is no preset at all), the bot's id when the roster
+ * has no name for it, else Kairos.
  * @param {{agentPreset?: unknown}|null|undefined} summary - the session
  *   summary from `session.list`/`session.create`, or `null` for no session.
  * @param {{id: string, name?: unknown}[]} bots - the `/data/bots.json` rows.
@@ -38,7 +40,7 @@ export const HOST_NAME = "Kairos";
  */
 export function speakerFor(summary, bots) {
   const id = summary?.agentPreset;
-  if (typeof id !== "string" || id === "kairos") return HOST_NAME;
+  if (typeof id !== "string" || id.trim() === "" || id === "kairos") return HOST_NAME;
   const bot = (Array.isArray(bots) ? bots : []).find((b) => b?.id === id);
   const name = typeof bot?.name === "string" ? bot.name.trim() : "";
   return name === "" ? id : name;
