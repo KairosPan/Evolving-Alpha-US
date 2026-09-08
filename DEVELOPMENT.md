@@ -1024,8 +1024,8 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   with `UserQuestionError: web user interaction requires an agent-owned session`.
 - **R12 — The transcript labels a bot's reply as Kairos.** Observed in the manual bots drill
   (2026-09-07): a home session's replies open in the bot's persona, the sidebar buckets the session
-  under the bot's name, but the speaker label over each assistant turn is the client's fixed
-  `KAIROS` (`render.js`), not the session's `agentPreset`. Cosmetic today (one voice per session);
+  under the bot's name, but the speaker label over each assistant turn is the fixed `Kairos` the
+  message renderer in `chat.js` writes into the `who` element, not the session's `agentPreset`. Cosmetic today (one voice per session);
   it becomes a truth problem the moment a room shows several voices in one log (plan 3).
 
 ---
