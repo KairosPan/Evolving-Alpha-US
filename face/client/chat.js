@@ -41,6 +41,7 @@ import { renderChannelPage } from "./channels.js";
 import { ARCHIVED_KEY, bucketFor, isBotKey, UNGROUPED_KEY } from "./grouping.js";
 import { proposeBotId } from "./botId.js";
 import { foldChannelName } from "./channelName.js";
+import { HOST_NAME, speakerFor } from "./speaker.js";
 
 /** Rendered in place of a value the host did not give us. */
 const EM = "—";
@@ -224,7 +225,7 @@ function bubbleNode(view) {
   }
   const hasText = typeof view.text === "string" && view.text !== "";
   if (hasText) {
-    if (lane === "k") wrap.append(el("div", "who", "Kairos"));
+    if (lane === "k") wrap.append(el("div", "who", speaker));
     /* Kairos writes markdown; the operator's own words render exactly as
      * typed. A markdown answer with document structure (headings, tables)
      * widens its lane — a chat-sized reply keeps the bubble. */
@@ -460,7 +461,9 @@ function approvalNode(view) {
 function questionNode(view) {
   const node = el("article", "card ask");
   const head = el("div", "card-head");
-  head.append(el("span", "kind", "kairos asks"));
+  // `.kind` is `text-transform: uppercase` (chat.css), so the case written
+  // here never reaches the screen - the name goes in as the roster spells it.
+  head.append(el("span", "kind", `${speaker} asks`));
   head.append(el("span", "producer", ""));
   node.append(head);
 
@@ -1026,6 +1029,12 @@ async function openSession(id) {
   const token = ++openSeq;
   closeDetail(); // picking a session always brings the chat back
   activeSession = id;
+  /* Before the history replay, not after: every bubble the replay builds reads
+   * `speaker` as it renders, so a session opened cold would otherwise write
+   * the PREVIOUS session's name over a whole transcript. The summary is the
+   * sidebar's own row - a session the list has not caught up with yet is the
+   * host, which is what an unknown session was already labelled. */
+  setSpeaker(lastSessions.find((s) => String(s.sessionId) === id) ?? null);
   resetFlow();
   markActive();
   loadingSession = id;
@@ -1067,6 +1076,7 @@ function newSession() {
   pendingCwd = undefined;
   pendingWorkspaceId = undefined;
   pendingAgentPreset = undefined;
+  setSpeaker(null); // no preset pending, no session: the host
   resetFlow();
   markActive();
   status("new session · pick a strategy, then type below");
@@ -1177,6 +1187,24 @@ function botOf(summary) {
   if (typeof id !== "string" || id === "kairos") return null;
   const bot = botIndex.find((b) => b.id === id);
   return { id, label: bot?.name ?? id };
+}
+
+/** The name the transcript writes over the ACTIVE session's turns: a bot's
+ * display name for its own session, `Kairos` for the host's. Per session, not
+ * per message — `speakerFor` reads the same `agentPreset` header `botOf`
+ * buckets the sidebar by, so the label and the bucket can never disagree.
+ * @type {string} */
+let speaker = HOST_NAME;
+
+/** Point every naming surface at one session's voice: the `who` element over
+ * each assistant bubble and the ask card's head read `speaker` when they
+ * render, and the composer placeholder is rewritten here because it is the
+ * one surface that is already on screen. Call it BEFORE anything renders for
+ * a session; `null` means no session, which is the host.
+ * @param {{agentPreset?: unknown}|null|undefined} summary */
+function setSpeaker(summary) {
+  speaker = speakerFor(summary, botIndex);
+  /** @type {HTMLInputElement} */ ($("#composer-input")).placeholder = `Message ${speaker}…`;
 }
 
 /** Session ids the operator archived — face metadata from
@@ -1302,6 +1330,7 @@ function pickerRow(label, cwd, badge, picker, workspaceId) {
     pendingWorkspaceId = workspaceId;
     pendingCwd = workspaceId === undefined ? cwd : undefined;
     pendingAgentPreset = undefined;
+    setSpeaker(null); // a folder or channel is Kairos's, whatever was armed before
     for (const other of picker.querySelectorAll(".pick-row")) other.classList.toggle("sel", other === row);
     status(`new session · ${label} · type below`);
   };
@@ -1451,6 +1480,14 @@ async function send() {
       const id = created?.sessionId;
       if (typeof id !== "string") throw new Error("session.create returned no sessionId");
       activeSession = id;
+      /* The new session's voice, from the summary the host just answered with
+       * — `created.agentPreset`, which `bots-smoke.test.ts` pins on a real tree
+       * for both branches: a bot's id, and the literal `kairos` for the host.
+       * The host's answer, not the pending we sent:
+       * if the two ever disagreed the host's is the session that exists. This
+       * one call covers both the bot case and the reset the other three sites
+       * do, so no `setSpeaker(null)` follows the pendings below. */
+      setSpeaker(created);
       pendingCwd = undefined;
       pendingWorkspaceId = undefined;
       pendingAgentPreset = undefined;
@@ -1626,6 +1663,7 @@ async function openChannel(channel) {
         pendingWorkspaceId = channel.workspaceId;
         pendingCwd = undefined;
         pendingAgentPreset = undefined;
+        setSpeaker(null); // a channel round is Kairos's, even opened from a bot's page
         closeDetail();
         resetFlow();
         markActive();
@@ -1873,6 +1911,11 @@ function openBotHome(bot) {
   pendingWorkspaceId = undefined;
   pendingCwd = String(bot.homeCwd);
   pendingAgentPreset = String(bot.id);
+  /* Armed, before a session exists: the composer says "Message <bot>…" while
+   * the operator types the first prompt, and `send()` then confirms it from
+   * the summary the host answers with. The bot is a `botIndex` row, so its
+   * display name resolves rather than falling back to the id. */
+  setSpeaker({ agentPreset: String(bot.id) });
   closeDetail();
   resetFlow();
   markActive();

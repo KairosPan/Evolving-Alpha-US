@@ -698,8 +698,17 @@ only, the human half has not been run.
 | `markdown.js` | DOM-built markdown for Kairos bubbles (inline emphasis, code, links; headings, nested lists, GFM tables, fences, quotes, rules) |
 | `channels.js` | the channel landing page, assembly only — every judgement is made server-side |
 | `grouping.js`, `channelName.js`, `botId.js` | sidebar buckets keyed by `workspaceId` (never title) or by `bot:<id>`; the whitespace → dash fold; the display-name → bot-id fold |
+| `speaker.js` | the name the transcript writes over a turn: `speakerFor(summary, bots)` reads the session's `agentPreset` — a rostered bot's display name, its id when the roster has none, `Kairos` for the host and for no session. Per session, never per message; an unknown preset falls to the id, never to the host |
 | `market.js`, `account.js` | the instruments: no state, no timer, fetch on load and on `refresh` |
 | `chat.css` | one sheet for all three pages; every color a `:root` token (radii only about half — four `--r-*` tokens, the rest literal px); light only |
+
+`speakerFor` and `botOf` read the same field, so the label over a turn and the sidebar bucket it
+files under can never disagree. `chat.js` holds the answer in one module-level `speaker`, set by
+`setSpeaker` before anything renders for a session — `openSession` (before the history replay),
+`send` (from the summary `session.create` answers with, which always carries `agentPreset`) and
+`openBotHome` (armed, before a session exists) — and reset at the three other sites that clear
+`pendingAgentPreset`: `newSession`, the strategy picker's row, and a channel page's new round.
+`setSpeaker` also rewrites the composer placeholder, the one naming surface already on screen.
 
 `bucketFor` orders its buckets archived → bot → channel → ungrouped, so a session whose
 `agentPreset` names a bot files under that bot even when its cwd is a channel directory. Not
@@ -893,7 +902,7 @@ order path.
 
 ### 7.3 The face suite
 
-233 tests (228 pass, 5 skipped without `FACE_SMOKE=1`) across `channels`, `orders` (pure gate
+239 tests (234 pass, 5 skipped without `FACE_SMOKE=1`) across `channels`, `orders` (pure gate
 logic: raw and minted names, renamed server caught, read-only listing not gated, deny under
 `never`, one-shot grants for this `callId` only, marker only on `mcp__` tools, the guard reasons),
 `panels`, `data` (TTL, single-flight, stale, 503 bodies never leak, fence), `mapper` (against
@@ -902,7 +911,9 @@ recorded wire frames), `roster` (seed-once, fail-closed on corruption, append-on
 channel, fail-closed on a corrupt roster), `static`, `boot`, `setup`, `overlay` (exactly eleven
 rows, loopback config), `grouping`, `http`, `version`, `bots` (the id grammar and reserved names,
 the rendered composition, create-never-overwrites, the soul rewrite and its `{{` refusal, the
-roster merge), `botId` (the browser twin proposes only ids the server accepts), `bot-plugin` (both
+roster merge), `botId` (the browser twin proposes only ids the server accepts), `speaker` (the transcript's
+name for a session: the host for no preset and for `kairos`, a rostered bot's display name, the
+id when the roster has no name for it — and the fallback is never the host), `bot-plugin` (both
 registrations ride `ctx.effect` and return disposers; `expandAllow`), `persona`, and the five
 `FACE_SMOKE` boots: `smoke.test.ts` (the real tree serves the page, the RPC, the mux upgrade, the
 forged-Host 403 via `node:http` because `fetch` silently drops a forged `Host`, the stub producer)
@@ -936,7 +947,7 @@ outcomes the spec was willing to take, and S7 still asserts only the outcome it 
 | **Order approval** — automated half | the listener is registered, reaches the live approval service, defaults to `ask`, catches renamed servers, leaves `orders` alone; mutation-proven (removing the registration fails it) | the positive path — a grant logged by the real approval service, the guard finding it, the order dispatching — is covered only by unit tests of `hasApprovalGrant` / `orderGuardReason` with hand-built events, never on a real tree (the README calls it the highest-value missing test); that a human can read the card; containment | passed 2026-09-04 |
 | **Order approval** — manual half (arm Gate 1 in a *scratch* home, ask for one paper order, deny, see the audit pair) | the card, end to end | | **not yet run** — the condition before the flag flips in the real home |
 | **Bots** — automated (`bots-smoke`, `bot-sandbox-smoke`, `askuser-noclient-smoke`) | roster listing incl. broken; header `agentPreset`; mask = allow ∩ tree; persona shadow; inert default; the shipped relative plugin path mounted; Gate 2 refusing an order tool the bot's own mask admits; the S4/S7 observations | a bot in a room (plan 2); that a home session's write to `../SOUL.md` is refused (plan 2); that the approval CARD renders (no client) | passes as of 2026-09-07 |
-| **Bots** — manual (`face/README.md`) | create → home → persona → tools named and not named → `{{` refused; the sidebar buckets the home session under the bot; a restart's boot line lists the id | that the transcript names the speaker: a bot's reply is still labelled `KAIROS` (R12, plan 3) | passes as of 2026-09-07 |
+| **Bots** — manual (`face/README.md`) | create → home → persona → tools named and not named → `{{` refused; the sidebar buckets the home session under the bot; a restart's boot line lists the id | that the transcript names the speaker — the R12 fix landed after this run, and only `speaker.test.ts` covers it | passes as of 2026-09-07 |
 | **Ask-user** — `ask_user_question` offered, called, answered, cancelled | the seam | that it is a gate (the answer is model-visible); the instruction half (README step 6 — on a thin brief that does not name the tool, Kairos asks before it builds, per `AGENTS.md`), left to the operator and not run | passed 2026-09-03 with a real model, 26 tools offered |
 
 ---
@@ -1022,11 +1033,16 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   with no browser attached neither answers nor rejects — it parks until the caller aborts, exactly
   as the approval card does. An agentless (host) ask is the other branch and is rejected up front
   with `UserQuestionError: web user interaction requires an agent-owned session`.
-- **R12 — The transcript labels a bot's reply as Kairos.** Observed in the manual bots drill
-  (2026-09-07): a home session's replies open in the bot's persona, the sidebar buckets the session
-  under the bot's name, but the speaker label over each assistant turn is the fixed `Kairos` the
-  message renderer in `chat.js` writes into the `who` element, not the session's `agentPreset`. Cosmetic today (one voice per session);
-  it becomes a truth problem the moment a room shows several voices in one log (plan 3).
+- **R12 — The transcript labels a bot's reply as Kairos.** *Resolved.* Observed in the manual bots
+  drill (2026-09-07): a home session's replies open in the bot's persona, the sidebar buckets the
+  session under the bot's name, but the speaker label over each assistant turn is the fixed
+  `Kairos` the message renderer in `chat.js` writes into the `who` element, not the session's
+  `agentPreset`. Cosmetic today (one voice per session); it becomes a truth problem the moment a
+  room shows several voices in one log (plan 3). Fixed 2026-09-07: the label is per SESSION
+  (`speakerFor` in `client/speaker.js`, from the summary's `agentPreset`), carried by the `who`
+  element, the ask card's head and the composer placeholder alike (§5.1). Per-message attribution
+  — several voices in one room log — stays plan 3. Unproven in a browser: `speaker.test.ts` pins
+  the decision, nothing pins the three DOM sites, and the manual drill has not been re-run.
 
 ---
 

@@ -516,7 +516,10 @@ the way in) and the plugin itself (`validateBotConfig`, at mount) refuse it.
 and the gateway's own `session.create` mounts the preset (no in-process agent creation).
 The sidebar buckets a bot's sessions under its name from the session summary's `agentPreset`
 (`grouping.js` `bucketFor`, `BOT_KEY_PREFIX`); the strategy picker never offers a journal as a
-"local folder" (`knownFolders` skips every cwd under `bots/`). Ids are dsh's preset grammar
+"local folder" (`knownFolders` skips every cwd under `bots/`). Reading the same `agentPreset`,
+the transcript names the voice: in a bot's session its display name stands over every reply, its
+ask cards read `<bot> asks` and the composer says `Message <bot>…`, while Kairos's own sessions
+stay `Kairos` (`speaker.js` `speakerFor`). Ids are dsh's preset grammar
 `[a-z0-9][a-z0-9-]*`, bounded here to 64 code points (`BOT_ID_RE`); the form proposes one from
 the display name (`botId.js` `proposeBotId`, the browser twin of the server's — `botId.test.ts`
 pins that a non-empty proposal is always an id `isBotId` accepts) and the server refuses anything
