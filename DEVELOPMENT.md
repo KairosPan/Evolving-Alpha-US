@@ -936,7 +936,7 @@ outcomes the spec was willing to take, and S7 still asserts only the outcome it 
 | **Order approval** — automated half | the listener is registered, reaches the live approval service, defaults to `ask`, catches renamed servers, leaves `orders` alone; mutation-proven (removing the registration fails it) | the positive path — a grant logged by the real approval service, the guard finding it, the order dispatching — is covered only by unit tests of `hasApprovalGrant` / `orderGuardReason` with hand-built events, never on a real tree (the README calls it the highest-value missing test); that a human can read the card; containment | passed 2026-09-04 |
 | **Order approval** — manual half (arm Gate 1 in a *scratch* home, ask for one paper order, deny, see the audit pair) | the card, end to end | | **not yet run** — the condition before the flag flips in the real home |
 | **Bots** — automated (`bots-smoke`, `bot-sandbox-smoke`, `askuser-noclient-smoke`) | roster listing incl. broken; header `agentPreset`; mask = allow ∩ tree; persona shadow; inert default; the shipped relative plugin path mounted; Gate 2 refusing an order tool the bot's own mask admits; the S4/S7 observations | a bot in a room (plan 2); that a home session's write to `../SOUL.md` is refused (plan 2); that the approval CARD renders (no client) | passes as of 2026-09-07 |
-| **Bots** — manual (`face/README.md`) | create → home → persona → tools named and not named → `{{` refused | | **not run** — run after merge |
+| **Bots** — manual (`face/README.md`) | create → home → persona → tools named and not named → `{{` refused; the sidebar buckets the home session under the bot; a restart's boot line lists the id | that the transcript names the speaker: a bot's reply is still labelled `KAIROS` (R12, plan 3) | passes as of 2026-09-07 |
 | **Ask-user** — `ask_user_question` offered, called, answered, cancelled | the seam | that it is a gate (the answer is model-visible); the instruction half (README step 6 — on a thin brief that does not name the tool, Kairos asks before it builds, per `AGENTS.md`), left to the operator and not run | passed 2026-09-03 with a real model, 26 tools offered |
 
 ---
@@ -1022,6 +1022,11 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   with no browser attached neither answers nor rejects — it parks until the caller aborts, exactly
   as the approval card does. An agentless (host) ask is the other branch and is rejected up front
   with `UserQuestionError: web user interaction requires an agent-owned session`.
+- **R12 — The transcript labels a bot's reply as Kairos.** Observed in the manual bots drill
+  (2026-09-07): a home session's replies open in the bot's persona, the sidebar buckets the session
+  under the bot's name, but the speaker label over each assistant turn is the client's fixed
+  `KAIROS` (`render.js`), not the session's `agentPreset`. Cosmetic today (one voice per session);
+  it becomes a truth problem the moment a room shows several voices in one log (plan 3).
 
 ---
 
