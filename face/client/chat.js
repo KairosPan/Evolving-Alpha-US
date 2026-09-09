@@ -622,6 +622,15 @@ function acceptGate(view) {
     // Flag the row instead — once, however many times the mux replays the gate.
     const sub = convRows.get(view.sessionId)?.querySelector(".conv-sub");
     if (sub && sub.querySelector(".chip.waiting") === null) sub.prepend(waitingChip());
+    /* The row flag above is the gated session's OWN row and nothing else. The
+     * aggregated marks — the room row's chip for a folded member, the channel
+     * header's dot, the landing page's chip — are rebuilt only by
+     * `refreshSessions`, and no frame for another session reaches the render
+     * path that schedules it. Without this the mark on the row the operator
+     * actually navigates by would wait for an unrelated refresh; it also
+     * covers the case where the row does not exist yet (a member session the
+     * sidebar has not listed). Same rebuild `acceptGateResolved` relies on. */
+    scheduleListRefresh();
     return;
   }
   renderGate(view);
