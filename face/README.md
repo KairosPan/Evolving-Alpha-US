@@ -638,20 +638,22 @@ blocks until the hard cap (R6). A bot does not remember across channels (R5).
 | `POST /data/rooms/say` | `{sessionId, text}` → `{addressed: [...]}`; 400 a bad id or empty text, 404 not in a channel, 409 a corrupt roster |
 | `POST /data/rooms/state` | `{sessionId}` → `{roster, members, caps, round?}`; never resumes a session |
 
-## Chat rendering (client/render.js + the collapsed process rows)
+## Chat rendering (client/render.js + client/answer-traces.js)
 
-The transcript renders dsh-style calm: every tool call and every injected
-user-role message (AGENTS.md context, skill catalog, file notices, cron
-wake-ups) is ONE collapsed line — chevron · kind · one-line summary · status —
-expanding on click. A failed call's error is in the line itself, no click
-needed. Prose bubbles and the answerable gates (approval / question) keep
-their full shape: only what the operator must read or act on is loud.
+Context, thinking and tool calls preceding an answer live in its closed
+**思考轨迹** disclosure, opened from the bottom-right of the answer bubble.
+The count includes each process row once; a tool result updates its original
+call. Expanded traces retain the individual rows' summaries and detail/raw
+toggles. Pending or unanswered traces have a standalone closed disclosure;
+operator messages, room replies and turn endings close their association so
+they cannot leak into the next answer. Approval and question cards stay
+visible outside the disclosure. History and live events use the same path.
 
 Thinking follows dsh's design: while a reasoning block is OPEN, the flow's
 tail carries one ephemeral indicator — a spinning mark and elapsed time,
 NEVER content — and the status line reads "Kairos is thinking…". Only when
-the message settles does the thinking itself appear, as a collapsed `think`
-row above its bubble (a reasoning-only step is a think row with no bubble).
+the message settles does the thinking enter the answer's trace as a `think`
+row (a reasoning-only step waits in the pending disclosure).
 The stream's deltas themselves stay log-only.
 
 Kairos's own bubbles render markdown (client/markdown.js, DOM-built, no

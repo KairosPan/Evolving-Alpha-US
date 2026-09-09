@@ -35,6 +35,7 @@
  */
 import { rpc, respond, openMux } from "./api.js";
 import { mapFrame } from "./mapper.js";
+import { createAnswerTraces } from "./answer-traces.js";
 import { renderResult } from "./render.js";
 import { renderMarkdown } from "./markdown.js";
 import { renderChannelPage } from "./channels.js";
@@ -64,8 +65,10 @@ const STICK_PX = 120;
 let activeSession = null;
 /** Dedupe key set, `sessionId:seq`, across backfill and stream. @type {Set<string>} */
 const seen = new Set();
-/** seq → the node it rendered, the index `surfaceOp: replace` needs. @type {Map<number, HTMLElement>} */
+/** seq → its rendered nodes (an answer and its thinking share a seq).
+ * @type {Map<number, Set<HTMLElement>>} */
 const bySeq = new Map();
+const answerTraces = createAnswerTraces(() => flow());
 /** callId → its card, so a `tool/result` completes the call's card instead of
  * opening a nameless second one (the result event carries no tool name).
  * @type {Map<string, HTMLElement>} */
@@ -253,29 +256,40 @@ function honourSurfaceOp(view) {
   if (!op || op === "append") return;
   /** @type {Set<HTMLElement>} */
   const doomed = new Set();
-  for (const [seq, node] of bySeq) {
-    if (seq >= op.start && seq <= op.end) doomed.add(node);
+  for (const [seq, nodes] of bySeq) {
+    if (seq >= op.start && seq <= op.end) for (const node of nodes) doomed.add(node);
   }
   if (doomed.size === 0) return;
+  answerTraces.beforeRemove(doomed);
   for (const node of doomed) node.remove();
-  for (const [seq, node] of [...bySeq]) if (doomed.has(node)) bySeq.delete(seq);
+  for (const [seq, nodes] of [...bySeq]) {
+    for (const node of nodes) if (doomed.has(node)) nodes.delete(node);
+    if (nodes.size === 0) bySeq.delete(seq);
+  }
   for (const [callId, node] of [...toolCards]) if (doomed.has(node)) toolCards.delete(callId);
+  answerTraces.prune();
 }
 
 /**
  * Append a node for one session event and index it by seq.
- * @param {Record<string, any>} view @param {HTMLElement} node
+ * @param {Record<string, any>} view @param {HTMLElement} node @param {boolean} [trace]
  */
-function place(view, node) {
+function place(view, node, trace = false) {
   const stick = atTail();
-  flow().append(node);
+  if (trace) answerTraces.add(node);
+  else {
+    flow().append(node);
+    if (view.kind === "bubble" && view.role === "kairos") answerTraces.attach(node);
+  }
   index(view, node);
   if (stick) toTail();
 }
 
 /** Record which node rendered a seq, for a later `replace`. @param {Record<string, any>} view @param {HTMLElement} node */
 function index(view, node) {
-  if (typeof view.seq === "number") bySeq.set(view.seq, node);
+  if (typeof view.seq !== "number") return;
+  if (!bySeq.has(view.seq)) bySeq.set(view.seq, new Set());
+  bySeq.get(view.seq).add(node);
 }
 
 /* ---------- transcript: bubbles ---------- */
@@ -312,12 +326,6 @@ function bubbleNode(view) {
   const lane = operator ? "op" : "k";
 
   const wrap = el("div", `msg ${lane}`);
-  /* Thinking rides the same message but is never chat text: a collapsed row
-   * above the bubble, the bubble itself untouched. A reasoning-only step (the
-   * model thought, then went straight to tools) is a think row with no bubble. */
-  if (lane === "k" && typeof view.thinking === "string" && view.thinking !== "") {
-    wrap.append(thinkRow(view.thinking));
-  }
   const hasText = typeof view.text === "string" && view.text !== "";
   if (hasText) {
     if (lane === "k") wrap.append(el("div", "who", speaker));
@@ -484,7 +492,7 @@ function acceptCard(view) {
   }
   const node = toolCardNode(card);
   if (card.phase === "result") fillResult(node, card);
-  place(view, node);
+  place(view, node, true);
   if (card.phase === "call" && typeof card.callId === "string") toolCards.set(card.callId, node);
 }
 
@@ -876,9 +884,27 @@ function accept(view) {
   clearPulse();
   hideThinkLive();
   honourSurfaceOp(view);
-  if (view.kind === "bubble") place(view, bubbleNode(view));
+  if (view.kind === "bubble") {
+    const injected = view.role === "operator" && typeof view.source === "string" && view.source !== "user";
+    if (injected) place(view, contextRow(view), true);
+    else if (view.role === "kairos") {
+      const hasText = typeof view.text === "string" && view.text !== "";
+      if (typeof view.thinking === "string" && view.thinking !== "") {
+        const row = thinkRow(view.thinking);
+        if (!hasText && view.interrupted === true) row.querySelector(".card-head").append(el("span", "tag tag-cut", "interrupted"));
+        place(view, row, true);
+      }
+      if (hasText) place(view, bubbleNode(view));
+    } else {
+      answerTraces.boundary();
+      place(view, bubbleNode(view));
+    }
+  }
   else if (view.kind === "card") acceptCard(view);
-  else if (view.kind === "room-line") place(view, roomLineNode(view));
+  else if (view.kind === "room-line") {
+    answerTraces.boundary();
+    place(view, roomLineNode(view));
+  }
 }
 
 /**
@@ -909,6 +935,16 @@ function acceptFrame(frame) {
     return;
   }
   if (view.kind === "turn") {
+    if (view.sessionId === undefined || view.sessionId === activeSession) {
+      const key = typeof view.seq === "number" ? `${view.sessionId ?? activeSession}:${view.seq}` : null;
+      if (key !== null && seen.has(key)) return;
+      if (key !== null) seen.add(key);
+      if (view.phase === "end") {
+        answerTraces.boundary();
+        hideThinkLive();
+        clearPulse();
+      }
+    }
     // A member's turn boundary: its fine state ends with the turn; the coarse
     // state (answered / passed / …) arrives on the room's projection.
     if (view.sessionId !== undefined && memberSessionIds().has(view.sessionId)) {
@@ -953,6 +989,7 @@ function flushQueued() {
 /** Wipe everything that belongs to the session leaving the screen. */
 function resetFlow() {
   hideThinkLive();
+  answerTraces.reset();
   flow().replaceChildren();
   seen.clear();
   bySeq.clear();
