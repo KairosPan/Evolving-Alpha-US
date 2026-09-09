@@ -1,6 +1,7 @@
 # Kairos — Product Charter
 
-**Status:** living charter, written 2026-08-30, revised 2026-09-04, §9 added 2026-09-08 · **Owner:** the operator ·
+**Status:** living charter, written 2026-08-30, revised 2026-09-04, §9 added 2026-09-08, §7.1
+amended and D11–D13 revised 2026-09-09 (the bots-and-rooms arc) · **Owner:** the operator ·
 **Authority:** this charter carries intent and principles; mechanism lives in `DEVELOPMENT.md`
 (the as-built front/back-end reference) and in code. On a question of intent, the charter
 wins; on a question of mechanism, the code is the fact and the documents follow it. The pointer
@@ -16,17 +17,19 @@ page, the content belongs in `DEVELOPMENT.md` or the docs, not here.
 ## 1. The product
 
 Kairos is a market–strategy–account research workbench for **one operator, one machine, one
-agent**. The agent, also called Kairos, runs on DeepSeek Harness (dsh) inside the operator's
-chat face and works three layers:
+principal agent**. The agent, also called Kairos, runs on DeepSeek Harness (dsh) inside the
+operator's chat face and works three layers. The operator may author further agents — bots — as
+discussants (§7.1); they are voices on Kairos's substrate, not hands.
 
 - **MARKET** — point-in-time US equities data (Alpaca bars and corporate actions, EDGAR
   filings, two offline PIT beds), guarded against lookahead in code.
 - **STRATEGY** — Kairos's arena. A strategy is a directory under `strategies/`, meant to be
   git-versioned: a thesis with falsification terms, an executable screen, backtests, a journal,
   a lifecycle state. In the face, each strategy directory is a **channel**: its conversations,
-  its landing page, its roster of helper agents. (As of 2026-09-04 only the template is
-  committed; the three live strategies are untracked, so their ledger is not yet written —
-  `DEVELOPMENT.md` §3.4.)
+  its landing page, its roster of helper agents. A channel with bots on its roster is a **room**:
+  Kairos dispatches the voices, the operator argues with them, and the conclusion stays Kairos's.
+  (As of 2026-09-04 only the template is committed; the three live strategies are untracked, so
+  their ledger is not yet written — `DEVELOPMENT.md` §3.4.)
 - **ACCOUNT** — an Alpaca paper account, read-only by default. Order capability exists in code
   behind two gates (§4); it has never been armed in the operator's real harness home.
 
@@ -151,7 +154,9 @@ solved would be worse than carrying them.
 | D8 | Both order gates are prose against a shell: they hold the tool surface, the key file sits at the repo root, and Gate 2 exists only inside the face | paper account; hostname pin; the flag has never been armed | real-money intent, or any host other than the face running the profile with the flag set |
 | D9 | The channel roster is a menu, not a fence: tool schemas are tree-wide, a session in no channel is never roster-checked, and a shell turn can call a CLI directly | it reduces noise and states intent; writes are logged | if a rostered agent ever gets a capability the operator would not grant every channel |
 | D10 | The harness home and the face's own routes are reachable over loopback from inside the workspace — a fence, not authentication — including the approval-answer route, so a shell turn can approve its own order card; and the MCP server, a child of the face process, writes outside the sandbox | one operator, one machine; the writes are small and visible; the paper pin bounds an answered card | a second human, a hosted deployment, real-money intent, or the first unexplained change to `$DSH_HOME/face/*` |
-| D11 | The model is never told it is Kairos: the persona seat in the harness config is empty | the label is on the page and in the directory names | the operator's call; the config seat already exists |
+| D11 | *Resolved 2026-09-07.* The model is told it is Kairos: `dsh/profile/persona.md` is the `system-prompt` row's `persona`, set by the face at compose time; a bot's preset shadows it for that bot's sessions | — | — |
+| D12 | Bot tool masks are visibility, not authority. dsh scopes and `tools.restrict` are "live visibility composition, not an authority boundary"; a bot with a shell writes whatever its session's sandbox mode allows and reaches whatever the network allows | held by: the `read-only` permission preset logged into every bot room session inside its creation (file effects, subject to an operator-granted escalation card), the `journal/`-scoped `cwd` of every bot home session, Gate 2 tree-wide (the account), and the room transcript naming every dispatch and every member not called. Not held by the mask, and not held for the network | if a bot's composition is ever given the account tools, or a room session is created other than read-only (§8) |
+| D13 | Kairos's sessions may have a picked `cwd` at the repository root, which includes `bots/`; "Kairos never edits a bot" is a Rule-7 commitment carried by `AGENTS.md`'s never-edit list and review, not by the sandbox | single operator; every edit reviewed; git is the ledger | the first bot edit that is not the operator's |
 
 ## 6. Rules carried forward
 
@@ -176,11 +181,20 @@ was expensive.
 
 ## 7. What this design deliberately does not build
 
-- **No second agent.** Teaching, review, and adjudication belong to the operator. The local
-  CLIs the operator may roster on a channel (today `claude` and `codex` carry exec recipes and
-  become callable tools; the connect list knows thirteen more that can be rostered but not
-  driven) are subordinate tools of the one agent, never peers; a reviewer entity would add a
-  plane of machinery to buy safety that already comes from P1.
+- **No privileged second agent.** Teaching, review, and adjudication belong to the operator. One
+  hand, many voices: Kairos is the one agent whose composition carries the account tools and the
+  write to a strategy directory; the operator may roster other agents on a channel — local CLIs as
+  callable tools, operator-authored dsh bots as **discussants** that speak in the room — but a bot
+  is a voice, not a reviewer: what it says is evidence the operator and Kairos weigh, never a
+  verdict, and the conclusion is written by Kairos. Bots run on Kairos's substrate with their tool
+  sets masked by configuration; the mask is a menu (a bot with a shell writes whatever its sandbox
+  mode allows — D12), and the fence around the account is Gate 2, tree-wide, the same for every
+  agent. Kairos's `dispatch` orders the room but grants nothing, and the operator's `@` bypasses
+  it. Bots are authored by the operator, never by Kairos (Rule 7). A voice need not run on this
+  machine: an agent reached over A2A is a voice too — untrusted text in the room log, never a hand
+  in this tree; the moment anything outside this machine can call *in*, §8's last row applies. A
+  reviewer entity with authority would add a plane of machinery to buy safety that already comes
+  from P1.
 - **No proposal queue.** Change lands by editing; git is the ledger and the rollback. A
   deliberation pipeline is bureaucracy at this scale.
 - **No bespoke harness.** dsh owns the runtime — sessions, tools, sandboxing, subagents, and
@@ -208,6 +222,7 @@ Few and concrete. Each names the section it reopens.
 | An independent evaluator is introduced | D1 · D7 (the measurement plane) |
 | dsh leaves developer preview or ships a breaking change | the two pins · profile and skills format · the drills |
 | A second human, or any hosted deployment | this charter is the wrong document; write the next one |
+| A bot's composition is given the account tools, a bot room session is created other than read-only, or a bot home session's cwd widens past its `journal/` | §7.1 · D8 · D12 · run the order drill under that bot's preset |
 | Starting the interface migration in §9 | §3 (the FACE row) · §7 "No bespoke harness" and "No hosted face" · the two pins · the row inventory of the face's tree against the CLI's (R13 is its first symptom) |
 
 ## 9. Forward
