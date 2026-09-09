@@ -591,6 +591,11 @@ export class RoomEngine {
     }
     while (!round.superseded && round.continuations.length > 0) {
       const id = round.continuations.shift() as string;
+      /* A serial round queues a peer before that peer's OWN dispatched turn has
+       * been prepared, so `called` is read here too, not only where continuations
+       * are queued: one turn per member per round, whatever the mode. Its slot is
+       * not spent - a voice that has not yet spoken can take it. */
+      if (round.called.has(id)) continue;
       round.continuationsRun++;
       await runOne(id, "continuation");
     }
