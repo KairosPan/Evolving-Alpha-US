@@ -21,6 +21,7 @@ import { registerStatic } from "./static.ts";
 import { registerSessionRoutes } from "./sessions.ts";
 import { listSessionHeads, registerChannelRoutes, type RegistryLike } from "./channels.ts";
 import { hasExec, panelDeps, readAgentsMeta, registerPanelRoutes } from "./panels.ts";
+import { installRoom, registerRoomRoutes, type RoomContextLike } from "./room.ts";
 
 /** Diagnostic label, the same string boot.ts uses for `BIN`. Not imported
  * because boot.ts does not export it, and it is a label rather than a contract:
@@ -172,11 +173,23 @@ registerChannelRoutes(booted.ctx.webServer, {
  * the host's own add-only archive has no way to honour. */
 registerSessionRoutes(booted.ctx.webServer, { root: process.cwd(), home: dshHome, hostArchive: workspaceRegistry });
 registerBotRoutes(booted.ctx.webServer, { botsRoot: BOTS_ROOT, listPresets: () => agentPresets.list() });
+/* Rooms: the engine lives on the ROOT context (a root-created member is a
+ * runtime root, so it can ask the operator a question; a root listener sees
+ * every session). `channelFor` is the same lookup the agent tools use, now
+ * carrying the channel directory a member session is created in. */
+const deps = panelDeps(booted.ctx, process.cwd());
+const room = installRoom({
+  ctx: booted.ctx as unknown as RoomContextLike,
+  home: dshHome,
+  channelFor: deps.channelFor,
+  listBots: () => listBots(BOTS_ROOT, () => agentPresets.list()),
+});
+registerRoomRoutes(booted.ctx.webServer, room);
 /* The master rail's feeds: in-process reads of the booted tree (skills /
  * tools / loader), which have no RPC at this pin, plus the local-agent
  * roster — awaited, because every agent already on the roster is registered
  * as a tool for Kairos before the face reports itself up. */
-await registerPanelRoutes(booted.ctx.webServer, panelDeps(booted.ctx, process.cwd()));
+await registerPanelRoutes(booted.ctx.webServer, deps);
 /* The URL line belongs to the shell, not to the webserver plugin (which states
  * outright that it never prints). This is that shell. Host and port are read
  * back off the service rather than off the config, so an OS-assigned port
@@ -184,3 +197,4 @@ await registerPanelRoutes(booted.ctx.webServer, panelDeps(booted.ctx, process.cw
 console.log(
   `${BIN}: http://${booted.ctx.webServer.host}:${booted.ctx.webServer.port}/ (profile: ${profileName})`,
 );
+console.log(`${BIN}: rooms: dispatch registered; caps ${JSON.stringify(room.caps)}`);
