@@ -42,7 +42,7 @@ import { ARCHIVED_KEY, bucketFor, isBotKey, UNGROUPED_KEY } from "./grouping.js"
 import { proposeBotId } from "./botId.js";
 import { foldChannelName } from "./channelName.js";
 import { HOST_NAME, speakerFor } from "./speaker.js";
-import { avatarGlyph, foldMembers, gateSpeaker, roundEndLine, stripChips } from "./room.js";
+import { avatarGlyph, foldMembers, gateSpeaker, isMentionText, roundEndLine, stripChips } from "./room.js";
 
 /** Rendered in place of a value the host did not give us. */
 const EM = "—";
@@ -1737,6 +1737,20 @@ async function send() {
       flow().querySelector(".picker")?.remove();
       await refreshSessions();
       markActive();
+    }
+    /* The operator's `@` (spec §4.4 rule 1): resolved on the server against
+     * the channel's roster, appended to the room as the operator's own message
+     * without waking Kairos, and each named member turns. A text that resolves
+     * to nobody is an ordinary prompt. Only inside a channel: elsewhere `@` is
+     * just a character. */
+    if (isMentionText(text) && channelOf(activeSession) !== null) {
+      const said = await panelData("/data/rooms/say", { sessionId: activeSession, text });
+      const addressed = Array.isArray(said.addressed) ? said.addressed : [];
+      if (addressed.length > 0) {
+        const names = addressed.map((id) => botIndex.find((b) => b.id === id)?.name ?? id).join(", ");
+        status(`@ → ${names}`);
+        return;
+      }
     }
     const accepted = await rpc("session.prompt", {
       sessionId: activeSession,
