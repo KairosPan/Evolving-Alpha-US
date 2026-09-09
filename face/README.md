@@ -1097,8 +1097,9 @@ session writes its journal and is refused on `../SOUL.md`.
 
 **Step 0b, if you changed anything under `client/`.** Hard-reload.
 
-**The drill**, with the face live and two template bots created on the agent face (the bots
-drill, steps 1–2), on a fresh channel:
+**The drill**, with the face live, on the tracked fixtures — the voices `drill-bull` (看多派) and
+`drill-bear` (看空派) on the channel `room-drill` — or on two template bots you create on the agent
+face (the bots drill, steps 1–2) and a fresh channel:
 
 1. Channel page → **bots in this channel** → check both in. PASS, part one: two chips read
    on; `$DSH_HOME/face/roster.log` gained a dated `bots` line; `channels.json` carries `bots`.
@@ -1131,7 +1132,7 @@ drill, steps 1–2), on a fresh channel:
 
 **Drilled and PASSED 2026-09-09** on the operator's own face (real `$DSH_HOME`, the alpaca-kit
 server connected, DeepSeek as the model; `feat/rooms` @ `31b2e68`), two fresh template bots
-(`看多派`, `看空派`) on a fresh channel `room-drill`, the question "SanDisk (SNDK) 现在值得买吗？请各说
+(`看多派`, `看空派`) on a fresh channel `room-drill` (all three kept since as the tracked fixtures), the question "SanDisk (SNDK) 现在值得买吗？请各说
 各的". Part one: the check-in went through the channel-bots route the chips call (the landing page
 is reachable only once the channel has a session); `roster.log` gained the dated `bots` line and
 `channels.json` carried `bots`; the chips read on once the page existed. Part two: Kairos read the

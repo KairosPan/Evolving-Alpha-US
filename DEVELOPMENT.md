@@ -456,11 +456,12 @@ display name folds to a proposal through `proposeBotId` (`src/bots.ts`, twinned 
 carrying `{{` is refused twice, at `rejectSoul` and again at the plugin's `validateBotConfig`: the
 system prompt is a strict template with no escape.
 
-State on 2026-09-09: two bot directories are tracked and three are not. `bots/kairos` is the
+State on 2026-09-09: four bot directories are tracked and one is not. `bots/kairos` is the
 inert default — an empty composition (`[]`) every session that names no preset joins, so Kairos's
 tools stay exactly the host's — and `bots/_template` is the copy source, invisible to dsh and
-refused as an id. `bots/buffet/`, `bots/drill-bull/` and `bots/drill-bear/` are the operator's own
-voices and are untracked: a created bot is the operator's to commit.
+refused as an id. `bots/drill-bull/` (看多派) and `bots/drill-bear/` (看空派) are the room drill's
+two voices, kept as tracked fixtures with their channel `strategies/room-drill`. `bots/buffet/` is
+the operator's own voice and is untracked: a created bot is the operator's to commit.
 
 `preset.yml` may carry one key beyond `name` and `description`: `model: <provider>/<model>`
 (`MODEL_ROUTE_RE`, written by `renderPresetMeta`). It is **face-only**: dsh's own metadata reader
