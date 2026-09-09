@@ -17,10 +17,7 @@ import { isBotId } from "./bots.ts";
 import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 import { FORBIDDEN, HttpError, readBody } from "./http.ts";
 import { botsFor, logBotsWrite, logRosterWrite, rosterFor, seedRoster, setBots, setRoster } from "./roster.ts";
-
-/* TODO(Task 3): import ROOM_CAPS from ./room-rules.ts and drop this local
- * copy once room-rules.ts lands - see room-rules.ts step 9. */
-const MAX_MEMBERS = 6;
+import { ROOM_CAPS } from "./room-rules.ts";
 
 /** Diagnostic label, the same string every other `${BIN}:`-prefixed line in this
  * program uses (`roster.ts:24`, `main.ts:26`) - copied rather than imported,
@@ -623,8 +620,8 @@ export function registerChannelRoutes(webServer: RouteRegistrar, deps: ChannelRo
         /* The cap is the room's, not the store's: six members is what one
          * operator message may cost (spec §4.6, P5). Refused here, before the
          * write, so the file never holds a roster the engine would refuse. */
-        if (ids.length > MAX_MEMBERS) {
-          return send(res, 400, { ok: false, error: `a channel rosters at most ${MAX_MEMBERS} bots` });
+        if (ids.length > ROOM_CAPS.maxMembers) {
+          return send(res, 400, { ok: false, error: `a channel rosters at most ${ROOM_CAPS.maxMembers} bots` });
         }
         const id = workspaceId as string;
         await setBots(deps.home, id, ids);

@@ -40,7 +40,7 @@ const zstdDecompressAsync = promisify(zstdDecompress);
 
 /** Exactly a dsh session id: the literal prefix and a uuid, nothing else —
  * what makes it safe to use as one path segment. */
-const SESSION_ID_RE = /^session-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const SESSION_ID_RE = /^session-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** The face's session-metadata file under the harness home. */
 const META_FILE = ["face", "archived.json"] as const;
