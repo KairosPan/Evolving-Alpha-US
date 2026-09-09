@@ -911,13 +911,14 @@ Built 2026-09-08 on `main` (`face/src/room.ts`, `room-rules.ts`, `room-projectio
 
 Built 2026-09-09 on `feat/rooms` (313 face tests; the live drill passed 2026-09-09, recorded in
 `face/README.md`). Deviations, each decided by the wire plan 2 left: (1) the dispatch line is the
-`dispatch` tool card's own collapsed row — the result text plan 2 wrote is the spec's line
-verbatim; (2) fine states are derived from the member sessions' own `assistant/chunk` block starts
-and `turn/*` boundaries, which the mux forwards for every live session — the unit carries coarse
-state only; (3) the fold rule is the header rule (plan 2, deviation 7); (4) a member's gate renders
-inline when its room is on screen, headed with the bot's name, answered against the member's own
-session — the wire already required that. §6's "no with-whom column" holds. The drill's eight parts
-and the PASS line are in the README.
+`dispatch` tool card's own collapsed row — the result text plan 2 wrote carries the spec's facts
+(who was called, the mode, who was not) in the engine's own wording (`dispatchResultText`,
+`face/src/room-rules.ts`), not the §4.3 line's words; (2) fine states are derived from the member
+sessions' own `assistant/chunk` block starts and `turn/*` boundaries, which the mux forwards for
+every live session — the unit carries coarse state only; (3) the fold rule is the header rule
+(plan 2, deviation 7); (4) a member's gate renders inline when its room is on screen, headed with
+the bot's name, answered against the member's own session — the wire already required that. §6's
+"no with-whom column" holds. The drill's eight parts and the PASS line are in the README.
 
 ### Plan 4 — the charter and the documents
 
