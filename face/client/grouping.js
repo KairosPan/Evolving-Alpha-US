@@ -45,13 +45,18 @@ export function isBotKey(key) {
  * @param {boolean} archived - the session is archived (face-local ∪ host).
  * @param {{id: string, label: string}|null} bot - the session's bot when its
  *   `agentPreset` names one (never the default `kairos`), else `null`.
+ * @param {boolean} [member] - the session is a room member (folded under its
+ *   room); a room member is reached through its room (folded under it); it
+ *   never files under the bot's home bucket, even though its header names
+ *   the bot.
  * @returns {{key: string, label: string, channel: {workspaceId: string, title: string}|null}}
  *   `key` is the durable bucket identity to group and persist collapse state
  *   by; `label` is the display text; `channel` is `null` for the synthetic
  *   buckets and for a bot (there is nothing to open by clicking their header).
  */
-export function bucketFor(channel, archived, bot) {
+export function bucketFor(channel, archived, bot, member = false) {
   if (archived) return { key: ARCHIVED_KEY, label: "archived", channel: null };
+  if (member) bot = null;
   if (bot !== null && bot !== undefined) return { key: BOT_KEY_PREFIX + bot.id, label: bot.label, channel: null };
   if (channel !== null) return { key: channel.workspaceId, label: channel.title, channel };
   return { key: UNGROUPED_KEY, label: "ungrouped", channel: null };
