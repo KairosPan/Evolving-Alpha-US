@@ -618,9 +618,13 @@ the transcript shows Kairos (`organizing` while its turn is open) and every rost
 coarse states from the projection, fine states (`thinking` / `writing` / `tool`) from the member
 sessions' own pulses, `waiting for you` when a gate is pending on the member, `left` for a member
 the roster no longer carries. A member's question or escalation card renders **inline in the
-room**, headed with the bot's name, and is answered against the member's own session. Members
-**fold under their room** in the sidebar (counted, the bot's name as the label; the fold rule is
-the header: `parentSessionId` set, no `origin`, a bot preset, the parent running the host). A
+room**, headed with the bot's name, and is answered against the member's own session. Member
+sessions have **no separate Members dropdown** in the sidebar. Each member answer has the same
+bottom-right **思考轨迹** disclosure as Kairos. Opening it reads the exact member session and
+turn recorded on that answer, paging older history as needed; it does not resume or prompt
+the member. Context, thinking and tool results stay scoped to that turn, with visible loading,
+empty and retry states. Membership still follows the header: `parentSessionId` set, no
+`origin`, a bot preset, the parent running the host. A
 pending gate on a session or its members marks the session row, the channel header and the
 landing page (needs-you at the index level).
 
@@ -1114,8 +1118,9 @@ face (the bots drill, steps 1–2) and a fresh channel:
    `writing` → `answered` or `passed`; each answer is a bubble in the bot's own voice with its
    glyph; the round line reads `round 1 · settled · …`; Kairos wakes once and names the
    disagreement.
-3. Sidebar. PASS, part three: the room row shows `2 members`, folded; expanding it lists both
-   by name; opening one shows its delta as a `context · room` row and its reply.
+3. Sidebar and answer traces. PASS, part three: the room row has no Members dropdown;
+   each bot's answer has a closed `思考轨迹` control at its bottom-right. Expanding it
+   shows that member turn's context, thinking and tool records in place.
 4. `@<bot> …` in the composer. PASS, part four: the status line reads `@ → <bot>`; the bot's
    chip moves and its bubble lands; Kairos does not speak (no new Kairos turn until you prompt
    it); the `@` shows as your own bubble.
@@ -1124,14 +1129,14 @@ face (the bots drill, steps 1–2) and a fresh channel:
    landing page's session row show the needs-you mark; answer it; the mark clears and the
    bot's answer lands.
 6. Make a bot write: `@<bot> 在当前目录写一个 test.txt`. PASS, part six: no file appears; the
-   bot's own session (open it from the fold or the strip) shows the bash result with
+   bot's answer trace (or its own session, opened from the strip) shows the bash result with
    `[sandbox: file access denied under read-only mode]`; the bot reports the refusal in the
    room.
 7. Un-check one bot on the channel page and come back. PASS, part seven: its chip reads
    `left`; `@` to it resolves nobody (the text goes to Kairos as a prompt); re-check it and
-   `@` it again: the same session answers (one member row, not two).
-8. Restart the face, open the room. PASS, part eight: the strip's coarse states and the fold
-   survive (the projection cache); the members' titles survive (R13 closed).
+   `@` it again: the same member session answers.
+8. Restart the face, open the room. PASS, part eight: the strip's coarse states survive
+   (the projection cache); each answer's trace still loads its recorded member turn.
 
 **PASS criteria are observations.** Record the run below with the date and the commit.
 

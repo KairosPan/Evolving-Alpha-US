@@ -1,3 +1,24 @@
+/** Shared closed disclosure for both the host and a room member's answer. */
+export function createTraceDisclosure() {
+  const details = document.createElement("details");
+  details.className = "answer-trace";
+  const summary = document.createElement("summary");
+  summary.className = "trace-toggle";
+  const label = document.createElement("span");
+  label.textContent = "思考轨迹";
+  const count = document.createElement("span");
+  count.className = "trace-count";
+  const chevron = document.createElement("span");
+  chevron.className = "trace-chevron";
+  chevron.textContent = "⌄";
+  chevron.setAttribute("aria-hidden", "true");
+  summary.append(label, count, chevron);
+  const body = document.createElement("div");
+  body.className = "trace-content";
+  details.append(summary, body);
+  return { details, body, count };
+}
+
 /** Move process rows into the answer they precede without cloning them:
  * tool results and compaction still address the original event nodes. */
 export function createAnswerTraces(container) {
@@ -9,24 +30,9 @@ export function createAnswerTraces(container) {
   }
 
   function createGroup() {
-    const details = document.createElement("details");
-    details.className = "answer-trace trace-pending";
-    const summary = document.createElement("summary");
-    summary.className = "trace-toggle";
-    const label = document.createElement("span");
-    label.textContent = "思考轨迹";
-    const count = document.createElement("span");
-    count.className = "trace-count";
-    const chevron = document.createElement("span");
-    chevron.className = "trace-chevron";
-    chevron.textContent = "⌄";
-    chevron.setAttribute("aria-hidden", "true");
-    summary.append(label, count, chevron);
-    const body = document.createElement("div");
-    body.className = "trace-content";
-    details.append(summary, body);
-    container().append(details);
-    const group = { details, body, count, answer: null };
+    const group = { ...createTraceDisclosure(), answer: null };
+    group.details.classList.add("trace-pending");
+    container().append(group.details);
     groups.add(group);
     return group;
   }

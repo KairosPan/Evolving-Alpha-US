@@ -219,6 +219,21 @@ test("a member's answer is a BOT bubble with its name and id, never an operator 
   assert.equal(v.form, "answer");
   assert.equal(v.text, "买。理由：便宜。");
   assert.equal(v.seq, 30);
+  assert.equal(v.sessionId, "s1", "the room retains its own identity");
+  assert.equal(v.memberSessionId, "s-b");
+  assert.equal(v.memberTurn, 1);
+});
+
+test("a legacy member answer without trace identity never guesses the room or another turn", () => {
+  const v = mapFrame({ type: "session/event", sessionId: "room", event: {
+    type: "user/message", seq: 1, data: {
+      content: [{ type: "text", text: "回答" }],
+      source: { kind: "room", form: "answer", bot: "member" },
+    },
+  } });
+  assert.equal(v.sessionId, "room");
+  assert.equal(v.memberSessionId, undefined);
+  assert.equal(v.memberTurn, undefined);
 });
 
 test("the round-end message is a room line carrying the outcome and every turn's state", () => {

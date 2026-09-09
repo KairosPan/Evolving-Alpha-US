@@ -905,6 +905,18 @@ body {
 .answer-trace:not([open]) > .trace-content { display: none; }
 .trace-content > .card { min-width: 0; max-width: 100%; }
 .trace-content .tool-out { max-height: 360px; overflow: auto; }
+.trace-note { color: var(--dim); font: 12px/1.6 var(--sans); }
+.trace-note.err { color: var(--red); }
+.trace-retry {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--accent);
+  font: 12px var(--sans);
+  cursor: pointer;
+}
 .trace-pending { align-self: flex-start; width: 100%; margin-top: 0; }
 .trace-pending > .trace-toggle { margin-left: 0; }
 
@@ -1050,11 +1062,7 @@ body {
 .conv-group-n { margin-left: auto; font: 10px var(--mono); letter-spacing: 0; color: var(--dim); }
 .conv-group-link { cursor: pointer; text-decoration: underline dotted; }
 
-/* a room's members, folded under its row; the needs-you mark on a group head */
-.conv-members { margin: 0 0 0 14px; border-left: 1px solid var(--line); }
-.conv-members-head { display: flex; align-items: center; gap: 6px; padding: 4px 10px; font: 10px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); cursor: pointer; user-select: none; }
-.conv-member { padding: 6px 12px; }
-.conv-member .conv-name { font-weight: 500; font-size: 13px; }
+/* The needs-you mark on a channel head includes its rooms' member gates. */
 .needs-you { color: var(--danger); font-size: 9px; margin-left: 4px; }
 
 .conv { position: relative; }

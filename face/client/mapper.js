@@ -80,6 +80,8 @@
  * @property {unknown} [value] - projections: the unit's whole new view value.
  * @property {string} [bot] - a room member's roster id: bubbles with `role: "bot"`.
  * @property {string} [name] - a room member's display name: bubbles with `role: "bot"`.
+ * @property {string} [memberSessionId] - the member's own session, distinct from this room's sessionId.
+ * @property {number} [memberTurn] - the exact member turn that produced this answer.
  * @property {string} [form] - the room `source.form` a room-sourced bubble carried (`answer`, `delta`),
  *   when the frame is one.
  * @property {string[]} [mention] - operator bubbles: the roster ids the operator's `@` addressed.
@@ -179,7 +181,13 @@ function bubble(role, message, base, interrupted) {
    * (an injected context row, like every other plugin-sourced message). */
   if (role === "operator" && kind === "room") {
     if (form === "answer" && typeof src.bot === "string") {
-      return { ...base, kind: "bubble", role: "bot", bot: src.bot, name: typeof src.name === "string" && src.name !== "" ? src.name : src.bot, form, text, interrupted: false, source: kind };
+      return {
+        ...base, kind: "bubble", role: "bot", bot: src.bot,
+        name: typeof src.name === "string" && src.name !== "" ? src.name : src.bot,
+        form, text, interrupted: false, source: kind,
+        memberSessionId: typeof src.sessionId === "string" ? src.sessionId : undefined,
+        memberTurn: typeof src.turn === "number" ? src.turn : undefined,
+      };
     }
     if (form === "round-end") {
       return { ...base, kind: "room-line", line: "round-end", round: typeof src.round === "number" ? src.round : undefined, outcome: typeof src.outcome === "string" ? src.outcome : undefined, turns: Array.isArray(src.turns) ? src.turns : [], text };

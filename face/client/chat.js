@@ -35,7 +35,8 @@
  */
 import { rpc, respond, openMux } from "./api.js";
 import { mapFrame } from "./mapper.js";
-import { createAnswerTraces } from "./answer-traces.js";
+import { createAnswerTraces, createTraceDisclosure } from "./answer-traces.js";
+import { loadMemberTrace } from "./member-traces.js";
 import { renderResult } from "./render.js";
 import { renderMarkdown } from "./markdown.js";
 import { renderChannelPage } from "./channels.js";
@@ -317,6 +318,7 @@ function bubbleNode(view) {
     const md = renderMarkdown(String(view.text ?? ""));
     bubble.append(md.node);
     if (md.doc) wrap.classList.add("doc");
+    bubble.append(memberTraceNode(view));
     wrap.append(bubble);
     return wrap;
   }
@@ -407,6 +409,58 @@ function thinkRow(text) {
   if (sum) sum.textContent = firstLine.slice(0, 160);
   node.append(el("pre", "tool-out think-out", text));
   return node;
+}
+
+/** A member's process belongs to its exact answering turn, fetched on first
+ * expansion. Its seqs and tool call ids never enter the room's own indexes. */
+function memberTraceNode(view) {
+  const { details, body, count } = createTraceDisclosure();
+  let loaded = false;
+  let loading = false;
+  const load = async () => {
+    if (loaded || loading || !details.isConnected) return;
+    loading = true;
+    body.setAttribute("aria-busy", "true");
+    body.replaceChildren(el("div", "trace-note", "正在加载思考轨迹…"));
+    try {
+      const views = await loadMemberTrace(rpc, { sessionId: view.memberSessionId, turn: view.memberTurn });
+      if (!details.isConnected) return;
+      body.replaceChildren();
+      const calls = new Map();
+      for (const entry of views) {
+        if (entry.kind === "card") {
+          const card = entry.card ?? {};
+          const previous = card.phase === "result" ? calls.get(card.callId) : undefined;
+          if (previous) fillResult(previous, card);
+          else {
+            const node = toolCardNode(card);
+            if (card.phase === "result") fillResult(node, card);
+            else if (typeof card.callId === "string") calls.set(card.callId, node);
+            body.append(node);
+          }
+        } else if (entry.role === "kairos" && entry.thinking) {
+          const node = thinkRow(entry.thinking);
+          if (entry.interrupted) node.querySelector(".card-head").append(el("span", "tag tag-cut", "interrupted"));
+          body.append(node);
+        } else if (entry.role === "operator") body.append(contextRow(entry));
+      }
+      count.textContent = String(body.childElementCount);
+      if (body.childElementCount === 0) body.append(el("div", "trace-note", "本次回答没有过程记录。"));
+      loaded = true;
+    } catch (err) {
+      if (!details.isConnected) return;
+      const note = el("div", "trace-note err", `无法加载思考轨迹：${err instanceof Error ? err.message : String(err)}`);
+      const retry = el("button", "trace-retry", "重试");
+      retry.type = "button";
+      retry.addEventListener("click", () => void load());
+      body.replaceChildren(note, retry);
+    } finally {
+      loading = false;
+      body.removeAttribute("aria-busy");
+    }
+  };
+  details.addEventListener("toggle", () => { if (details.open) void load(); });
+  return details;
 }
 
 /** A room fact as one quiet centred line: the round end today. @param {Record<string, any>} view */
@@ -1131,53 +1185,6 @@ function convRow(summary) {
   return row;
 }
 
-/** The members folded under a room row: one indented row per member, the bot's
- * name as its label, expanded until the operator folds it (the choice is
- * remembered with the sidebar's other groups). The count is on the head, so a
- * folded room still SAYS how many sessions it holds — hiding them behind a
- * silent chevron would be the one thing Rule 5 forbids.
- * @param {Record<string, any>} roomSummary @param {Record<string, any>[]} members @returns {HTMLElement} */
-function memberBox(roomSummary, members) {
-  const key = `room:${String(roomSummary.sessionId)}`;
-  const box = el("div", "conv-members");
-  const head = el("div", "conv-members-head");
-  const chev = el("span", "chev", collapsedGroups.has(key) ? "▸" : "▾");
-  head.append(chev, el("span", "conv-members-n", `${members.length} member${members.length === 1 ? "" : "s"}`));
-  const list = el("div");
-  list.hidden = collapsedGroups.has(key);
-  head.addEventListener("click", () => {
-    if (collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
-    persistCollapsed();
-    list.hidden = collapsedGroups.has(key);
-    chev.textContent = list.hidden ? "▸" : "▾";
-  });
-  for (const m of members) {
-    const row = el("div", "conv conv-pick conv-member");
-    row.setAttribute("role", "button");
-    row.tabIndex = 0;
-    const top = el("div", "conv-top");
-    top.append(el("span", "conv-name", botOf(m)?.label ?? String(m.agentPreset)));
-    row.append(top);
-    const sub = el("div", "conv-sub");
-    if (needsYou(String(m.sessionId))) sub.append(waitingChip());
-    if (m.running === true) sub.append(el("span", "chip", "running"));
-    row.append(sub);
-    row.title = `${dash(m.cwd)}\n${when(m.updatedAt)}`;
-    row.addEventListener("click", () => void openSession(String(m.sessionId)));
-    row.addEventListener("keydown", (event) => {
-      const k = /** @type {KeyboardEvent} */ (event).key;
-      if (k !== "Enter" && k !== " ") return;
-      event.preventDefault();
-      void openSession(String(m.sessionId));
-    });
-    convRows.set(String(m.sessionId), row);
-    row.dataset.title = botOf(m)?.label ?? String(m.agentPreset);
-    list.append(row);
-  }
-  box.append(head, list);
-  return box;
-}
-
 /** Mark the row of the session on screen, and name it in the topbar. The title
  * comes off the row the last `session.list` built — the sidebar is the one
  * place titles are known, so the topbar reads it rather than calling again. */
@@ -1186,7 +1193,8 @@ function markActive() {
   /* In detail mode the topbar names the open detail, not the session. */
   if (!detailOpen) {
     const row = activeSession === null ? undefined : convRows.get(activeSession);
-    $("#topbar-name").textContent = activeSession === null ? "new session" : row?.dataset.title ?? "untitled";
+    const summary = lastSessions.find((s) => String(s.sessionId) === activeSession);
+    $("#topbar-name").textContent = activeSession === null ? "new session" : row?.dataset.title ?? botOf(summary)?.label ?? titleOf(summary);
     $("#topbar-raw").title = dash(activeSession);
   }
   /** @type {HTMLButtonElement} */ ($("#stop")).disabled = activeSession === null;
@@ -1228,10 +1236,8 @@ async function refreshSessions() {
    * the host's one-way `channelIndex.archived`. */
   const hostArchived = new Set(channelIndex?.archived ?? []);
   lastSessions = (value?.items ?? []).filter((summary) => !deletedSet.has(String(summary.sessionId)));
-  /* The room fold, recomputed from the list that just landed: a member never
-   * files under a bucket of its own (it would leave its room, and read as a
-   * second conversation the operator has to hunt for) — it renders indented
-   * under the room row, counted there (charter Rule 5: folded, never hidden). */
+  /* Keep membership for the strip and pending gates. Member conversations
+   * have no sidebar rows; their process is read from each answer in the room. */
   const fold = foldMembers(lastSessions);
   memberFold = fold; // module state the strip and the gates read
   /* Re-derive the active session's voice from the list that just landed. Two
@@ -1249,7 +1255,7 @@ async function refreshSessions() {
     if (deletedSet.has(id)) continue; // a host-memory ghost
     // Attached sessions list with a projections block — seed the usage store.
     seedProjections(id, summary.projections);
-    if (fold.members.has(id)) continue; // folded under its room instead
+    if (fold.members.has(id)) continue; // shown through its room's answers
     const archived = archivedSet.has(id) || hostArchived.has(id);
     const { key, label, channel } = bucketFor(channelOf(id), archived, botOf(summary), false);
     let bucket = buckets.get(key);
@@ -1274,7 +1280,6 @@ async function refreshSessions() {
       row.dataset.title = titleOf(summary);
       convRows.set(id, row);
       box.append(row);
-      if (fold.rooms.has(id)) box.append(memberBox(summary, fold.rooms.get(id)));
     }
   }
   markActive();
