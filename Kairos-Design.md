@@ -221,9 +221,9 @@ Few and concrete. Each names the section it reopens.
 | Kairos begins authoring reusable skills | Rule 7 → lifecycle machinery · D4 |
 | An independent evaluator is introduced | D1 · D7 (the measurement plane) |
 | dsh leaves developer preview or ships a breaking change | the two pins · profile and skills format · the drills |
-| A second human, or any hosted deployment | this charter is the wrong document; write the next one |
 | A bot's composition is given the account tools, a bot room session is created other than read-only, or a bot home session's cwd widens past its `journal/` | §7.1 · D8 · D12 · run the order drill under that bot's preset |
 | Starting the interface migration in §9 | §3 (the FACE row) · §7 "No bespoke harness" and "No hosted face" · the two pins · the row inventory of the face's tree against the CLI's (R13 is its first symptom) |
+| A second human, or any hosted deployment | this charter is the wrong document; write the next one |
 
 ## 9. Forward
 
