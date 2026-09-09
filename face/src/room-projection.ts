@@ -20,7 +20,7 @@ import type { EventLike, MemberTurnState, RoundOutcome } from "./room-rules.ts";
 export const ROOM_PROJECTION_KEY = "room";
 /** Bump when the state fields or the fold change: the persisted cache
  * discards rows of another version instead of forward-applying garbage. */
-export const ROOM_STATE_VERSION = 1;
+export const ROOM_STATE_VERSION = 2;
 
 export type MemberCoarseState = "called" | MemberTurnState;
 
@@ -31,10 +31,23 @@ export interface RoomMemberState {
   turn?: number;
 }
 
+export interface RoomRoundState { n: number; mode: "parallel" | "serial" | "mention"; open: boolean; outcome?: RoundOutcome }
+
+/** What a `dispatch` tool/call displaced, held until its result says whether
+ * the call was actually accepted. A refused dispatch (round cap, roster miss,
+ * "still running") is a `tool/result` with `isError`, and until it arrives the
+ * round it opened is only a claim. */
+export interface RoomPendingDispatch {
+  callId: string;
+  kind: "none" | "room";
+  round?: RoomRoundState;
+  members?: Record<string, RoomMemberState>;
+}
+
 export interface RoomState {
   kind: "none" | "room" | "member";
   /** room: the current or last round */
-  round?: { n: number; mode: "parallel" | "serial" | "mention"; open: boolean; outcome?: RoundOutcome };
+  round?: RoomRoundState;
   /** room: the members of the current round, by bot id */
   members?: Record<string, RoomMemberState>;
   /** room: Kairos's turn is open */
@@ -43,6 +56,8 @@ export interface RoomState {
   room?: string;
   /** member: the bot */
   bot?: string;
+  /** room: the dispatch call whose result has not landed yet (never on the wire) */
+  pending?: RoomPendingDispatch;
 }
 
 const memberSchema = z.object({
@@ -51,19 +66,41 @@ const memberSchema = z.object({
   state: z.enum(["called", "answered", "passed", "failed", "timed-out"]),
   turn: z.number().optional(),
 });
+const roundSchema = z.object({
+  n: z.number(),
+  mode: z.enum(["parallel", "serial", "mention"]),
+  open: z.boolean(),
+  outcome: z.enum(["settled", "capped", "superseded"]).optional(),
+});
+const pendingSchema = z.object({
+  callId: z.string(),
+  kind: z.enum(["none", "room"]),
+  round: roundSchema.optional(),
+  members: z.record(z.string(), memberSchema).optional(),
+});
 export const roomStateSchema: z.ZodType<RoomState> = z.object({
   kind: z.enum(["none", "room", "member"]),
-  round: z.object({
-    n: z.number(),
-    mode: z.enum(["parallel", "serial", "mention"]),
-    open: z.boolean(),
-    outcome: z.enum(["settled", "capped", "superseded"]).optional(),
-  }).optional(),
+  round: roundSchema.optional(),
+  members: z.record(z.string(), memberSchema).optional(),
+  organizing: z.boolean().optional(),
+  room: z.string().optional(),
+  bot: z.string().optional(),
+  pending: pendingSchema.optional(),
+});
+/** The client's view: the fold's own bookkeeping never rides the wire. */
+export const roomViewSchema: z.ZodType<RoomState> = z.object({
+  kind: z.enum(["none", "room", "member"]),
+  round: roundSchema.optional(),
   members: z.record(z.string(), memberSchema).optional(),
   organizing: z.boolean().optional(),
   room: z.string().optional(),
   bot: z.string().optional(),
 });
+export const roomView = (state: RoomState): RoomState => {
+  if (state.pending === undefined) return state;
+  const { pending: _pending, ...rest } = state;
+  return rest;
+};
 
 export const initRoomState = (): RoomState => ({ kind: "none" });
 
@@ -100,11 +137,17 @@ function applyOperator(state: RoomState, source: Source): RoomState {
   if (state.kind === "member") return state;
   if (state.kind === "none" && mention.length === 0) return state;
   const room = asRoom(state) as RoomState;
-  const reset: RoomState = { ...room, members: {}, ...(room.round === undefined ? {} : { round: { ...room.round, open: false } }) };
+  /* An `@` is posted by the engine and waits in the room's outbox while Kairos
+   * is mid-turn, so it can be folded AFTER a dispatch that in wall time came
+   * later (room.ts carries the same twin on the bus). While a round is open it
+   * therefore ADDS the voices it names and leaves the running round standing,
+   * rather than wiping member states the round is still filling in. */
+  const joins = mention.length > 0 && room.round?.open === true;
+  const reset: RoomState = joins ? room : { ...room, members: {}, ...(room.round === undefined ? {} : { round: { ...room.round, open: false } }) };
   if (mention.length === 0) return reset;
   let next = reset;
   for (const bot of mention) next = withMember(next, bot, { state: "called" });
-  return { ...next, round: { n: room.round?.n ?? 1, mode: "mention", open: true } };
+  return joins ? next : { ...next, round: { n: room.round?.n ?? 1, mode: "mention", open: true } };
 }
 
 /**
@@ -165,7 +208,31 @@ export function applyRoomEvent(state: RoomState, event: EventLike): RoomState {
       const members: Record<string, RoomMemberState> = {};
       for (const bot of to) members[bot] = { state: "called" };
       const mode = args.mode === "serial" ? "serial" : "parallel";
-      return { ...room, members, round: { n: (room.round?.n ?? 0) + 1, mode, open: true } };
+      /* The call is a claim, not a fact: `execute` still refuses on the round
+       * cap, a roster miss or a round already running. What it displaces is
+       * remembered so the matching error result can put it back. */
+      const pending: RoomPendingDispatch = {
+        callId: typeof data.callId === "string" ? data.callId : "",
+        kind: state.kind === "room" ? "room" : "none",
+        ...(state.round === undefined ? {} : { round: state.round }),
+        ...(state.members === undefined ? {} : { members: state.members }),
+      };
+      return { ...room, members, round: { n: (room.round?.n ?? 0) + 1, mode, open: true }, pending };
+    }
+    case "tool/result": {
+      const pending = state.pending;
+      if (pending === undefined) return state;
+      const block = (data?.message as { content?: { toolCallId?: unknown; isError?: unknown }[] } | undefined)?.content?.[0];
+      if (typeof block?.toolCallId !== "string" || block.toolCallId !== pending.callId) return state;
+      const settled = roomView(state);
+      if (block.isError !== true) return settled; // the round is real; only the bookkeeping goes
+      /* Refused: the round it opened never ran, so the strip shows what stood
+       * before the call - a running round's real member states, or nothing. */
+      const restored: RoomState = { ...settled, kind: pending.kind };
+      if (pending.round === undefined) delete restored.round; else restored.round = pending.round;
+      if (pending.members === undefined) delete restored.members; else restored.members = pending.members;
+      if (pending.kind === "none") delete restored.organizing;
+      return restored;
     }
     case "turn/start":
       return state.kind === "room" && state.organizing !== true ? { ...state, organizing: true } : state;
@@ -193,7 +260,7 @@ export function registerRoomProjection(registry: { register(definition: Projecti
     stateSchema: roomStateSchema,
     init: initRoomState,
     apply: applyRoomEvent,
-    wire: { viewSchema: roomStateSchema, view: (state) => state },
+    wire: { viewSchema: roomViewSchema, view: roomView },
     stateVersion: ROOM_STATE_VERSION,
   });
 }

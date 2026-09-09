@@ -7,8 +7,11 @@ let seq = 0;
 const ev = (type: string, data: unknown): EventLike => ({ type, seq: seq++, data });
 const user = (id: string, text: string, source: Record<string, unknown>): EventLike =>
   ev("user/message", { id, role: "user", content: [{ type: "text", text }], source });
-const dispatchCall = (to: string[], mode: string): EventLike =>
-  ev("tool/call", { turn: 1, step: 1, callId: "c1", name: "dispatch", arguments: JSON.stringify({ to, mode, brief: "b", reason: "r" }) });
+const dispatchCall = (to: string[], mode: string, callId = "c1"): EventLike =>
+  ev("tool/call", { turn: 1, step: 1, callId, name: "dispatch", arguments: JSON.stringify({ to, mode, brief: "b", reason: "r" }) });
+/** dsh's own tool-result shape (dsh-llm `createToolResultMessage`). */
+const dispatchResult = (callId: string, isError: boolean): EventLike =>
+  ev("tool/result", { turn: 1, step: 1, message: { id: `r-${callId}`, role: "user", content: [{ type: "tool-result", toolCallId: callId, content: [], isError }], source: { kind: "tool", callId } } });
 const answerMsg = (id: string, bot: string, sessionId: string, turn: number) => ({
   id, role: "user", content: [{ type: "text", text: "view" }], source: { kind: "room", form: "answer", bot, name: bot, sessionId, turn, round: 1 },
 });
@@ -67,6 +70,36 @@ test("a new operator message resets the members to idle and closes the round; an
   assert.equal(fromNone.kind, "room", "an `@` on a plain channel session makes it a room too");
 });
 
+test("a REFUSED dispatch leaves the state exactly as it was; an accepted one keeps its round", () => {
+  /* The tool/call opens the round before `execute` has run: the round cap, a
+   * roster miss and "a round is still running" all refuse AFTER it is logged. */
+  const running = fold([dispatchCall(["buffett", "speculator"], "parallel", "c1"), ev("user/message", answerMsg("a1", "buffett", "s-b", 1))]);
+  const refused = [dispatchCall(["macro"], "serial", "c2"), dispatchResult("c2", true)].reduce(applyRoomEvent, running);
+  assert.deepEqual(refused.round, { n: 1, mode: "parallel", open: true }, "the running round is not replaced by the refused one");
+  assert.deepEqual(refused.members, running.members, "and its member states stand");
+  assert.equal(refused.pending, undefined);
+  const quiet = [dispatchCall(["macro"], "parallel", "c3"), dispatchResult("c3", true)].reduce(applyRoomEvent, initRoomState());
+  assert.deepEqual(quiet, { kind: "none" }, "a refusal on a session that was never a room shows no phantom round");
+  const accepted = [dispatchCall(["buffett"], "parallel", "c4"), dispatchResult("c4", false)].reduce(applyRoomEvent, initRoomState());
+  assert.deepEqual(accepted, { kind: "room", organizing: false, members: { buffett: { state: "called" } }, round: { n: 1, mode: "parallel", open: true } });
+  const unrelated = applyRoomEvent(running, dispatchResult("some-other-call", true));
+  assert.equal(unrelated, running, "another tool's result is not this unit's event");
+});
+
+test("an `@` folded while a round is open joins that round instead of wiping it", () => {
+  /* `say` posts the operator's message and it waits in the outbox while Kairos
+   * is mid-turn, so the log can carry it AFTER a dispatch that came later in
+   * wall time (room.ts holds the same twin on the bus). */
+  const s = fold([
+    dispatchCall(["buffett", "speculator"], "parallel"),
+    ev("user/message", answerMsg("a1", "buffett", "s-b", 1)),
+    user("u9", "@macro 你呢", { kind: "user", mention: ["macro"] }),
+  ]);
+  assert.equal(s.members?.buffett.state, "answered", "the running round's states stand");
+  assert.deepEqual(s.members?.macro, { state: "called" });
+  assert.deepEqual(s.round, { n: 1, mode: "parallel", open: true });
+});
+
 test("a second dispatch bumps the round and forgets who was in the last one", () => {
   const s = fold([dispatchCall(["buffett"], "parallel"), dispatchCall(["speculator"], "serial")]);
   assert.deepEqual(s.round, { n: 2, mode: "serial", open: true });
@@ -100,6 +133,11 @@ test("the state schema accepts every state the fold produces and the unit regist
   assert.equal(def.stateVersion, ROOM_STATE_VERSION);
   assert.deepEqual(def.init(), { kind: "none" });
   assert.equal(def.wire.view({ kind: "none" }).kind, "none");
+  assert.deepEqual(
+    def.wire.view({ kind: "room", members: { buffett: { state: "called" } }, pending: { callId: "c1", kind: "none" } }),
+    { kind: "room", members: { buffett: { state: "called" } } },
+    "the fold's own bookkeeping never rides the wire",
+  );
   dispose();
   assert.equal(seen.length, 0);
 });
