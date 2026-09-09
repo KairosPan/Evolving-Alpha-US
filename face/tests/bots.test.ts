@@ -139,6 +139,24 @@ test("listBots reads every directory in the grammar, marks the default, carries 
   assert.equal(unlisted.find((b) => b.id === "probe")!.listed, false);
 });
 
+test("preset.yml may carry a face-only model route; createBot writes it and listBots reads it", async () => {
+  const root = await makeBotsRoot();
+  const made = await createBot(root, { id: "router", name: "Router", model: "stub/echo" });
+  assert.equal(made.model, "stub/echo");
+  const meta = load(await readFile(join(root, "router", "preset.yml"), "utf8")) as Record<string, unknown>;
+  assert.equal(meta.model, "stub/echo");
+  const listed = (await listBots(root, async () => [{ id: "router" }])).find((b) => b.id === "router");
+  assert.equal(listed?.model, "stub/echo");
+  const plain = await createBot(root, { id: "plain", name: "Plain" });
+  assert.equal(plain.model, undefined, "absent stays absent - the default route serves it");
+});
+
+test("createBot refuses a model that is not one provider/model pair", async () => {
+  const root = await makeBotsRoot();
+  await assert.rejects(createBot(root, { id: "bad", name: "Bad", model: "deepseek-v4-flash" }), (err: HttpError) => err.status === 400 && /provider\/model/.test(err.message));
+  await assert.rejects(createBot(root, { id: "bad2", name: "Bad", model: "a/b/c" }), (err: HttpError) => err.status === 400);
+});
+
 function fakeRes(): { out: { status: number; body: string }; res: ServerResponse } {
   const out = { status: 0, body: "" };
   const res = {

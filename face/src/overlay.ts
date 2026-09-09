@@ -17,6 +17,7 @@ import type { ConnectionConfig } from "@deepseek-ai/dsh-client-connection";
 import type { Config as StorageJsonConfig } from "@deepseek-ai/dsh-storage-json";
 import type { Config as StorageDomainConfig } from "@deepseek-ai/dsh-storage-domain";
 import type { Config as AgentPresetsConfig } from "@deepseek-ai/dsh-agent-presets";
+import type { Config as ProjectionCacheConfig } from "@deepseek-ai/dsh-session-projection-cache";
 
 export interface FaceRowEntry {
   id: string;
@@ -32,6 +33,7 @@ export const BOTS_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..
 /** The inert preset every session that names none joins (spec S3). */
 export const DEFAULT_PRESET = "kairos";
 export const AGENT_PRESETS_ROW_ID = "agent-presets";
+export const PROJECTION_CACHE_ROW_ID = "session-projection-cache";
 /** dsh-base's system-prompt row, whose `persona` composeFace sets (boot.ts). */
 export const SYSTEM_PROMPT_ROW_ID = "system-prompt";
 
@@ -92,6 +94,22 @@ export function faceOverlay(port: number, dshHome: string, botsRoot: string): Fa
        * prevent. Configless by contract (`apply(ctx)`, no exported Config), so
        * it joins the unconfigured rows rather than the `satisfies` set. */
       { id: "tool-ask-user", name: "@deepseek-ai/dsh-tool-ask-user" },
+
+      /* R13. `session.list` fills a session's `projections` column from
+       * `sessionProjections.snapshot` when the session is attached in this
+       * boot and from `sessionProjectionCache.cachedSnapshot` when it is cold
+       * (dsh-host-apiproxy `listProjectionsFor`). dsh-base composes the
+       * registry and NOT the cache, so every cold session listed with no
+       * column at all and the sidebar read `untitled` after every restart
+       * (measured 2026-09-08: 24 sessions, none with a block). The cache
+       * writes a whole-record checkpoint at every `turn/end` and at session
+       * disposal, throttled between by these two REQUIRED keys - the values
+       * are dsh-web-app's own. It fills forward only: a session cold before
+       * this row existed stays `untitled` until it is resumed and completes a
+       * turn. The `room` projection unit (src/room-projection.ts) rides the
+       * same cache, which is what lets a cold room keep its member states. */
+      { id: PROJECTION_CACHE_ROW_ID, name: "@deepseek-ai/dsh-session-projection-cache",
+        config: { writeEveryEvents: 200, writeIntervalMs: 5000 } satisfies ProjectionCacheConfig },
 
       /* A bot is a dsh agent preset: a directory under `bots/` holding one
        * `agent.cordis.yml` (spec §2). The roster's only root is the repository's

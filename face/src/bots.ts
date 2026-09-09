@@ -72,8 +72,14 @@ export function renderComposition(opts: { soul: string; allow: readonly string[]
   return GENERATED_HEADER + dump(rows, { lineWidth: -1, noRefs: true });
 }
 
-export function renderPresetMeta(name: string, description: string): string {
-  return dump({ name, description }, { lineWidth: -1 });
+/** `preset.yml`'s face-only `model:` - `<provider>/<model>`, the route a bot's
+ *  sessions select when the tree serves it (spec §2.5). dsh's reader keeps only
+ *  name/description/order and drops it, so it is harmless to dsh. Exactly two
+ *  non-empty segments: a bare model id is refused rather than guessed at. */
+export const MODEL_ROUTE_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9][A-Za-z0-9_.:-]*$/;
+
+export function renderPresetMeta(name: string, description: string, model?: string): string {
+  return dump({ name, description, ...(model === undefined ? {} : { model }) }, { lineWidth: -1 });
 }
 
 /** The soul text a request may carry: non-empty, no `{{` (the prompt is a strict template). */
@@ -91,6 +97,8 @@ export interface BotRow {
   /** The bot's home session cwd - its journal, the one directory it may write. */
   homeCwd: string;
   soul: string;
+  /** `preset.yml`'s `model:` verbatim, absent when the default route serves the bot. */
+  model?: string;
   /** `kairos`: the host composition, not a bot. */
   isDefault: boolean;
   /** dsh's own reason when the composition cannot mount (Rule 5: shown, never skipped). */
@@ -117,12 +125,16 @@ async function exists(path: string): Promise<boolean> {
   try { await stat(path); return true; } catch { return false; }
 }
 
-async function readMeta(dir: string): Promise<{ name?: string; description?: string }> {
+async function readMeta(dir: string): Promise<{ name?: string; description?: string; model?: string }> {
   try {
     const parsed: unknown = load(await readFile(join(dir, "preset.yml"), "utf8"));
     if (parsed === null || typeof parsed !== "object") return {};
-    const { name, description } = parsed as { name?: unknown; description?: unknown };
-    return { ...(typeof name === "string" ? { name } : {}), ...(typeof description === "string" ? { description } : {}) };
+    const { name, description, model } = parsed as { name?: unknown; description?: unknown; model?: unknown };
+    return {
+      ...(typeof name === "string" ? { name } : {}),
+      ...(typeof description === "string" ? { description } : {}),
+      ...(typeof model === "string" ? { model } : {}),
+    };
   } catch { return {}; }
 }
 
@@ -133,6 +145,7 @@ async function rowFor(root: string, id: string, presets: Map<string, { broken?: 
   const preset = presets.get(id);
   return {
     id, name: meta.name ?? id, description: meta.description ?? "", dir, homeCwd: join(dir, "journal"), soul,
+    ...(meta.model === undefined ? {} : { model: meta.model }),
     isDefault: id === "kairos",
     ...(preset?.broken === undefined ? {} : { broken: preset.broken }),
     listed: preset !== undefined,
@@ -166,12 +179,16 @@ export async function createBot(root: string, body: Record<string, unknown>): Pr
   }
   const description = typeof body.description === "string" ? body.description.trim() : "";
   const soul = body.soul === undefined ? TEMPLATE_SOUL : rejectSoul(body.soul);
+  const model = body.model === undefined ? undefined : body.model;
+  if (model !== undefined && (typeof model !== "string" || !MODEL_ROUTE_RE.test(model))) {
+    throw new HttpError(400, "model must be one provider/model route, e.g. deepseek-official/deepseek-v4-flash");
+  }
   const template = join(root, TEMPLATE);
   if (!(await exists(join(template, "agent.cordis.yml")))) throw new HttpError(500, `bots/${TEMPLATE} missing`);
   const dir = join(root, id);
   if (await exists(dir)) throw new HttpError(409, "bot already exists");
   await cp(template, dir, { recursive: true, filter: (src) => !src.includes("__pycache__") });
-  await writeFile(join(dir, "preset.yml"), renderPresetMeta(name ?? id, description), "utf8");
+  await writeFile(join(dir, "preset.yml"), renderPresetMeta(name ?? id, description, model), "utf8");
   await writeFile(join(dir, "SOUL.md"), `${soul}\n`, "utf8");
   await writeFile(join(dir, "agent.cordis.yml"), renderComposition({ soul, allow: DEFAULT_ALLOW }), "utf8");
   return rowFor(root, id, new Map());

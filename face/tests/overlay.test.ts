@@ -6,15 +6,15 @@ import { faceOverlay } from "../src/overlay.ts";
 const HOME = "/tmp/face-home";
 const BOTS = "/tmp/face-test-bots";
 
-test("overlay inserts exactly the eleven rows with loopback config", () => {
+test("overlay inserts exactly the twelve rows with loopback config", () => {
   const patches = faceOverlay(3090, HOME, BOTS);
   assert.equal(patches.length, 1);
   const rows = patches[0].insert!;
   const byId = new Map(rows.map(r => [r.id, r]));
   assert.deepEqual(
     [...byId.keys()].sort(),
-    ["agent-presets", "api-gateway", "connection", "cordis-host-runner", "directory-picker", "storage",
-      "storage-domain", "storage-json", "tool-ask-user", "webserver", "workspace"],
+    ["agent-presets", "api-gateway", "connection", "cordis-host-runner", "directory-picker",
+      "session-projection-cache", "storage", "storage-domain", "storage-json", "tool-ask-user", "webserver", "workspace"],
   );
   assert.deepEqual(byId.get("agent-presets")!.config, {
     default: "kairos",
@@ -31,6 +31,18 @@ test("overlay inserts exactly the eleven rows with loopback config", () => {
   assert.deepEqual(byId.get("connection")!.config, { trustedHosts: [] });
   assert.equal(byId.get("directory-picker")!.name, "@deepseek-ai/dsh-host-directory-picker-auto");
   assert.equal(byId.get("cordis-host-runner")!.name, "@deepseek-ai/dsh-cordis-host-runner");
+});
+
+/* R13: a cold session listed with no `projections` column because dsh-base
+ * composes `session-projection` and not the persisted cache. `session.list`
+ * reads `sessionProjectionCache.cachedSnapshot(meta)` for every session not
+ * attached in this boot, so without this row every restart resets the whole
+ * sidebar to `untitled`. Both config keys are REQUIRED by the plugin (no
+ * defaults); the values are dsh-web-app's own. */
+test("the persisted projection cache is mounted so cold sessions keep their titles", () => {
+  const byId = new Map(faceOverlay(3090, HOME, BOTS)[0].insert!.map(r => [r.id, r]));
+  assert.equal(byId.get("session-projection-cache")!.name, "@deepseek-ai/dsh-session-projection-cache");
+  assert.deepEqual(byId.get("session-projection-cache")!.config, { writeEveryEvents: 200, writeIntervalMs: 5000 });
 });
 
 /* The only AGENT-plane row here, and the only one that is not a host service:

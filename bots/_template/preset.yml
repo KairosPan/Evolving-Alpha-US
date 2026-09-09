@@ -1,3 +1,5 @@
 # bots/_template/preset.yml
 name: <bot name>
 description: <one line - the stance this voice argues>
+# model: deepseek-official/deepseek-v4-flash   # face-only, optional: the provider/model route this voice
+#                                              # runs on when the tree serves it; the default route otherwise
