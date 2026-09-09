@@ -178,7 +178,7 @@ export class FakeTree {
   readonly ctx = {
     agents: {
       get: (id: string) => this.agents.get(id),
-      create: async (opts: { sessionId: string; meta: { cwd: string; parentSession?: string; agentPreset?: string }; agentOptions?: unknown; setup?: (agentCtx: unknown) => Promise<unknown> | unknown }) => {
+      create: async (opts: { sessionId: string; meta: { cwd: string; parentSession?: string; agentPreset?: string }; agentOptions?: unknown; setup?: (agentCtx: { agent?: FakeAgent }) => Promise<unknown> | unknown }) => {
         if (this.agents.has(opts.sessionId)) throw new Error(`session "${opts.sessionId}" already exists`);
         this.agentsCreated.push(opts);
         const session = new FakeSession(opts.sessionId, { ...opts.meta, createdAt: this.createdAt++ });
@@ -191,7 +191,7 @@ export class FakeTree {
         this.persisted.push({ id: session.id, ...opts.meta, createdAt: session.header.createdAt });
         return { agent, dispose: async () => {} };
       },
-      resume: async (opts: { resumeSessionId: string; agentOptions?: unknown; setup?: (agentCtx: unknown) => Promise<unknown> | unknown }) => {
+      resume: async (opts: { resumeSessionId: string; agentOptions?: unknown; setup?: (agentCtx: { agent?: FakeAgent }) => Promise<unknown> | unknown }) => {
         const header = this.persisted.find((h) => h.id === opts.resumeSessionId);
         if (header === undefined) throw new Error(`session "${opts.resumeSessionId}" not found`);
         if (this.agents.has(opts.resumeSessionId)) throw new Error(`agent "${opts.resumeSessionId}" is already registered`);
