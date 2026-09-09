@@ -24,8 +24,8 @@ const frames: unknown[] = readFileSync(
 const views = frames.map((frame) => mapFrame(frame));
 
 test("fixture file and view list stay aligned", () => {
-  assert.equal(frames.length, 21);
-  assert.equal(views.length, 21);
+  assert.equal(frames.length, 26);
+  assert.equal(views.length, 26);
 });
 
 test("message events become bubbles, attributed by role", () => {
@@ -112,10 +112,18 @@ test("a gate the host settles on its own is reported, never ignored", () => {
 
 test("log-only, control, and contentless frames are ignored", () => {
   assert.equal(views[4].kind, "ignore", "assistant/chunk is log-only for v1");
-  assert.equal(views[5].kind, "ignore", "turn/start is a boundary marker");
   assert.equal(views[8].kind, "ignore", "session/subscribed is a control frame");
   assert.equal(views[9].kind, "ignore", "stream/error has no v1 surface");
   assert.equal(views[12].kind, "ignore", "assistant message with no text block");
+});
+
+test("a turn/start boundary surfaces too, with no reason (it hasn't ended yet)", () => {
+  const v = views[5];
+  assert.equal(v.kind, "turn");
+  assert.equal(v.phase, "start");
+  assert.equal(v.turn, 1);
+  assert.equal(v.sessionId, "s1");
+  assert.equal(v.reason, undefined);
 });
 
 test("bare mux frames and history entries map like enveloped ones", () => {
@@ -200,4 +208,51 @@ test("null-safe: unrecognized input never throws, it ignores", () => {
     { type: "session/event", event: { type: "user/message" } }]) {
     assert.equal(mapFrame(bad).kind, "ignore");
   }
+});
+
+test("a member's answer is a BOT bubble with its name and id, never an operator bubble or a context row", () => {
+  const v = views[21];
+  assert.equal(v.kind, "bubble");
+  assert.equal(v.role, "bot");
+  assert.equal(v.bot, "buffett");
+  assert.equal(v.name, "巴菲特型");
+  assert.equal(v.form, "answer");
+  assert.equal(v.text, "买。理由：便宜。");
+  assert.equal(v.seq, 30);
+});
+
+test("the round-end message is a room line carrying the outcome and every turn's state", () => {
+  const v = views[22];
+  assert.equal(v.kind, "room-line");
+  assert.equal(v.line, "round-end");
+  assert.equal(v.round, 1);
+  assert.equal(v.outcome, "settled");
+  assert.deepEqual((v.turns as { bot: string; state: string }[]).map((t) => `${t.bot}:${t.state}`), ["buffett:answered", "speculator:passed"]);
+  assert.match(v.text ?? "", /^Round 1 ended/);
+});
+
+test("the operator's @ stays an operator bubble and names whom it addressed", () => {
+  const v = views[23];
+  assert.equal(v.kind, "bubble");
+  assert.equal(v.role, "operator");
+  assert.equal(v.source, "user");
+  assert.deepEqual(v.mention, ["buffett"]);
+});
+
+test("a member's delta prompt is an injected context row of source room, form delta", () => {
+  const v = views[24];
+  assert.equal(v.kind, "bubble");
+  assert.equal(v.role, "operator");
+  assert.equal(v.source, "room");
+  assert.equal(v.form, "delta");
+  assert.equal(v.sessionId, "s-b");
+});
+
+test("turn boundaries are surfaced for every session, so the strip can clear a member's fine state", () => {
+  const v = views[25];
+  assert.equal(v.kind, "turn");
+  assert.equal(v.phase, "end");
+  assert.equal(v.turn, 1);
+  assert.equal(v.sessionId, "s-b");
+  assert.equal(v.reason, "completed");
 });

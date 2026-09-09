@@ -51,16 +51,16 @@
  * One frame's whole meaning to the UI. A closed `kind` vocabulary with optional
  * payload fields: a renderer switches on `kind` and reads only its own fields.
  * @typedef {object} FrameView
- * @property {"bubble"|"card"|"approval"|"question"|"gate-resolved"|"pulse"|"projection"|"ignore"} kind
+ * @property {"bubble"|"card"|"approval"|"question"|"gate-resolved"|"pulse"|"projection"|"room-line"|"turn"|"ignore"} kind
  * @property {number} [seq] - the session event's seq; the renderer's dedupe key across backfill and stream.
  * @property {string} [sessionId] - which session this belongs to (absent on a history entry that carries none).
  * @property {SurfaceOpView} [surfaceOp] - on every rendered session event: `append`, or a
  *   replace instruction the renderer MUST honour by dropping the shadowed range.
- * @property {"operator"|"kairos"} [role] - bubble side.
+ * @property {"operator"|"kairos"|"bot"} [role] - bubble side; `bot` is a room member speaking in its own voice.
  * @property {string} [text] - bubble text.
  * @property {boolean} [interrupted] - bubbles: the turn was cancelled mid-stream and this is
  *   only the prefix that had arrived. Never render a partial answer as a complete one.
- * @property {string} [source] - who produced a bubble's message: `user`, `plugin`, `model`, `tool`.
+ * @property {string} [source] - who produced a bubble's message: `user`, `plugin`, `model`, `tool`, `room`.
  * @property {string} [thinking] - kairos bubbles: the message's reasoning blocks, joined.
  *   Thinking is never chat text; a renderer shows it apart from the bubble or not at all.
  * @property {string} [mode] - pulses: which block kind just opened live — `reasoning`, `text`, `tool-call`.
@@ -69,14 +69,25 @@
  * @property {string} [approvalId] - approvals: the host's audit id (NOT the wire id).
  * @property {string} [toolName] - approvals: the tool awaiting permission.
  * @property {string} [callId] - approvals: the call awaiting permission.
- * @property {string} [reason] - approvals: why permission is being asked, when the host said.
+ * @property {string} [reason] - approvals: why permission is being asked, when the host said;
+ *   turn views: the TurnEndReason's `kind` (`completed`, `aborted`, …), when the frame carries one.
  * @property {unknown[]} [questions] - questions: the AskUserQuestionItem batch (one ask, many questions, ONE answer).
  * @property {string} [outcome] - gate-resolved: how the host settled it — `answered`
- *   or `cancelled` for a question, an ApprovalOutcome for an approval.
+ *   or `cancelled` for a question, an ApprovalOutcome for an approval; room-line: the round's `RoundOutcome`.
  * @property {string} [key] - projections: which unit changed — `tokenUsage`,
  *   `contextPressure`, `title`, … The renderer stores whole values per key,
  *   higher `seq` winning; the frame is a state broadcast, not a delta.
  * @property {unknown} [value] - projections: the unit's whole new view value.
+ * @property {string} [bot] - a room member's roster id: bubbles with `role: "bot"`.
+ * @property {string} [name] - a room member's display name: bubbles with `role: "bot"`.
+ * @property {string} [form] - the room `source.form` a room-sourced bubble carried (`answer`, `delta`),
+ *   when the frame is one.
+ * @property {string[]} [mention] - operator bubbles: the roster ids the operator's `@` addressed.
+ * @property {string} [line] - room-line: which room-only line this is — `round-end`.
+ * @property {number} [round] - room-line: the round number that ended.
+ * @property {unknown[]} [turns] - room-line: every member's `RoomTurnRecord` for the round.
+ * @property {"start"|"end"} [phase] - turn: which boundary this is.
+ * @property {number} [turn] - turn: the turn number opening or closing.
  */
 
 /** @param {unknown} value @returns {boolean} true for a non-null, non-array object. */
@@ -159,14 +170,31 @@ function bubble(role, message, base, interrupted) {
   const text = isObject(message) ? blocksText(message.content) : "";
   const thinking = role === "kairos" && isObject(message) ? blocksReasoning(message.content) : "";
   if (text === "" && thinking === "") return ignore();
-  const source = isObject(message) && isObject(message.source) ? message.source.kind : undefined;
+  const src = isObject(message) && isObject(message.source) ? message.source : {};
+  const kind = typeof src.kind === "string" ? src.kind : undefined;
+  const form = typeof src.form === "string" ? src.form : undefined;
+  /* A room-sourced user message is one of three things (plan 2, deviation 1):
+   * a member's ANSWER (a bubble in the bot's own voice), the ROUND END (a
+   * line), or - in a member's own session - the DELTA it was prompted with
+   * (an injected context row, like every other plugin-sourced message). */
+  if (role === "operator" && kind === "room") {
+    if (form === "answer" && typeof src.bot === "string") {
+      return { ...base, kind: "bubble", role: "bot", bot: src.bot, name: typeof src.name === "string" && src.name !== "" ? src.name : src.bot, form, text, interrupted: false, source: kind };
+    }
+    if (form === "round-end") {
+      return { ...base, kind: "room-line", line: "round-end", round: typeof src.round === "number" ? src.round : undefined, outcome: typeof src.outcome === "string" ? src.outcome : undefined, turns: Array.isArray(src.turns) ? src.turns : [], text };
+    }
+  }
+  const mention = kind === "user" && Array.isArray(src.mention) ? src.mention.filter((m) => typeof m === "string") : undefined;
   return {
     ...base,
     kind: "bubble",
     role,
     text,
     interrupted,
-    source: typeof source === "string" ? source : undefined,
+    source: kind,
+    form,
+    ...(mention !== undefined && mention.length > 0 ? { mention } : {}),
     thinking: thinking === "" ? undefined : thinking,
   };
 }
@@ -247,9 +275,14 @@ function mapSessionEvent(frame) {
       if (chunk.type !== "block-start" || typeof chunk.blockType !== "string") return ignore();
       return { ...base, kind: "pulse", mode: chunk.blockType };
     }
+    case "turn/start":
+    case "turn/end": {
+      const reason = isObject(data.reason) && typeof data.reason.kind === "string" ? data.reason.kind : undefined;
+      return { ...base, kind: "turn", phase: event.type === "turn/start" ? "start" : "end", turn: typeof data.turn === "number" ? data.turn : undefined, ...(reason === undefined ? {} : { reason }) };
+    }
     default:
-      // Every other session event type is log-only for v1: boundaries
-      // (turn/step), raw chunks, todo/write, request headers, compaction.
+      // Every other session event type is log-only for v1: step boundaries,
+      // raw chunks, todo/write, request headers, compaction.
       return ignore();
   }
 }
