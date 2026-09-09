@@ -81,13 +81,14 @@ Two things about that directory are NOT yours:
 
 ## Instruments
 
-Two read-only pages beside the chat, reached from the sidebar footer and from
-each other: **`/market`** — the composite tape, the bed's maturity rail,
-breadth, and both screens — and **`/account`** — balances, positions, Alpaca's
-most recent 50 orders (all statuses, not just the open ones), and the
-order-gate strip. The only interaction on either page is `refresh`: nothing
-here places, cancels, or changes anything, and the gate strip DISPLAYS what the
-two order gates compute to rather than operating them.
+Two read-only pages beside the chat, reached from the primary navigation rail
+and from each other: **`/market`** (above strategy) — the composite tape, the
+bed's maturity rail, breadth, and both screens — and **`/account`** (at the
+bottom of the rail) — balances, positions, Alpaca's most recent 50 orders
+(all statuses, not just the open ones), and the order-gate strip. The only
+interaction on either page is `refresh`: nothing here places, cancels, or
+changes anything, and the gate strip DISPLAYS what the two order gates compute
+to rather than operating them.
 
 Each page fetches one endpoint — `/data/market.json`, `/data/account.json` —
 and each endpoint is a thin cache in front of ONE producer: `scripts/face_data.py`,
@@ -348,7 +349,9 @@ neighbourhood:
 
 ## The master rail (src/panels.ts + the sidebar's four faces)
 
-A narrow icon rail at the far left picks which face the sidebar shows:
+A narrow icon rail at the far left opens **market** above the sidebar switches
+and **account** at the bottom. The four switches pick which face the sidebar
+shows:
 **strategy** (the working face — everything above), **agent**, **memory**,
 **plugin**. One pattern across all four (operator direction): the sidebar is
 always an INDEX — rows, never content — and clicking a row opens that item's

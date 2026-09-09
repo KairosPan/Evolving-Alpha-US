@@ -2031,7 +2031,7 @@ function seedProjections(sessionId, block) {
 /** Show one sidebar face and refresh its content. */
 function setPanel(name) {
   activePanel = name;
-  for (const btn of document.querySelectorAll(".rail-btn")) {
+  for (const btn of document.querySelectorAll(".rail-btn[data-panel]")) {
     btn.classList.toggle("active", /** @type {HTMLElement} */ (btn).dataset.panel === name);
   }
   $(".sidebar").dataset.panel = name;
@@ -2833,7 +2833,7 @@ $("#composer").addEventListener("submit", (event) => {
 });
 $("#new-session").addEventListener("click", () => newSession());
 $("#stop").addEventListener("click", () => void stopTurn());
-for (const btn of document.querySelectorAll(".rail-btn")) {
+for (const btn of document.querySelectorAll(".rail-btn[data-panel]")) {
   btn.addEventListener("click", () => setPanel(/** @type {HTMLElement} */ (btn).dataset.panel ?? "strategy"));
 }
 
