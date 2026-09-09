@@ -1,14 +1,15 @@
 # CLAUDE.md
 
 Descriptive, not prescriptive — present-tense facts about the tree, updated when the tree
-moves; the only CLAUDE.md in the repo. Owner: the operator. Last reviewed 2026-09-04. Depth
+moves; the only CLAUDE.md in the repo. Owner: the operator. Last reviewed 2026-09-09. Depth
 lives in `DEVELOPMENT.md`, `Kairos-Design.md`, `face/README.md`, docstrings, and `docs/`.
 
 ## What this is
-A market-strategy-account research workbench for one operator and one agent (Kairos), reset
-2026-08-29 from the retired Sonia-Kairos product. MARKET + ACCOUNT are `alpaca_kit` — one
-Python package, two faces: importable library and MCP server. STRATEGY is `strategies/`, the
-agent's arena, run on DeepSeek Harness (dsh) hosted inside `face/`, the operator's chat face.
+A market-strategy-account research workbench for one operator, one principal agent (Kairos),
+and operator-authored bots, reset 2026-08-29 from the retired Sonia-Kairos product. MARKET +
+ACCOUNT are `alpaca_kit` — one Python package, two faces: importable library and MCP server.
+STRATEGY is `strategies/`, the agent's arena, run on DeepSeek Harness (dsh) hosted inside
+`face/`, the operator's chat face.
 
 ## Map
 | Where | What |
@@ -24,6 +25,7 @@ agent's arena, run on DeepSeek Harness (dsh) hosted inside `face/`, the operator
 | `strategies/` · `data/` · `scripts/` | one directory per strategy (`_template` is the copy source) · gitignored PIT beds + caches · capture_window / capture_broad / smoke_alpaca / `face_data.py` (the instruments' producer) / convert_seeds |
 | `dsh/` | the harness config: `profile/cordis.yml` template (indicative shape, not a validated dsh config) + `skills/mechanics` (rules, tool guide) + `skills/style-kairos` (operator style). Install is `cd face && npm run setup`; `dsh/README.md` steps 2 and 6 predate the face and Gate 2 |
 | `face/` | kairos-face: Node 22, hosts dsh in-process from profile `face`, serves chat + `/market` + `/account` at 127.0.0.1:3090; `strategies/*` are rostered channels; `src/orders.ts` is Gate 2, the per-order approval card |
+| `bots/` | one directory per bot (`_template` is the copy source, `kairos` the inert default): a dsh agent preset — persona + allow-list mask via `face/plugins/bot.js`; in a room (a channel session with bots rostered) `face/src/room.ts` creates one `read-only` member session per bot and Kairos calls `dispatch` |
 | `docs/` | `backtest-rules.md` (the five honest-eval rules) · `superpowers/{specs,plans,runbooks}` (per-feature decision history; everything dated 2026-06/07, and the one runbook, describes the retired product) · `research/` (frozen inputs) · `design/prototypes` (face rounds R1–R4) |
 | `tests/` · `face/tests/` | offline pytest, no keys · `node --test` via tsx; `FACE_SMOKE=1` adds the two real boots |
 
@@ -62,6 +64,9 @@ npm start                   # http://127.0.0.1:3090 (see face/README.md)
   storage chain, tool-ask-user…) compose last and override it silently.
 - **`face/client/*` is served with no cache headers** — hard-reload the browser after any client
   edit, or you drill a stale `chat.js`.
+- **No custom session-event types.** dsh's persistence refuses to reload a log carrying an event
+  type outside its generated catalog, and `Session.append` cannot mark one ignorable — the room
+  engine records every room fact on a known event (`user/message` with `source.kind: 'room'`).
 
 Reading order for a new session: `Kairos-Design.md` §1–§2 → the `DEVELOPMENT.md` section you
 are touching → `AGENTS.md` for what Kairos itself sees.

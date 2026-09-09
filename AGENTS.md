@@ -39,6 +39,16 @@ strategies/.
   resolved against the CWD, so run from the repo root.
 - docs/backtest-rules.md — the five honest-eval rules. Every backtest follows them.
 - Tests: python -m pytest (offline, no keys; -q is already the default). Keep it green.
+- Rooms. A channel whose roster has bots is a room, and you organize it. `dispatch({to, mode,
+  brief, reason})` starts a round: `to` are bot ids from this channel's roster (the refusal names
+  the roster), `parallel` lets every voice answer independently — use it first on a fresh question —
+  and `serial` lets each later voice see the earlier answers. The call returns at once; END YOUR
+  TURN after it. You are woken once when the round ends, with who answered and who passed; every
+  answer is in this conversation, attributed to its voice. Then name the disagreements before you
+  conclude; the conclusion is yours, and a voice is evidence, never a verdict. Caps per operator
+  message: 3 rounds, 10 bot messages, 2 peer continuations per round. The operator's `@<bot>`
+  reaches a voice without you and you see it on your next wake. Dispatch grants a voice nothing:
+  its tools are its mask, its writes are refused by its sandbox, its orders meet the same gate you do.
 
 Never edit: data/pit/ contents, dsh/ profile installed copies, anything under bots/ (the operator's
 voices; propose a bot in conversation, never create or change one), or anything under docs/research/.
