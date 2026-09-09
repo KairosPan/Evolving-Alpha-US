@@ -155,6 +155,9 @@ export interface Room {
   selections: Map<string, { selection: ModelSelectionLike; note?: string }>;
   /** Messages for the room log, waiting for a quiet log (deviation 2). */
   outbox: MessageLike[];
+  /** Ids of the operator messages THIS engine posted (`say`), so the bus does
+   * not read one back as a second, later operator send. */
+  posted: Set<string>;
   roundsThisSend: number;
   turnsThisSend: number;
   active?: Round;
@@ -208,7 +211,13 @@ export class RoomEngine {
   private readonly rooms = new Map<string, Room>();
   /** member session id → the listener of the turn being driven on it (one at a time per member). */
   private readonly turnWaiters = new Map<string, (event: EventLike) => void>();
-  private readonly quietWaiters = new Map<string, Array<() => void>>();
+  /** room session id → the rounds waiting for that log to go quiet. `retry`
+   * re-reads the log after a `turn/end`; `fail` settles the round when the
+   * engine is disposed rather than leaving it pending forever. */
+  private readonly quietWaiters = new Map<string, Array<{ retry(): void; fail(err: Error): void }>>();
+  /** Every armed deadline, so `dispose` disarms them: a timer that outlives the
+   * engine can still cancel a member of a room nothing is driving any more. */
+  private readonly timers = new Set<unknown>();
   private readonly disposers: Array<() => void> = [];
   readonly caps: RoomCaps;
   private readonly clock: RoomClock;
@@ -230,7 +239,26 @@ export class RoomEngine {
   }
 
   dispose(): void {
+    for (const handle of [...this.timers]) this.clock.clearTimeout(handle);
+    this.timers.clear();
+    this.turnWaiters.clear();
+    for (const waiters of [...this.quietWaiters.values()]) for (const waiter of waiters) waiter.fail(new Error("the room engine was disposed"));
+    this.quietWaiters.clear();
     for (const d of this.disposers.splice(0)) d();
+  }
+
+  /** Arm a deadline this engine can disarm on `dispose`. */
+  private arm(fn: () => void, ms: number): unknown {
+    let handle: unknown;
+    handle = this.clock.setTimeout(() => { this.timers.delete(handle); fn(); }, ms);
+    this.timers.add(handle);
+    return handle;
+  }
+
+  private disarm(handle: unknown): void {
+    if (handle === undefined) return;
+    this.timers.delete(handle);
+    this.clock.clearTimeout(handle);
   }
 
   /** Run `fn` when the engine is disposed (the tool and projection disposers). */
@@ -240,7 +268,7 @@ export class RoomEngine {
   roomOf(agentId: string, channel: RoomChannel): Room {
     let room = this.rooms.get(agentId);
     if (room === undefined) {
-      room = { id: agentId, channel, members: new Map(), ensuring: new Map(), selections: new Map(), outbox: [], roundsThisSend: 0, turnsThisSend: 0 };
+      room = { id: agentId, channel, members: new Map(), ensuring: new Map(), selections: new Map(), outbox: [], posted: new Set(), roundsThisSend: 0, turnsThisSend: 0 };
       this.rooms.set(agentId, room);
     }
     return room;
@@ -260,13 +288,32 @@ export class RoomEngine {
     if (event.type === "turn/end") {
       const waiters = this.quietWaiters.get(room.id);
       this.quietWaiters.delete(room.id);
+      /* A throw inside a microtask is an UNCAUGHT exception - main.ts answers
+       * one by tearing the face down - so each reaction carries its own guard. */
       queueMicrotask(() => {
-        this.flush(room);
-        for (const w of waiters ?? []) w();
+        this.guard(room, "flush the room log", () => this.flush(room));
+        for (const waiter of waiters ?? []) this.guard(room, "wake a round waiting for a quiet log", () => waiter.retry());
       });
     } else if (event.type === "user/message") {
-      const source = (event.data as MessageLike | undefined)?.source;
-      if (source?.kind === "user") queueMicrotask(() => this.onOperatorSend(room));
+      const message = event.data as MessageLike | undefined;
+      if (message?.source?.kind !== "user") return;
+      /* `say` posts the operator's `@` and resets the caps in the same breath,
+       * but when Kairos is mid-turn that message waits in the outbox and lands
+       * on the log a turn LATER - after a round Kairos dispatched in between.
+       * Log order is not wall order here, so an engine-posted message is never
+       * read back as a fresh send: it would supersede a round that in fact came
+       * after it and hand Kairos a second set of caps. */
+      if (typeof message.id === "string" && room.posted.delete(message.id)) return;
+      queueMicrotask(() => this.guard(room, "record the operator's send", () => this.onOperatorSend(room)));
+    }
+  }
+
+  /** Run a bus reaction, logging rather than throwing into the microtask queue. */
+  private guard(room: Room, what: string, fn: () => void): void {
+    try {
+      fn();
+    } catch (err) {
+      this.log(`could not ${what} in ${room.channel.name}: ${errText(err)}`);
     }
   }
 
@@ -281,6 +328,7 @@ export class RoomEngine {
 
   /** Queue a message for the room log and append it now if the log is quiet. */
   post(room: Room, message: MessageLike): void {
+    if (message.source.kind === "user" && typeof message.id === "string") room.posted.add(message.id);
     room.outbox.push(message);
     this.flush(room);
   }
@@ -292,13 +340,19 @@ export class RoomEngine {
     for (const message of room.outbox.splice(0)) session.append("user/message", message, { surfaceOp: "append" });
   }
 
-  /** Resolves once the room log has no open turn (immediately when it already has none). */
+  /**
+   * Resolves once the room log has no open turn (immediately when it already
+   * has none) and REJECTS when there is no such session any more: only a
+   * `turn/end` on that very log can settle a waiter, so a room session that was
+   * deleted or disposed mid-round would otherwise never wake its round.
+   */
   whenQuiet(room: Room): Promise<void> {
     const session = this.deps.ctx.sessions.get(room.id);
-    if (session !== undefined && isQuiet(session)) return Promise.resolve();
-    return new Promise((resolve) => {
+    if (session === undefined) return Promise.reject(new Error(`room session ${room.id} is not live`));
+    if (isQuiet(session)) return Promise.resolve();
+    return new Promise((resolve, reject) => {
       const list = this.quietWaiters.get(room.id) ?? [];
-      list.push(() => { void this.whenQuiet(room).then(resolve); });
+      list.push({ retry: () => { this.whenQuiet(room).then(resolve, reject); }, fail: reject });
       this.quietWaiters.set(room.id, list);
     });
   }
@@ -345,15 +399,26 @@ export class RoomEngine {
     return entry.selection;
   }
 
-  /** The member's session on disk or in the room log, if it exists. */
+  /** The member's session on disk or in the room log, if it STILL exists. */
   private async findMemberSession(room: Room, bot: string): Promise<string | undefined> {
     const live = this.deps.ctx.sessions.get(room.id);
+    let logged: string | undefined;
     for (const event of live?.events ?? []) {
       if (event.type !== "user/message") continue;
       const source = (event.data as MessageLike | undefined)?.source as { kind?: unknown; bot?: unknown; sessionId?: unknown } | undefined;
-      if (source?.kind === "room" && source.bot === bot && typeof source.sessionId === "string" && source.sessionId !== "") return source.sessionId;
+      if (source?.kind === "room" && source.bot === bot && typeof source.sessionId === "string" && source.sessionId !== "") { logged = source.sessionId; break; }
     }
+    /* The log is a record of what WAS: the operator can delete a member session
+     * from the sidebar afterwards. Resuming an id that is gone throws "not
+     * found" on every round for as long as that answer stays in the log, so the
+     * id is confirmed against the session store before it is trusted; when it
+     * is gone the header scan and, failing that, creation take over. */
+    if (logged !== undefined && this.deps.ctx.agents.get(logged) !== undefined) return logged;
     const headers = await this.deps.ctx.sessionPersistence?.list() ?? [];
+    if (logged !== undefined) {
+      if (headers.some((h) => h.id === logged)) return logged;
+      this.log(`${bot}'s member session ${logged} in ${room.channel.name} is gone from the session store; looking for a newer one`);
+    }
     const mine = headers
       .filter((h) => h.parentSession === room.id && h.agentPreset === bot && h.origin === undefined)
       .sort((a, b) => b.createdAt - a.createdAt);
@@ -457,13 +522,13 @@ export class RoomEngine {
       const finish = (value: Parameters<typeof resolve>[0]): void => {
         if (settled) return;
         settled = true;
-        this.clock.clearTimeout(timer);
+        this.disarm(timer);
         this.turnWaiters.delete(session.id);
         resolve(value);
       };
       const arm = (ms: number): void => {
-        this.clock.clearTimeout(timer);
-        timer = this.clock.setTimeout(check, ms);
+        this.disarm(timer);
+        timer = this.arm(check, ms);
       };
       const check = (): void => {
         const elapsed = this.clock.now() - startedAt;
@@ -586,37 +651,49 @@ export class RoomEngine {
       const member = await prepare(id);
       if (member !== undefined) await drive(member, trig);
     };
-    if (round.mode === "serial") { for (const id of to) await runOne(id, trigger); }
-    else {
-      const members: (Member | undefined)[] = [];
-      for (const id of to) members.push(await prepare(id));
-      await Promise.all(members.map(async (member) => { if (member !== undefined) await drive(member, trigger); }));
+    /* `finally`, not a trailing statement: a round left `active` by a throw
+     * refuses every later dispatch with "round N is still running" until the
+     * operator happens to speak, and its answers never leave the outbox. */
+    try {
+      if (round.mode === "serial") { for (const id of to) await runOne(id, trigger); }
+      else {
+        const members: (Member | undefined)[] = [];
+        for (const id of to) members.push(await prepare(id));
+        await Promise.all(members.map(async (member) => { if (member !== undefined) await drive(member, trigger); }));
+      }
+      while (!round.superseded && round.continuations.length > 0) {
+        const id = round.continuations.shift() as string;
+        /* A serial round queues a peer before that peer's OWN dispatched turn has
+         * been prepared, so `called` is read here too, not only where continuations
+         * are queued: one turn per member per round, whatever the mode. Its slot is
+         * not spent - a voice that has not yet spoken can take it. */
+        if (round.called.has(id)) continue;
+        round.continuationsRun++;
+        await runOne(id, "continuation");
+      }
+      const outcome: RoundOutcome = round.superseded ? "superseded" : round.capped ? "capped" : "settled";
+      if (trigger === "dispatch") await this.finishRound(room, round, outcome);
+    } finally {
+      if (room.active === round) room.active = undefined;
     }
-    while (!round.superseded && round.continuations.length > 0) {
-      const id = round.continuations.shift() as string;
-      /* A serial round queues a peer before that peer's OWN dispatched turn has
-       * been prepared, so `called` is read here too, not only where continuations
-       * are queued: one turn per member per round, whatever the mode. Its slot is
-       * not spent - a voice that has not yet spoken can take it. */
-      if (round.called.has(id)) continue;
-      round.continuationsRun++;
-      await runOne(id, "continuation");
-    }
-    const outcome: RoundOutcome = round.superseded ? "superseded" : round.capped ? "capped" : "settled";
-    if (trigger === "dispatch") await this.finishRound(room, round, outcome);
-    if (room.active === round) room.active = undefined;
   }
 
-  /** Every buffered answer onto the log, then the ONE wake - one synchronous block once the log is quiet. */
+  /** Every buffered answer onto the log, then the ONE wake - one synchronous
+   * block once the log is quiet. A room session that is gone takes its wake and
+   * its buffered answers with it; that is a log line, never a hang. */
   private async finishRound(room: Room, round: Round, outcome: RoundOutcome): Promise<void> {
-    await this.whenQuiet(room);
-    this.flush(room);
-    const text = roundEndText(round.n, outcome, round.turns, Math.max(0, this.caps.maxRounds - room.roundsThisSend));
-    const end = createUserMessage({
-      content: [{ type: "text", text }],
-      source: { kind: "room", form: "round-end", round: round.n, outcome, turns: round.turns },
-    });
-    this.roomAgent(room).followup(end as unknown as MessageLike);
+    try {
+      await this.whenQuiet(room);
+      this.flush(room);
+      const text = roundEndText(round.n, outcome, round.turns, Math.max(0, this.caps.maxRounds - room.roundsThisSend));
+      const end = createUserMessage({
+        content: [{ type: "text", text }],
+        source: { kind: "room", form: "round-end", round: round.n, outcome, turns: round.turns },
+      });
+      this.roomAgent(room).followup(end as unknown as MessageLike);
+    } catch (err) {
+      this.log(`round ${round.n} in ${room.channel.name} could not be delivered: ${errText(err)}; ${round.turns.length} turn(s) ran, ${room.outbox.length} message(s) stay in the outbox`);
+    }
   }
 
   /* ---------- the operator's `@` (spec §4.4 rule 1) ---------- */
@@ -695,19 +772,25 @@ const errorText = (error: unknown): string => {
 
 /* ---------- the tool (spec §4.3) ---------- */
 
-const DISPATCH_DESCRIPTION =
+/** The caps sentence is model-facing TRUTH: the numbers come from the engine
+ * that enforces them, never from prose, because a wrong one here is invisible
+ * to the type checker and to every test. */
+export const dispatchDescription = (caps: RoomCaps): string =>
   "Ask the bots on this channel's roster for their views, each in its own voice. You are the organizer: choose whom (bot ids " +
   "from the roster), the mode (parallel: everyone answers independently and sees no peer this round - use it first on a fresh " +
   "question; serial: each later bot sees the earlier answers), a brief (the question or task for this batch) and a reason " +
   "(why these, why this mode - it lands in the transcript). The call returns at once; END YOUR TURN after it. You will be " +
   "woken once when the round ends, with who answered and who passed; every answer will be in this conversation, attributed. " +
   "Then name the disagreements before you conclude. A bot that is not on the roster cannot be called; the refusal names the " +
-  "roster. Caps per operator message: 3 rounds, 10 bot messages, 2 peer continuations per round. Dispatch grants a bot nothing.";
+  `roster. Caps per operator message: ${caps.maxRounds} ${caps.maxRounds === 1 ? "round" : "rounds"}, ` +
+  `${caps.maxBotMessages} bot ${caps.maxBotMessages === 1 ? "message" : "messages"}, ` +
+  `${caps.maxContinuations} peer ${caps.maxContinuations === 1 ? "continuation" : "continuations"} per round. ` +
+  "Dispatch grants a bot nothing.";
 
 export function dispatchToolDefinition(engine: RoomEngine, deps: Pick<RoomDeps, "channelFor">): RoomToolDefinition {
   return {
     name: "dispatch",
-    description: DISPATCH_DESCRIPTION,
+    description: dispatchDescription(engine.caps),
     parameters: {
       type: "object",
       properties: {

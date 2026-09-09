@@ -83,6 +83,32 @@ test("a member that already exists on disk is RESUMED, never recreated - by the 
   assert.equal(tree.resumed.length, 1);
 });
 
+test("a member session the operator deleted is not a permanent brick: the next round finds a newer one, else creates", async () => {
+  const answer = (sessionId: string) => ({
+    id: `a-${sessionId}`, role: "user" as const, content: [{ type: "text", text: "v" }],
+    source: { kind: "room", form: "answer", bot: "buffett", name: "巴菲特型", sessionId, turn: 1, round: 1 },
+  });
+  /* The log remembers a session the operator has since deleted from the
+   * sidebar: resuming it throws "not found" on every round, forever. */
+  const gone = makeFakeTree();
+  gone.newRoom("session-room", CHANNEL.dir).session.append("user/message", answer("session-gone"), { surfaceOp: "append" });
+  const logged: string[] = [];
+  const goneEngine = engineOn(gone, { log: (line) => logged.push(line) });
+  const member = await goneEngine.ensureMember(goneEngine.roomOf("session-room", CHANNEL), roster[0]);
+  assert.equal(gone.resumed.length, 0, "a session that is not in the store is never resumed");
+  assert.equal(gone.agentsCreated.length, 1, "a fresh member is created instead");
+  assert.notEqual(member.agent.id, "session-gone");
+  assert.match(logged.join("\n"), /session-gone .* is gone from the session store/);
+  /* And when the bot DOES still have a session on disk, that one is resumed. */
+  const newer = makeFakeTree();
+  newer.newRoom("session-room", CHANNEL.dir).session.append("user/message", answer("session-gone"), { surfaceOp: "append" });
+  newer.persistMember("session-newer", "session-room", "buffett", CHANNEL.dir);
+  const newerEngine = engineOn(newer);
+  const resumed = await newerEngine.ensureMember(newerEngine.roomOf("session-room", CHANNEL), roster[0]);
+  assert.equal(resumed.agent.id, "session-newer");
+  assert.equal(newer.agentsCreated.length, 0);
+});
+
 test("a member whose preset is gone fails visibly at ensure, with dsh's reason", async () => {
   const tree = makeFakeTree();
   tree.newRoom("session-room", CHANNEL.dir);
@@ -327,6 +353,64 @@ test("a dispatch while a round is running is refused; an operator message mid-ro
   assert.equal((end.source as unknown as { outcome: string }).outcome, "superseded");
 });
 
+test("an operator @ held in the outbox never supersedes a round dispatched after it, nor resets the caps twice", async () => {
+  const tree = makeFakeTree();
+  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  tree.script("buffett", () => ({ kind: "answer", text: "b" }));
+  tree.script("speculator", () => ({ kind: "answer", text: "s" }));
+  const engine = engineOn(tree);
+  engine.rosterFor = async () => roster;
+  kairos.wake(); // mid-turn: the @ cannot land on the log yet
+  await engine.say("session-room", "@buffett 你说");
+  const out = await engine.dispatch("session-room", CHANNEL, { to: ["speculator"], mode: "parallel", brief: "q", reason: "r" }, roster);
+  assert.equal(out.round, 1, "say reset the caps once, when it ran");
+  kairos.sleep(); // the held @ reaches the log NOW - after the dispatch it in fact preceded
+  await tree.clock.advance(200);
+  const end = kairos.inbox.nextTurn[0];
+  assert.equal((end.source as unknown as { outcome: string }).outcome, "settled", "the round is not superseded by the @ that came before it");
+  assert.match(end.content[0].text ?? "", /2 rounds left/, "and the caps it consumed still stand");
+  assert.equal((await engine.describe("session-room")).caps.roundsLeft, 2);
+});
+
+test("a round whose room session disappears mid-flight settles instead of hanging, and the room takes the next dispatch", async () => {
+  const tree = makeFakeTree();
+  tree.newRoom("session-room", CHANNEL.dir);
+  tree.script("buffett", () => ({ kind: "answer", text: "b", afterMs: 20 }));
+  tree.script("speculator", () => ({ kind: "answer", text: "s" }));
+  const logged: string[] = [];
+  const engine = engineOn(tree, { log: (line) => logged.push(line) });
+  await engine.dispatch("session-room", CHANNEL, { to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, roster);
+  await tree.clock.advance(5);
+  tree.sessions.delete("session-room"); // the operator deletes the room session mid-round
+  tree.agents.delete("session-room");
+  await tree.clock.advance(200);
+  assert.match(logged.join("\n"), /round 1 in storage-chain could not be delivered.*is not live/s);
+  const again = await engine.dispatch("session-room", CHANNEL, { to: ["speculator"], mode: "parallel", brief: "q", reason: "r" }, roster);
+  assert.equal(again.round, 2, "the dead round did not stay active and brick the room");
+});
+
+test("dispose disarms every armed deadline and settles a round waiting on a quiet log", async () => {
+  const tree = makeFakeTree();
+  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  tree.script("buffett", () => ({ kind: "hang" }));
+  const engine = engineOn(tree);
+  const room = engine.roomOf("session-room", CHANNEL);
+  const member = await engine.ensureMember(room, roster[0]);
+  void engine.runMemberTurn(room, member, roster, "dispatch", "q");
+  kairos.wake();
+  const quiet = engine.whenQuiet(room);
+  engine.dispose();
+  await assert.rejects(quiet, /disposed/);
+  await tree.clock.advance(ROOM_CAPS.turnHardCapMs * 2);
+  assert.equal(tree.agents.get(member.agent.id)!.cancelled.length, 0, "a disposed engine's deadline cancels nobody");
+});
+
+test("whenQuiet refuses a room session that is not live rather than waiting for a turn/end that cannot come", async () => {
+  const tree = makeFakeTree();
+  const engine = engineOn(tree);
+  await assert.rejects(engine.whenQuiet(engine.roomOf("session-nowhere", CHANNEL)), /is not live/);
+});
+
 test("say: an @ is the operator's message, appended to the room, not a prompt; the named members turn; an @ to a running member is queued", async () => {
   const tree = makeFakeTree();
   const kairos = tree.newRoom("session-room", CHANNEL.dir);
@@ -419,6 +503,12 @@ test("the dispatch tool: global, Kairos-only, channel-only, roster-checked; vali
   const tool = tree.registeredTools[0] as unknown as ReturnType<typeof dispatchToolDefinition>;
   assert.match(tool.description, /roster/);
   assert.match(tool.description, /end your turn/i);
+  /* The caps sentence is the engine's own numbers, not prose: a cap change must
+   * not leave the model reading an instruction the engine no longer enforces. */
+  assert.match(tool.description, /Caps per operator message: 3 rounds, 10 bot messages, 2 peer continuations per round\./);
+  const tightEngine = engineOn(tree, { caps: { maxRounds: 1, maxBotMessages: 1, maxContinuations: 1 } });
+  assert.match(dispatchToolDefinition(tightEngine, { channelFor: async () => CHANNEL }).description, /Caps per operator message: 1 round, 1 bot message, 1 peer continuation per round\./);
+  tightEngine.dispose();
   const exec = (agent: unknown) => ({ agent, signal: new AbortController().signal }) as never;
 
   await assert.rejects(tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, exec(undefined)), /needs a session/);
