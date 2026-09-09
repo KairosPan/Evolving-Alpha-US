@@ -1158,5 +1158,5 @@ restart the cold listing carried the room's title and its `room` value from the 
 the strip's coarse states survived. Three observations, none a failure: the landing page lists the
 member sessions as plain `untitled` rows (shown and counted, not yet labelled by voice); Kairos,
 handed an un-rostered `@` as a prompt, assumed the voice would answer — `AGENTS.md` should say that
-such an `@` named nobody; the peer-`@` continuation was superseded by the operator's next `@` before
+such an `@` named nobody (the sentence landed the same day, in its Rooms paragraph); the peer-`@` continuation was superseded by the operator's next `@` before
 it ran (by design), so that path stands on the engine tests, not on this drill.

@@ -916,14 +916,15 @@ Built 2026-09-09 on `feat/rooms` (313 face tests; the live drill passed 2026-09-
 `face/src/room-rules.ts`), not the §4.3 line's words; (2) fine states are derived from the member
 sessions' own `assistant/chunk` block starts and `turn/*` boundaries, which the mux forwards for
 every live session — the unit carries coarse state only; (3) the fold rule is the header rule
-(plan 2, deviation 7); (4) a member's gate renders inline when its room is on screen, headed with
-the bot's name, answered against the member's own session — the wire already required that. §6's
-"no with-whom column" holds. The drill's eight parts and the PASS line are in the README.
+(§16 plan-2 block, deviation 1); (4) a member's gate renders inline when its room is on screen,
+headed with the bot's name, answered against the member's own session — the wire already
+required that. §6's "no with-whom column" holds. The drill's eight parts and the PASS line are
+in the README.
 
 ### Plan 4 — the charter and the documents
 
 Written 2026-09-09 after plans 2–3 shipped: §10's amendment landed in `Kairos-Design.md` §7.1
 verbatim; D11 marked resolved, D12 and D13 added, the §8 trigger added; `CLAUDE.md`, `AGENTS.md`,
-`DEVELOPMENT.md` (§3.7, §4.2–4.5, §5.1–5.3, §6.8, §7.3–7.4, §8, §9 R6/R13/R14–R17, §10) and
+`DEVELOPMENT.md` (§3.7, §4.2–4.5, §5.1–5.3, §6.8, §7.3–7.4, §8, §9 R6/R13/R14–R19, §10) and
 `ROADMAP.md` describe the tree as built. This document is frozen: its Status line stays as written
 and its truth now lives where §16's blocks point.
