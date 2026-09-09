@@ -1,7 +1,9 @@
 /** The room, end to end, in-process, on a stub model and no key (spec §8's
  * last smoke bullets; S5 and S6, which plan 1 deferred here).
  *
- * One boot, one file (smoke.test.ts). The bots root is `mkdtemp`'d INSIDE the
+ * One boot, one file (this one): every FACE_SMOKE test owns its own bootFace,
+ * which is why the room's live drill is room-smoke.test.ts rather than another
+ * case inside smoke.test.ts. The bots root is `mkdtemp`'d INSIDE the
  * repository so the shipped relative plugin path mounts (bots-fixture.ts).
  * @module
  */
@@ -27,10 +29,9 @@ const MARKER = "ROOM-SMOKE-AGENTS-MARKER";
 
 interface Ev { type: string; seq: number; data?: Record<string, unknown> }
 const sourceOf = (e: Ev): Record<string, unknown> | undefined => (e.data?.source ?? (e.data?.message as { source?: unknown } | undefined)?.source) as Record<string, unknown> | undefined;
-const lastUserText = (o: GenerateOptions): string => {
-  const last = [...o.messages].reverse().find((m) => m.role === "user");
-  return (last?.content ?? []).map((b) => (b as { text?: string }).text ?? "").join("\n");
-};
+const textOf = (m: GenerateOptions["messages"][number] | undefined): string =>
+  (m?.content ?? []).map((b) => (b as { text?: string }).text ?? "").join("\n");
+const lastUserText = (o: GenerateOptions): string => textOf([...o.messages].reverse().find((m) => m.role === "user"));
 async function waitFor(what: string, check: () => boolean, ms = 30_000): Promise<void> {
   const until = Date.now() + ms;
   while (!check()) {
@@ -73,6 +74,10 @@ test("room smoke: dispatch → two members → answers in the room log → one w
 
       /* The script: who is asking is the session's preset; what to say is where the conversation is. */
       const presetOf = (o: GenerateOptions): string => String(sessions.get(String(o.sessionId))?.header.agentPreset ?? "");
+      /* Deviation 2's whole claim, measured inside the request that tests it:
+       * an answer appended with `surfaceOp: 'append'` is in the HISTORY of the
+       * synthesis call, and the round-end wake is the last user message. */
+      let synthesisRequest: { answerInHistory: boolean; roundEndIsLast: boolean } | undefined;
       llm.registerAdapter(["stub"], new StubAdapter((o): StubReply => {
         if (o.purpose !== undefined) return { kind: "text", text: "room smoke" }; // titles, compaction
         const who = presetOf(o);
@@ -81,7 +86,14 @@ test("room smoke: dispatch → two members → answers in the room log → one w
         const lastForm = String((last?.source as { form?: unknown } | undefined)?.form);
         if (who === "kairos") {
           if (lastKind === "tool") return { kind: "text", text: "Waiting for the room." };
-          if (lastKind === "room" && lastForm === "round-end") return { kind: "text", text: `Synthesis: ${lastUserText(o).split("\n")[1]}` };
+          if (lastKind === "room" && lastForm === "round-end") {
+            const users = o.messages.filter((m) => m.role === "user");
+            synthesisRequest = {
+              answerInHistory: users.some((m) => textOf(m).includes("alpha: buy X")),
+              roundEndIsLast: String((users.at(-1)?.source as { form?: unknown } | undefined)?.form) === "round-end",
+            };
+            return { kind: "text", text: `Synthesis: ${lastUserText(o).split("\n")[1]}` };
+          }
           return { kind: "tool", name: "dispatch", args: { to: ["alpha", "beta", "gamma"], mode: "parallel", brief: "state your view on X", reason: "independent views first" } };
         }
         if (who === "alpha") {
@@ -132,6 +144,11 @@ test("room smoke: dispatch → two members → answers in the room log → one w
         const end = events.findIndex((e) => sourceOf(e)?.form === "round-end");
         return end >= 0 && events.slice(end).some((e) => e.type === "assistant/message" && JSON.stringify(e.data).includes("Synthesis:"));
       }, 60_000);
+
+      /* Deviation 2, asserted where it is actually decided - dsh's own history
+       * derivation for the wake request, not the log the client reads. */
+      assert.deepEqual(synthesisRequest, { answerInHistory: true, roundEndIsLast: true },
+        "the appended answer is IN the synthesis request's messages, with the round-end wake last");
 
       /* The log sequence (S5 restated for deviation 2): every answer precedes the
        * round-end, the round-end wake opens exactly ONE new turn, and the synthesis is in it. */
@@ -211,7 +228,6 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       const soulBefore = await readFile(join(bots, "alpha", "SOUL.md"), "utf8");
       const outside = await write(join(bots, "alpha", "SOUL.md"));
       const text = (outside.content ?? []).map((c) => c.text ?? "").join("\n");
-      console.log(`home-scope observed: ${text.replace(/\s+/g, " ").slice(0, 200)}`);
       assert.match(text, /sandbox: file access denied/, "a home cannot rewrite its own SOUL.md");
       assert.equal(await readFile(join(bots, "alpha", "SOUL.md"), "utf8"), soulBefore);
     } finally {

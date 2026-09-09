@@ -72,6 +72,12 @@ process.chdir(join(moduleDir, "..", ".."));
  * would miss it. */
 let dispose: (() => Promise<void>) | undefined;
 
+/** The room engine's own unwind (the `dispatch` tool, the room projection, the
+ * root bus listener and every armed member deadline). Separate from `dispose`
+ * because the engine is installed ON the booted tree rather than by it, and a
+ * deadline that outlives the process's stop can still cancel a member. */
+let disposeRoom: (() => void) | undefined;
+
 /** Tear the tree down, then leave with `code`. A dispose that rejects still
  * exits, and says why: a signal the process has already acknowledged must not
  * end in a hang. The exit is unconditional for the same reason boot.ts keeps
@@ -79,6 +85,7 @@ let dispose: (() => Promise<void>) | undefined;
  * beats waiting on an unbounded teardown. */
 async function shutdown(code: number): Promise<void> {
   try {
+    disposeRoom?.();
     await dispose?.();
   } catch (err) {
     console.error(`${BIN}: dispose failed during shutdown:`, err);
@@ -184,6 +191,7 @@ const room = installRoom({
   channelFor: deps.channelFor,
   listBots: () => listBots(BOTS_ROOT, () => agentPresets.list()),
 });
+disposeRoom = () => { room.dispose(); };
 registerRoomRoutes(booted.ctx.webServer, room);
 /* The master rail's feeds: in-process reads of the booted tree (skills /
  * tools / loader), which have no RPC at this pin, plus the local-agent
