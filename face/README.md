@@ -1128,3 +1128,35 @@ drill, steps 1–2), on a fresh channel:
    survive (the projection cache); the members' titles survive (R13 closed).
 
 **PASS criteria are observations.** Record the run below with the date and the commit.
+
+**Drilled and PASSED 2026-09-09** on the operator's own face (real `$DSH_HOME`, the alpaca-kit
+server connected, DeepSeek as the model; `feat/rooms` @ `31b2e68`), two fresh template bots
+(`看多派`, `看空派`) on a fresh channel `room-drill`, the question "SanDisk (SNDK) 现在值得买吗？请各说
+各的". Part one: the check-in went through the channel-bots route the chips call (the landing page
+is reachable only once the channel has a session); `roster.log` gained the dated `bots` line and
+`channels.json` carried `bots`; the chips read on once the page existed. Part two: Kairos read the
+channel, pulled the point-in-time record, then called `dispatch` — the card read `Dispatched 看多派,
+看空派 (parallel), round 1 of this operator message; 2 rounds left after it. Not called: none.` —
+ended its turn, both answers landed as attributed bubbles with their glyphs, the line read `round 1 ·
+settled · answered: 看空派, 看多派`, and the one wake produced a synthesis that named the
+disagreements first; the log order was `turn/end` → both answers → one `turn/start` → the round-end
+prompt → the synthesis. The strip stayed hidden on this first round — the create path fetched no
+room state (drill finding F1, fixed the same day in `31b2e68` and re-verified: a fresh round shows
+`Kairos organizing · 看多派 · 看空派` with the first prompt). Part three: the room row folded `2
+members`; a member's own transcript opened with its `context · room` delta row, its reply under its
+own name, `Message 看空派…` in the composer, and no strip. Part four: `@看多派` read `@ → 看多派`, the
+chip went `writing` then `answered`, the answer landed, and Kairos's turn starts stayed at two.
+Part five: `@看空派 先用 ask_user_question 问我一个问题` raised the card inline headed `看空派 asks`, the
+chip read `waiting for you`, the channel header and the landing page's session row carried the
+mark; answering cleared the mark and brought the answer. Part six: `@看多派 …写一个 test.txt` — the
+member's `bash` was refused inside the tool content under `read-only`, its retry with
+`sandbox_permissions` raised the escalation card inline (`approval 看多派 · bash`), denied; the bot
+reported the refusal in the room; no file. Part seven: un-checked, the chip read `left` and an `@`
+to it went to Kairos as a prompt; re-checked, the same session answered (still `2 members`), and
+the answer sent while Kairos's turn was open landed right after its `turn/end`. Part eight: after a
+restart the cold listing carried the room's title and its `room` value from the cache, the fold and
+the strip's coarse states survived. Three observations, none a failure: the landing page lists the
+member sessions as plain `untitled` rows (shown and counted, not yet labelled by voice); Kairos,
+handed an un-rostered `@` as a prompt, assumed the voice would answer — `AGENTS.md` should say that
+such an `@` named nobody; the peer-`@` continuation was superseded by the operator's next `@` before
+it ran (by design), so that path stands on the engine tests, not on this drill.
