@@ -154,7 +154,7 @@ operator. Three layers, split by who may write them:
 |---|---|---|
 | **Body** (content) | `strategies/<dir>/`, or the repo root | Kairos, freely |
 | **Identity** (container) | the dsh workspace registry (`~/.dsh/storages/workspace.json`) | host-owned, only through `/api/workspace.*` |
-| **Roster** (runtime) | `$DSH_HOME/face/channels.json` | the operator, on the channel page |
+| **Roster** (runtime) | `$DSH_HOME/face/channels.json` — `agents[]` (local CLIs Kairos may call) and `bots[]` (the voices a room may dispatch) | the operator, on the channel page |
 
 The directory is the truth of existence, not the registry: `listChannelDirs`
 (`src/channels.ts:43`) walks `strategies/*`, skipping `_template` and any name
@@ -540,9 +540,100 @@ The roster is mounted `trust: "system"`, so the gateway's own `agentPreset.copy`
 `openDocument` RPCs refuse it ("it ships with the deployment") — the face's three routes are the
 only authoring path, and no connected client can reach around them into a git-tracked directory.
 
-**Not built here (the rooms arc, plans 2–4 of the spec):** `dispatch`, member sessions, the
-participants strip, the roster's `bots[]`, a `read-only` pin for bots in rooms, and the charter
-amendment. Until then a bot has a home and a mask, and nothing else.
+**A bot in a room** — dispatched by Kairos, addressed by the operator's `@`, its answers in the
+room's transcript in its own voice — is the next section. What is still not built (spec §11, on
+purpose): bot-to-bot messaging outside a room, cross-channel memory for a bot, a delete button, a
+channel-scoped 1:1 with a bot.
+
+## Rooms (src/room.ts + src/room-rules.ts + src/room-projection.ts + client/room.js)
+
+A room is an ordinary channel session whose agent is Kairos and which has **members**: one
+session per bot the channel rosters, created lazily the first time that bot is named. Nothing
+is created to make a session a room. The operator checks bots into a channel on its page
+("bots in this channel", `POST /data/channels/bots`, at most six — `ROOM_CAPS.maxMembers`); the
+roster stays a menu, not a fence (the channels section's honest limits apply verbatim).
+
+**Kairos organizes the room through one tool, `dispatch`** (`to`, `mode` parallel or serial,
+`brief`, `reason`). It is registered globally on the root context (`installRoom` in `main.ts`),
+so it is in Kairos's roster; every bot's allow-list mask excludes it without naming it. The
+call validates `to` against the channel's bot roster (the refusal names the roster), starts
+the round, and returns at once — the result text names who was called, how, **who was not
+called**, and tells the model to end its turn. Kairos is woken once per round, by a
+`followup` that names who answered and who passed.
+
+**A member session** is created in-process by the engine (`ctx.agents.create`) with the
+channel directory as `cwd`, `parentSession` = the room, `agentPreset` = the bot, the bot's
+`preset.yml` `model:` when the tree serves it (else the default, with a line in the dispatch
+result), and — inside the same creation `setup`, before the session is published — the
+**`read-only`** permission preset: a bot in a room does not write files, by sandbox mode, not
+by mask (D12). A member that already exists is resumed, never recreated. Members are runtime
+roots (created from the root context, not from Kairos's), which is what lets a member ask the
+operator a question.
+
+**What a member sees** each turn: the room delta — every operator prompt, Kairos reply and
+member answer since it last spoke, one attributed line each (`操作员:`, `Kairos:`, `<bot> (you):`,
+`<bot>:`) — the brief, and four standing rules carried in the prompt (reply with your view or
+exactly `(pass)`; your text goes to the room verbatim; you remember this room only; address the
+operator directly when the judgment is theirs, write `@<bot>` to pull a peer in). Its cursor is
+the delta prompt in its own log (`source.form === 'delta'`, `messageIds`), so a member never
+re-reads what it saw. Parallel: everyone answers on the same delta and sees no peer this round.
+Serial: each later member sees the earlier answers.
+
+**How a room fact is recorded — no `room/*` events.** dsh's persistence refuses to reload a log
+carrying an event type outside its catalog (`KNOWN_SESSION_EVENT_TYPES`), so every room fact
+rides a known event: membership is the member's header; the dispatch is the tool's own
+call/result; an answer is a `user/message` on the room session with `source: { kind: 'room',
+form: 'answer', bot, name, sessionId, turn, round }`; the round end is the waking
+`user/message` with `form: 'round-end'` and every turn's state. Answers are **appended straight
+onto the room log** while no Kairos turn is open (a bubble at once, a seq now, in the next
+request's history) and held in a per-room outbox otherwise, flushed at the next `turn/end` and
+before the round-end wake. The `room` projection unit folds these events into the coarse state
+the strip shows (`called`, `answered`, `passed`, `failed`, `timed-out`, the round, `organizing`);
+it rides `session/projection` frames, the `session.list` row and — now that the face mounts
+`dsh-session-projection-cache` — the cold row too (R13 closed by the same row).
+
+**Caps, deadlines, endings** (`ROOM_CAPS`, one block): 3 rounds and 10 bot messages per
+operator send, 2 peer continuations per round, 180 s base per member turn extended while the
+member runs or has a gate pending, 1200 s hard cap → `agent.cancel` (inbox kept) → `timed-out`.
+A member whose model fails is `failed` and counts as a pass; the round continues. A round ends
+`settled`, `capped` (a cap stopped it) or `superseded` (the operator spoke mid-round: running
+turns finish and land, nothing further starts) — three words for three facts. Every operator
+send resets the caps.
+
+**The operator's `@`** is deterministic and never passes through Kairos: the composer sends a
+text containing `(^|\s)@` to `POST /data/rooms/say`, which resolves mentions against the roster
+by id (by display name only when it is one token), appends the message to the room as the
+operator's own (`kind: 'user'`, `mention: [...]`) without waking Kairos, and turns each named
+member — one mid-turn is queued behind that turn, never refused. A text that names nobody comes
+back `addressed: []` and the client sends it as an ordinary prompt. `POST /data/rooms/state`
+answers the roster, the members the engine drove this boot, and the caps left.
+
+**The client.** A member's answer renders as a bubble in the bot's own voice — its display name
+and an avatar glyph — never as a context row (`client/room.js`, `mapper.js`); the round end is a
+room line; the dispatch card reads as the who-was-called line. The **participants strip** above
+the transcript shows Kairos (`organizing` while its turn is open) and every rostered voice:
+coarse states from the projection, fine states (`thinking` / `writing` / `tool`) from the member
+sessions' own pulses, `waiting for you` when a gate is pending on the member, `left` for a member
+the roster no longer carries. A member's question or escalation card renders **inline in the
+room**, headed with the bot's name, and is answered against the member's own session. Members
+**fold under their room** in the sidebar (counted, the bot's name as the label; the fold rule is
+the header: `parentSessionId` set, no `origin`, a bot preset, the parent running the host). A
+pending gate on a session or its members marks the session row, the channel header and the
+landing page (needs-you at the index level).
+
+**The honest limits, in the register of the channels section.** Dispatch grants nothing and the
+mask is visibility; a member's write fence is its sandbox mode, its order fence is Gate 2,
+tree-wide (both proven from a bot session in `room-smoke.test.ts` and `bots-smoke.test.ts`).
+Four voices on one model will tend to converge (R3); parallel first answers are the mitigation,
+not a cure. Dispatch is Kairos's judgment (R2): it may under- or over-call; the "not called"
+clause and the operator's `@` are the answer. A member's pending gate with no client connected
+blocks until the hard cap (R6). A bot does not remember across channels (R5).
+
+| Route | What |
+|---|---|
+| `POST /data/channels/bots` | `{workspaceId, bots[]}` — the channel's bot roster, at most six ids; 400 a bad id or over the cap, 404 no such channel, 409 a corrupt roster file; a dated `bots` line to `roster.log` |
+| `POST /data/rooms/say` | `{sessionId, text}` → `{addressed: [...]}`; 400 a bad id or empty text, 404 not in a channel, 409 a corrupt roster |
+| `POST /data/rooms/state` | `{sessionId}` → `{roster, members, caps, round?}`; never resumes a session |
 
 ## Chat rendering (client/render.js + the collapsed process rows)
 
@@ -990,3 +1081,50 @@ market-data reads among them and no `subagent`, `agent_<bin>` or order tool; the
 refused with both files byte-identical. The speaker label (R12) held on the `who` element, the
 composer, the topbar and the status pulse across session switches, a reload and a restart. One
 observation → R13 in `DEVELOPMENT.md` §9: every cold session lists as `untitled`.
+
+## The room drill (run after any face or dsh change)
+
+A room whose strip never moved is presumed decorative.
+
+**Step 0, no model, no key.** `FACE_SMOKE=1 npm test` boots `room-smoke.test.ts`: a stub model
+route, three bots in a temp channel, one operator prompt → Kairos dispatches all three in
+parallel → alpha answers, beta passes, gamma's model fails → the answer is on the room log before
+the round-end wake, the wake is one turn, Kairos's synthesis is in it; every member is parented,
+preset-joined, `read-only` as its first event, carries the channel's `AGENTS.md` chain and lacks
+`dispatch`; the `room` value rides the session row and the cache file; an `@` turns alpha, whose
+write into the channel is refused inside the tool content (D12) and never woke Kairos; a home
+session writes its journal and is refused on `../SOUL.md`.
+
+**Step 0b, if you changed anything under `client/`.** Hard-reload.
+
+**The drill**, with the face live and two template bots created on the agent face (the bots
+drill, steps 1–2), on a fresh channel:
+
+1. Channel page → **bots in this channel** → check both in. PASS, part one: two chips read
+   on; `$DSH_HOME/face/roster.log` gained a dated `bots` line; `channels.json` carries `bots`.
+2. `new round`, ask a question that invites two views ("X 值得买吗？各说各的"). PASS, part
+   two: the strip appears with Kairos and both voices; Kairos's dispatch card reads
+   `Dispatched <A>, <B> (parallel) … Not called: none.`; both chips go `called` → `thinking` /
+   `writing` → `answered` or `passed`; each answer is a bubble in the bot's own voice with its
+   glyph; the round line reads `round 1 · settled · …`; Kairos wakes once and names the
+   disagreement.
+3. Sidebar. PASS, part three: the room row shows `2 members`, folded; expanding it lists both
+   by name; opening one shows its delta as a `context · room` row and its reply.
+4. `@<bot> …` in the composer. PASS, part four: the status line reads `@ → <bot>`; the bot's
+   chip moves and its bubble lands; Kairos does not speak (no new Kairos turn until you prompt
+   it); the `@` shows as your own bubble.
+5. Make a bot ask: `@<bot> 先问我一个问题再回答`. PASS, part five: the card appears inline in
+   the room headed `<bot> asks`; the chip reads `waiting for you`; the channel header and the
+   landing page's session row show the needs-you mark; answer it; the mark clears and the
+   bot's answer lands.
+6. Make a bot write: `@<bot> 在当前目录写一个 test.txt`. PASS, part six: no file appears; the
+   bot's own session (open it from the fold or the strip) shows the bash result with
+   `[sandbox: file access denied under read-only mode]`; the bot reports the refusal in the
+   room.
+7. Un-check one bot on the channel page and come back. PASS, part seven: its chip reads
+   `left`; `@` to it resolves nobody (the text goes to Kairos as a prompt); re-check it and
+   `@` it again: the same session answers (one member row, not two).
+8. Restart the face, open the room. PASS, part eight: the strip's coarse states and the fold
+   survive (the projection cache); the members' titles survive (R13 closed).
+
+**PASS criteria are observations.** Record the run below with the date and the commit.
