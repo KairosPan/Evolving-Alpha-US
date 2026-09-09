@@ -30,8 +30,9 @@
  */
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { Context } from "@deepseek-ai/cordis";
 import { installModelSelection as installDshModelSelection } from "@deepseek-ai/dsh-agent";
-import { createUserMessage } from "@deepseek-ai/dsh-llm";
+import { createUserMessage, type ReasoningEffortId } from "@deepseek-ai/dsh-llm";
 import type { BotRow } from "./bots.ts";
 import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 import { FORBIDDEN, HttpError, readBody } from "./http.ts";
@@ -67,10 +68,10 @@ export interface AgentLike {
   followup(message: MessageLike): void;
   cancel(cause: { kind: "hook"; reason: string }, options?: { keepInbox?: boolean }): void;
 }
-export interface ModelSelectionLike { provider: string; model: string; reasoningEffort?: string }
-/** dsh-agent's `ModelSelectionRef`. */
+export interface ModelSelectionLike { provider: string; model: string; reasoningEffort?: ReasoningEffortId }
+/** dsh-agent's `ModelSelectionRef`; assignable to it, so the real call below is type-checked. */
 export interface ModelSelectionRefLike { current: ModelSelectionLike | undefined; assembled: ModelSelectionLike | undefined }
-/** The unpublished agent scope `setup` receives: `agentCtx.agent` is the agent being composed. */
+/** The scoped `Context` `setup` receives (dsh-agent-loop calls `setup(prepared.agent.ctx)`): `agentCtx.agent` is the agent being composed. */
 export interface AgentCtxLike { agent?: AgentLike }
 export interface CreateMemberOptions {
   sessionId: string;
@@ -214,7 +215,12 @@ export class RoomEngine {
   constructor(private readonly deps: RoomDeps) {
     this.caps = { ...ROOM_CAPS, ...deps.caps };
     this.clock = deps.clock ?? defaultClock;
-    this.installSelection = deps.installModelSelection ?? ((agentCtx, ref) => installDshModelSelection(agentCtx as never, ref as never));
+    /* dsh-agent-loop's `setupAndPublish` calls `setup(prepared.agent.ctx)`, so
+     * what `setup` holds IS the agent-scoped cordis `Context` this wants; the
+     * cast erases only dsh's branded ids (`MessageId` on `Session.append`),
+     * which this module states as plain strings. The ref is NOT cast — it is
+     * checked against dsh's own `ModelSelectionRef`. */
+    this.installSelection = deps.installModelSelection ?? ((agentCtx, ref) => installDshModelSelection(agentCtx as unknown as Context, ref));
     this.log = deps.log ?? ((line) => console.log(`${BIN}: ${line}`));
     const off = deps.ctx.on("session/event", (session, event) => this.onEvent(session, event));
     this.disposers.push(() => { off(); });
