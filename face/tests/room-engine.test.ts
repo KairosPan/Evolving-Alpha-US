@@ -194,3 +194,145 @@ test("gatePending reads an open ask or an undecided approval from the member's o
   assert.equal(isQuiet(session), true);
   assert.equal(isQuiet({ ...session, events: [] }), true, "an empty log is quiet");
 });
+
+const answers = (events: readonly EventLike[]) => sources(events).filter((s) => s.kind === "room" && s.form === "answer").map((s) => s.bot);
+const roundEnds = (events: readonly EventLike[]) => sources(events).filter((s) => s.kind === "room" && s.form === "round-end");
+
+test("a parallel round: every member gets the same delta and sees no peer this round; answers land in the room log; Kairos is woken once with who spoke and who passed", async () => {
+  const tree = makeFakeTree();
+  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  kairos.session.append("user/message", { id: "u1", role: "user", content: [{ type: "text", text: "开会" }], source: { kind: "user" } }, { surfaceOp: "append" });
+  const prompts: Record<string, string> = {};
+  tree.script("buffett", (m) => { prompts.buffett = m.content[0].text ?? ""; return { kind: "answer", text: "买", afterMs: 20 }; });
+  tree.script("speculator", (m) => { prompts.speculator = m.content[0].text ?? ""; return { kind: "answer", text: "(pass)", afterMs: 5 }; });
+  const engine = engineOn(tree);
+  const out = await engine.dispatch("session-room", CHANNEL, { to: ["buffett", "speculator"], mode: "parallel", brief: "各说各的", reason: "first views" }, roster);
+  assert.deepEqual(out, { round: 1, remainingRounds: 2, notCalled: ["macro"], notes: [] });
+  await tree.clock.advance(100);
+  assert.doesNotMatch(prompts.buffett, /投机型:/, "parallel: no peer answer this round");
+  assert.doesNotMatch(prompts.speculator, /巴菲特型:/);
+  assert.deepEqual(answers(kairos.session.events), ["buffett"], "a pass is not an answer");
+  assert.equal(kairos.inbox.nextTurn.length, 1, "woken exactly once");
+  const end = kairos.inbox.nextTurn[0];
+  assert.deepEqual(end.source.form, "round-end");
+  assert.equal((end.source as unknown as { outcome: string }).outcome, "settled");
+  assert.deepEqual((end.source as unknown as { turns: { bot: string; state: string }[] }).turns.map((t) => `${t.bot}:${t.state}`), ["speculator:passed", "buffett:answered"]);
+  assert.match(end.content[0].text ?? "", /Answered: 巴菲特型\. Passed: 投机型\./);
+  assert.ok(kairos.session.events.findIndex((e) => (e.data as { source?: { form?: string } })?.source?.form === "answer") >= 0, "the answer is in the log BEFORE the wake is queued");
+});
+
+test("a serial round: the later member's delta carries the earlier answer", async () => {
+  const tree = makeFakeTree();
+  tree.newRoom("session-room", CHANNEL.dir);
+  const prompts: Record<string, string> = {};
+  tree.script("buffett", () => ({ kind: "answer", text: "买" }));
+  tree.script("speculator", (m) => { prompts.speculator = m.content[0].text ?? ""; return { kind: "answer", text: "卖" }; });
+  const engine = engineOn(tree);
+  await engine.dispatch("session-room", CHANNEL, { to: ["buffett", "speculator"], mode: "serial", brief: "q", reason: "r" }, roster);
+  await tree.clock.advance(100);
+  assert.match(prompts.speculator, /巴菲特型: 买/);
+});
+
+test("a peer @ queues one continuation after the dispatched turns, bounded, and Kairos is woken after it", async () => {
+  const tree = makeFakeTree();
+  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  let macroTurns = 0;
+  tree.script("buffett", () => ({ kind: "answer", text: "@macro 你怎么看 @macro 再说一次" }));
+  tree.script("speculator", () => ({ kind: "answer", text: "@macro @buffett @speculator" }));
+  tree.script("macro", (m, turn) => { macroTurns = turn; return { kind: "answer", text: `macro turn ${turn}: ${m.content[0].text?.includes("continuation") ? "cont" : "plain"}` }; });
+  const engine = engineOn(tree);
+  await engine.dispatch("session-room", CHANNEL, { to: ["buffett", "speculator"], mode: "parallel", brief: "q", reason: "r" }, roster);
+  await tree.clock.advance(200);
+  assert.equal(macroTurns, 1, "one continuation for macro however many peers named it");
+  assert.deepEqual(answers(kairos.session.events).sort(), ["buffett", "macro", "speculator"]);
+  const end = kairos.inbox.nextTurn[0];
+  assert.equal((end.source as unknown as { turns: unknown[] }).turns.length, 3);
+  assert.ok(kairos.session.events.filter((e) => (e.data as { source?: { form?: string } })?.source?.form === "answer").length === 3, "all three answers precede the wake");
+});
+
+test("caps: the round cap refuses a fourth dispatch; the bot-message cap ends a round capped; a new operator send resets both", async () => {
+  const tree = makeFakeTree();
+  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  for (const b of roster) tree.script(b.id, () => ({ kind: "answer", text: "v" }));
+  const engine = engineOn(tree, { caps: { maxBotMessages: 4, maxRounds: 2 } });
+  const args = { to: ["buffett", "speculator", "macro"], mode: "parallel" as const, brief: "q", reason: "r" };
+  await engine.dispatch("session-room", CHANNEL, args, roster);
+  await tree.clock.advance(100);
+  await engine.dispatch("session-room", CHANNEL, args, roster);
+  await tree.clock.advance(100);
+  const ends = roundEnds(kairos.session.events.concat(kairos.inbox.nextTurn.map((m, i) => ({ type: "user/message", seq: 1000 + i, data: m }))));
+  assert.deepEqual(ends.map((e) => e.outcome), ["settled", "capped"], "round 2 ran one turn of three before the message cap");
+  await assert.rejects(engine.dispatch("session-room", CHANNEL, args, roster), /round cap/);
+  // the operator speaks: the gateway logs a user message on the room
+  kairos.session.append("user/message", { id: "u2", role: "user", content: [{ type: "text", text: "再来" }], source: { kind: "user" } }, { surfaceOp: "append" });
+  await tree.clock.flush();
+  const out = await engine.dispatch("session-room", CHANNEL, args, roster);
+  assert.equal(out.round, 1);
+});
+
+test("a dispatch while a round is running is refused; an operator message mid-round supersedes it - running turns finish, nothing further starts", async () => {
+  const tree = makeFakeTree();
+  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  tree.script("buffett", () => ({ kind: "answer", text: "slow", afterMs: 50 }));
+  tree.script("speculator", () => ({ kind: "answer", text: "@macro", afterMs: 10 }));
+  tree.script("macro", () => ({ kind: "answer", text: "never" }));
+  const engine = engineOn(tree);
+  await engine.dispatch("session-room", CHANNEL, { to: ["buffett", "speculator"], mode: "parallel", brief: "q", reason: "r" }, roster);
+  await assert.rejects(engine.dispatch("session-room", CHANNEL, { to: ["macro"], mode: "parallel", brief: "q", reason: "r" }, roster), /still running|not settled/);
+  await tree.clock.advance(20);
+  kairos.session.append("user/message", { id: "u2", role: "user", content: [{ type: "text", text: "换个话题" }], source: { kind: "user" } }, { surfaceOp: "append" });
+  await tree.clock.advance(200);
+  assert.deepEqual(answers(kairos.session.events).sort(), ["buffett", "speculator"], "the running turn finished and landed; the continuation never started");
+  const end = kairos.inbox.nextTurn[0];
+  assert.equal((end.source as unknown as { outcome: string }).outcome, "superseded");
+});
+
+test("say: an @ is the operator's message, appended to the room, not a prompt; the named members turn; an @ to a running member is queued", async () => {
+  const tree = makeFakeTree();
+  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  const turns: string[] = [];
+  tree.script("buffett", (m, turn) => { turns.push(`buffett:${turn}`); return { kind: "answer", text: "b", afterMs: 30 }; });
+  tree.script("speculator", (m, turn) => { turns.push(`speculator:${turn}`); return { kind: "answer", text: "s" }; });
+  const engine = engineOn(tree);
+  engine.rosterFor = async () => roster; // the roster read is the file's; stub it here
+  const first = await engine.say("session-room", "@buffett @speculator 你们怎么看");
+  assert.deepEqual(first.addressed, ["buffett", "speculator"]);
+  assert.deepEqual(sources(kairos.session.events).at(-1), { kind: "user", mention: ["buffett", "speculator"] }, "in the room log as the operator's, with whom it addressed");
+  assert.equal(kairos.inbox.nextTurn.length, 0, "Kairos is not prompted");
+  const second = await engine.say("session-room", "@buffett 补一句");
+  assert.deepEqual(second.addressed, ["buffett"]);
+  await tree.clock.advance(100);
+  assert.deepEqual(turns, ["buffett:1", "speculator:1", "buffett:2"], "the second @ ran after the first turn, never refused");
+  assert.deepEqual(answers(kairos.session.events), ["speculator", "buffett", "buffett"]);
+  assert.equal(kairos.inbox.nextTurn.length, 0, "no round-end for @ turns");
+  const none = await engine.say("session-room", "no mention at all");
+  assert.deepEqual(none, { addressed: [] });
+  assert.equal(tree.modelsCalls.length, 0, "a live room needs no resume");
+});
+
+test("say on a cold room resumes it through the gateway's own composition before touching it", async () => {
+  const tree = makeFakeTree();
+  const engine = engineOn(tree);
+  engine.rosterFor = async () => roster;
+  tree.persisted.push({ id: "session-cold", cwd: CHANNEL.dir, agentPreset: "kairos", createdAt: 1 });
+  tree.ctx.apiProxy.sessions.models = async (request: { payload: { sessionId: string } }) => { tree.modelsCalls.push(request.payload.sessionId); tree.newRoom(request.payload.sessionId, CHANNEL.dir); return { ok: true }; };
+  tree.script("buffett", () => ({ kind: "answer", text: "b" }));
+  const out = await engine.say("session-cold", "@buffett hi");
+  assert.deepEqual(out.addressed, ["buffett"]);
+  assert.deepEqual(tree.modelsCalls, ["session-cold"]);
+});
+
+test("describe reports the roster, the runtime members and the caps left", async () => {
+  const tree = makeFakeTree();
+  tree.newRoom("session-room", CHANNEL.dir);
+  tree.script("buffett", () => ({ kind: "answer", text: "b" }));
+  const engine = engineOn(tree);
+  engine.rosterFor = async () => roster;
+  await engine.dispatch("session-room", CHANNEL, { to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, roster);
+  await tree.clock.advance(50);
+  const d = await engine.describe("session-room");
+  assert.deepEqual(d.roster.map((b) => b.id), ["buffett", "speculator", "macro"]);
+  assert.equal(Object.keys(d.members).length, 1);
+  assert.match(d.members.buffett.sessionId, /^session-/);
+  assert.deepEqual(d.caps, { roundsLeft: 2, messagesLeft: 9, maxRounds: 3, maxBotMessages: 10 });
+});

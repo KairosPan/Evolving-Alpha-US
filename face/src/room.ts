@@ -140,6 +140,9 @@ export interface Round {
   mode: "parallel" | "serial" | "mention";
   superseded: boolean;
   capped: boolean;
+  /** Every bot that has had a turn this round: one turn per member per round, so a
+   * peer's `@` pulls in a voice that has not spoken rather than starting a duel. */
+  called: Set<string>;
   continuations: string[];
   continuationsRun: number;
   turns: RoomTurnRecord[];
@@ -488,6 +491,190 @@ export class RoomEngine {
         finish({ kind: "never-started", reason: errText(err) });
       }
     });
+  }
+
+  /* ---------- rounds (spec §4.3, §4.4, §4.6) ---------- */
+
+  /** The channel's bot roster, named: the file's ids with the display names dsh's roster reports. */
+  async rosterFor(channel: RoomChannel): Promise<RosterBot[]> {
+    const { rosters, corrupt } = await readRosters(this.deps.home);
+    if (corrupt) throw new Error(`the channel roster is unreadable; repair ${this.deps.home}/face/channels.json`);
+    if (!Object.hasOwn(rosters, channel.workspaceId)) throw new Error(`channel "${channel.name}" has no roster yet; it gets one the first time the channel list loads, and the operator checks bots in on the channel page`);
+    const bots = await this.deps.listBots();
+    return rosters[channel.workspaceId].bots.map((id) => {
+      const row = bots.find((b) => b.id === id);
+      return { id, name: row?.name ?? id, ...(row?.model === undefined ? {} : { model: row.model }), ...(row?.broken === undefined ? {} : { broken: row.broken }) };
+    });
+  }
+
+  /**
+   * Start a round for Kairos and return at once (the tool result tells the model
+   * to end its turn). Refuses on the round cap and while a round is unsettled.
+   */
+  async dispatch(agentId: string, channel: RoomChannel, args: DispatchArgs, roster: readonly RosterBot[]): Promise<{ round: number; remainingRounds: number; notCalled: string[]; notes: string[] }> {
+    const room = this.roomOf(agentId, channel);
+    if (room.active !== undefined && !room.active.superseded) {
+      throw new Error(`round ${room.active.n} is still running (${room.active.turns.length} of its turns have ended); end your turn and dispatch again when you are woken`);
+    }
+    if (room.roundsThisSend >= this.caps.maxRounds) {
+      throw new Error(`the round cap (${this.caps.maxRounds} per operator message) is reached; reply to the operator now`);
+    }
+    room.roundsThisSend++;
+    const round: Round = { n: room.roundsThisSend, mode: args.mode, superseded: false, capped: false, called: new Set(), continuations: [], continuationsRun: 0, turns: [] };
+    room.active = round;
+    const notes: string[] = [];
+    for (const id of args.to) {
+      const bot = roster.find((b) => b.id === id);
+      if (bot === undefined) continue;
+      await this.selectionFor(room, bot);
+      const note = this.noteFor(room, id);
+      if (note !== undefined) notes.push(note);
+    }
+    void this.runRound(room, round, args.to, roster, "dispatch", args.brief).catch((err: unknown) => this.log(`round ${round.n} in ${room.channel.name} failed: ${errText(err)}`));
+    return {
+      round: round.n,
+      remainingRounds: this.caps.maxRounds - room.roundsThisSend,
+      notCalled: roster.filter((b) => !args.to.includes(b.id)).map((b) => b.id),
+      notes,
+    };
+  }
+
+  private answerMessage(record: RoomTurnRecord, text: string, round: number): MessageLike {
+    return createUserMessage({
+      content: [{ type: "text", text }],
+      source: { kind: "room", form: "answer", bot: record.bot, name: record.name, sessionId: record.sessionId, turn: record.turn ?? 0, round },
+    }) as unknown as MessageLike;
+  }
+
+  private async runRound(room: Room, round: Round, to: readonly string[], roster: readonly RosterBot[], trigger: TurnTrigger, brief?: string): Promise<void> {
+    /* Everything before the prompt: the roster row, the caps, the member session.
+     * A parallel round overlaps the TURNS, not the member sessions coming up, so
+     * this runs in `to` order there too and every voice is prompted in the order
+     * it was named - however many awaits its model route happens to cost. */
+    const prepare = async (id: string): Promise<Member | undefined> => {
+      const bot = roster.find((b) => b.id === id);
+      if (bot === undefined || round.superseded) return undefined;
+      round.called.add(id);
+      if (room.turnsThisSend >= this.caps.maxBotMessages) { round.capped = true; return undefined; }
+      room.turnsThisSend++;
+      try {
+        return await this.ensureMember(room, bot);
+      } catch (err) {
+        round.turns.push({ bot: id, name: bot.name, sessionId: "", state: "failed", reason: errText(err) });
+        return undefined;
+      }
+    };
+    const drive = async (member: Member, trig: TurnTrigger): Promise<void> => {
+      const result = await this.enqueue(member, () => this.runMemberTurn(room, member, roster, trig, brief));
+      round.turns.push(result.record);
+      if (result.record.state !== "answered") return;
+      this.post(room, this.answerMessage(result.record, result.text, round.n));
+      /* Spec §4.4 rule 2: a peer's `@` pulls in ONE continuation turn for a voice
+       * that has not spoken this round - `called` is what makes "one continuation
+       * for macro however many peers named it" true, and keeps two members that
+       * name each other from trading turns inside one round. */
+      for (const peer of resolveMentions(result.text, roster.filter((b) => b.id !== member.bot))) {
+        if (round.called.has(peer) || round.continuations.includes(peer)) continue;
+        if (round.continuationsRun + round.continuations.length >= this.caps.maxContinuations) break;
+        round.continuations.push(peer);
+      }
+    };
+    const runOne = async (id: string, trig: TurnTrigger): Promise<void> => {
+      const member = await prepare(id);
+      if (member !== undefined) await drive(member, trig);
+    };
+    if (round.mode === "serial") { for (const id of to) await runOne(id, trigger); }
+    else {
+      const members: (Member | undefined)[] = [];
+      for (const id of to) members.push(await prepare(id));
+      await Promise.all(members.map(async (member) => { if (member !== undefined) await drive(member, trigger); }));
+    }
+    while (!round.superseded && round.continuations.length > 0) {
+      const id = round.continuations.shift() as string;
+      round.continuationsRun++;
+      await runOne(id, "continuation");
+    }
+    const outcome: RoundOutcome = round.superseded ? "superseded" : round.capped ? "capped" : "settled";
+    if (trigger === "dispatch") await this.finishRound(room, round, outcome);
+    if (room.active === round) room.active = undefined;
+  }
+
+  /** Every buffered answer onto the log, then the ONE wake - one synchronous block once the log is quiet. */
+  private async finishRound(room: Room, round: Round, outcome: RoundOutcome): Promise<void> {
+    await this.whenQuiet(room);
+    this.flush(room);
+    const text = roundEndText(round.n, outcome, round.turns, Math.max(0, this.caps.maxRounds - room.roundsThisSend));
+    const end = createUserMessage({
+      content: [{ type: "text", text }],
+      source: { kind: "room", form: "round-end", round: round.n, outcome, turns: round.turns },
+    });
+    this.roomAgent(room).followup(end as unknown as MessageLike);
+  }
+
+  /* ---------- the operator's `@` (spec §4.4 rule 1) ---------- */
+
+  /** The channel a session belongs to, live or cold; `null` when it is in none. */
+  private async channelOf(sessionId: string): Promise<RoomChannel | null> {
+    const live = this.deps.ctx.sessions.get(sessionId);
+    let cwd = live?.header.cwd;
+    if (cwd === undefined) cwd = (await this.deps.ctx.sessionPersistence?.list() ?? []).find((h) => h.id === sessionId)?.cwd;
+    return this.deps.channelFor(cwd);
+  }
+
+  /** A cold room session becomes live through the gateway's OWN composition path
+   * (`session.models` resumes via its agent resolver and changes nothing else),
+   * so the face never composes Kairos's session itself. */
+  private async ensureLive(sessionId: string): Promise<AgentLike> {
+    const live = this.deps.ctx.agents.get(sessionId);
+    if (live !== undefined) return live;
+    if (this.deps.ctx.apiProxy === undefined) throw new HttpError(409, "the room session is not live and the gateway is not available to resume it");
+    await this.deps.ctx.apiProxy.sessions.models({ rpcId: `room-${randomUUID()}`, payload: { sessionId } });
+    const resumed = this.deps.ctx.agents.get(sessionId);
+    if (resumed === undefined) throw new HttpError(404, "no such session");
+    return resumed;
+  }
+
+  /**
+   * The operator's `@`: resolved against the roster deterministically, appended
+   * to the room as the operator's own message (never a prompt - Kairos sees it
+   * on its next wake), and each named member turns on the standard delta. A
+   * member mid-turn takes it after that turn. Resets the caps like every send.
+   */
+  async say(sessionId: string, text: string): Promise<{ addressed: string[] }> {
+    const channel = await this.channelOf(sessionId);
+    if (channel === null) throw new HttpError(404, "this session is in no channel");
+    const roster = await this.rosterFor(channel).catch((err: unknown) => { throw new HttpError(409, errText(err)); });
+    const addressed = resolveMentions(text, roster);
+    if (addressed.length === 0) return { addressed: [] };
+    await this.ensureLive(sessionId);
+    const room = this.roomOf(sessionId, channel);
+    const message = createUserMessage({ content: [{ type: "text", text }], source: { kind: "user", mention: addressed } });
+    this.post(room, message as unknown as MessageLike);
+    this.onOperatorSend(room);
+    const round: Round = { n: room.active?.n ?? 0, mode: "mention", superseded: false, capped: false, called: new Set(), continuations: [], continuationsRun: 0, turns: [] };
+    void this.runRound(room, round, addressed, roster, "mention").catch((err: unknown) => this.log(`@ turn in ${room.channel.name} failed: ${errText(err)}`));
+    return { addressed };
+  }
+
+  /** What the client asks about a room: the roster, the members this engine drove, the caps left. Never resumes anything. */
+  async describe(sessionId: string): Promise<{ roster: RosterBot[]; members: Record<string, { sessionId: string; name: string }>; caps: { roundsLeft: number; messagesLeft: number; maxRounds: number; maxBotMessages: number }; round?: { n: number; mode: string; superseded: boolean } }> {
+    const channel = await this.channelOf(sessionId);
+    if (channel === null) throw new HttpError(404, "this session is in no channel");
+    const roster = await this.rosterFor(channel).catch(() => [] as RosterBot[]);
+    const room = this.rooms.get(sessionId);
+    const members: Record<string, { sessionId: string; name: string }> = {};
+    for (const [bot, member] of room?.members ?? []) members[bot] = { sessionId: member.agent.id, name: member.name };
+    return {
+      roster,
+      members,
+      caps: {
+        roundsLeft: Math.max(0, this.caps.maxRounds - (room?.roundsThisSend ?? 0)),
+        messagesLeft: Math.max(0, this.caps.maxBotMessages - (room?.turnsThisSend ?? 0)),
+        maxRounds: this.caps.maxRounds,
+        maxBotMessages: this.caps.maxBotMessages,
+      },
+      ...(room?.active === undefined ? {} : { round: { n: room.active.n, mode: room.active.mode, superseded: room.active.superseded } }),
+    };
   }
 }
 
