@@ -1908,6 +1908,17 @@ async function openChannel(channel) {
           failed(err, "channel agents");
         }
       },
+      onToggleBot: async (id, on) => {
+        try {
+          const current = Array.isArray(payload.bots) ? payload.bots : [];
+          const next = on ? [...current, id] : current.filter((b) => b !== id);
+          await panelData("/data/channels/bots", { workspaceId: channel.workspaceId, bots: next });
+          void loadRoomInfo(); // the strip of a room in this channel follows the roster
+          void openChannel(channel);
+        } catch (err) {
+          failed(err, "channel bots");
+        }
+      },
       onNewRound: () => {
         /* Same reset `newSession()` does for the "+ new" button, minus the
          * picker: `activeSession` must go back to null here, or `send()`'s

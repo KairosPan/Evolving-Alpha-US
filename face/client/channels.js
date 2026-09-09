@@ -57,6 +57,7 @@ function kvTable(rows) {
  * @param {Record<string, any>} payload - `/data/channels/overview`'s body,
  *   plus the client's own `allBins` and `sessions` (see `openChannel`).
  * @param {{onRename(title: string): void, onToggleAgent(bin: string, on: boolean): void,
+ *   onToggleBot(id: string, on: boolean): void,
  *   onNewRound(): void, onOpenSession(id: string): void}} actions
  */
 export function renderChannelPage(inner, payload, actions) {
@@ -90,6 +91,34 @@ export function renderChannelPage(inner, payload, actions) {
   }
   if ((payload.allBins ?? agents).length === 0) chips.append(el("span", "ch-none", "no agents connected"));
   head.append(chips);
+
+  /* Bots: the operator's own voices, checked in per channel. A chip per bot the
+   * preset roster reports (a broken one is shown, disabled, with dsh's reason),
+   * plus - Rule 5 - any id the roster file carries that no directory answers to. */
+  const bchips = el("div", "ch-chips");
+  bchips.append(el("span", "ch-chips-label", "bots in this channel"));
+  const rosterBots = Array.isArray(payload.bots) ? payload.bots : [];
+  const allBots = (Array.isArray(payload.allBots) ? payload.allBots : []).filter((b) => b.id !== "kairos");
+  const known = new Set(allBots.map((b) => b.id));
+  for (const bot of allBots) {
+    const on = rosterBots.includes(bot.id);
+    const chip = el("button", on ? "ch-chip on" : "ch-chip", String(bot.name ?? bot.id));
+    chip.type = "button";
+    chip.title = bot.broken ? `dsh cannot mount this bot: ${bot.broken}` : String(bot.id);
+    if (bot.broken) chip.classList.add("broken");
+    chip.addEventListener("click", () => { void actions.onToggleBot(bot.id, !on); });
+    bchips.append(chip);
+  }
+  for (const id of rosterBots) {
+    if (known.has(id)) continue;
+    const chip = el("button", "ch-chip on missing", id);
+    chip.type = "button";
+    chip.title = "on this channel's roster, but no bot directory answers to this id - click to remove";
+    chip.addEventListener("click", () => { void actions.onToggleBot(id, false); });
+    bchips.append(chip);
+  }
+  if (allBots.length === 0 && rosterBots.length === 0) bchips.append(el("span", "ch-none", "no bots yet - create one on the agent face"));
+  head.append(bchips);
   inner.append(head);
 
   /* 2 - headline */

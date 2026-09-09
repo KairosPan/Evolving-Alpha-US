@@ -1361,6 +1361,8 @@ body {
 }
 .ch-chip:hover { border-color: var(--accent); color: var(--accent); }
 .ch-chip.on { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.ch-chip.broken { text-decoration: line-through; opacity: 0.6; }
+.ch-chip.missing { border-style: dashed; }
 .ch-none { font: 11.5px/1.5 var(--sans); color: var(--dim); }
 
 /* the headline card: status.yaml's one_line/next/numbers, when any exist */
