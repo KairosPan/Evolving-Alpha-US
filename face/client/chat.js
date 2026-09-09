@@ -42,7 +42,7 @@ import { ARCHIVED_KEY, bucketFor, isBotKey, UNGROUPED_KEY } from "./grouping.js"
 import { proposeBotId } from "./botId.js";
 import { foldChannelName } from "./channelName.js";
 import { HOST_NAME, speakerFor } from "./speaker.js";
-import { avatarGlyph, foldMembers, roundEndLine, stripChips } from "./room.js";
+import { avatarGlyph, foldMembers, gateSpeaker, roundEndLine, stripChips } from "./room.js";
 
 /** Rendered in place of a value the host did not give us. */
 const EM = "—";
@@ -481,6 +481,14 @@ function acceptCard(view) {
 
 /* ---------- gates: approvals and questions ---------- */
 
+/** Whose card this is: a member's bot for a member's gate, else the session's own voice.
+ * @param {string|undefined} sessionId @returns {string} */
+function gateWho(sessionId) {
+  const rows = memberFold.rooms.get(activeSession ?? "") ?? [];
+  const extra = Object.entries(roomInfo?.members ?? {}).map(([bot, m]) => ({ sessionId: m?.sessionId, agentPreset: bot }));
+  return gateSpeaker(sessionId, [...rows, ...extra], botIndex, speaker);
+}
+
 /**
  * Settle a gate's card: the buttons go, the outcome stays. Idempotent — the
  * host echoes a resolution for the answer this client just sent, and by then
@@ -505,7 +513,8 @@ function approvalNode(view) {
   const node = el("article", "card ask");
   const head = el("div", "card-head");
   head.append(el("span", "kind", "approval"));
-  head.append(el("span", "producer", dash(view.toolName)));
+  const isMember = view.sessionId !== undefined && view.sessionId !== activeSession;
+  head.append(el("span", "producer", isMember ? `${gateWho(view.sessionId)} · ${dash(view.toolName)}` : dash(view.toolName)));
   const raw = el("span", "raw", "raw");
   raw.title = `approvalId ${dash(view.approvalId)} · callId ${dash(view.callId)}`;
   head.append(raw);
@@ -558,7 +567,7 @@ function questionNode(view) {
   const head = el("div", "card-head");
   // `.kind` is `text-transform: uppercase` (chat.css), so the case written
   // here never reaches the screen - the name goes in as the roster spells it.
-  head.append(el("span", "kind", `${speaker} asks`));
+  head.append(el("span", "kind", `${gateWho(view.sessionId)} asks`));
   head.append(el("span", "producer", ""));
   node.append(head);
 
@@ -676,9 +685,11 @@ function questionNode(view) {
 
 /**
  * Take one approval/question view: remember it while it is pending, and show it
- * if it belongs to the session on screen.
+ * if it belongs to the session on screen — its own session, or a member of the
+ * room on screen (a member's gate renders inline in its room, attributed to
+ * the member's bot by {@link gateWho}).
  *
- * A gate for another session is NOT dropped — it is held in `gates` and its
+ * A gate for any OTHER session is NOT dropped — it is held in `gates` and its
  * sidebar row is flagged, so switching to that session still finds it. The
  * agent is blocked until someone answers; a gate that only existed on the tab
  * that happened to be open would strand the turn.
@@ -688,7 +699,8 @@ function acceptGate(view) {
   if (typeof view.id !== "string") return; // unanswerable without the wire id
   gates.set(view.id, view);
   renderStrip(); // a member's ask reads as `waiting for you` on its chip
-  if (view.sessionId !== undefined && view.sessionId !== activeSession) {
+  const inRoom = view.sessionId !== undefined && memberSessionIds().has(view.sessionId);
+  if (view.sessionId !== undefined && view.sessionId !== activeSession && !inRoom) {
     // Flag the row instead — once, however many times the mux replays the gate.
     const sub = convRows.get(view.sessionId)?.querySelector(".conv-sub");
     if (sub && sub.querySelector(".chip.waiting") === null) sub.prepend(waitingChip());
@@ -1273,10 +1285,10 @@ async function openSession(id) {
     acceptFrame({ type: "session/event", sessionId: id, ...entry });
   }
   flushQueued();
-  for (const gate of gates.values()) if (gate.sessionId === id) renderGate(gate);
+  await loadRoomInfo(); // before the gate replay, so a member's gate is found on a cold open
+  for (const gate of gates.values()) if (gate.sessionId === id || memberSessionIds().has(gate.sessionId)) renderGate(gate);
   toTail();
   status(`session ${id}`);
-  void loadRoomInfo();
 }
 
 /** Start a fresh conversation. No session is created until the first prompt —
