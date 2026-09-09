@@ -42,6 +42,7 @@ import { ARCHIVED_KEY, bucketFor, isBotKey, UNGROUPED_KEY } from "./grouping.js"
 import { proposeBotId } from "./botId.js";
 import { foldChannelName } from "./channelName.js";
 import { HOST_NAME, speakerFor } from "./speaker.js";
+import { avatarGlyph, roundEndLine } from "./room.js";
 
 /** Rendered in place of a value the host did not give us. */
 const EM = "—";
@@ -211,6 +212,22 @@ function index(view, node) {
  * @param {Record<string, any>} view @returns {HTMLElement}
  */
 function bubbleNode(view) {
+  /* A member's answer: the bot's own lane and name, an avatar glyph the eye
+   * learns, markdown like Kairos's. Attribution is per MESSAGE here - the
+   * room log carries several voices - which is what `speaker` (per session)
+   * could never say (R12's last mile). */
+  if (view.role === "bot") {
+    const wrap = el("div", "msg k bot");
+    const who = el("div", "who");
+    who.append(el("span", "avatar", avatarGlyph(String(view.bot))), el("span", "who-name", String(view.name ?? view.bot)));
+    wrap.append(who);
+    const bubble = el("div", "bubble md-bubble");
+    const md = renderMarkdown(String(view.text ?? ""));
+    bubble.append(md.node);
+    if (md.doc) wrap.classList.add("doc");
+    wrap.append(bubble);
+    return wrap;
+  }
   const operator = view.role === "operator";
   const injected = operator && typeof view.source === "string" && view.source !== "user";
   if (injected) return contextRow(view);
@@ -306,6 +323,14 @@ function thinkRow(text) {
   return node;
 }
 
+/** A room fact as one quiet centred line: the round end today. @param {Record<string, any>} view */
+function roomLineNode(view) {
+  const node = el("div", "room-line");
+  node.append(el("span", "room-line-text", view.line === "round-end" ? roundEndLine(view) : dash(view.text)));
+  node.title = dash(view.text);
+  return node;
+}
+
 /* ---------- transcript: tool cards ---------- */
 
 /**
@@ -355,6 +380,7 @@ function fillResult(node, card) {
     const firstLine = dash(card.text).split("\n").find((l) => l.trim() !== "") ?? "";
     sum.textContent = (meta ?? firstLine).slice(0, 160);
   }
+  if (node.dataset.tool === "dispatch") node.classList.add("dispatch");
 }
 
 /**
@@ -737,6 +763,7 @@ function accept(view) {
   honourSurfaceOp(view);
   if (view.kind === "bubble") place(view, bubbleNode(view));
   else if (view.kind === "card") acceptCard(view);
+  else if (view.kind === "room-line") place(view, roomLineNode(view));
 }
 
 /**

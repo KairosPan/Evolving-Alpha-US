@@ -1436,3 +1436,27 @@ body {
 .ch-session:hover { background: var(--active-bg); }
 .ch-session.archived { color: var(--dim); }
 .ch-session-title { min-width: 0; }
+
+/* ---------- rooms: attributed voices, room lines, the strip ---------- */
+
+.msg.bot .who { display: flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0.04em; }
+.msg.bot .avatar { font-size: 11px; color: var(--accent); }
+.msg.bot .bubble { border-left: 3px solid var(--accent); }
+
+.room-line {
+  align-self: center;
+  max-width: 88%;
+  margin: 4px 0;
+  padding: 3px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-chip);
+  font: 11px var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--dim);
+  text-align: center;
+}
+
+/* the dispatch card reads as a line: who was called, how, and who was NOT */
+.card.dispatch { border-left-color: var(--accent); }
+.card.dispatch .kind { color: var(--accent); }
+.card.dispatch .sum { color: var(--text); }
