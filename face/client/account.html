@@ -1,30 +1,43 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Account — KAIROS</title>
-<!-- Absolute paths, same reason as index.html and market.html: the page is
-     served at `/account` (static.ts's exact route) while its assets live under
-     the `/client` prefix, so a relative href would ask for `/chat.css` and
-     404. -->
 <link rel="stylesheet" href="/client/chat.css">
+<link rel="stylesheet" href="/client/account.css">
 </head>
-<body class="inst-body">
-<!-- The frame only. Every reading below - the balances, the positions, the
-     orders, and the state of both order gates - is built by account.js from
-     /data/account.json through the DOM API, so this file holds no account data
-     and can never be stale against the payload. -->
-<main class="inst-wrap">
-  <header class="inst-head">
-    <a class="inst-mark" href="/">KAIROS</a>
-    <span class="inst-title">Account</span>
-    <a class="inst-link" href="/market">market →</a>
-    <span id="stamp" class="inst-note"></span>
-    <button id="refresh" class="inst-refresh" type="button" title="re-fetch">refresh</button>
+<body class="account-body">
+<nav class="rail account-rail" aria-label="primary navigation">
+  <a class="account-logo" href="/" aria-label="Kairos 首页">K</a>
+  <a class="rail-btn" href="/market" title="Market" aria-label="Market">
+    <svg class="rail-glyph" viewBox="0 0 18 18" width="16" height="16" aria-hidden="true"><polyline points="2,13 6.5,8 10,10.5 16,3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><polyline points="12,3.5 16,3.5 16,7.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span class="rail-label">market</span>
+  </a>
+  <a class="rail-btn" href="/" title="Strategy" aria-label="Strategy"><span class="rail-glyph">❖</span><span class="rail-label">strategy</span></a>
+  <a class="rail-btn rail-account active" href="/account" title="Account" aria-label="Account" aria-current="page">
+    <svg class="rail-glyph" viewBox="0 0 18 18" width="16" height="16" aria-hidden="true"><rect x="2" y="4.5" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11.5 9.5h4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="11.8" cy="9.5" r="1" fill="currentColor"/></svg>
+    <span class="rail-label">account</span>
+  </a>
+</nav>
+<div class="account-workspace">
+  <header class="account-topbar">
+    <a class="account-brand" href="/">KAIROS</a><span class="account-divider" aria-hidden="true">/</span><span>Account</span>
+    <a class="account-back" href="/">返回对话 <span aria-hidden="true">↗</span></a>
   </header>
-  <div id="root"><p class="inst-note">loading…</p></div>
-</main>
+  <main class="account-main">
+    <div class="account-heading">
+      <div><p class="account-eyebrow">PORTFOLIO</p><h1>账户总览</h1></div>
+      <div class="account-refresh-wrap">
+        <span id="stamp" class="account-stamp" role="status"></span>
+        <button id="refresh" class="account-button" type="button">
+          <svg viewBox="0 0 18 18" width="15" height="15" aria-hidden="true"><path d="M14.5 7a5.8 5.8 0 1 0 .2 3M14.5 3v4h-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>刷新</span>
+        </button>
+      </div>
+    </div>
+    <div id="root" aria-busy="true"><div class="account-loading" role="status">正在读取账户…</div></div>
+  </main>
+</div>
 <script type="module" src="/client/account.js"></script>
 </body>
 </html>

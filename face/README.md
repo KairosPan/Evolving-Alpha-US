@@ -85,10 +85,15 @@ Two read-only pages beside the chat, reached from the primary navigation rail
 and from each other: **`/market`** (above strategy) — the composite tape, the
 bed's maturity rail, breadth, and both screens — and **`/account`** (at the
 bottom of the rail) — balances, positions, Alpaca's most recent 50 orders
-(all statuses, not just the open ones), and the order-gate strip. The only
-interaction on either page is `refresh`: nothing here places, cancels, or
-changes anything, and the gate strip DISPLAYS what the two order gates compute
-to rather than operating them.
+(all statuses, not just the open ones). Account uses a compact trading-console
+layout: total equity first, then cash, buying power and unrealized P&L, with
+positions and orders in tabs. Symbol search and order-status filters narrow the
+loaded rows only; they do not query a complete order history. Unrealized P&L is
+shown only when every position reports its amount. Account and order-gate
+details stay collapsed until opened. Both pages remain read-only: refresh
+re-reads the snapshot, and no control places or cancels an order, changes an
+account, or operates a gate. The account environment badge follows the actual
+read hostname: only `paper-api.alpaca.markets` is labelled Paper.
 
 Each page fetches one endpoint — `/data/market.json`, `/data/account.json` —
 and each endpoint is a thin cache in front of ONE producer: `scripts/face_data.py`,
@@ -107,10 +112,12 @@ positions.
 The account keys are inherited by the face process, not read per request — the
 same trust posture as the dsh MCP mount. Without them `/account` is not an
 error page: the producer answers `available: false` with the reason AND the
-real computed gate strip, because the gate reads the environment and stays
-computable with no broker client at all. `ALPACA_KIT_ENABLE_ORDERS` stays
+real computed gate state, because the gate reads the environment and stays
+computable with no broker client at all. The redesigned account view presents
+this as an unconnected account rather than a zero balance, with the gate state
+available in its collapsed details. `ALPACA_KIT_ENABLE_ORDERS` stays
 unset, so Gate 1 reads unregistered; Gate 2 reads not-validated and points at
-the drill below — the strip states that intent rather than claiming a
+the drill below — the details state that intent rather than claiming a
 validation only a live run can give.
 
 **Timings.** A COLD `/market` — the first assembly ever, or the first after the
