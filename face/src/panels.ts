@@ -261,7 +261,7 @@ export interface PanelDeps {
   home: string;
   /** Which channel a session's directory belongs to, or `null` when it
    * belongs to none. Injected so the agent tools need no registry import. */
-  channelFor(cwd: string | undefined): Promise<{ workspaceId: string; name: string } | null>;
+  channelFor(cwd: string | undefined): Promise<{ workspaceId: string; name: string; dir: string } | null>;
   /** Run one local-agent probe: `<bin> --version`, first stdout line, `null`
    * when the binary is absent or refuses. Every `bin` that reaches this has
    * passed {@link AGENT_BIN_RE} — a bare PATH token, never a path. */
@@ -355,7 +355,7 @@ export function panelDeps(ctx: Context, cwd: string, home = resolveDshHome(undef
       if (typeof sessionCwd !== "string" || sessionCwd === "") return null;
       const ws = await workspaceRegistry.resolveByPath(sessionCwd).catch(() => undefined);
       if (ws === undefined) return null;
-      return { workspaceId: ws.id, name: ws.path.split("/").filter((p) => p !== "").pop() ?? ws.title };
+      return { workspaceId: ws.id, name: ws.path.split("/").filter((p) => p !== "").pop() ?? ws.title, dir: ws.path };
     },
     probeAgent: defaultAgentProber(),
     probeAuth: defaultAuthProber(),

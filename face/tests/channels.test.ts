@@ -463,6 +463,7 @@ async function routesFor(root: string, home: string): Promise<Map<string, WebRou
     registry, root, home,
     listSessions: async () => [],
     connectedBins: async () => ["codex"],
+    listBots: async () => [],
   });
   return new Map(routes.map((r) => [r.path, r]));
 }
@@ -475,10 +476,10 @@ async function channelNamed(routes: Map<string, WebRoute>, name: string): Promis
   return payload.channels.find((c) => c.name === name)!;
 }
 
-test("routes: exactly four paths, and every one refuses a forged Host FIRST", async () => {
+test("routes: exactly five paths, and every one refuses a forged Host FIRST", async () => {
   const routes = await routesFor(await makeRoot(), await mkdtemp(join(tmpdir(), "face-rt-")));
   assert.deepEqual([...routes.keys()].sort(), [
-    "/data/channels", "/data/channels.json", "/data/channels/agents", "/data/channels/overview",
+    "/data/channels", "/data/channels.json", "/data/channels/agents", "/data/channels/bots", "/data/channels/overview",
   ]);
   for (const [path, route] of routes) {
     const forged = fakeRes();
@@ -582,6 +583,7 @@ test("routes: POST /data/channels stays 200 even when the reconcile AFTER creati
     // awaits this first) - simulates the EACCES/lock-timeout/EIO class I3
     // is about, entirely decoupled from directory creation itself.
     connectedBins: async () => { throw new Error("EACCES: permission denied"); },
+    listBots: async () => [],
   });
   const create = new Map(routes.map((r) => [r.path, r])).get("/data/channels")!;
 
@@ -630,4 +632,49 @@ test("createChannel takes a name in any script and creates it in NFC", async () 
   await assert.rejects(createChannel(root, NFC), (err: HttpError) => err.status === 409, "one word, two normalizations, one directory");
   assert.equal((await createChannel(root, "Upper-Case_9")).name, "Upper-Case_9", "case is the operator's to choose");
   assert.equal((await createChannel(root, "存储超级周期")).name, "存储超级周期", "a Chinese name is a name");
+});
+
+test("the overview carries the bot roster and every preset the roster reports; POST /data/channels/bots writes it under the members cap", async () => {
+  const root = await makeRoot();
+  const home = await mkdtemp(join(tmpdir(), "face-home-"));
+  const { registry } = fakeRegistry();
+  const built: WebRoute[] = [];
+  registerChannelRoutes({ register: (route) => built.push(route) }, {
+    registry, root, home,
+    listSessions: async () => [], connectedBins: async () => [],
+    listBots: async () => [
+      { id: "buffett", name: "巴菲特型", listed: true },
+      { id: "cracked", name: "cracked", broken: "not a list", listed: true },
+    ],
+  });
+  const routes = new Map(built.map((r) => [r.path, r]));
+  const ws = await channelNamed(routes, "alpha");
+
+  const ok = fakeRes();
+  await routes.get("/data/channels/bots")!.handler(
+    postReq(JSON.stringify({ workspaceId: ws.workspaceId, bots: ["buffett", "ghost"] })), ok.res);
+  assert.equal(ok.out.status, 200);
+  const okBody = JSON.parse(ok.out.body) as { bots: string[] };
+  assert.deepEqual(okBody.bots, ["buffett", "ghost"], "an id the mount does not report is kept and shown (Rule 5), not dropped");
+
+  const over = fakeRes();
+  await routes.get("/data/channels/overview")!.handler(postReq(JSON.stringify({ workspaceId: ws.workspaceId })), over.res);
+  const overBody = JSON.parse(over.out.body) as { bots: string[]; allBots: { id: string; broken?: string }[] };
+  assert.deepEqual(overBody.bots, ["buffett", "ghost"]);
+  assert.deepEqual(overBody.allBots.map((b) => b.id), ["buffett", "cracked"]);
+  assert.equal(overBody.allBots[1].broken, "not a list");
+
+  const tooMany = fakeRes();
+  await routes.get("/data/channels/bots")!.handler(
+    postReq(JSON.stringify({ workspaceId: ws.workspaceId, bots: ["a1", "a2", "a3", "a4", "a5", "a6", "a7"] })), tooMany.res);
+  assert.equal(tooMany.out.status, 400);
+  assert.match((JSON.parse(tooMany.out.body) as { error: string }).error, /6/);
+
+  const junk = fakeRes();
+  await routes.get("/data/channels/bots")!.handler(postReq(JSON.stringify({ workspaceId: ws.workspaceId, bots: ["Not Valid"] })), junk.res);
+  assert.equal(junk.out.status, 400);
+
+  const nowhere = fakeRes();
+  await routes.get("/data/channels/bots")!.handler(postReq(JSON.stringify({ workspaceId: "ws-none", bots: [] })), nowhere.res);
+  assert.equal(nowhere.out.status, 404);
 });

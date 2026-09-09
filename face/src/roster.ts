@@ -16,6 +16,7 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { withFileLock, writeFileAtomic } from "@deepseek-ai/dsh-atomic-write";
+import { isBotId } from "./bots.ts";
 import { HttpError } from "./http.ts";
 
 /** Diagnostic label, the same string every other `${BIN}:`-prefixed line in
@@ -36,7 +37,7 @@ const ROSTER_LOG_FILE = ["face", "roster.log"] as const;
  * than guess. */
 export interface RosterFile {
   version: 1;
-  channels: Record<string, { agents: string[] }>;
+  channels: Record<string, { agents: string[]; bots: string[] }>;
 }
 
 const pathOf = (home: string): string => join(home, ...ROSTER_FILE);
@@ -69,7 +70,15 @@ export async function readRosters(home: string): Promise<{ rosters: RosterFile["
       if (typeof bin !== "string" || bin === "" || bins.includes(bin)) continue;
       bins.push(bin);
     }
-    rosters[id] = { agents: bins };
+    const { bots } = row as { bots?: unknown };
+    const ids: string[] = [];
+    if (Array.isArray(bots)) {
+      for (const id of bots) {
+        if (typeof id !== "string" || !isBotId(id) || ids.includes(id)) continue;
+        ids.push(id);
+      }
+    }
+    rosters[id] = { agents: bins, bots: ids };
   }
   return { rosters, corrupt: false };
 }
@@ -106,7 +115,7 @@ async function update(
 export async function seedRoster(home: string, workspaceId: string, bins: readonly string[]): Promise<void> {
   await update(home, ({ rosters, corrupt }) => {
     if (corrupt || Object.hasOwn(rosters, workspaceId)) return null;
-    return { ...rosters, [workspaceId]: { agents: [...bins] } };
+    return { ...rosters, [workspaceId]: { agents: [...bins], bots: [] } };
   });
 }
 
@@ -127,7 +136,7 @@ export async function setRoster(home: string, workspaceId: string, bins: readonl
         `${pathOf(home)} is corrupt and cannot be safely merged into - repair or remove it by hand, then set the roster again`,
       );
     }
-    return { ...rosters, [workspaceId]: { agents: [...new Set(bins)] } };
+    return { ...rosters, [workspaceId]: { agents: [...new Set(bins)], bots: rosters[workspaceId]?.bots ?? [] } };
   });
 }
 
@@ -161,4 +170,39 @@ export async function logRosterWrite(home: string, workspaceId: string, agents: 
 export async function rosterFor(home: string, workspaceId: string): Promise<string[] | null> {
   const { rosters } = await readRosters(home);
   return Object.hasOwn(rosters, workspaceId) ? [...rosters[workspaceId].agents] : null;
+}
+
+/** The operator's explicit write of a channel's BOT roster: exactly `ids`,
+ * deduplicated in order. Refuses a corrupt file for the reason `setRoster`
+ * gives, and refuses any id outside the bot grammar before it can reach the
+ * file - the ids become directory names under `bots/` when the engine mounts
+ * them. Agents are left as they were. The cap on members (ROOM_CAPS) is the
+ * route's to apply, not this store's: the store records what it is told. */
+export async function setBots(home: string, workspaceId: string, ids: readonly string[]): Promise<void> {
+  const bad = ids.filter((id) => !isBotId(id));
+  if (bad.length > 0) throw new HttpError(400, `not a bot id: ${bad.join(", ")}`);
+  await update(home, ({ rosters, corrupt }) => {
+    if (corrupt) {
+      throw new HttpError(409, `${pathOf(home)} is corrupt and cannot be safely merged into - repair or remove it by hand, then set the roster again`);
+    }
+    return { ...rosters, [workspaceId]: { agents: rosters[workspaceId]?.agents ?? [], bots: [...new Set(ids)] } };
+  });
+}
+
+/** This channel's bot roster, or `null` when the channel has no entry (or the file is corrupt). */
+export async function botsFor(home: string, workspaceId: string): Promise<string[] | null> {
+  const { rosters } = await readRosters(home);
+  return Object.hasOwn(rosters, workspaceId) ? [...rosters[workspaceId].bots] : null;
+}
+
+/** The bots twin of {@link logRosterWrite}: its own line kind, same file, same never-throws contract. */
+export async function logBotsWrite(home: string, workspaceId: string, bots: readonly string[]): Promise<void> {
+  const line = `${new Date().toISOString()} bots ${workspaceId} = [${bots.join(", ")}]`;
+  console.log(`${BIN}: ${line}`);
+  try {
+    await mkdir(join(home, ROSTER_LOG_FILE[0]), { recursive: true });
+    await appendFile(join(home, ...ROSTER_LOG_FILE), `${line}\n`, { encoding: "utf8", mode: 0o600 });
+  } catch (err) {
+    console.error(`${BIN}: failed to append to ${join(home, ...ROSTER_LOG_FILE)} - the bots write itself still stands:`, err);
+  }
 }

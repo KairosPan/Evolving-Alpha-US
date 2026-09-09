@@ -13,9 +13,14 @@ import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { load } from "js-yaml";
 import type { RouteRegistrar } from "./static.ts";
+import { isBotId } from "./bots.ts";
 import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 import { FORBIDDEN, HttpError, readBody } from "./http.ts";
-import { logRosterWrite, rosterFor, seedRoster, setRoster } from "./roster.ts";
+import { botsFor, logBotsWrite, logRosterWrite, rosterFor, seedRoster, setBots, setRoster } from "./roster.ts";
+
+/* TODO(Task 3): import ROOM_CAPS from ./room-rules.ts and drop this local
+ * copy once room-rules.ts lands - see room-rules.ts step 9. */
+const MAX_MEMBERS = 6;
 
 /** Diagnostic label, the same string every other `${BIN}:`-prefixed line in this
  * program uses (`roster.ts:24`, `main.ts:26`) - copied rather than imported,
@@ -493,6 +498,8 @@ export interface ChannelRouteDeps {
   listSessions(): Promise<SessionHeadLike[]>;
   /** The bins a newly adopted channel's roster is seeded from. */
   connectedBins(): Promise<string[]>;
+  /** Every bot directory with dsh's view merged in (`listBots` in bots.ts, narrowed). */
+  listBots(): Promise<{ id: string; name: string; broken?: string; listed: boolean }[]>;
 }
 
 /** Mount the four channel routes. Same trust posture as data.ts: the fence
@@ -562,6 +569,8 @@ export function registerChannelRoutes(webServer: RouteRegistrar, deps: ChannelRo
           status: await readChannelStatus(channel.dir),
           body: await readChannelBody(channel.dir),
           agents: await rosterFor(deps.home, channel.workspaceId) ?? [],
+          bots: await botsFor(deps.home, channel.workspaceId) ?? [],
+          allBots: await deps.listBots(),
         });
       } catch (err) {
         if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
@@ -591,6 +600,36 @@ export function registerChannelRoutes(webServer: RouteRegistrar, deps: ChannelRo
          * `logRosterWrite`), not just a bare, undated stdout line. */
         await logRosterWrite(deps.home, id, agents as string[]);
         return send(res, 200, { ok: true, agents: await rosterFor(deps.home, id) ?? [] });
+      } catch (err) {
+        if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
+        return send(res, 500, { ok: false, error: "roster write failed" });
+      }
+    },
+  });
+
+  webServer.register({
+    kind: "exact",
+    path: "/data/channels/bots",
+    handler: async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+      if (!guardPost(req, res)) return;
+      try {
+        const { workspaceId, bots } = await bodyOf(req);
+        const { channels } = await reconcile();
+        if (!channels.some((c) => c.workspaceId === workspaceId)) return send(res, 404, { ok: false, error: "no such channel" });
+        if (!Array.isArray(bots) || bots.some((b) => !isBotId(b))) {
+          return send(res, 400, { ok: false, error: "bots must be an array of bot ids" });
+        }
+        const ids = [...new Set(bots as string[])];
+        /* The cap is the room's, not the store's: six members is what one
+         * operator message may cost (spec §4.6, P5). Refused here, before the
+         * write, so the file never holds a roster the engine would refuse. */
+        if (ids.length > MAX_MEMBERS) {
+          return send(res, 400, { ok: false, error: `a channel rosters at most ${MAX_MEMBERS} bots` });
+        }
+        const id = workspaceId as string;
+        await setBots(deps.home, id, ids);
+        await logBotsWrite(deps.home, id, ids);
+        return send(res, 200, { ok: true, bots: await botsFor(deps.home, id) ?? [] });
       } catch (err) {
         if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
         return send(res, 500, { ok: false, error: "roster write failed" });

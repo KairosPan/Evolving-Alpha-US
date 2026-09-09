@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { logRosterWrite, readRosters, rosterFor, seedRoster, setRoster } from "../src/roster.ts";
+import { botsFor, logBotsWrite, logRosterWrite, readRosters, rosterFor, seedRoster, setBots, setRoster } from "../src/roster.ts";
 
 const home = (): Promise<string> => mkdtemp(join(tmpdir(), "face-roster-"));
 
@@ -102,4 +102,35 @@ test("logRosterWrite swallows a write failure - the log is a record, never a gat
   // ENOTDIR - the write failure the durable half of this log can hit for real.
   await writeFile(join(h, "face"), "not a directory");
   await assert.doesNotReject(logRosterWrite(h, "ws-1", ["claude"]));
+});
+
+test("bots ride beside agents: seeded empty, set independently, and a legacy file reads bots as []", async () => {
+  const h = await home();
+  await seedRoster(h, "ws-1", ["claude"]);
+  assert.deepEqual(await botsFor(h, "ws-1"), []);
+  await setBots(h, "ws-1", ["buffett", "speculator", "buffett"]);
+  assert.deepEqual(await botsFor(h, "ws-1"), ["buffett", "speculator"], "deduplicated, order kept");
+  assert.deepEqual(await rosterFor(h, "ws-1"), ["claude"], "setBots leaves agents alone");
+  await setRoster(h, "ws-1", ["codex"]);
+  assert.deepEqual(await botsFor(h, "ws-1"), ["buffett", "speculator"], "setRoster leaves bots alone");
+  assert.equal(await botsFor(h, "ws-nope"), null);
+  // a file written before bots existed
+  await mkdir(join(h, "face"), { recursive: true });
+  await writeFile(join(h, "face", "channels.json"), JSON.stringify({ version: 1, channels: { "ws-old": { agents: ["claude"] } } }));
+  assert.deepEqual((await readRosters(h)).rosters["ws-old"], { agents: ["claude"], bots: [] });
+});
+
+test("setBots refuses over a corrupt file and refuses non-id junk", async () => {
+  const h = await home();
+  await corrupt(h);
+  await assert.rejects(setBots(h, "ws-1", ["buffett"]), /corrupt/i);
+  const clean = await home();
+  await assert.rejects(setBots(clean, "ws-1", ["Not An Id"]), (err: Error) => /bot id/.test(err.message));
+});
+
+test("logBotsWrite appends its own dated line kind", async () => {
+  const h = await home();
+  await logBotsWrite(h, "ws-1", ["buffett"]);
+  const log = await readFile(join(h, "face", "roster.log"), "utf8");
+  assert.match(log, /^\d{4}-\d{2}-\d{2}T[^ ]+ bots ws-1 = \[buffett\]\n$/);
 });
