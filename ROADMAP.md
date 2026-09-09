@@ -5,4 +5,4 @@ Part I — forward: (1) first real strategy directory through a full research cy
 order gate (deferred); (4) FINRA/float live endpoints; (5) second data vendor.
 
 Part II — built log: 2026-08-29 skeleton reset
-(spec `docs/superpowers/specs/2026-08-29-market-strategy-account-skeleton-design.md`).
+(spec `docs/superpowers/specs/2026-08-29-market-strategy-account-skeleton-design.md`); 2026-09-07..09 bots and rooms (spec `docs/superpowers/specs/2026-09-07-bots-and-rooms-design.md`, plans 1–4): bots as dsh presets with a home, rooms with `dispatch`, member sessions, the strip, the live drill; charter §7.1 amended.
