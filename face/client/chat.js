@@ -1761,6 +1761,7 @@ async function send() {
       flow().querySelector(".picker")?.remove();
       await refreshSessions();
       markActive();
+      void loadRoomInfo(); // a session born in a channel with bots gets its strip now, not on the next reopen
     }
     /* The operator's `@` (spec §4.4 rule 1): resolved on the server against
      * the channel's roster, appended to the room as the operator's own message
