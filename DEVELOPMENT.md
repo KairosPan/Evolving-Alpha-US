@@ -1,7 +1,8 @@
 # Kairos Workbench — Development Reference
 
-**Status:** living, as-built · **Owner:** the operator · **Last full pass:** 2026-09-08 on
-`main` @ `b6dbce0` (388 pytest; 239 face tests, 234 pass + 5 skipped without `FACE_SMOKE`; typecheck clean).
+**Status:** living, as-built · **Owner:** the operator · **Last full pass:** 2026-09-09 on
+`feat/rooms` @ `fe1b8d1` (388 pytest; 313 face tests, 307 pass + 6 skipped without `FACE_SMOKE`;
+313 under `FACE_SMOKE=1`; typecheck clean).
 
 **Authority.** `Kairos-Design.md` (the charter) outranks this document on intent. This document
 describes mechanism *as built*: where it disagrees with the code, the code is the fact and this
@@ -40,8 +41,9 @@ external services on five hostnames.
  ┌─ kairos-face  (Node 22, `tsx src/main.ts`, cwd = repo root) ────────────────────────┴──┐
  │  hosts DeepSeek Harness (dsh 0.1.1-rc.2) IN-PROCESS from profile `face`               │
  │  ├─ dsh-base bundle: LLM (deepseek), sessions, tools (§3.6), sandbox, approvals, skills│
- │  ├─ face overlay rows (eleven, §4.3): webserver · connection · api-gateway · storage   │
- │  │   chain · directory-picker · host-runner · ask-user · agent-presets                 │
+ │  ├─ face overlay rows (twelve, §4.3): webserver · connection · api-gateway · storage   │
+ │  │   chain · directory-picker · host-runner · ask-user · projection-cache ·            │
+ │  │   agent-presets                                                                     │
  │  ├─ face routes: `/` `/market` `/account` `/client/*` `/data/*`                        │
  │  ├─ Gate 2: registered by `bootFace` on `tools/pre-execute` + `tools.guard`;           │
  │  │   the rules live in `src/orders.ts`                                                 │
@@ -454,16 +456,30 @@ display name folds to a proposal through `proposeBotId` (`src/bots.ts`, twinned 
 carrying `{{` is refused twice, at `rejectSoul` and again at the plugin's `validateBotConfig`: the
 system prompt is a strict template with no escape.
 
-State on 2026-09-07: no bot exists. `bots/kairos` is the inert default — an empty composition
-(`[]`) every session that names no preset joins, so Kairos's tools stay exactly the host's — and
-`bots/_template` is the copy source, invisible to dsh and refused as an id. Both are tracked; a
-created bot is the operator's to commit.
+State on 2026-09-09: two bot directories are tracked and three are not. `bots/kairos` is the
+inert default — an empty composition (`[]`) every session that names no preset joins, so Kairos's
+tools stay exactly the host's — and `bots/_template` is the copy source, invisible to dsh and
+refused as an id. `bots/buffet/`, `bots/drill-bull/` and `bots/drill-bear/` are the operator's own
+voices and are untracked: a created bot is the operator's to commit.
+
+`preset.yml` may carry one key beyond `name` and `description`: `model: <provider>/<model>`
+(`MODEL_ROUTE_RE`, written by `renderPresetMeta`). It is **face-only**: dsh's own metadata reader
+keeps `name`, `description` and `order` and drops it. The room engine resolves it per bot, once
+per room (`selectionFor` in `src/room.ts`), and falls back to the tree's default route with a
+logged, model-visible note when the route is not one `provider/model` pair or the tree does not
+serve it.
+
+A bot in a room gets a member session **per room** — one per (room, bot) pair, not one per bot.
+Its header is the whole membership rule: `parentSession` = the room session, `agentPreset` = the
+bot, `cwd` = the channel directory, and the `read-only` permission preset pinned inside creation
+setup so no create→set window exists. `src/room.ts` creates it (`materializeMember`) and resumes
+it; nothing creates one by hand, and a session that only looks like one is not a member (§9, R16).
 
 ---
 
 ## 4. Frontend: the face server (`face/src`)
 
-4,189 lines of TypeScript across 16 files, run directly by `tsx` — no build step, plus one plain
+5,802 lines of TypeScript across 19 files, run directly by `tsx` — no build step, plus one plain
 `.js` file outside `src/` (`face/plugins/bot.js`, §3.7 — a bot's composition resolves it by path,
 from a directory where no `node_modules` is reachable, so it must import nothing). Pins:
 `DSH_PIN = 0.1.1-rc.2` (every `@deepseek-ai/dsh-*` dependency, declared and installed) and
@@ -519,43 +535,49 @@ instruments, channels, the master rail, bots, the upgrade order, and the four dr
 8. Print `kairos-face: http://<host>:<port>/ (profile: …)` from the bound service.
 
 One `bootFace` per process: given a `dshHome` (as the tests do; `main.ts` passes none) it sets
-`process.env.DSH_HOME` permanently, which is why the five real-boot tests live in separate
+`process.env.DSH_HOME` permanently, which is why the six real-boot tests live in separate
 files.
 
 ### 4.2 Module table
 
 | File | Responsibility |
 |---|---|
-| `main.ts` | entry: chdir, signal handlers, boot, mount every route family, print the URL |
+| `main.ts` | entry: chdir, signal handlers, boot, mount every route family (the room engine included), print the URL |
 | `boot.ts` | the mirror of dsh CLI's private `prepareProfile / composeProfile / runProfile` against the pinned typings; the three boot assertions (the Gate 2 services, `ask_user_question` in the live registry, a resolvable default preset); Gate 2 registration |
-| `overlay.ts` | the eleven host rows `dsh-base` does not mount, `satisfies`-checked against each plugin's own config type |
+| `overlay.ts` | the twelve host rows `dsh-base` does not mount, `satisfies`-checked against each plugin's own config type |
 | `orders.ts` | Gate 2 decision logic, pure: `isOrderTool`, `effectiveApprovalPolicy`, `orderApprovalDecision`, `describeOrder`, `hasApprovalGrant`, `isGatedTool`, `orderGuardReason`, `auditOrderTools`, `OPERATOR_GATED_MARKER` — depends on nothing (structural types only) |
 | `setup.ts` | one-shot `$DSH_HOME/profiles/<name>` creation; refuses to overwrite |
 | `http.ts` | `HttpError`, `readBody` (4,096 B cap → 413), the fixed `FORBIDDEN` body |
 | `static.ts` | `/`, `/market`, `/account`, `/client/*` with a traversal-safe resolver; the `RouteRegistrar` contract |
 | `data.ts` | `/data/{market,account}.json`: fixed-argv `execFile` of the producer, TTL cache, single-flight, stale-on-error; **the trust fence every `/data` route reuses** |
 | `sessions.ts` | session delete (on disk, cwd-fenced to the repo) and the reversible archive set with tombstones in `$DSH_HOME/face/archived.json` |
-| `roster.ts` | `$DSH_HOME/face/channels.json`, the per-channel agent roster: locked, atomic, fail-closed; `roster.log` append |
-| `channels.ts` | channel = `strategies/<dir>` + workspace-registry identity; reconcile dirs ↔ registry ↔ sessions; `status.yaml` / `THESIS.md` / `journal.md` / `backtests/` readers; create-from-template; four routes |
+| `roster.ts` | `$DSH_HOME/face/channels.json`, the per-channel agent AND bot rosters: locked, atomic, fail-closed; `roster.log` append, one line kind per roster |
+| `channels.ts` | channel = `strategies/<dir>` + workspace-registry identity; reconcile dirs ↔ registry ↔ sessions; `status.yaml` / `THESIS.md` / `journal.md` / `backtests/` readers; create-from-template; five routes — the overview answers `bots` (this channel's roster) and `allBots` (every preset dsh reports) beside the agent roster |
 | `agents.ts` | exec recipes for `claude` and `codex` (fixed argv, prompt on stdin, scrubbed env, `--restricted` / `--sandbox read-only`), the spawn runner, the `agent_<bin>` tool with the roster check on execute, tool sync |
 | `bots.ts` | bots = `bots/<id>/` agent presets: `isBotId`, `renderComposition` (the persona text written into the composition), `createBot`, `updateSoul`, `listBots` (dsh's roster merged in, `broken`/`listed`); three routes |
+| `room-rules.ts` | the room's pure rules: `ROOM_CAPS`, `resolveMentions` (by id, by one-token name), `finalTextOf` + `isPass`, `validateDispatch` (names the roster), `dispatchResultText` (names who was not called), `roomLinesOf` + `formatDelta` + `memberPrompt` (the attributed delta and the four standing rules), `roundEndText`, `parseModelRoute`; the `room` message-source vocabulary |
+| `room-projection.ts` | the `room` projection unit: a pure fold of the known events that carry room facts (`dispatch` calls, room-sourced messages, turn boundaries) into `{kind, round, members, organizing}`; zod schemas; `stateVersion` |
+| `room.ts` | the engine on the root context: `installRoom` (the `dispatch` tool, the unit, the bus); `RoomEngine` — members created with `ctx.agents.create` (`parentSession`, `agentPreset`, the model ref, `read-only` inside `setup`) or resumed; `driveTurn` with the extending deadline and the hard-cap cancel (`keepInbox`); rounds parallel/serial, peer continuations, the three caps, `settled`/`capped`/`superseded`; answers appended to a quiet room log, the round-end `followup`; `say` (the operator's `@`), `describe`; two routes |
 | `persona.ts` | Kairos's deployment persona: `readPersona` validates the strict `{{}}` template and refuses the boot on a bad file |
 | `plugins/bot.js` | the `kairos-bot` composition plugin: scoped `deployment:persona` section + allow-list `tools.restrict` (`expandAllow` resolves `mcp__*__<raw>` against the live tree), dependency-free — so a preset can name it by path with nothing to install (Node would resolve a bare specifier from here, but there is nothing to resolve) |
-| `panels.ts` | the master rail's feeds: local-agent roster (probe, auth, connect, disconnect), memory (skills), plugins (loader rows + tool schemas); builds `PanelDeps` from the context |
+| `panels.ts` | the master rail's feeds: local-agent roster (probe, auth, connect, disconnect), memory (skills), plugins (loader rows + tool schemas); builds `PanelDeps` from the context, whose `channelFor` answers `{workspaceId, name, dir}` — the `dir` is what the room engine gives a member as its `cwd` |
 | `version.ts` | the two pins |
 
 ### 4.3 The overlay rows
 
-Composed last, winning silently over the operator's patch and the home layer: `storage`,
-`storage-json` (root `$DSH_HOME/storages`), `storage-domain` (json), `workspace` (the registry
-`api-gateway` injects), `directory-picker`, `api-gateway` (`dsh-host-apiproxy`),
+Twelve rows, composed last, winning silently over the operator's patch and the home layer:
+`storage`, `storage-json` (root `$DSH_HOME/storages`), `storage-domain` (json), `workspace` (the
+registry `api-gateway` injects), `directory-picker`, `api-gateway` (`dsh-host-apiproxy`),
 `cordis-host-runner`, `webserver` (`127.0.0.1:<port>` — loopback-only is the contract),
 `connection` (`trustedHosts: []`, the `/api` Host fence), `tool-ask-user` (the model-facing half
-of `userQuestions`, in no upstream bundle), `agent-presets` (the bot roster, rooted at `bots/`
-with `trust: system`, `includeUserRoot: false` and `default: kairos` — §3.7; `system` because the
-face authors by its own filesystem write, and `user` would arm the gateway's `agentPreset.copy` /
-`remove` / `openDocument` RPCs over a git-tracked directory — trust gates nothing about mounting).
-A patch of the operator's aimed at
+of `userQuestions`, in no upstream bundle), `session-projection-cache` (`writeEveryEvents: 200`,
+`writeIntervalMs: 5000` — the persisted projection checkpoints `session.list` reads for a cold
+session, written at every `turn/end` and at disposal and throttled between by those two required
+keys; the row that closes R13, and what lets a cold room keep its member states), `agent-presets`
+(the bot roster, rooted at `bots/` with `trust: system`, `includeUserRoot: false` and
+`default: kairos` — §3.7; `system` because the face authors by its own filesystem write, and
+`user` would arm the gateway's `agentPreset.copy` / `remove` / `openDocument` RPCs over a
+git-tracked directory — trust gates nothing about mounting). A patch of the operator's aimed at
 any of these is accepted, overridden, and never reported; a patch matching no row is also silent
 — hence the `rows.has(…)` guards around the switches.
 
@@ -582,6 +604,7 @@ in §9.
 | `GET /data/channels.json` | `channels.ts` | **reconciles on every GET**: registry `create` per directory, `attachSession`, `seedRoster`; returns `{root, channels, ungrouped, archived}` |
 | `POST /data/channels/overview` `{workspaceId}` | `channels.ts` | reconcile + `status.yaml`, thesis, the whole journal newest-first (the client folds entries past five), backtests newest-first with the newest dated one parsed as `latest`, file list, roster |
 | `POST /data/channels/agents` `{workspaceId, agents[]}` | `channels.ts` | `setRoster` → `channels.json` (409 on a corrupt file), then a dated line to `roster.log` and stdout |
+| `POST /data/channels/bots` `{workspaceId, bots[]}` | `channels.ts` | `setBots` → `channels.json` (`bots[]` beside `agents[]`; 400 an id outside the bot grammar or more than `ROOM_CAPS.maxMembers` ids, 404 no such channel, 409 a corrupt file), then a dated `bots` line to `roster.log`. The overview answers `bots` (the roster) and `allBots` (every preset dsh reports, `broken` reasons included) |
 | `POST /data/channels` `{name}` | `channels.ts` | `NAME_RE` + NFC; copies `_template` (409 if exists); a reconcile failure after the copy is a warning, not a 500 — the directory exists and a 500 would make the retry 409 |
 | `GET /data/sessions-meta.json`; `POST /data/sessions/archive`, `/delete` | `sessions.ts` | the archive set (409 on un-archiving a host-archived id — the host is add-only at this pin); delete reads the session header's `cwd` from the first zstd frame and `rm -rf`s **only if it is inside the repo root** (ids are unique across every project under `$DSH_HOME/sessions`); an unreadable header is a 404, never "safe" |
 | `GET /data/memory.json`, `POST /data/memory/skill` | `panels.ts` | the skill catalog grouped by pack; one skill's content |
@@ -590,6 +613,8 @@ in §9.
 | `GET /data/bots.json` | `bots.ts` | every directory under `bots/` in the id grammar, `listBots` merging dsh's own roster in: `broken` carries dsh's reason, `listed:false` marks a directory the roster did not report |
 | `POST /data/bots` `{name?, id?, description?, soul?}` | `bots.ts` | `createBot`: id = the one given or `proposeBotId(name)`; copies `_template` and writes `preset.yml`, `SOUL.md` and the rendered composition. 400 an id outside the grammar or reserved, 400 a soul carrying `{{` or empty, 409 the directory exists (never overwritten), 500 `_template` missing. The returned row reads `listed:false` — it is built without the roster, which re-scans on the next GET |
 | `POST /data/bots/soul` `{id, soul}` | `bots.ts` | `updateSoul`: rewrites `SOUL.md` and the composition's persona row together. 400 a bad id or a `{{` soul, 404 no such bot. Both POSTs take a 64 KiB body cap, not the shared 4,096 B — a soul is prose |
+| `POST /data/rooms/say` `{sessionId, text}` | `room.ts` | the operator's `@`: mentions resolved against the roster (by id, by one-token display name); nobody named → `addressed: []` and the client sends an ordinary prompt; else the message is appended to the room as the operator's own (never a prompt), a cold room is resumed through the gateway's own composition (`apiProxy.sessions.models`), and each named member turns. 400 a bad id or empty text, 404 not in a channel, 409 a corrupt roster |
+| `POST /data/rooms/state` `{sessionId}` | `room.ts` | the roster, the members the engine drove this boot, the caps left; never resumes |
 
 ### 4.5 Persistent state the face writes
 
@@ -599,13 +624,15 @@ in §9.
 | `$DSH_HOME/profiles/node_modules` | the profiles-module heal | every boot |
 | `$DSH_HOME/profiles/<profile>/{package.json, cordis.patch.yml, pnpm-workspace.yaml}` | `setupFaceProfile` | only when the profile *directory* is absent; an existing directory is left untouched even if one of the three files is missing |
 | `$DSH_HOME/storages/**` | dsh's storage rows | workspace registry records (`registry.create`, `attachSession`) |
+| `$DSH_HOME/storages/session_projcache.json` | dsh's projection cache (the face's overlay row) | one checkpoint record per session, written at every turn/end and at detach; what `session.list` reads for a cold session's projections |
 | `$DSH_HOME/face/archived.json` | `sessions.ts` | `{archived[], deleted[]}`; plain write |
-| `$DSH_HOME/face/channels.json` | `roster.ts` | `{version:1, channels:{<wsId>:{agents[]}}}`; file lock + atomic write, mode 0600; the one file that needs a cross-process lock because the reconcile writes on GET |
+| `$DSH_HOME/face/channels.json` | `roster.ts` | `{version:1, channels:{<wsId>:{agents[], bots[]}}}`; file lock + atomic write, mode 0600; the one file that needs a cross-process lock because the reconcile writes on GET |
 | `$DSH_HOME/face/roster.log` | `roster.ts` | append-only, one dated line per operator roster write |
 | `$DSH_HOME/face/agents.json` | `panels.ts` | `{connected:[{bin,label}]}` |
 | `$DSH_HOME/sessions/<slug>/<id>/` | `deleteSession` | removed, cwd-fenced |
 | `strategies/<name>/` | `createChannel` | copied from `_template`, never overwritten |
 | `bots/<id>/` | `createBot`, `updateSoul` | copied from `_template`; `preset.yml`, `SOUL.md` and the composition's persona row rewritten together; never overwritten by create |
+| `bots/<id>/journal/` | a bot's HOME session | workspace-write, cwd = the journal; the only directory a bot writes (the write to `../SOUL.md` is refused, proven in `room-smoke`) |
 | `dsh/profile/persona.md` | the operator | not written by the face — read by `composeFace` into the `system-prompt` row, and a malformed template refuses the boot |
 | `data/.face_cache` | the producer, not the face | |
 
@@ -682,7 +709,7 @@ only, the human half has not been run.
 
 ## 5. Frontend: the browser client (`face/client`)
 
-6,101 lines; ES modules served from `/client`, no bundler, no framework, no `innerHTML` anywhere
+6,833 lines; ES modules served from `/client`, no bundler, no framework, no `innerHTML` anywhere
 (every string lands via `textContent`).
 
 ### 5.1 Pages and files
@@ -692,12 +719,13 @@ only, the human half has not been run.
 | `index.html` | the chat app shell: master rail (strategy / agent / memory / plugin), sidebar (brand, `+ new`, conversation list, panels), main pane (topbar, transcript, detail view, composer). Holds not one byte of host data |
 | `market.html`, `account.html` | the two instruments' frames; each built entirely by its script from one endpoint |
 | `api.js` | the wire envelope: `rpc(method, payload)`, `respond(rpcId, value)`, `openMux(onFrame, …)` |
-| `mapper.js` | pure frame → view-model (`bubble`, `card`, `approval`, `question`, `gate-resolved`, `pulse`, `projection`, `ignore`); shapes pinned to `dsh-host-apiproxy@0.1.1-rc.2` |
-| `chat.js` | the impure half: sessions sidebar, transcript, composer, gates, rail panels, detail pane, strategy picker, channel page glue |
+| `mapper.js` | pure frame → view-model (`bubble`, `card`, `approval`, `question`, `gate-resolved`, `pulse`, `projection`, `room-line`, `turn`, `ignore`); shapes pinned to `dsh-host-apiproxy@0.1.1-rc.2`. Four of those views are the room's: a member's answer becomes a `bubble` with `role: "bot"` carrying `bot` and `name`, a round end becomes a `room-line`, a turn boundary becomes a `turn` (for every session, not only the one on screen), and the operator's `@` stays an operator bubble carrying `mention` |
+| `chat.js` | the impure half: sessions sidebar, transcript, composer, gates, rail panels, detail pane, strategy picker, channel page glue; and the room: the participants strip (`renderStrip`, refetched by `loadRoomInfo`), a member's gate rendered inline in its room (`gateWho`), members folded under their room row, and the composer's `@` path |
 | `render.js` | pretty renderers for alpaca-kit tool results; returns null unless both tool and payload shape are recognised, so the raw `<pre>` is always kept |
 | `markdown.js` | DOM-built markdown for Kairos bubbles (inline emphasis, code, links; headings, nested lists, GFM tables, fences, quotes, rules) |
-| `channels.js` | the channel landing page, assembly only — every judgement is made server-side |
+| `channels.js` | the channel landing page, assembly only — every judgement is made server-side; the **bots in this channel** chips (one per bot dsh reports, `on` when the roster carries it, `broken` with dsh's reason as the title, plus a removable chip for a rostered id no directory answers to) |
 | `grouping.js`, `channelName.js`, `botId.js` | sidebar buckets keyed by `workspaceId` (never title) or by `bot:<id>`; the whitespace → dash fold; the display-name → bot-id fold |
+| `room.js` | the pure room rules: `foldMembers` (the membership fold — a bot session parented by a host session, no `origin`), `isMemberSession`, `stripChips` (the strip's chips and their state precedence), `avatarGlyph`, `isMentionText` (the composer anchor), `roundEndLine`, `gateSpeaker` |
 | `speaker.js` | the name the transcript writes over a turn: `speakerFor(summary, bots)` reads the session's `agentPreset` — a rostered bot's display name, its id when the roster has none, `Kairos` for the host and for no session. Per session, never per message; an unknown preset falls to the id, never to the host |
 | `market.js`, `account.js` | the instruments: no state, no timer, fetch on load and on `refresh` |
 | `chat.css` | one sheet for all three pages; every color a `:root` token (radii only about half — four `--r-*` tokens, the rest literal px); light only |
@@ -744,9 +772,12 @@ outcome:"allowed-once"|"rejected"}`; question value the whole batch of answers, 
 **Event stream** — `WebSocket /api/events.mux`, downlink only (the host closes 1008 on any client
 send), fixed 1.5 s reconnect. Envelope `{type:"server-request", rpcId, method, payload:
 MuxFrame}`; frame types `session/event` (`user/message`, `assistant/message` with
-`interrupted` and `thinking`, `tool/call`, `tool/result`, `assistant/chunk` block starts),
-`approval/requested`, `question/requested`, `approval/resolved`, `question/resolved`,
-`session/projection`; the rest are ignored. Each event carries a `surfaceOp` — `append`, or
+`interrupted` and `thinking`, `tool/call`, `tool/result`, `assistant/chunk` block starts,
+`turn/start`, `turn/end`), `approval/requested`, `question/requested`, `approval/resolved`,
+`question/resolved`, `session/projection`; the rest are ignored. The two turn boundaries are
+surfaced for **every** session, not only the one on screen — that is what lets a member's fine
+state on the strip end with its turn. The projection frame carries `tokenUsage`,
+`contextPressure`, `title` and the `room` unit's whole value. Each event carries a `surfaceOp` — `append`, or
 `{op:"replace", start, end}` at a compaction checkpoint, which removes every rendered node in
 that seq range. On open the host replays every pending approval and question with its original
 `rpcId`; `since` is unimplemented, so open refetches the list and reopens the active session's
@@ -761,6 +792,13 @@ the HTTP receipt returns, so the client claims the wording first (`answering`), 
 approved card would read `closed · allowed-once`. For Gate 2 the reason is the whole order
 description; the drill explicitly does not prove the card is readable by a human (§7.4).
 
+**Room routes** — `/data/rooms/say` is called **before** `session.prompt` whenever the composer's
+text carries `(^|\s)@` and the session is in a channel; an answer of `addressed: []` means the text
+named nobody on the roster and it goes out as an ordinary prompt instead. `/data/rooms/state` is
+called on session open (before the gate replay, so a member's gate is attributed), on a new
+session's first prompt, when the channel page's bot roster changes, and when no session is
+selected (which hides the strip).
+
 **`/data` routes** — the client calls every route in §4.4; market and account fetch once on load
 and on `refresh` (button disabled in flight), render `STALE ·` with an amber class when the
 server re-served an old payload, and show two clocks on market (`assembled`, `served`) because a
@@ -774,7 +812,10 @@ Frame → `acceptFrame` (queued while a history backfill is loading) → `mapFra
 pulses to the status line and an ephemeral `◐ thinking…` row; projections into a per-session
 store (token usage, context pressure); approvals and questions to the gate handlers; other
 sessions' frames dropped; a `sessionId:seq` set dedupes backfill against stream. Then
-`honourSurfaceOp`, then bubble or card. History backfill wraps each `session.history` entry as
+`honourSurfaceOp`, then bubble or card. Pulses and turn boundaries of the room's MEMBER sessions
+feed the strip's fine states; a `user/message` whose source is `room`/`answer` renders in the
+bot's own voice, `room`/`round-end` as a room line, and `room`/`delta` (in a member's own session)
+as a `context · room` row. History backfill wraps each `session.history` entry as
 a synthetic `session/event` through the same path.
 
 Operator text renders verbatim; injected user-role events from a plugin, tool or model become a
@@ -871,18 +912,32 @@ install` → `npm test` → `npm run typecheck` → re-diff `boot.ts` against th
 test` → the drills. The five `cordis-plugin-*` packages are unpinned and held only by the
 lockfile.
 
+**6.8 A room round.** Operator checks two bots into a channel (`POST /data/channels/bots` →
+`channels.json` `bots[]`) → asks a question in a channel session → Kairos calls `dispatch`
+(`tool/call`) → the engine validates against the roster, starts the round and returns at once
+(`tool/result` naming who was not called) → per bot: find or create the member session
+(`ctx.agents.create`, `parentSession` = the room, `agentPreset` = the bot, `read-only` pinned
+inside `setup`, attached to the channel workspace) → `followup` the delta prompt (its
+`messageIds` are the member's cursor, in its own log) → await that turn's `turn/end` under the
+extending deadline → final text after the last tool result; empty or `(pass)` → `passed`; an
+error → `failed` → an answer is appended to the room log while no Kairos turn is open (else held
+until its `turn/end`) → peer `@`s queue continuations (≤ 2) → round end: every held answer
+flushed, then ONE `followup` naming who answered and who passed → Kairos's synthesis turn. Every
+step is a known event; the `room` projection folds them; the client renders each answer in the
+bot's voice as it lands and the strip from the projection plus the members' own pulses.
+
 ---
 
 ## 7. Tests and drills
 
 ### 7.1 Commands that work
 
-| Command | From | Needs | Measured 2026-09-04 |
+| Command | From | Needs | Measured 2026-09-09 |
 |---|---|---|---|
 | `python -m pytest` | repo root | nothing — offline, no keys, no bed | 388 passed, ~4 s |
-| `cd face && npm test` | `face/` | nothing — no port, no key | 233 tests, 228 pass, 5 skipped |
+| `cd face && npm test` | `face/` | nothing — no port, no key | 313 tests, 307 pass, 6 skipped |
 | `cd face && npm run typecheck` | `face/` | | clean |
-| `cd face && FACE_SMOKE=1 npm test` | `face/` | boots five real trees into `mkdtemp` homes, binds a port; still no LLM or key | the five skipped tests; 233/233 |
+| `cd face && FACE_SMOKE=1 npm test` | `face/` | boots six real trees into `mkdtemp` homes, binds a port; still no LLM or key | the six skipped tests; 313/313, ~10 s |
 
 ### 7.2 The Python suite
 
@@ -909,21 +964,40 @@ order path.
 
 ### 7.3 The face suite
 
-239 tests (234 pass, 5 skipped without `FACE_SMOKE=1`) across `channels`, `orders` (pure gate
+313 tests (307 pass, 6 skipped without `FACE_SMOKE=1`) across `channels`, `orders` (pure gate
 logic: raw and minted names, renamed server caught, read-only listing not gated, deny under
 `never`, one-shot grants for this `callId` only, marker only on `mcp__` tools, the guard reasons),
 `panels`, `data` (TTL, single-flight, stale, 503 bodies never leak, fence), `mapper` (against
-recorded wire frames), `roster` (seed-once, fail-closed on corruption, append-only log), `api`,
-`sessions`, `channelName`, `agents` (fixed argv, scrubbed env, roster refusal, fail-open with no
-channel, fail-closed on a corrupt roster), `static`, `boot`, `setup`, `overlay` (exactly eleven
+recorded wire frames — five of them the room's: a member's answer as a bot bubble with its id and
+name, the round-end line with every turn's state, the operator's `@` still an operator bubble
+carrying `mention`, a member's delta as a `context · room` row, and a turn boundary carried for a
+session other than the one on screen), `roster` (seed-once, fail-closed on corruption,
+append-only log), `api`, `sessions`, `channelName`, `agents` (fixed argv, scrubbed env, roster refusal, fail-open with no
+channel, fail-closed on a corrupt roster), `static`, `boot`, `setup`, `overlay` (exactly twelve
 rows, loopback config), `grouping`, `http`, `version`, `bots` (the id grammar and reserved names,
 the rendered composition, create-never-overwrites, the soul rewrite and its `{{` refusal, the
 roster merge), `botId` (the browser twin proposes only ids the server accepts), `speaker` (the transcript's
 name for a session: the host for no preset, for `kairos` and for a blank one, a rostered bot's
 display name, the id when the roster has no name for it or never loaded at all — and the FALLBACK
 is never the host, though a roster that names a bot `Kairos` is obeyed), `bot-plugin` (both
-registrations ride `ctx.effect` and return disposers; `expandAllow`), `persona`, and the five
-`FACE_SMOKE` boots: `smoke.test.ts` (the real tree serves the page, the RPC, the mux upgrade, the
+registrations ride `ctx.effect` and return disposers; `expandAllow`), `persona`, the four room
+suites, and the six `FACE_SMOKE` boots.
+
+The room suites are `room-rules` (the caps block verbatim, `AGENTS.md`'s caps sentence pinned to
+`ROOM_CAPS`, mention resolution, `isPass`, `finalTextOf`, dispatch validation and its two result
+texts, the delta and the member prompt, the round-end text, the model route), `room-projection`
+(each fold in isolation, a refused `dispatch` restoring exactly what it displaced, an `@` folded
+into an open round, the schema accepting every state the fold produces), `room-engine` — against
+a fake tree (`room-fake.ts`: a scriptable agent per member, a manual clock, a root
+`session/event` bus) covering member creation and the read-only pin, resume-not-recreate,
+parallel isolation and serial accumulation, continuations bounded to one turn per member per
+round, the three caps, `settled` / `capped` / `superseded`, the deadline that extends while a
+member runs or has a gate open and the hard cap that cancels with `keepInbox`, an `@` queued
+behind a running turn, the cold-room resume through the gateway, and the two routes under the
+fence — and `room-client` (the header fold, the strip and its state precedence, the glyph, the
+mention anchor, the round-end line, the gate speaker).
+
+The six boots: `smoke.test.ts` (the real tree serves the page, the RPC, the mux upgrade, the
 forged-Host 403 via `node:http` because `fetch` silently drops a forged `Host`, the stub producer)
 and `order-gate.test.ts` (fires `tools/pre-execute` at `mcp__drill__place_order` with a bare
 session so the real approval service's policy lookup runs; asserts `ask` with a decidable reason,
@@ -945,7 +1019,15 @@ broken preset refused by dsh's own `agent-preset` error),
 `bot-sandbox-smoke.test.ts` (S4) and `askuser-noclient-smoke.test.ts` (S7). The last two each
 print one `observed:` line; S4 now PINS the shape §9's R10 records (the sandbox marker in the
 tool's content, and the command having actually run) rather than accepting any of the three
-outcomes the spec was willing to take, and S7 still asserts only the outcome it forbids.
+outcomes the spec was willing to take, and S7 still asserts only the outcome it forbids. The
+sixth is `room-smoke.test.ts`: a stub model route, three bots in a temp channel, one operator
+prompt → Kairos dispatches all three in parallel → alpha answers, beta passes, gamma's model
+fails → the answer is on the room log before the round-end wake, the wake is one turn, Kairos's
+synthesis is in it; every member is parented, preset-joined, `read-only` as its first event,
+carries the channel's `AGENTS.md` chain and lacks `dispatch`; the `room` value rides the session
+row and the cache file; an `@` turns alpha, whose write into the channel is refused inside the
+tool content (D12) and never woke Kairos; a home session writes its journal and is refused on
+`../SOUL.md`.
 
 ### 7.4 Drills (`face/README.md`)
 
@@ -954,8 +1036,10 @@ outcomes the spec was willing to take, and S7 still asserts only the outcome it 
 | **Approval channel** (the README heading still reads "The Gate-2 drill"; its PASSED line calls it the approval-channel drill) — a file write outside the workspace escalates | request → answerer → card → outcome → paired `approval/asked` / `decided`; deny blocks, approve runs once | a producer for an MCP tool call | passed live 2026-08-31; re-run 2026-09-08 on `main`, passed (deny blocked, approve ran once, paired records) |
 | **Order approval** — automated half | the listener is registered, reaches the live approval service, defaults to `ask`, catches renamed servers, leaves `orders` alone; mutation-proven (removing the registration fails it) | the positive path — a grant logged by the real approval service, the guard finding it, the order dispatching — is covered only by unit tests of `hasApprovalGrant` / `orderGuardReason` with hand-built events, never on a real tree (the README calls it the highest-value missing test); that a human can read the card; containment | passed 2026-09-04 |
 | **Order approval** — manual half (arm Gate 1 in a *scratch* home, ask for one paper order, deny, see the audit pair) | the card, end to end | | **not yet run** — the condition before the flag flips in the real home |
-| **Bots** — automated (`bots-smoke`, `bot-sandbox-smoke`, `askuser-noclient-smoke`) | roster listing incl. broken; header `agentPreset`; mask = allow ∩ tree; persona shadow; inert default; the shipped relative plugin path mounted; Gate 2 refusing an order tool the bot's own mask admits; the S4/S7 observations | a bot in a room (plan 2); that a home session's write to `../SOUL.md` is refused (plan 2); that the approval CARD renders (no client) | passes as of 2026-09-07 |
-| **Bots** — manual (`face/README.md`) | create → home → persona → tools named and not named → `{{` refused; the sidebar buckets the home session under the bot; a restart's boot line lists the id; the transcript names the speaker on all four surfaces (second run) | per-message attribution in a room (plan 3); no automated test pins the four naming surfaces or the reconnect path | passes as of 2026-09-07; re-run 2026-09-08 on `main` with the R12 fix in, passed |
+| **Bots** — automated (`bots-smoke`, `bot-sandbox-smoke`, `askuser-noclient-smoke`) | roster listing incl. broken; header `agentPreset`; mask = allow ∩ tree; persona shadow; inert default; the shipped relative plugin path mounted; Gate 2 refusing an order tool the bot's own mask admits; the S4/S7 observations | that the approval CARD renders (no client) — a bot in a room and a home session's write to `../SOUL.md` were this row's two gaps until `room-smoke` closed both | passes as of 2026-09-07 |
+| **Bots** — manual (`face/README.md`) | create → home → persona → tools named and not named → `{{` refused; the sidebar buckets the home session under the bot; a restart's boot line lists the id; the transcript names the speaker on all four surfaces (second run) | no automated test pins the four naming surfaces or the reconnect path; per-message attribution in a room is the Room rows below | passes as of 2026-09-07; re-run 2026-09-08 on `main` with the R12 fix in, passed |
+| **Room** — automated (`room-smoke`) | a real round on a stub model: dispatch → three members (answered / passed / failed) → answers on the log before one wake → synthesis in one turn; members parented, preset-joined, `read-only` first, `AGENTS.md` chain, no `dispatch`; the projection on the row and in the cache; the `@` route with a member's write refused in content; a home refused on `../SOUL.md` | that a human can read the strip; a real model's behaviour on the four standing rules | passes as of 2026-09-09 |
+| **Room** — manual (`face/README.md`, eight parts) | check-in → dispatch line → attributed bubbles and the strip → the fold → `@` → an inline member question with the needs-you mark → a member's write refused → `left` and re-check → a restart keeps states and titles | per-message attribution across a mux reconnect; convergence of four voices on one model (R3); the peer-`@` continuation, which the operator's next `@` superseded before it ran (by design) — that path stands on the engine tests | **Drilled and PASSED 2026-09-09** on the operator's own face (`feat/rooms` @ `31b2e68`, two fresh template bots, DeepSeek as the model); one client finding (F1, the strip missing on a session's first round) fixed the same day and re-verified |
 | **Ask-user** — `ask_user_question` offered, called, answered, cancelled | the seam | that it is a gate (the answer is model-visible); the instruction half (README step 6 — on a thin brief that does not name the tool, Kairos asks before it builds, per `AGENTS.md`), left to the operator and not run | passed 2026-09-03 with a real model, 26 tools offered; re-run 2026-09-08 on `main`, passed (34 tools offered; answered, then Stop → `closed · cancelled`) |
 
 ---
@@ -976,6 +1060,8 @@ outcomes the spec was willing to take, and S7 still asserts only the outcome it 
   copies under `$DSH_HOME` (operator territory; the face rewrites `cordis.yml`), anything under
   `bots/` (the operator's voices; Kairos proposes one in conversation and creates none), anything
   under `docs/research/` (frozen inputs).
+- **No custom session-event types.** dsh's persistence refuses to reload a log carrying an
+  unknown type; a room fact rides a known event with a room `source`.
 - **A bot's mask is visibility, not authority.** Write sentences that say so; the session's
   sandbox mode and Gate 2 are the fences, and neither is containment.
 - **Channel names do not admit spaces.** They become shell paths Kairos types by hand.
@@ -1015,11 +1101,10 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   a shell turn can invoke the CLI directly.
 - **R5 — The MCP server's writes bypass the sandbox.** It is a child of the face process, not
   of a session; `data/.screen_cache` was written with no card.
-- **R6 — The charter still records a seat the tree now fills.** As of 2026-09-07 the model IS
-  told it is Kairos: `composeFace` patches the `system-prompt` row's `persona` from
-  `dsh/profile/persona.md` through `readPersona`, which refuses the boot on a template the strict
-  renderer would throw on. The charter's D11 row still records the seat as empty; the amendment
-  rides plan 4 of the bots spec (§10 item 3).
+- **R6 — The charter recorded a seat the tree now fills.** *Resolved 2026-09-09.* The charter's
+  D11 now names the persona mechanism (plan 4). As of 2026-09-07 the model IS told it is Kairos:
+  `composeFace` patches the `system-prompt` row's `persona` from `dsh/profile/persona.md` through
+  `readPersona`, which refuses the boot on a template the strict renderer would throw on.
 - **R7 — Gate 2 exists only inside the face.** A dsh tree composed without it has Gate 1 alone;
   the profile's `always_ask` block is inert.
 - **R8 — Registration is not readiness.** The three snapshot-backed tools register whenever
@@ -1035,12 +1120,19 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   `bash` write returns `isError: false` with no `approval/asked` event, and the refusal appears in
   the result text as `[sandbox: file access denied under read-only mode]` followed by an offer to
   retry with escalation. The file does not exist. A caller that reads only `isError` sees a
-  success, so any rule about a bot's writes is worded off the CONTENT.
+  success, so any rule about a bot's writes is worded off the CONTENT. The escalation the content
+  offers is real: a retry with `sandbox_permissions` raises an approval card, so the operator can
+  grant a room member the write the preset refuses, and the grant is logged on that member's own
+  session (observed and denied in the room drill's part six). The bot/Kairos asymmetry is
+  enforced-with-a-human-exception, not absolute.
 - **R11 — A question with no client connected blocks; it never fails.** Measured
   (`askuser-noclient-smoke.test.ts`, spike S7): `userQuestions.ask()` from an agent-owned session
   with no browser attached neither answers nor rejects — it parks until the caller aborts, exactly
   as the approval card does. An agentless (host) ask is the other branch and is rejected up front
-  with `UserQuestionError: web user interaction requires an agent-owned session`.
+  with `UserQuestionError: web user interaction requires an agent-owned session`. In a room the
+  abort has an owner: a member's turn holds its deadline open while a gate is pending
+  (`gatePending`) and the hard cap (`turnHardCapMs`, 20 minutes) is what finally cancels the turn,
+  so an unanswered member question ends the round `timed-out` rather than hanging it.
 - **R12 — The transcript labels a bot's reply as Kairos.** *Resolved.* Observed in the manual bots
   drill (2026-09-07): a home session's replies open in the bot's persona, the sidebar buckets the
   session under the bot's name, but the speaker label over each assistant turn is the fixed
@@ -1067,8 +1159,34 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   logs carry provider `session/title` events; `$DSH_HOME/storages/session_projcache.json` holds
   three stale records the face never wrote. A title shows only while its session stays attached
   in the boot that titled it; every restart resets the whole sidebar to `untitled`. Pre-existing,
-  not a bots regression. The fix is the one row the cache's README prescribes (`writeEveryEvents`,
-  `writeIntervalMs`) as a face overlay row, plus a cold-listing test; not applied.
+  not a bots regression. *Resolved 2026-09-08.* The face mounts `dsh-session-projection-cache`
+  (overlay row, §4.3); a cold session lists with its cached projections once it has completed a
+  turn under the row — sessions cold before it stay `untitled` until they are resumed. Observed
+  in the room drill's part eight (2026-09-09): after a restart the cold listing carried the
+  room's title and its `room` value.
+- **R14 — A room's answers are appended to Kairos's log by the face, not spoken by Kairos's
+  driver.** Honest and necessary (plan 2, deviation 2), but it means a room log can gain user-role
+  messages while no client watches and while Kairos is idle; the persistence write path records
+  them like any event. The `quiet` rule (no open turn) is what keeps a running request intact.
+- **R15 — Fine states are presence, not truth.** `thinking` / `writing` / `tool` on the strip come
+  from the members' own `assistant/chunk` block starts, held in the client's memory and cleared at
+  turn boundaries; a reload loses them; the log never held them.
+- **R16 — The membership rule is a header rule.** A session is a member of `P` when its header
+  names `P`, has no `origin`, and a bot preset, and `P` runs the host. A fork of a room keeps the
+  host preset and a subagent child carries `origin`, so both stay out; a blank session re-linked
+  to another preset through `agentPreset.select` (an RPC the face never calls) could masquerade.
+- **R17 — `superseded` is a third outcome.** The spec named two; a round the operator's next
+  message cut short is neither settled nor capped, and the log says so.
+- **R18 — The channel landing page lists a room's member sessions as plain `untitled` rows.**
+  Observed in the room drill (2026-09-09): the member sessions are shown and counted, so Rule 5
+  holds — nothing is hidden — but the rows carry no voice, while the sidebar's own fold labels
+  each member with its bot's name. Polish, not a truth problem; a member's transcript names its
+  voice the moment it is opened.
+- **R19 — Dispatch is Kairos's judgment, and nothing checks it.** Kairos chooses whom to call and
+  in which mode; it can under-call or over-call a voice, and no rule in the engine says otherwise.
+  Three things push against it and none removes it: the tool result names who was NOT called, the
+  operator's `@` reaches any rostered voice directly, and the round-end text asks for the
+  disagreements before the conclusion.
 
 ---
 
@@ -1082,15 +1200,15 @@ In order; each with what "done" is and which charter row it reopens.
    artifacts and `tests/strategies/`), `storage-chain`, `Bloom-Energy营收预期分析` and the
    channel-name client fold. Done when `git log` is the audit trail it claims to be; this also
    turns ROADMAP item (1) into a built entry.
-3. **Carry D11 into the charter.** R6 is closed in the tree — `composeFace` sets
-   `system-prompt.persona` from `dsh/profile/persona.md` — but the charter's D11 row still says
-   the seat is empty; the amendment rides plan 4 of the bots spec. R3, R3a and R5 are already
-   answered by the 2026-09-04 charter revision: §7 rules out loopback authentication and D10
-   carries the loopback fence, the forgeable answer and the MCP server's out-of-sandbox writes as
-   an accepted debt with a revisit trigger. Done when D11 names the decision that shipped. A real
-   automated test of the admit path (R3a's positive twin — a test answerer on `approval/request`,
-   the guard admitting, the order dispatching) is the highest-value missing test and belongs with
-   item 1.
+3. **Carry D11 into the charter.** *Done 2026-09-09* (plan 4 of the bots-and-rooms arc): the
+   charter's D11 row names the decision that shipped — `composeFace` sets
+   `system-prompt.persona` from `dsh/profile/persona.md`, and a bot's preset shadows it for that
+   bot's sessions — so R6 is closed on both sides. R3, R3a and R5 were already answered by the
+   2026-09-04 charter revision: §7 rules out loopback authentication and D10 carries the loopback
+   fence, the forgeable answer and the MCP server's out-of-sandbox writes as an accepted debt
+   with a revisit trigger. What is left of this item belongs to item 1: a real automated test of
+   the admit path (R3a's positive twin — a test answerer on `approval/request`, the guard
+   admitting, the order dispatching) is the highest-value missing test.
 4. **Close the doc debts**: post-build blocks on the skeleton and channels specs (both still
    "pending user review"; the skeleton spec's Gate 2 paragraph describes a mechanism that never
    bound), `dsh/README.md` step 2, step 6 and its "installed state" bullets (the profile comes
@@ -1103,9 +1221,11 @@ In order; each with what "done" is and which charter row it reopens.
    independent evaluator exists (D1, D7).
 7. **FINRA and float live endpoints**; then a **second data vendor** for pre-2021 history.
 8. **Distinct commit identity for Kairos** (D2) on the first confusion.
-9. **Rooms** (spec §14 plans 2–4): `dispatch`, member sessions with the `read-only` pin, the
-   participants strip, the roster's `bots[]`, the charter amendment. Done when the live room drill
-   passes.
+9. **Rooms** — built 2026-09-08/09 (plans 2–4); the live room drill passed 2026-09-09.
+   Remaining from the spec's §11: nothing planned.
+10. **A2A voices** — the charter's §7.1 admits an agent reached over A2A as a voice; no spec,
+   nothing built; the day anything outside this machine can call in, the last row of the
+   charter's §8 revisit table fires ("A second human, or any hosted deployment").
 
 ---
 
