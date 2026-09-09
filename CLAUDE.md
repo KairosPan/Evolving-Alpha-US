@@ -64,9 +64,8 @@ npm start                   # http://127.0.0.1:3090 (see face/README.md)
   storage chain, tool-ask-user…) compose last and override it silently.
 - **`face/client/*` is served with no cache headers** — hard-reload the browser after any client
   edit, or you drill a stale `chat.js`.
-- **No custom session-event types.** dsh's persistence refuses to reload a log carrying an event
-  type outside its generated catalog, and `Session.append` cannot mark one ignorable — the room
-  engine records every room fact on a known event (`user/message` with `source.kind: 'room'`).
+- **No custom session-event types.** dsh's persistence refuses an unknown event type on reload,
+  and `Session.append` cannot mark one ignorable — every room fact rides a known event type.
 
 Reading order for a new session: `Kairos-Design.md` §1–§2 → the `DEVELOPMENT.md` section you
 are touching → `AGENTS.md` for what Kairos itself sees.

@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   ROOM_CAPS, dispatchResultText, finalTextOf, formatDelta, isPass, memberPrompt, parseModelRoute,
   resolveMentions, roomLinesOf, roundEndText, validateDispatch, type EventLike, type MessageLike, type RosterBot,
@@ -16,6 +18,25 @@ test("ROOM_CAPS is the spec's block, verbatim", () => {
     maxRounds: 3, maxContinuations: 2, maxBotMessages: 10, maxMembers: 6,
     turnTimeoutMs: 180_000, turnHardCapMs: 1_200_000,
   });
+});
+
+/** AGENTS.md's "Rooms." paragraph states the caps as literal figures for Kairos's
+ * benefit (a controller ruling, not this test's call to revisit) - but nothing
+ * else ties that prose to ROOM_CAPS, and `dispatchDescription`'s own comment
+ * names exactly this failure mode: "a wrong one here is invisible to the type
+ * checker and to every test." This test is that check. */
+test("AGENTS.md's caps sentence matches ROOM_CAPS - the model-facing prose must never drift from the engine that enforces it", () => {
+  const agentsMd = readFileSync(fileURLToPath(new URL("../../AGENTS.md", import.meta.url)), "utf8")
+    .replace(/\s+/g, " ");
+  const m = agentsMd.match(
+    /Caps per operator message: (\d+) rounds?, (\d+) bot messages?, (\d+) peer continuations? per round\./,
+  );
+  assert.ok(m, "AGENTS.md's caps sentence is missing or reworded past what this test recognizes - " +
+    "update this pattern together with the prose, never let it go silently uncovered");
+  const [, rounds, botMessages, continuations] = m;
+  assert.equal(Number(rounds), ROOM_CAPS.maxRounds, "AGENTS.md rounds figure vs ROOM_CAPS.maxRounds");
+  assert.equal(Number(botMessages), ROOM_CAPS.maxBotMessages, "AGENTS.md bot-messages figure vs ROOM_CAPS.maxBotMessages");
+  assert.equal(Number(continuations), ROOM_CAPS.maxContinuations, "AGENTS.md continuations figure vs ROOM_CAPS.maxContinuations");
 });
 
 test("resolveMentions: by id always, by display name only when it is one token; anchored; unknown and e-mail pass through", () => {
