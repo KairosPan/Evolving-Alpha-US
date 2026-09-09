@@ -1468,3 +1468,30 @@ body {
 .card.dispatch { border-left-color: var(--accent); }
 .card.dispatch .kind { color: var(--accent); }
 .card.dispatch .sum { color: var(--text); }
+
+/* the participants strip: one chip per voice, above the transcript */
+.strip {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 6px 18px; border-bottom: 1px solid var(--line); background: var(--panel);
+}
+/* `display` here is an AUTHOR declaration and beats the UA's `[hidden] {display:none}`,
+   so `strip.hidden = true` alone would leave an empty bar on every non-room session
+   (and on a cold page load, where the element ships hidden). Both rules restore it:
+   the strip belongs to the room's transcript, and a detail page is not one. */
+.strip[hidden] { display: none; }
+.main.detail-mode .strip { display: none; }
+.strip-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border: 1px solid var(--line); border-radius: var(--r-chip);
+  font: 11px var(--mono); color: var(--dim); background: var(--bg);
+}
+.strip-chip.open { cursor: pointer; }
+.strip-chip .avatar { color: var(--accent); }
+.strip-name { color: var(--text); }
+.strip-state { text-transform: uppercase; letter-spacing: 0.06em; font-size: 9.5px; }
+.strip-chip[data-state="idle"] .strip-state { display: none; }
+.strip-chip[data-state="organizing"], .strip-chip[data-state="thinking"], .strip-chip[data-state="writing"], .strip-chip[data-state="tool"], .strip-chip[data-state="called"] { border-color: var(--accent); }
+.strip-chip[data-state="waiting for you"] { border-color: var(--danger); color: var(--danger); }
+.strip-chip[data-state="answered"] .strip-state { color: var(--green); }
+.strip-chip[data-state="failed"] .strip-state, .strip-chip[data-state="timed-out"] .strip-state { color: var(--red); }
+.strip-chip[data-state="left"], .strip-chip.broken { opacity: 0.6; }

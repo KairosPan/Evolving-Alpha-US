@@ -42,7 +42,7 @@ import { ARCHIVED_KEY, bucketFor, isBotKey, UNGROUPED_KEY } from "./grouping.js"
 import { proposeBotId } from "./botId.js";
 import { foldChannelName } from "./channelName.js";
 import { HOST_NAME, speakerFor } from "./speaker.js";
-import { avatarGlyph, foldMembers, roundEndLine } from "./room.js";
+import { avatarGlyph, foldMembers, roundEndLine, stripChips } from "./room.js";
 
 /** Rendered in place of a value the host did not give us. */
 const EM = "—";
@@ -104,6 +104,75 @@ let listTimer = null;
  * session's units are kept, not just the active one's — the agent panel reads
  * whichever session is on screen when it renders. @type {Map<string, Map<string, {seq: number, value: unknown}>>} */
 const projStore = new Map();
+
+/* ---------- the participants strip ---------- */
+
+/** The room on screen, from `/data/rooms/state`: the channel's bot roster and
+ * the members the engine has driven this boot. `null` when the active session
+ * is in no channel. @type {{roster: any[], members: Record<string, any>}|null} */
+let roomInfo = null;
+/** Live fine states of member sessions (thinking / writing / tool) from their
+ * own pulses; cleared at their turn boundaries. Presence, not truth. @type {Map<string, string>} */
+const fineStates = new Map();
+
+/** The member session ids of the room on screen: the header fold ∪ what the engine reports. */
+function memberSessionIds() {
+  const ids = new Set((memberFold.rooms.get(activeSession ?? "") ?? []).map((m) => String(m.sessionId)));
+  for (const m of Object.values(roomInfo?.members ?? {})) if (typeof m?.sessionId === "string") ids.add(m.sessionId);
+  return ids;
+}
+
+/** Refetch the room state for the session on screen; a session in no channel reads `null`. */
+async function loadRoomInfo() {
+  const id = activeSession;
+  if (id === null) { roomInfo = null; renderStrip(); return; }
+  try {
+    const body = await panelData("/data/rooms/state", { sessionId: id });
+    if (activeSession !== id) return;
+    roomInfo = { roster: Array.isArray(body.roster) ? body.roster : [], members: body.members ?? {} };
+  } catch {
+    if (activeSession !== id) return;
+    roomInfo = null; // 404: not in a channel - no strip
+  }
+  renderStrip();
+}
+
+/** Kairos's own chip says `organizing` or nothing at all: the host is not a
+ * called voice, so the bots' vocabulary would misread on it. */
+const KAIROS_STATES = { organizing: "organizing", idle: "" };
+/** Draw the strip for the session on screen, or hide it. */
+function renderStrip() {
+  const strip = $("#strip");
+  const projection = activeSession === null ? undefined : projStore.get(activeSession)?.get("room")?.value;
+  const isRoom = projection !== null && typeof projection === "object" && /** @type {any} */ (projection).kind === "room";
+  if (roomInfo === null || (roomInfo.roster.length === 0 && !isRoom)) { strip.hidden = true; strip.replaceChildren(); return; }
+  const running = lastSessions.find((s) => String(s.sessionId) === activeSession)?.running === true;
+  const chips = stripChips({
+    roster: roomInfo.roster.filter((b) => b.id !== "kairos"),
+    projection,
+    members: roomInfo.members,
+    gates: new Set([...gates.values()].map((g) => g.sessionId)),
+    fine: fineStates,
+    running,
+    kairosName: HOST_NAME,
+  });
+  strip.replaceChildren();
+  for (const chip of chips) {
+    const node = el("span", chip.kairos ? "strip-chip kairos" : "strip-chip");
+    node.dataset.state = chip.state;
+    if (!chip.kairos) node.append(el("span", "avatar", avatarGlyph(chip.id)));
+    node.append(el("span", "strip-name", chip.name));
+    node.append(el("span", "strip-state", chip.kairos ? (KAIROS_STATES[chip.state] ?? chip.state) : chip.state));
+    if (chip.broken) { node.classList.add("broken"); node.title = `dsh cannot mount this bot: ${chip.broken}`; }
+    if (chip.sessionId) {
+      node.title = `session ${chip.sessionId}`;
+      node.classList.add("open");
+      node.addEventListener("click", () => void openSession(String(chip.sessionId)));
+    }
+    strip.append(node);
+  }
+  strip.hidden = false;
+}
 
 /* ---------- dom helpers ---------- */
 
@@ -618,6 +687,7 @@ function questionNode(view) {
 function acceptGate(view) {
   if (typeof view.id !== "string") return; // unanswerable without the wire id
   gates.set(view.id, view);
+  renderStrip(); // a member's ask reads as `waiting for you` on its chip
   if (view.sessionId !== undefined && view.sessionId !== activeSession) {
     // Flag the row instead — once, however many times the mux replays the gate.
     const sub = convRows.get(view.sessionId)?.querySelector(".conv-sub");
@@ -661,6 +731,7 @@ function acceptGateResolved(view) {
   }
   if (id === undefined) return; // already answered here, or never ours
   gates.delete(id);
+  renderStrip(); // the chip drops back to its coarse state
   const node = gateNodes.get(id);
   /* The host echoes the resolution for an answer THIS tab sent too, and it
    * normally wins the race against `respond()` returning. Such a card is left
@@ -805,6 +876,20 @@ function acceptFrame(frame) {
       pulse(view.mode);
       if (view.mode === "reasoning") showThinkLive();
       else hideThinkLive();
+    }
+    if (view.sessionId !== undefined && memberSessionIds().has(view.sessionId)) {
+      fineStates.set(view.sessionId, view.mode === "reasoning" ? "thinking" : view.mode === "tool-call" ? "tool" : "writing");
+      renderStrip();
+    }
+    return;
+  }
+  if (view.kind === "turn") {
+    // A member's turn boundary: its fine state ends with the turn; the coarse
+    // state (answered / passed / …) arrives on the room's projection.
+    if (view.sessionId !== undefined && memberSessionIds().has(view.sessionId)) {
+      if (view.phase === "end") fineStates.delete(view.sessionId);
+      else fineStates.set(view.sessionId, "thinking");
+      renderStrip();
     }
     return;
   }
@@ -1120,6 +1205,7 @@ async function refreshSessions() {
     }
   }
   markActive();
+  renderStrip(); // the member fold and `running` may both have moved
   syncPickerFolders(); // a picker already on screen learns the folders the list just revealed
 }
 
@@ -1190,6 +1276,7 @@ async function openSession(id) {
   for (const gate of gates.values()) if (gate.sessionId === id) renderGate(gate);
   toTail();
   status(`session ${id}`);
+  void loadRoomInfo();
 }
 
 /** Start a fresh conversation. No session is created until the first prompt —
@@ -1206,6 +1293,7 @@ function newSession() {
   resetFlow();
   markActive();
   status("new session · pick a strategy, then type below");
+  void loadRoomInfo(); // no session, no room: the strip hides
   void showStrategyPicker();
 }
 
@@ -1812,6 +1900,7 @@ async function openChannel(channel) {
         resetFlow();
         markActive();
         status(`new session · ${channel.title} · type below`);
+        void loadRoomInfo(); // no session yet: the strip hides until the first prompt
       },
       onOpenSession: (id) => { closeDetail(); void openSession(id); },
     });
@@ -1862,6 +1951,7 @@ function acceptProjection(view) {
   if (id === activeSession && (view.key === "tokenUsage" || view.key === "contextPressure")) {
     renderAgentSession();
   }
+  if (id === activeSession && view.key === "room") renderStrip(); // the coarse states live here
 }
 
 /** Seed the store from a `{asOfSeq, values}` projections block (history tail
