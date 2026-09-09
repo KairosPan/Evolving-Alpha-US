@@ -1,7 +1,7 @@
 // face/tests/room-client.test.ts
 import test from "node:test";
 import assert from "node:assert/strict";
-import { avatarGlyph, foldMembers, gateSpeaker, isMentionText, roundEndLine, stripChips } from "../client/room.js";
+import { avatarGlyph, foldMembers, gateSpeaker, isMemberSession, isMentionText, roundEndLine, stripChips } from "../client/room.js";
 import { bucketFor } from "../client/grouping.js";
 
 test("avatarGlyph is deterministic per id and differs between the two template bots", () => {
@@ -36,6 +36,18 @@ test("foldMembers: a bot session parented by a host session is a member; forks, 
   assert.deepEqual([...rooms.keys()], ["room"]);
   assert.deepEqual(rooms.get("room")!.map((r) => r.sessionId), ["m1", "m2"]);
   assert.deepEqual([...members].sort(), ["m1", "m2"]);
+});
+
+test("isMemberSession: a member's own transcript is not a room - the delta's projection says so, and the header fold says so before it lands", () => {
+  const { members } = foldMembers(rows);
+  // the member's own projection, the shape room-projection.ts writes on a delta
+  assert.equal(isMemberSession({ kind: "member", room: "room", bot: "buffett" }, new Set(), "m1"), true);
+  // no projection yet (a cold open, before the delta is replayed): the fold answers
+  assert.equal(isMemberSession(undefined, members, "m1"), true);
+  // the room itself, and a session in no room, keep their strip
+  assert.equal(isMemberSession({ kind: "room", organizing: true, members: {} }, members, "room"), false);
+  assert.equal(isMemberSession(undefined, members, "solo"), false);
+  assert.equal(isMemberSession(undefined, members, null), false);
 });
 
 test("bucketFor: a member never files under its bot's home bucket, whatever precedence says otherwise", () => {

@@ -57,6 +57,29 @@ export function foldMembers(items) {
   return { rooms, members };
 }
 
+/**
+ * Whether the session on screen is a MEMBER's own transcript rather than a
+ * room's. Two witnesses, either one enough: its `room` projection reads
+ * `kind: "member"` (the delta it was dispatched with wrote that), or the
+ * header fold already files it under a room - which is true before any
+ * projection lands.
+ *
+ * The strip describes THE ROOM ON SCREEN, and a member's transcript is not a
+ * room. Nothing else stops it being drawn there: `engine.describe` answers for
+ * a member too (a member's cwd IS the channel's, so it resolves to the same
+ * channel and returns the same roster), while the member's own projection
+ * carries no members - so the strip would read the whole roster `idle` and
+ * Kairos `organizing` whenever the member itself is mid-turn.
+ * @param {unknown} projection - the session's own `room` projection value.
+ * @param {ReadonlySet<string>} memberIds - every id the header fold made a member.
+ * @param {string|null|undefined} sessionId - the session on screen.
+ * @returns {boolean}
+ */
+export function isMemberSession(projection, memberIds, sessionId) {
+  if (projection !== null && typeof projection === "object" && /** @type {any} */ (projection).kind === "member") return true;
+  return typeof sessionId === "string" && memberIds.has(sessionId);
+}
+
 /** @typedef {{id: string, name: string, state: string, kairos?: boolean, broken?: string, sessionId?: string}} Chip */
 
 /**

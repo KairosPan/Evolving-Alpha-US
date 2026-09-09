@@ -42,7 +42,7 @@ import { ARCHIVED_KEY, bucketFor, isBotKey, UNGROUPED_KEY } from "./grouping.js"
 import { proposeBotId } from "./botId.js";
 import { foldChannelName } from "./channelName.js";
 import { HOST_NAME, speakerFor } from "./speaker.js";
-import { avatarGlyph, foldMembers, gateSpeaker, isMentionText, roundEndLine, stripChips } from "./room.js";
+import { avatarGlyph, foldMembers, gateSpeaker, isMemberSession, isMentionText, roundEndLine, stripChips } from "./room.js";
 
 /** Rendered in place of a value the host did not give us. */
 const EM = "—";
@@ -145,6 +145,10 @@ function renderStrip() {
   const strip = $("#strip");
   const projection = activeSession === null ? undefined : projStore.get(activeSession)?.get("room")?.value;
   const isRoom = projection !== null && typeof projection === "object" && /** @type {any} */ (projection).kind === "room";
+  /* A member's OWN transcript takes no strip: `/data/rooms/state` answers for
+   * it (same cwd, same channel, same roster) and would draw every voice idle
+   * with Kairos `organizing` off the member's own `running` flag. */
+  if (isMemberSession(projection, memberFold.members, activeSession)) { strip.hidden = true; strip.replaceChildren(); return; }
   if (roomInfo === null || (roomInfo.roster.length === 0 && !isRoom)) { strip.hidden = true; strip.replaceChildren(); return; }
   const running = lastSessions.find((s) => String(s.sessionId) === activeSession)?.running === true;
   const chips = stripChips({
@@ -163,12 +167,17 @@ function renderStrip() {
     if (!chip.kairos) node.append(el("span", "avatar", avatarGlyph(chip.id)));
     node.append(el("span", "strip-name", chip.name));
     node.append(el("span", "strip-state", chip.kairos ? (KAIROS_STATES[chip.state] ?? chip.state) : chip.state));
-    if (chip.broken) { node.classList.add("broken"); node.title = `dsh cannot mount this bot: ${chip.broken}`; }
+    /* Both facts, never one over the other: a bot the engine drove earlier this
+     * boot and that the roster now reports broken is the case where the reason
+     * matters most, and it is exactly the case that carries a session id too. */
+    const titles = [];
+    if (chip.broken) { node.classList.add("broken"); titles.push(`dsh cannot mount this bot: ${chip.broken}`); }
     if (chip.sessionId) {
-      node.title = `session ${chip.sessionId}`;
+      titles.push(`session ${chip.sessionId}`);
       node.classList.add("open");
       node.addEventListener("click", () => void openSession(String(chip.sessionId)));
     }
+    if (titles.length > 0) node.title = titles.join(" · ");
     strip.append(node);
   }
   strip.hidden = false;
@@ -699,20 +708,24 @@ function acceptGate(view) {
   if (typeof view.id !== "string") return; // unanswerable without the wire id
   gates.set(view.id, view);
   renderStrip(); // a member's ask reads as `waiting for you` on its chip
+  /* Unconditional, and BEFORE the two branches part: the aggregated marks — the
+   * room row's chip for a folded member, the channel header's needs-you dot,
+   * the landing page's chip — are rebuilt only by `refreshSessions`, and no
+   * frame for another session reaches the render path that schedules it. A
+   * member's gate that lands while its ROOM is on screen renders inline below
+   * and would otherwise leave every one of those marks absent until it is
+   * answered; a gate on a session nobody is watching would leave them waiting
+   * for an unrelated refresh, and covers the row that does not exist yet (a
+   * member session the sidebar has not listed). It is the debounced list
+   * refresh, so the cost is one `session.list`. Same rebuild
+   * `acceptGateResolved` relies on. */
+  scheduleListRefresh();
   const inRoom = view.sessionId !== undefined && memberSessionIds().has(view.sessionId);
   if (view.sessionId !== undefined && view.sessionId !== activeSession && !inRoom) {
-    // Flag the row instead — once, however many times the mux replays the gate.
+    // Flag the gated session's OWN row now — once, however many times the mux
+    // replays the gate — rather than waiting for the refresh above.
     const sub = convRows.get(view.sessionId)?.querySelector(".conv-sub");
     if (sub && sub.querySelector(".chip.waiting") === null) sub.prepend(waitingChip());
-    /* The row flag above is the gated session's OWN row and nothing else. The
-     * aggregated marks — the room row's chip for a folded member, the channel
-     * header's dot, the landing page's chip — are rebuilt only by
-     * `refreshSessions`, and no frame for another session reaches the render
-     * path that schedules it. Without this the mark on the row the operator
-     * actually navigates by would wait for an unrelated refresh; it also
-     * covers the case where the row does not exist yet (a member session the
-     * sidebar has not listed). Same rebuild `acceptGateResolved` relies on. */
-    scheduleListRefresh();
     return;
   }
   renderGate(view);
@@ -947,6 +960,16 @@ function resetFlow() {
   gateNodes.clear();
   answering.clear();
   queued.length = 0;
+  /* The room on screen leaves with the flow. `loadRoomInfo` refetches for the
+   * session being opened, but only if that open SUCCEEDS — a failed
+   * `session.history` returns with `activeSession` already moved, and the
+   * previous room's chips would sit under a different session until the next
+   * successful open. Fine states are presence, not truth: an entry is deleted
+   * by its member's own `turn/end`, which is matched against the room on
+   * screen, so switching away mid-turn would strand it forever. */
+  roomInfo = null;
+  fineStates.clear();
+  renderStrip();
 }
 
 /** @param {number} at - epoch ms. @returns {string} a short local stamp. */
@@ -1072,7 +1095,8 @@ function convRow(summary) {
 }
 
 /** The members folded under a room row: one indented row per member, the bot's
- * name as its label, collapsed by default. The count is on the head, so a
+ * name as its label, expanded until the operator folds it (the choice is
+ * remembered with the sidebar's other groups). The count is on the head, so a
  * folded room still SAYS how many sessions it holds — hiding them behind a
  * silent chevron would be the one thing Rule 5 forbids.
  * @param {Record<string, any>} roomSummary @param {Record<string, any>[]} members @returns {HTMLElement} */

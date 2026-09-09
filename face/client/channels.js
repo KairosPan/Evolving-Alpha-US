@@ -93,7 +93,9 @@ export function renderChannelPage(inner, payload, actions) {
   head.append(chips);
 
   /* Bots: the operator's own voices, checked in per channel. A chip per bot the
-   * preset roster reports (a broken one is shown, disabled, with dsh's reason),
+   * preset roster reports (a broken one is shown struck through and still
+   * toggleable, with dsh's reason on the chip - a bot cannot be checked OUT of
+   * a channel by a chip the client refuses to take a click on),
    * plus - Rule 5 - any id the roster file carries that no directory answers to. */
   const bchips = el("div", "ch-chips");
   bchips.append(el("span", "ch-chips-label", "bots in this channel"));
