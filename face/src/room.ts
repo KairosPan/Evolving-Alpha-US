@@ -233,6 +233,9 @@ export class RoomEngine {
     for (const d of this.disposers.splice(0)) d();
   }
 
+  /** Run `fn` when the engine is disposed (the tool and projection disposers). */
+  onDispose(fn: () => void): void { this.disposers.push(fn); }
+
   /** The runtime for a room session; created on first sight. */
   roomOf(agentId: string, channel: RoomChannel): Room {
     let room = this.rooms.get(agentId);
@@ -689,3 +692,115 @@ const errorText = (error: unknown): string => {
   const message = typeof e?.message === "string" ? e.message : "";
   return code === undefined ? (message || "error") : (message === "" ? code : `${code}: ${message}`);
 };
+
+/* ---------- the tool (spec §4.3) ---------- */
+
+const DISPATCH_DESCRIPTION =
+  "Ask the bots on this channel's roster for their views, each in its own voice. You are the organizer: choose whom (bot ids " +
+  "from the roster), the mode (parallel: everyone answers independently and sees no peer this round - use it first on a fresh " +
+  "question; serial: each later bot sees the earlier answers), a brief (the question or task for this batch) and a reason " +
+  "(why these, why this mode - it lands in the transcript). The call returns at once; END YOUR TURN after it. You will be " +
+  "woken once when the round ends, with who answered and who passed; every answer will be in this conversation, attributed. " +
+  "Then name the disagreements before you conclude. A bot that is not on the roster cannot be called; the refusal names the " +
+  "roster. Caps per operator message: 3 rounds, 10 bot messages, 2 peer continuations per round. Dispatch grants a bot nothing.";
+
+export function dispatchToolDefinition(engine: RoomEngine, deps: Pick<RoomDeps, "channelFor">): RoomToolDefinition {
+  return {
+    name: "dispatch",
+    description: DISPATCH_DESCRIPTION,
+    parameters: {
+      type: "object",
+      properties: {
+        to: { type: "array", items: { type: "string" }, description: "bot ids from this channel's roster, in speaking order for serial" },
+        mode: { type: "string", enum: ["parallel", "serial"] },
+        brief: { type: "string", description: "the question or task for this batch" },
+        reason: { type: "string", description: "why these bots, why this mode" },
+      },
+      required: ["to", "mode", "brief", "reason"],
+      additionalProperties: false,
+    },
+    output: {
+      schema: {
+        type: "object",
+        properties: { text: { type: "string" }, round: { type: "number" }, called: { type: "array", items: { type: "string" } }, notCalled: { type: "array", items: { type: "string" } } },
+        required: ["text", "round", "called", "notCalled"],
+        additionalProperties: false,
+      },
+      render: (_args, value) => [{ type: "text", text: (value as { text: string }).text }],
+    },
+    timeoutMs: 30_000,
+    async execute(args, exec) {
+      const agent = exec.agent;
+      if (agent === undefined) throw new Error("dispatch needs a session to run in");
+      const preset = agent.session.header.agentPreset;
+      if (preset !== undefined && preset !== DEFAULT_PRESET) throw new Error("dispatch is Kairos's tool; a voice does not dispatch");
+      const channel = await deps.channelFor(agent.session.header.cwd);
+      if (channel === null) throw new Error("dispatch works in a channel session; this session is in no channel");
+      const roster = await engine.rosterFor(channel);
+      const valid = validateDispatch(args, roster);
+      if (!valid.ok) throw new Error(valid.message);
+      const started = await engine.dispatch(agent.id, channel, valid.value, roster);
+      return {
+        text: dispatchResultText(valid.value, roster, started.round, started.remainingRounds, started.notes),
+        round: started.round,
+        called: valid.value.to,
+        notCalled: started.notCalled,
+      };
+    },
+    presentCall(args) {
+      const a = (args !== null && typeof args === "object" ? args : {}) as { to?: unknown; mode?: unknown; reason?: unknown };
+      const to = Array.isArray(a.to) ? a.to.filter((x): x is string => typeof x === "string").join(", ") : "?";
+      return { card: "generic", title: `dispatch ${to} (${typeof a.mode === "string" ? a.mode : "?"})`, kind: "read", rawInput: typeof a.reason === "string" ? a.reason.slice(0, 200) : undefined };
+    },
+  };
+}
+
+/* ---------- install ---------- */
+
+/** Register the tool, the projection unit and the bus on the ROOT context. Returns the engine; `dispose()` unwinds all three. */
+export function installRoom(deps: RoomDeps): RoomEngine {
+  const engine = new RoomEngine(deps);
+  const unregister = deps.ctx.tools.register(dispatchToolDefinition(engine, deps));
+  const registry = deps.ctx.sessionProjections;
+  const unproject = registry === undefined ? undefined : registerRoomProjection(registry as unknown as Parameters<typeof registerRoomProjection>[0]);
+  if (registry === undefined) deps.ctx.logger?.warn(`${BIN}: sessionProjections is not in the tree; the room strip will have no state`);
+  engine.onDispose(() => { unregister(); unproject?.(); });
+  return engine;
+}
+
+/* ---------- routes ---------- */
+
+export function registerRoomRoutes(webServer: RouteRegistrar, engine: RoomEngine): void {
+  const send = (res: ServerResponse, status: number, body: unknown): void => {
+    res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+    res.end(typeof body === "string" ? body : JSON.stringify(body));
+  };
+  const post = (act: (body: Record<string, unknown>) => Promise<object>) =>
+    async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+      if (!isTrustedDataRequest(req)) return send(res, 403, FORBIDDEN);
+      if (req.method !== "POST") return send(res, 405, { ok: false, error: "POST only" });
+      if (!isJsonBody(req)) return send(res, 415, { ok: false, error: "application/json only" });
+      try {
+        let body: Record<string, unknown>;
+        try {
+          const parsed: unknown = JSON.parse(await readBody(req, 16_384));
+          if (parsed === null || typeof parsed !== "object") throw new Error("not an object");
+          body = parsed as Record<string, unknown>;
+        } catch (err) {
+          if (err instanceof HttpError) throw err;
+          throw new HttpError(400, "body must be a JSON object");
+        }
+        if (typeof body.sessionId !== "string" || !SESSION_ID_RE.test(body.sessionId)) throw new HttpError(400, "invalid session id");
+        return send(res, 200, { ok: true, ...(await act(body)) });
+      } catch (err) {
+        if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
+        console.error(`${BIN}: room route failed:`, err);
+        return send(res, 500, { ok: false, error: "request failed" });
+      }
+    };
+  webServer.register({ kind: "exact", path: "/data/rooms/say", handler: post(async (body) => {
+    if (typeof body.text !== "string" || body.text.trim() === "") throw new HttpError(400, "text required");
+    return engine.say(body.sessionId as string, body.text);
+  }) });
+  webServer.register({ kind: "exact", path: "/data/rooms/state", handler: post(async (body) => engine.describe(body.sessionId as string)) });
+}

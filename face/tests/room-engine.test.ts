@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RoomEngine, gatePending, isQuiet, type RoomDeps } from "../src/room.ts";
+import { RoomEngine, dispatchToolDefinition, gatePending, installRoom, isQuiet, registerRoomRoutes, type RoomDeps } from "../src/room.ts";
 import { ROOM_CAPS, type EventLike, type RosterBot } from "../src/room-rules.ts";
+import { setBots } from "../src/roster.ts";
 import { makeFakeTree, type FakeTree } from "./room-fake.ts";
+import { recorder } from "./route-recorder.ts";
 
 const CHANNEL = { workspaceId: "ws-1", name: "storage-chain", dir: "/repo/strategies/storage-chain" };
 const roster: RosterBot[] = [
@@ -393,4 +396,78 @@ test("describe reports the roster, the runtime members and the caps left", async
   assert.equal(Object.keys(d.members).length, 1);
   assert.match(d.members.buffett.sessionId, /^session-/);
   assert.deepEqual(d.caps, { roundsLeft: 2, messagesLeft: 9, maxRounds: 3, maxBotMessages: 10 });
+});
+
+/* ---------- the tool, the install and the two routes (Task 8) ---------- */
+
+/** A room session id the face's own `SESSION_ID_RE` accepts (the routes check it). */
+const ROOM_ID = "session-2f0f4e2c-9d61-4c0e-8b7a-3f8a1c2d4e5f";
+const NO_CHANNEL_ID = "session-11111111-2222-4333-8444-555555555555";
+
+test("the dispatch tool: global, Kairos-only, channel-only, roster-checked; validates, starts the round and names who was not called", async () => {
+  const tree = makeFakeTree();
+  const home = await mkdtemp(join(tmpdir(), "face-room-"));
+  await setBots(home, CHANNEL.workspaceId, ["buffett", "speculator"]);
+  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  tree.script("buffett", () => ({ kind: "answer", text: "b" }));
+  const engine = installRoom({
+    ctx: tree.ctx as unknown as RoomDeps["ctx"], home,
+    channelFor: async (cwd) => (cwd === CHANNEL.dir ? CHANNEL : null),
+    listBots: async () => roster, clock: tree.clock, installModelSelection: () => () => {}, log: () => {},
+  });
+  assert.deepEqual(tree.registeredTools.map((t) => t.name), ["dispatch"]);
+  const tool = tree.registeredTools[0] as unknown as ReturnType<typeof dispatchToolDefinition>;
+  assert.match(tool.description, /roster/);
+  assert.match(tool.description, /end your turn/i);
+  const exec = (agent: unknown) => ({ agent, signal: new AbortController().signal }) as never;
+
+  await assert.rejects(tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, exec(undefined)), /needs a session/);
+  const bot = { id: "session-bot", status: "idle", session: { id: "session-bot", header: { cwd: CHANNEL.dir, agentPreset: "buffett" }, events: [], seq: 0 } };
+  await assert.rejects(tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, exec(bot)), /Kairos's tool/);
+  const nowhere = { ...kairos, session: { ...kairos.session, header: { cwd: "/elsewhere", agentPreset: "kairos" } } };
+  await assert.rejects(tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, exec(nowhere)), /in no channel/);
+  await assert.rejects(tool.execute({ to: ["macro"], mode: "parallel", brief: "q", reason: "r" }, exec(kairos)), /macro is not on this channel's roster.*buffett, speculator/);
+
+  const value = await tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "first" }, exec(kairos)) as { text: string; round: number; notCalled: string[] };
+  assert.equal(value.round, 1);
+  assert.deepEqual(value.notCalled, ["speculator"]);
+  const rendered = tool.output.render({}, value)[0].text;
+  assert.match(rendered, /Dispatched 巴菲特型 \(parallel\)/);
+  assert.match(rendered, /Not called: 投机型\./);
+  assert.deepEqual(tool.presentCall({ to: ["buffett"], mode: "parallel", brief: "q", reason: "first" }), { card: "generic", title: "dispatch buffett (parallel)", kind: "read", rawInput: "first" });
+  await tree.clock.advance(100);
+  assert.equal(kairos.inbox.nextTurn.length, 1);
+  engine.dispose();
+  assert.equal(tree.registeredTools.length, 0, "dispose unregisters the tool");
+  assert.equal(tree.listeners.length, 0, "and the bus listener");
+});
+
+test("the two routes: say and state, fenced like every /data route", async () => {
+  const tree = makeFakeTree();
+  const home = await mkdtemp(join(tmpdir(), "face-room-"));
+  await setBots(home, CHANNEL.workspaceId, ["buffett"]);
+  tree.newRoom(ROOM_ID, CHANNEL.dir);
+  tree.script("buffett", () => ({ kind: "answer", text: "b" }));
+  const engine = installRoom({
+    ctx: tree.ctx as unknown as RoomDeps["ctx"], home,
+    channelFor: async (cwd) => (cwd === CHANNEL.dir ? CHANNEL : null),
+    listBots: async () => roster, clock: tree.clock, installModelSelection: () => () => {}, log: () => {},
+  });
+  const routes = recorder();
+  registerRoomRoutes(routes, engine);
+  assert.deepEqual(routes.paths(), ["/data/rooms/say", "/data/rooms/state"]);
+  const forged = JSON.parse(await routes.call("/data/rooms/say", { method: "POST", json: { sessionId: ROOM_ID, text: "@buffett" }, host: "evil.example.com" }));
+  assert.equal(forged.status, 403);
+  const bad = JSON.parse(await routes.call("/data/rooms/say", { method: "POST", json: { sessionId: "nope", text: "@buffett" } }));
+  assert.equal(bad.status, 400);
+  const said = JSON.parse(await routes.call("/data/rooms/say", { method: "POST", json: { sessionId: ROOM_ID, text: "@buffett hi" } }));
+  assert.equal(said.status, 200);
+  assert.deepEqual(said.body.addressed, ["buffett"]);
+  await tree.clock.advance(50);
+  const state = JSON.parse(await routes.call("/data/rooms/state", { method: "POST", json: { sessionId: ROOM_ID } }));
+  assert.equal(state.status, 200);
+  assert.deepEqual(state.body.roster.map((b: { id: string }) => b.id), ["buffett"]);
+  assert.ok(state.body.members.buffett.sessionId);
+  const nowhere = JSON.parse(await routes.call("/data/rooms/state", { method: "POST", json: { sessionId: NO_CHANNEL_ID } }));
+  assert.equal(nowhere.status, 404);
 });
