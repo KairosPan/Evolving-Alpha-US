@@ -1,7 +1,7 @@
 # Kairos Workbench — Development Reference
 
 **Status:** living, as-built · **Owner:** the operator · **Last full pass:** 2026-09-09 on
-`feat/rooms` @ `fe1b8d1` (388 pytest; 313 face tests, 307 pass + 6 skipped without `FACE_SMOKE`;
+`feat/rooms` @ `ce07925` (388 pytest; 313 face tests, 307 pass + 6 skipped without `FACE_SMOKE`;
 313 under `FACE_SMOKE=1`; typecheck clean).
 
 **Authority.** `Kairos-Design.md` (the charter) outranks this document on intent. This document
