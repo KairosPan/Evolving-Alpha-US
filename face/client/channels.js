@@ -176,6 +176,9 @@ export function renderChannelPage(inner, payload, actions) {
     line.setAttribute("role", "button");
     line.tabIndex = 0;
     line.append(el("span", "ch-session-title", row.title ?? "untitled"));
+    /* `waiting` is decided in chat.js (`needsYou`, which knows the live gate
+     * map and the room fold) and passed down — this page re-derives nothing. */
+    if (row.waiting === true) line.append(el("span", "chip waiting", "waiting"));
     line.addEventListener("click", () => { void actions.onOpenSession(row.sessionId); });
     line.addEventListener("keydown", (event) => {
       const key = /** @type {KeyboardEvent} */ (event).key;

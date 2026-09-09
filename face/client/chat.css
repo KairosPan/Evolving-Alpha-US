@@ -1025,6 +1025,14 @@ body {
 .conv-group .chev { flex: none; font: 10px var(--mono); color: var(--dim); }
 .conv-group-n { margin-left: auto; font: 10px var(--mono); letter-spacing: 0; color: var(--dim); }
 .conv-group-link { cursor: pointer; text-decoration: underline dotted; }
+
+/* a room's members, folded under its row; the needs-you mark on a group head */
+.conv-members { margin: 0 0 0 14px; border-left: 1px solid var(--line); }
+.conv-members-head { display: flex; align-items: center; gap: 6px; padding: 4px 10px; font: 10px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); cursor: pointer; user-select: none; }
+.conv-member { padding: 6px 12px; }
+.conv-member .conv-name { font-weight: 500; font-size: 13px; }
+.needs-you { color: var(--danger); font-size: 9px; margin-left: 4px; }
+
 .conv { position: relative; }
 .conv-actions {
   position: absolute;

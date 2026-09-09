@@ -42,7 +42,7 @@ import { ARCHIVED_KEY, bucketFor, isBotKey, UNGROUPED_KEY } from "./grouping.js"
 import { proposeBotId } from "./botId.js";
 import { foldChannelName } from "./channelName.js";
 import { HOST_NAME, speakerFor } from "./speaker.js";
-import { avatarGlyph, roundEndLine } from "./room.js";
+import { avatarGlyph, foldMembers, roundEndLine } from "./room.js";
 
 /** Rendered in place of a value the host did not give us. */
 const EM = "—";
@@ -674,6 +674,16 @@ function waitingChip() {
   return el("span", "chip waiting", "waiting");
 }
 
+/** A session needs the operator when a gate is pending on it or on any of its
+ * members: a member's ask is answered inside its own session, but the operator
+ * navigates by the ROOM, so the room row has to carry the mark or a folded
+ * member's question waits unseen.
+ * @param {string} sessionId @returns {boolean} */
+function needsYou(sessionId) {
+  const ids = new Set([sessionId, ...(memberFold.rooms.get(sessionId) ?? []).map((m) => String(m.sessionId))]);
+  return [...gates.values()].some((gate) => ids.has(gate.sessionId));
+}
+
 /**
  * Draw a pending gate at the tail of the flow, once.
  * @param {Record<string, any>} view
@@ -865,7 +875,7 @@ function convRow(summary) {
   row.append(top);
 
   const sub = el("div", "conv-sub");
-  if ([...gates.values()].some((gate) => gate.sessionId === id)) sub.append(waitingChip());
+  if (needsYou(id)) sub.append(waitingChip());
   if (summary.running === true) sub.append(el("span", "chip", "running"));
   row.append(sub);
   /* Path and last-touch live on hover; the group header carries the identity
@@ -955,6 +965,52 @@ function convRow(summary) {
   return row;
 }
 
+/** The members folded under a room row: one indented row per member, the bot's
+ * name as its label, collapsed by default. The count is on the head, so a
+ * folded room still SAYS how many sessions it holds — hiding them behind a
+ * silent chevron would be the one thing Rule 5 forbids.
+ * @param {Record<string, any>} roomSummary @param {Record<string, any>[]} members @returns {HTMLElement} */
+function memberBox(roomSummary, members) {
+  const key = `room:${String(roomSummary.sessionId)}`;
+  const box = el("div", "conv-members");
+  const head = el("div", "conv-members-head");
+  const chev = el("span", "chev", collapsedGroups.has(key) ? "▸" : "▾");
+  head.append(chev, el("span", "conv-members-n", `${members.length} member${members.length === 1 ? "" : "s"}`));
+  const list = el("div");
+  list.hidden = collapsedGroups.has(key);
+  head.addEventListener("click", () => {
+    if (collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
+    persistCollapsed();
+    list.hidden = collapsedGroups.has(key);
+    chev.textContent = list.hidden ? "▸" : "▾";
+  });
+  for (const m of members) {
+    const row = el("div", "conv conv-pick conv-member");
+    row.setAttribute("role", "button");
+    row.tabIndex = 0;
+    const top = el("div", "conv-top");
+    top.append(el("span", "conv-name", botOf(m)?.label ?? String(m.agentPreset)));
+    row.append(top);
+    const sub = el("div", "conv-sub");
+    if (needsYou(String(m.sessionId))) sub.append(waitingChip());
+    if (m.running === true) sub.append(el("span", "chip", "running"));
+    row.append(sub);
+    row.title = `${dash(m.cwd)}\n${when(m.updatedAt)}`;
+    row.addEventListener("click", () => void openSession(String(m.sessionId)));
+    row.addEventListener("keydown", (event) => {
+      const k = /** @type {KeyboardEvent} */ (event).key;
+      if (k !== "Enter" && k !== " ") return;
+      event.preventDefault();
+      void openSession(String(m.sessionId));
+    });
+    convRows.set(String(m.sessionId), row);
+    row.dataset.title = botOf(m)?.label ?? String(m.agentPreset);
+    list.append(row);
+  }
+  box.append(head, list);
+  return box;
+}
+
 /** Mark the row of the session on screen, and name it in the topbar. The title
  * comes off the row the last `session.list` built — the sidebar is the one
  * place titles are known, so the topbar reads it rather than calling again. */
@@ -1005,6 +1061,12 @@ async function refreshSessions() {
    * the host's one-way `channelIndex.archived`. */
   const hostArchived = new Set(channelIndex?.archived ?? []);
   lastSessions = (value?.items ?? []).filter((summary) => !deletedSet.has(String(summary.sessionId)));
+  /* The room fold, recomputed from the list that just landed: a member never
+   * files under a bucket of its own (it would leave its room, and read as a
+   * second conversation the operator has to hunt for) — it renders indented
+   * under the room row, counted there (charter Rule 5: folded, never hidden). */
+  const fold = foldMembers(lastSessions);
+  memberFold = fold; // module state the strip and the gates read
   /* Re-derive the active session's voice from the list that just landed. Two
    * races need it, and neither is reachable from `setSpeaker`'s own call sites:
    * a mux reconnect reopens the active session against the PRE-reconnect
@@ -1020,8 +1082,9 @@ async function refreshSessions() {
     if (deletedSet.has(id)) continue; // a host-memory ghost
     // Attached sessions list with a projections block — seed the usage store.
     seedProjections(id, summary.projections);
+    if (fold.members.has(id)) continue; // folded under its room instead
     const archived = archivedSet.has(id) || hostArchived.has(id);
-    const { key, label, channel } = bucketFor(channelOf(id), archived, botOf(summary));
+    const { key, label, channel } = bucketFor(channelOf(id), archived, botOf(summary), false);
     let bucket = buckets.get(key);
     if (bucket === undefined) {
       bucket = { channel, label, items: [] };
@@ -1036,12 +1099,15 @@ async function refreshSessions() {
   for (const key of order) {
     const bucket = buckets.get(key);
     const box = el("div");
-    list.append(groupHeader(key, bucket.label, bucket.items.length, box, bucket.channel), box);
+    const needs = bucket.items.some((s) => needsYou(String(s.sessionId)));
+    list.append(groupHeader(key, bucket.label, bucket.items.length, box, bucket.channel, needs), box);
     for (const summary of bucket.items) {
+      const id = String(summary.sessionId);
       const row = convRow(summary);
       row.dataset.title = titleOf(summary);
-      convRows.set(String(summary.sessionId), row);
+      convRows.set(id, row);
       box.append(row);
+      if (fold.rooms.has(id)) box.append(memberBox(summary, fold.rooms.get(id)));
     }
   }
   markActive();
@@ -1161,6 +1227,9 @@ let pendingAgentPreset;
 /** The last `session.list` answer (ghosts dropped): the picker derives the
  * local folders sessions have worked in from it. @type {Record<string, any>[]} */
 let lastSessions = [];
+
+/** The header fold: room id → member rows; every member id. @type {{rooms: Map<string, any[]>, members: Set<string>}} */
+let memberFold = { rooms: new Map(), members: new Set() };
 
 /**
  * Folders sessions have already worked in that belong to no channel — the
@@ -1312,7 +1381,10 @@ const collapsedGroups = new Set(/** @type {string[]} */ ((() => {
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return raw
     .map((k) => (k === "archived" ? ARCHIVED_KEY : k === "ungrouped" ? UNGROUPED_KEY : k))
-    .filter((k) => typeof k === "string" && (k === ARCHIVED_KEY || k === UNGROUPED_KEY || UUID_RE.test(k) || isBotKey(k)));
+    // `room:<sessionId>` is the second grammar this Set carries: a room's own
+    // member fold, keyed by the room session — same per-browser view state.
+    .filter((k) => typeof k === "string" && (k === ARCHIVED_KEY || k === UNGROUPED_KEY || UUID_RE.test(k) || isBotKey(k)
+      || /^room:session-[0-9a-f-]{36}$/.test(k)));
 })()));
 
 function persistCollapsed() {
@@ -1331,13 +1403,22 @@ function persistCollapsed() {
  * collapse-state identity; `label` is only ever DISPLAYED — never used to
  * look anything up. Two channels can render the identical label and still
  * fold independently, which is the entire fix (M2).
+ * `needs` marks the whole group when any session under it is waiting on the
+ * operator — the mark has to survive the fold, or collapsing a channel hides
+ * the one thing that needs an answer.
  * @param {string} key @param {string} label @param {number} count @param {HTMLElement} box
- * @param {Record<string, any>|null} [channel] */
-function groupHeader(key, label, count, box, channel) {
+ * @param {Record<string, any>|null} [channel] @param {boolean} [needs] */
+function groupHeader(key, label, count, box, channel, needs) {
   const head = el("div", "conv-group");
   const chev = el("span", "chev", collapsedGroups.has(key) ? "▸" : "▾");
   const name = el("span", "conv-group-name", label);
-  head.append(chev, name, el("span", "conv-group-n", String(count)));
+  head.append(chev, name);
+  if (needs === true) {
+    const mark = el("span", "needs-you", "●");
+    mark.title = "a session in this channel is waiting on you";
+    head.append(mark);
+  }
+  head.append(el("span", "conv-group-n", String(count)));
   box.hidden = collapsedGroups.has(key);
   const fold = () => {
     if (collapsedGroups.has(key)) collapsedGroups.delete(key);
@@ -1679,6 +1760,7 @@ async function openChannel(channel) {
       sessionId: id,
       title: summary === undefined ? undefined : titleOf(summary),
       archived: archivedSet.has(id) || hostArchived.has(id),
+      waiting: needsYou(id),
     };
   });
 
