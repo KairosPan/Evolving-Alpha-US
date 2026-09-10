@@ -9,34 +9,13 @@
 .account-body [hidden] { display: none !important; }
 .account-body button, .account-body input, .account-body select { font: inherit; }
 .account-body button, .account-body summary, .account-body a { -webkit-tap-highlight-color: transparent; }
-.account-body :is(button, a, input, select, summary, [tabindex]):focus-visible {
+.account-workspace :is(button, a, input, select, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 .account-body .pos { color: var(--green); }
 .account-body .neg { color: var(--red); }
 
-.account-rail {
-  position: fixed;
-  inset: 0 auto 0 0;
-  z-index: 5;
-  width: 64px;
-  height: 100dvh;
-  padding: 15px 7px 14px;
-  gap: 7px;
-}
-.account-logo {
-  display: grid;
-  place-items: center;
-  height: 37px;
-  margin-bottom: 22px;
-  color: var(--text);
-  font: 750 22px/1 var(--sans);
-  text-decoration: none;
-}
-.account-rail .rail-btn { gap: 6px; padding: 11px 0 9px; }
-.account-rail .rail-label { font-size: 8px; letter-spacing: 0; }
-.account-workspace { min-width: 0; margin-left: 64px; }
 .account-topbar {
   height: 68px;
   padding: 0 40px;
@@ -205,10 +184,6 @@
   .account-info { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
-  .account-rail { width: 52px; padding: 13px 4px 12px; }
-  .account-rail .rail-label { font-size: 7px; }
-  .account-logo { margin-bottom: 15px; }
-  .account-workspace { margin-left: 52px; }
   .account-topbar { height: 56px; padding: 0 14px; gap: 12px; font-size: 11px; }
   .account-back { font-size: 10px; }
   .account-main { padding: 24px 14px 35px; }

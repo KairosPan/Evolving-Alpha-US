@@ -10,6 +10,8 @@
 <link rel="stylesheet" href="/client/chat.css">
 </head>
 <body class="inst-body">
+<nav class="rail" data-navigation="market" aria-label="primary navigation"></nav>
+<div class="page-workspace">
 <!-- The frame only. Every reading below is built by market.js from
      /data/market.json through the DOM API - this file holds not one byte of
      market data, so nothing here can ever be stale against the payload. -->
@@ -24,6 +26,8 @@
   </header>
   <div id="root"><p class="inst-note">loading…</p></div>
 </main>
+</div>
+<script type="module" src="/client/navigation.js"></script>
 <script type="module" src="/client/market.js"></script>
 </body>
 </html>

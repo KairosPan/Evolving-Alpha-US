@@ -357,8 +357,12 @@ neighbourhood:
 ## The master rail (src/panels.ts + the sidebar's four faces)
 
 A narrow icon rail at the far left opens **market** above the sidebar switches
-and **account** at the bottom. The four switches pick which face the sidebar
-shows:
+and **account** at the bottom. Chat, Market and Account share the same
+`client/navigation.js` rail and its fixed 56px layout: all six entries keep
+their icons, order and positions while only the active highlight changes.
+The four chat links (`/#strategy`, `/#agent`, `/#memory`, `/#plugin`) also work
+from either instrument page, and browser history restores the selected panel.
+The four switches pick which face the sidebar shows:
 **strategy** (the working face — everything above), **agent**, **memory**,
 **plugin**. One pattern across all four (operator direction): the sidebar is
 always an INDEX — rows, never content — and clicking a row opens that item's

@@ -9,6 +9,7 @@
    marker, so this ported block stays diffable against the prototype. */
 
 :root {
+  --rail-width: 56px;
   /* light (default) palette — clean messenger, one restrained accent */
   --bg: #f6f5f2;
   --panel: #ffffff;
@@ -46,7 +47,8 @@ body {
   overflow: hidden;
 }
 
-.chat-app { display: flex; height: 100vh; }
+.chat-app { display: flex; height: 100dvh; padding-left: var(--rail-width); }
+.page-workspace { min-width: 0; margin-left: var(--rail-width); }
 
 /* ---------- sidebar ---------- */
 
@@ -1093,8 +1095,13 @@ body {
    Market opens above strategy; account is anchored at the foot of the rail. */
 
 .rail {
-  flex: none;
-  width: 56px;
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 5;
+  height: 100dvh;
+  width: var(--rail-width);
+  overflow-y: auto;
+  font: 15px/1.5 var(--sans);
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -1118,6 +1125,7 @@ body {
   cursor: pointer;
 }
 .rail-account { margin-top: auto; }
+.rail-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .rail-btn:hover { background: var(--active-bg); }
 .rail-btn.active { background: var(--panel); color: var(--accent); box-shadow: inset 0 0 0 1px var(--line); }
 .rail-glyph { font-size: 16px; line-height: 1; }

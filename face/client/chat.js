@@ -34,6 +34,7 @@
  * @module
  */
 import { rpc, respond, openMux } from "./api.js";
+import { panelFromHash, setNavigationActive } from "./navigation.js";
 import { mapFrame } from "./mapper.js";
 import { createAnswerTraces, createTraceDisclosure } from "./answer-traces.js";
 import { loadMemberTrace } from "./member-traces.js";
@@ -2072,10 +2073,9 @@ function seedProjections(sessionId, block) {
 
 /** Show one sidebar face and refresh its content. */
 function setPanel(name) {
+  if (activePanel !== name || name === "strategy") closeDetail();
   activePanel = name;
-  for (const btn of document.querySelectorAll(".rail-btn[data-panel]")) {
-    btn.classList.toggle("active", /** @type {HTMLElement} */ (btn).dataset.panel === name);
-  }
+  setNavigationActive(name);
   $(".sidebar").dataset.panel = name;
   $("#conv-list").hidden = name !== "strategy";
   for (const panel of ["agent", "memory", "plugin"]) $(`#panel-${panel}`).hidden = panel !== name;
@@ -2876,8 +2876,19 @@ $("#composer").addEventListener("submit", (event) => {
 $("#new-session").addEventListener("click", () => newSession());
 $("#stop").addEventListener("click", () => void stopTurn());
 for (const btn of document.querySelectorAll(".rail-btn[data-panel]")) {
-  btn.addEventListener("click", () => setPanel(/** @type {HTMLElement} */ (btn).dataset.panel ?? "strategy"));
+  btn.addEventListener("click", (event) => {
+    // Native links handle new tabs and page/history navigation. Re-selecting
+    // the current fragment has no hashchange, but should still open its panel.
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const name = /** @type {HTMLElement} */ (btn).dataset.panel ?? "strategy";
+    if (location.hash === `#${name}`) {
+      event.preventDefault();
+      setPanel(name);
+    }
+  });
 }
+window.addEventListener("hashchange", () => setPanel(panelFromHash(location.hash)));
+setPanel(panelFromHash(location.hash));
 
 openMux(acceptFrame, {
   onOpen: () => {

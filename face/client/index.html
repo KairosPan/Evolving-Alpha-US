@@ -14,30 +14,7 @@
      list and every message is built by chat.js through the DOM API — this file
      holds the frame and not one byte of host data. -->
 <div class="chat-app">
-  <!-- The master rail: market and account open their own pages; strategy,
-       agent, memory and plugin switch the sidebar through chat.js. -->
-  <nav class="rail" aria-label="primary navigation">
-    <a class="rail-btn" href="/market" title="Market" aria-label="Market">
-      <svg class="rail-glyph" viewBox="0 0 18 18" width="16" height="16" aria-hidden="true"><polyline points="2,13 6.5,8 10,10.5 16,3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><polyline points="12,3.5 16,3.5 16,7.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span class="rail-label">market</span>
-    </a>
-    <button class="rail-btn active" data-panel="strategy" type="button" title="strategy — workspaces and sessions">
-      <span class="rail-glyph">❖</span><span class="rail-label">strategy</span>
-    </button>
-    <button class="rail-btn" data-panel="agent" type="button" title="agent — model, host, keys, session usage">
-      <span class="rail-glyph">◎</span><span class="rail-label">agent</span>
-    </button>
-    <button class="rail-btn" data-panel="memory" type="button" title="memory — the skill packs Kairos carries">
-      <span class="rail-glyph">▤</span><span class="rail-label">memory</span>
-    </button>
-    <button class="rail-btn" data-panel="plugin" type="button" title="plugin — composed rows and MCP tools">
-      <span class="rail-glyph">⚙</span><span class="rail-label">plugin</span>
-    </button>
-    <a class="rail-btn rail-account" href="/account" title="Account" aria-label="Account">
-      <svg class="rail-glyph" viewBox="0 0 18 18" width="16" height="16" aria-hidden="true"><rect x="2" y="4.5" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11.5 9.5h4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="11.8" cy="9.5" r="1" fill="currentColor"/></svg>
-      <span class="rail-label">account</span>
-    </a>
-  </nav>
+  <nav class="rail" data-navigation="chat" aria-label="primary navigation"></nav>
   <aside class="sidebar" data-panel="strategy">
     <div class="side-head">
       <div class="side-brand">Kairos</div>
