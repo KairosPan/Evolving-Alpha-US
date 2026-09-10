@@ -713,6 +713,50 @@ other channels' conversations or automatically maintain those notes (R5 remains 
 | `POST /data/rooms/say` | `{sessionId, text}` → `{addressed: [...]}`; 400 a bad id or empty text, 404 not in a channel, 409 a corrupt roster |
 | `POST /data/rooms/state` | `{sessionId}` → `{roster, members, caps, round?}`; never resumes a session |
 
+## Temporary subagents (client/subagents.js)
+
+A temporary subagent is a delegated task with its own durable child conversation. It is
+separate from the operator's named bots and the room roster: creating one writes no bot
+profile or journal. Its label describes the work. The face uses the subagent stack already
+mounted by `dsh-base`, with no second task registry or execution queue.
+
+Kairos's native `subagent` tool starts a fresh context and defaults to a continuable background
+child. It returns an id as soon as the first prompt is admitted. `send_message` queues a later
+turn in that same child, `list_agents` inspects existing children, and `interrupt_agent` stops
+the target's current turn. A background child can `report` a finding to its direct parent;
+the runtime separately sends a settlement notice with the outcome and any final answer.
+Kairos can continue independent work or end its turn to await that notice. A foreground
+`subagent` call (`run_in_background: false`) waits and returns a one-shot result;
+`subagent_fork` also remains one-shot and copies a prefix of its parent's history.
+
+The session's **临时子任务** panel lists its direct children, including one-shot history and
+catalog diagnostics. **委派子任务** prepares a prompt for the operator to complete and send to
+Kairos. **查看最近输出** reads a labelled snapshot; reopening it reads the latest log again.
+Opening a child uses the host's dedicated subagent history API without
+activating it. The child page uses its task label, links back to its direct parent, and routes
+continuations and interruption through the native parent/child address. Nested work is reached
+through each child's own panel. A task's report and the runtime's settlement notice are distinct
+transcript items, with their original text and source retained on replay.
+
+| Native RPC | What the face uses it for |
+|---|---|
+| `subagent.list` | Direct-child catalog, durable mode/label, current activity and parent availability; no activation |
+| `subagent.history` | Live or persisted child history, addressed by direct parent, child and mode; no activation |
+| `subagent.prompt` | Human follow-up to a continuable child, through its exact live parent; acceptance returns a message id |
+| `subagent.interrupt` | Request interruption of a continuable child's current turn; acceptance does not mean it has stopped yet |
+
+**State and limits.** `inactive` means the driver is not running; it does not prove success,
+completion or failure. One-shot children are read-only history in this panel. A cold parent
+cannot authorize a continuation: send a message in the parent conversation first, then retry.
+Merely viewing the parent's history does not reactivate it. Interruption preserves unclaimed
+queued messages and published descendants; it neither deletes the child nor stops its whole
+tree. A later send can resume parked work. The native runtime owns permission inheritance,
+ownership checks and cold resume. The face grants no additional tools or filesystem access.
+
+The deployment persona in the repository's `dsh/profile/persona.md` explains when to consult
+room voices and when to delegate a bounded task, how to wait for results, and how to report
+uncertainty. Named bots retain their existing delegation mask.
+
 ## Chat rendering (client/render.js + client/answer-traces.js)
 
 Context, thinking and tool calls preceding an answer live in its closed
@@ -781,6 +825,13 @@ edit, and model isolation. `room-discussion-smoke.test.ts` drives a structured s
 through the real engine with a local model stub: peer context, declared disagreements, malformed
 answer fallback, each member's own journal, Kairos's synthesis request, and metadata after
 flushing and reloading the session log.
+
+`subagents-smoke.test.ts` drives the native creation and control tools with a local model stub,
+checks explicit reports separately from settlement, verifies delegated permission overrides and
+parent ownership, and rejects ordinary session writes to managed children. It also reboots the
+host: cold catalog/history reads do not activate either side, and continuation resumes the same
+child after its parent is restored. Client tests cover catalog diagnostics, one-shot controls,
+unknown activity, cold-parent limits and live/history report attribution.
 
 ## Upgrading dsh — TWO pins, not one
 

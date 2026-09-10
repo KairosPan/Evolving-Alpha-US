@@ -11,8 +11,9 @@
  *   `openMux`  the downstream WebSocket at `/api/events.mux`. Downlink only —
  *              the host closes a socket that sends anything (1008 "downlink only").
  *
- * The face composes a reduced host: the client stays on `session.*`, `respond`,
- * and `events.mux`, because several stock rows are not mounted.
+ * Ordinary conversations use `session.*`; temporary child conversations use
+ * the ownership-aware `subagent.*` read/prompt/interrupt domain. `respond`
+ * answers gates in either kind of conversation.
  * @module
  */
 

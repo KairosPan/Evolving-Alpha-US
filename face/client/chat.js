@@ -27,6 +27,7 @@
  *
  * THE RPC SURFACE IS CLOSED:
  * `session.list/create/history/prompt/cancel/rename/fork`,
+ * `subagent.list/history/prompt/interrupt` for child sessions,
  * `host.pickDirectory` (the strategy picker's native folder dialog),
  * `host.describe` / `settings.describe` / `credentials.describe` (the agent
  * panel's three reads), `respond`, and `events.mux`. Answering a gate goes
@@ -46,6 +47,7 @@ import { proposeBotId } from "./botId.js";
 import { botModelChoices, botSettingsPayload, botToolLabel, draftBotSoul, normalizeBotModel } from "./botSettings.js";
 import { foldChannelName } from "./channelName.js";
 import { HOST_NAME, speakerFor } from "./speaker.js";
+import { isSubagentRow, normalizeSubagentCatalog, subagentAddress, subagentControls, subagentResult } from "./subagents.js";
 import { avatarGlyph, foldMembers, gateSpeaker, isMemberSession, isMentionText, normalizeRoomDiscussion, roomAnswerDisplay, roundEndLine, stripChips } from "./room.js";
 
 /** Rendered in place of a value the host did not give us. */
@@ -111,6 +113,178 @@ let listTimer = null;
  * whichever session is on screen when it renders. @type {Map<string, Map<string, {seq: number, value: unknown}>>} */
 const projStore = new Map();
 
+/* Native subagent catalogs are read-only, including for cold parents. Keep
+ * their addresses separate from room membership and normal session writes. */
+const subagentCatalogs = new Map();
+const subagentAddresses = new Map();
+// Identity survives a later catalog diagnostic/disappearance. Losing an
+// address must never let a child fall through to normal session writes.
+const subagentParents = new Map();
+const subagentCatalogReads = new Map();
+const subagentPanelOpen = new Map();
+const subagentOutputs = new Map();
+let subagentRefreshSeq = 0;
+let subagentInfoError = "";
+
+function activeSubagent() {
+  return activeSession === null ? null : subagentAddresses.get(activeSession) ?? null;
+}
+function isSubagentSession(id) {
+  return subagentParents.has(id) || subagentAddresses.has(id) || isSubagentRow(lastSessions.find((s) => String(s.sessionId) === id));
+}
+function childRow(address) {
+  return subagentCatalogs.get(address.parentSessionId)?.entries.find((row) => row.id === address.childSessionId);
+}
+async function readSubagentCatalog(parentSessionId) {
+  const token = (subagentCatalogReads.get(parentSessionId) ?? 0) + 1;
+  subagentCatalogReads.set(parentSessionId, token);
+  const catalog = normalizeSubagentCatalog(await rpc("subagent.list", { parentSessionId }));
+  if (subagentCatalogReads.get(parentSessionId) !== token) return subagentCatalogs.get(parentSessionId) ?? catalog;
+  subagentCatalogs.set(parentSessionId, catalog);
+  // A newly unavailable/diagnostic child must not retain a usable old address.
+  for (const [id, address] of subagentAddresses) if (address.parentSessionId === parentSessionId) subagentAddresses.delete(id);
+  for (const row of catalog.entries) {
+    subagentParents.set(row.id, parentSessionId);
+    const address = subagentAddress(parentSessionId, row.id, catalog);
+    if (address) subagentAddresses.set(row.id, address);
+  }
+  return catalog;
+}
+async function resolveSubagentAddress(id) {
+  const summary = lastSessions.find((s) => String(s.sessionId) === id);
+  const parent = subagentParents.get(id) ?? subagentAddresses.get(id)?.parentSessionId ?? (isSubagentRow(summary) ? summary.parentSessionId : undefined);
+  if (typeof parent !== "string") throw new Error("子任务缺少父会话地址，暂时无法读取。");
+  const catalog = await readSubagentCatalog(parent);
+  const address = subagentAddress(parent, id, catalog);
+  if (!address) throw new Error("子任务记录不可用，无法读取或续派。");
+  return address;
+}
+async function loadSubagentInfo() {
+  const id = activeSession;
+  const token = ++subagentRefreshSeq;
+  if (id === null) { subagentInfoError = ""; renderSubagents(); return; }
+  try {
+    const summary = lastSessions.find((row) => String(row.sessionId) === id);
+    const parent = subagentParents.get(id) ?? activeSubagent()?.parentSessionId ?? (isSubagentRow(summary) ? summary.parentSessionId : undefined);
+    await Promise.all([readSubagentCatalog(id), ...(parent ? [readSubagentCatalog(parent)] : [])]);
+    if (token !== subagentRefreshSeq || id !== activeSession) return;
+    subagentInfoError = "";
+  } catch (err) {
+    if (token !== subagentRefreshSeq || id !== activeSession) return;
+    subagentInfoError = String(err instanceof Error ? err.message : err);
+  }
+  renderSubagents();
+}
+function subagentButton(text, run) {
+  const button = el("button", "subagent-action", text);
+  button.type = "button";
+  button.addEventListener("click", () => void run(button));
+  return button;
+}
+async function interruptSubagent(address, button) {
+  button.disabled = true;
+  try {
+    await rpc("subagent.interrupt", address);
+    status("已请求中断当前轮；等待运行状态更新，排队消息仍保留。");
+    await loadSubagentInfo();
+  } catch (err) { failed(err, "subagent.interrupt"); }
+  finally {
+    if (button.id === "stop") syncSubagentComposer();
+    else if (button.isConnected) button.disabled = false;
+  }
+}
+function syncSubagentComposer() {
+  const input = /** @type {HTMLInputElement} */ ($("#composer-input"));
+  const stop = /** @type {HTMLButtonElement} */ ($("#stop"));
+  if (activeSession === null || !isSubagentSession(activeSession)) {
+    input.disabled = false;
+    input.placeholder = `Message ${speaker}…`;
+    stop.disabled = activeSession === null;
+    stop.title = "stop the active turn";
+    return;
+  }
+  const address = activeSubagent();
+  const controls = subagentControls(address ? childRow(address) : null, address ? subagentCatalogs.get(address.parentSessionId)?.parentAvailable === true : false);
+  input.disabled = !controls.canPrompt || subagentInfoError !== "";
+  input.placeholder = subagentInfoError || (controls.canPrompt ? `续派 ${childRow(address)?.label ?? "临时子任务"}…` : controls.note);
+  stop.disabled = !controls.canInterrupt;
+  stop.title = "中断子任务当前轮";
+}
+function renderSubagents() {
+  const dock = $("#subagent-dock");
+  dock.replaceChildren();
+  dock.hidden = activeSession === null;
+  syncSubagentComposer();
+  if (activeSession === null) return;
+  const parentId = activeSession;
+  const address = activeSubagent();
+  const current = address ? childRow(address) : null;
+  const ownParent = address?.parentSessionId ?? subagentParents.get(activeSession) ?? lastSessions.find((row) => String(row.sessionId) === activeSession && isSubagentRow(row))?.parentSessionId;
+  const catalog = subagentCatalogs.get(activeSession);
+  const children = catalog?.entries ?? [];
+  if (address || isSubagentSession(activeSession)) {
+    const own = el("div", "subagent-origin");
+    const controls = subagentControls(current, subagentCatalogs.get(ownParent)?.parentAvailable === true, needsYou(activeSession));
+    own.append(el("strong", "", `临时子任务 · ${current?.label ?? "未命名"}`), el("span", "", controls.state));
+    if (typeof ownParent === "string") own.append(subagentButton("返回父会话", () => openSession(ownParent)));
+    own.append(el("div", "subagent-note", controls.note));
+    dock.append(own);
+  }
+  const box = el("details", "subagent-list");
+  box.open = subagentPanelOpen.get(parentId) ?? children.length > 0;
+  box.addEventListener("toggle", () => { if (box.isConnected) subagentPanelOpen.set(parentId, box.open); });
+  box.append(el("summary", "", `临时子任务 · ${children.length}`));
+  const toolbar = el("div", "subagent-toolbar");
+  toolbar.append(subagentButton("刷新状态", () => loadSubagentInfo()));
+  const summary = lastSessions.find((s) => String(s.sessionId) === activeSession);
+  if (!isSubagentSession(activeSession) && !memberFold.members.has(activeSession) && (!summary?.agentPreset || summary.agentPreset === "kairos")) {
+    toolbar.append(subagentButton("委派子任务", () => {
+      const input = /** @type {HTMLInputElement} */ ($("#composer-input"));
+      if (input.value.trim() === "") input.value = "请委派一个临时子任务，任务是：";
+      input.focus();
+      status("补充任务目标和完成条件后发送，Kairos 会创建临时子任务。");
+    }));
+  }
+  box.append(toolbar);
+  if (subagentInfoError) { box.open = true; box.append(el("p", "subagent-note err", subagentInfoError)); }
+  else if (children.length === 0) box.append(el("p", "subagent-note", "尚无临时子任务。临时子任务处理具体工作，房间 bot 保留各自观点。"));
+  for (const row of children) {
+    const card = el("article", "subagent-card");
+    card.dataset.childSessionId = row.id;
+    const controls = subagentControls(row, catalog.parentAvailable, needsYou(row.id));
+    const head = el("div", "subagent-head");
+    head.append(el("strong", "", row.label ?? row.id), el("span", "subagent-state", controls.state));
+    card.append(head, el("p", "subagent-note", controls.note));
+    const target = subagentAddress(activeSession, row.id, catalog);
+    if (target) {
+      const actions = el("div", "subagent-toolbar");
+      actions.append(subagentButton(row.hasChildren ? "查看对话及下级任务" : "查看对话", () => openSession(row.id)));
+      const result = el("div", "subagent-result");
+      const outputView = subagentOutputs.get(row.id);
+      result.hidden = outputView?.open !== true;
+      result.textContent = outputView?.text ?? "";
+      actions.append(subagentButton(result.hidden ? "查看最近输出" : "收起输出", async (button) => {
+        if (!result.hidden) { result.hidden = true; button.textContent = "查看最近输出"; subagentOutputs.set(row.id, { open: false, text: result.textContent }); return; }
+        button.disabled = true;
+        result.hidden = false;
+        result.textContent = "读取记录…";
+        try {
+          const page = await rpc("subagent.history", { ...target, maxMessages: 12 });
+          const output = subagentResult(page.events ?? []);
+          result.textContent = output ? `${output.interrupted ? "已中断的输出片段\n" : "本次读取的最近输出\n"}${output.text.slice(0, 4000)}${output.text.length > 4000 ? "\n…打开对话查看全文" : ""}` : "最近记录中尚无文本输出；可打开对话检查过程。";
+          button.textContent = "收起输出";
+        } catch (err) { result.textContent = String(err instanceof Error ? err.message : err); }
+        finally { subagentOutputs.set(row.id, { open: true, text: result.textContent }); button.disabled = false; }
+      }));
+      if (controls.canPrompt) actions.append(subagentButton("续派", async () => { await openSession(row.id); $("#composer-input").focus(); }));
+      if (controls.canInterrupt) actions.append(subagentButton("中断当前轮", (button) => interruptSubagent(target, button)));
+      card.append(actions, result);
+    }
+    box.append(card);
+  }
+  dock.append(box);
+}
+
 /* ---------- the participants strip ---------- */
 
 /** The room on screen, from `/data/rooms/state`: the channel's bot roster and
@@ -131,7 +305,7 @@ function memberSessionIds() {
 /** Refetch the room state for the session on screen; a session in no channel reads `null`. */
 async function loadRoomInfo() {
   const id = activeSession;
-  if (id === null) { roomInfo = null; renderStrip(); return; }
+  if (id === null || isSubagentSession(id)) { roomInfo = null; renderStrip(); return; }
   try {
     const body = await panelData("/data/rooms/state", { sessionId: id });
     if (activeSession !== id) return;
@@ -149,6 +323,7 @@ const KAIROS_STATES = { organizing: "organizing", idle: "" };
 /** Draw the strip for the session on screen, or hide it. */
 function renderStrip() {
   const strip = $("#strip");
+  if (activeSession !== null && isSubagentSession(activeSession)) { strip.hidden = true; strip.replaceChildren(); return; }
   const projection = activeSession === null ? undefined : projStore.get(activeSession)?.get("room")?.value;
   const isRoom = projection !== null && typeof projection === "object" && /** @type {any} */ (projection).kind === "room";
   /* A member's OWN transcript takes no strip: `/data/rooms/state` answers for
@@ -1076,6 +1251,26 @@ function accept(view) {
     }
   }
   else if (view.kind === "card") acceptCard(view);
+  else if (view.kind === "subagent-message") {
+    answerTraces.boundary();
+    const node = el("article", "subagent-message");
+    node.append(el("strong", "", view.line === "report" ? "子任务报告" : "子任务结束通知"));
+    node.append(el("div", "subagent-note", view.line === "report" ? "子任务提供的内容" : "运行状态通知；不代表任务结论已经验证"));
+    const body = el("div", "subagent-message-body");
+    body.append(renderMarkdown(typeof view.text === "string" && view.text.trim() !== "" ? view.text : view.summary ?? "").node);
+    node.append(body);
+    if (typeof view.childSessionId === "string") {
+      const parent = view.sessionId ?? activeSession;
+      node.append(subagentButton("查看子任务", async () => {
+        try {
+          await readSubagentCatalog(parent);
+          if (!subagentAddresses.has(view.childSessionId)) throw new Error("子任务记录不可用。");
+          await openSession(view.childSessionId);
+        } catch (err) { failed(err, "subagent.history"); }
+      }));
+    }
+    place(view, node);
+  }
   else if (view.kind === "room-line") {
     answerTraces.boundary();
     place(view, roomLineNode(view));
@@ -1110,6 +1305,7 @@ function acceptFrame(frame) {
     return;
   }
   if (view.kind === "turn") {
+    scheduleListRefresh(); // children finish off-screen too; catalogs follow them
     if (view.sessionId === undefined || view.sessionId === activeSession) {
       const key = typeof view.seq === "number" ? `${view.sessionId ?? activeSession}:${view.seq}` : null;
       if (key !== null && seen.has(key)) return;
@@ -1143,7 +1339,10 @@ function acceptFrame(frame) {
     acceptGateResolved(view);
     return;
   }
-  if (view.sessionId !== undefined && view.sessionId !== activeSession) return;
+  if (view.sessionId !== undefined && view.sessionId !== activeSession) {
+    if (subagentAddresses.has(view.sessionId)) scheduleListRefresh();
+    return;
+  }
   if (typeof view.seq === "number") {
     const key = `${view.sessionId ?? activeSession}:${view.seq}`;
     if (seen.has(key)) return;
@@ -1182,6 +1381,9 @@ function resetFlow() {
   roomInfo = null;
   fineStates.clear();
   renderStrip();
+  subagentRefreshSeq += 1;
+  subagentInfoError = "";
+  renderSubagents();
 }
 
 /** @param {number} at - epoch ms. @returns {string} a short local stamp. */
@@ -1218,6 +1420,7 @@ function convRow(summary) {
   const sub = el("div", "conv-sub");
   if (needsYou(id)) sub.append(waitingChip());
   if (summary.running === true) sub.append(el("span", "chip", "running"));
+  if (isSubagentRow(summary)) sub.append(el("span", "chip subagent-chip", "临时子任务"));
   row.append(sub);
   /* Path and last-touch live on hover; the group header carries the identity
    * and the row keeps just the title (operator direction: no date column). */
@@ -1227,6 +1430,7 @@ function convRow(summary) {
    * archive and delete are the face's /data routes (the host has neither at
    * this pin). Delete is permanent and gated by a confirm — and never offered
    * on a running session. */
+  if (!isSubagentRow(summary)) {
   const actions = el("span", "conv-actions");
   const act = (glyph, label, fn) => {
     const btn = el("button", "conv-act", glyph);
@@ -1295,6 +1499,7 @@ function convRow(summary) {
     });
   }
   row.append(actions);
+  }
 
   row.addEventListener("click", () => void openSession(id));
   row.addEventListener("keydown", (event) => {
@@ -1315,11 +1520,12 @@ function markActive() {
   if (!detailOpen) {
     const row = activeSession === null ? undefined : convRows.get(activeSession);
     const summary = lastSessions.find((s) => String(s.sessionId) === activeSession);
-    $("#topbar-name").textContent = activeSession === null ? "new session" : row?.dataset.title ?? botOf(summary)?.label ?? titleOf(summary);
+    $("#topbar-name").textContent = activeSession === null ? "new session" : isSubagentSession(activeSession) ? `临时子任务 · ${activeSubagent() ? childRow(activeSubagent())?.label ?? "未命名" : "读取记录中"}` : row?.dataset.title ?? botOf(summary)?.label ?? titleOf(summary);
     $("#topbar-raw").title = dash(activeSession);
   }
   /** @type {HTMLButtonElement} */ ($("#stop")).disabled = activeSession === null;
   renderAgentSession(); // the usage card follows the session on screen
+  syncSubagentComposer();
 }
 
 /** Refetch the sidebar. Out-of-order answers are dropped, not rendered. The
@@ -1378,7 +1584,7 @@ async function refreshSessions() {
     seedProjections(id, summary.projections);
     if (fold.members.has(id)) continue; // shown through its room's answers
     const archived = archivedSet.has(id) || hostArchived.has(id);
-    const { key, label, channel } = bucketFor(channelOf(id), archived, botOf(summary), false);
+    const { key, label, channel } = bucketFor(channelOf(id), archived, isSubagentRow(summary) ? null : botOf(summary), false);
     let bucket = buckets.get(key);
     if (bucket === undefined) {
       bucket = { channel, label, items: [] };
@@ -1406,6 +1612,7 @@ async function refreshSessions() {
   markActive();
   renderStrip(); // the member fold and `running` may both have moved
   syncPickerFolders(); // a picker already on screen learns the folders the list just revealed
+  void loadSubagentInfo();
 }
 
 /** Refetch the sidebar shortly, coalescing a whole turn's worth of events. */
@@ -1453,11 +1660,20 @@ async function openSession(id) {
   /** @type {any} */
   let page;
   try {
-    page = await rpc("session.history", { sessionId: id });
+    if (isSubagentSession(id)) {
+      const address = await resolveSubagentAddress(id);
+      if (token !== openSeq) return;
+      page = await rpc("subagent.history", address);
+      if (token !== openSeq) return;
+      setSubagentSpeaker(address);
+    } else {
+      page = await rpc("session.history", { sessionId: id });
+    }
   } catch (err) {
     if (token !== openSeq) return;
     loadingSession = null;
-    failed(err, "session.history");
+    renderSubagents();
+    failed(err, isSubagentSession(id) ? "subagent.history" : "session.history");
     return;
   }
   if (token !== openSeq) return; // a newer open owns the flow now
@@ -1473,6 +1689,9 @@ async function openSession(id) {
   }
   flushQueued();
   await loadRoomInfo(); // before the gate replay, so a member's gate is found on a cold open
+  if (token !== openSeq) return;
+  await loadSubagentInfo();
+  if (token !== openSeq) return;
   for (const gate of gates.values()) if (gate.sessionId === id || memberSessionIds().has(gate.sessionId)) renderGate(gate);
   toTail();
   status(`session ${id}`);
@@ -1621,8 +1840,13 @@ let speaker = HOST_NAME;
  * for a session; `null` means no session, which is the host.
  * @param {{agentPreset?: unknown}|null|undefined} summary */
 function setSpeaker(summary) {
-  speaker = speakerFor(summary, botIndex);
+  const address = summary?.sessionId ? subagentAddresses.get(String(summary.sessionId)) : null;
+  speaker = isSubagentRow(summary) || address ? `临时子任务 · ${address ? childRow(address)?.label ?? "未命名" : "读取记录中"}` : speakerFor(summary, botIndex);
   /** @type {HTMLInputElement} */ ($("#composer-input")).placeholder = `Message ${speaker}…`;
+}
+function setSubagentSpeaker(address) {
+  speaker = `临时子任务 · ${childRow(address)?.label ?? "未命名"}`;
+  markActive();
 }
 
 /** Session ids the operator archived — face metadata from
@@ -1899,8 +2123,26 @@ async function send() {
   const input = /** @type {HTMLInputElement} */ ($("#composer-input"));
   const text = input.value;
   if (text.trim() === "") return;
+  const originSession = activeSession;
+  const originOpenSeq = openSeq;
+  // The composer DOM is shared by every conversation. Async failure recovery
+  // belongs to the view that submitted the text, including after a round trip
+  // away from and back to the same session.
+  const ownsComposer = () => openSeq === originOpenSeq && (originSession === null || activeSession === originSession);
   input.value = "";
   try {
+    if (activeSession !== null && isSubagentSession(activeSession)) {
+      const target = activeSession;
+      const address = await resolveSubagentAddress(target);
+      const controls = subagentControls(childRow(address), subagentCatalogs.get(address.parentSessionId)?.parentAvailable === true);
+      if (!controls.canPrompt) throw new Error(controls.note);
+      await rpc("subagent.prompt", { ...address, content: [{ type: "text", text }], clientTimeZone: timeZone() });
+      if (ownsComposer()) {
+        status("子任务已接收续派消息。");
+        void loadSubagentInfo();
+      }
+      return;
+    }
     if (activeSession === null) {
       const payload = pendingWorkspaceId !== undefined
         ? { workspaceId: pendingWorkspaceId }
@@ -1950,10 +2192,12 @@ async function send() {
     // the host runs it and it never reaches the model, so its only feedback is here.
     status(accepted?.command?.text ?? "sent");
   } catch (err) {
-    // Hand the text back rather than losing it — unless the operator has
-    // already started typing the next one.
-    if (input.value === "") input.value = text;
-    failed(err, "prompt");
+    // A failed send cannot plant its instruction in another conversation's
+    // draft, or overwrite text typed after this submission.
+    if (ownsComposer()) {
+      if (input.value === "") input.value = text;
+      failed(err, "prompt");
+    }
   }
 }
 
@@ -1961,6 +2205,12 @@ async function send() {
 async function stopTurn() {
   if (activeSession === null) return;
   try {
+    if (isSubagentSession(activeSession)) {
+      const address = activeSubagent();
+      if (address?.mode !== "continuable") throw new Error("此子任务仅可读取记录。");
+      await interruptSubagent(address, $("#stop"));
+      return;
+    }
     await rpc("session.cancel", { sessionId: activeSession });
     status("cancel requested");
   } catch (err) {
@@ -2177,6 +2427,9 @@ function acceptProjection(view) {
     renderAgentSession();
   }
   if (id === activeSession && view.key === "room") renderStrip(); // the coarse states live here
+  // session.list seeds the same snapshot again: only new projection cuts
+  // warrant another catalog read, otherwise listing schedules itself forever.
+  if (view.key === "subagent" && (prev === undefined || prev.seq < seq)) scheduleListRefresh();
 }
 
 /** Seed the store from a `{asOfSeq, values}` projections block (history tail

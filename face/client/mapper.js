@@ -51,7 +51,7 @@
  * One frame's whole meaning to the UI. A closed `kind` vocabulary with optional
  * payload fields: a renderer switches on `kind` and reads only its own fields.
  * @typedef {object} FrameView
- * @property {"bubble"|"card"|"approval"|"question"|"gate-resolved"|"pulse"|"projection"|"room-line"|"turn"|"ignore"} kind
+ * @property {"bubble"|"card"|"approval"|"question"|"gate-resolved"|"pulse"|"projection"|"room-line"|"subagent-message"|"turn"|"ignore"} kind
  * @property {number} [seq] - the session event's seq; the renderer's dedupe key across backfill and stream.
  * @property {string} [sessionId] - which session this belongs to (absent on a history entry that carries none).
  * @property {SurfaceOpView} [surfaceOp] - on every rendered session event: `append`, or a
@@ -60,7 +60,8 @@
  * @property {string} [text] - bubble text.
  * @property {boolean} [interrupted] - bubbles: the turn was cancelled mid-stream and this is
  *   only the prefix that had arrived. Never render a partial answer as a complete one.
- * @property {string} [source] - who produced a bubble's message: `user`, `plugin`, `model`, `tool`, `room`.
+ * @property {string} [source] - who produced the message: `user`, `plugin`, `model`, `tool`, `room`,
+ *   `subagent-report` (child-authored), or `subagent-settled` (runtime-authored).
  * @property {string} [thinking] - kairos bubbles: the message's reasoning blocks, joined.
  *   Thinking is never chat text; a renderer shows it apart from the bubble or not at all.
  * @property {string} [mode] - pulses: which block kind just opened live — `reasoning`, `text`, `tool-call`.
@@ -86,10 +87,14 @@
  * @property {string} [displayText] - the readable answer body supplied by the room producer; text retains the original.
  * @property {string} [viewIssue] - the producer could not fully record the member's account.
  * @property {unknown} [discussion] - the round's brief and attributed accounts, before renderer validation.
- * @property {string} [form] - the room `source.form` a room-sourced bubble carried (`answer`, `delta`),
- *   when the frame is one.
+ * @property {string} [form] - the wire `source.form`, when present; subagent messages retain
+ *   `relay` (report) or `notice` (settlement), distinct from their rendered `line`.
  * @property {string[]} [mention] - operator bubbles: the roster ids the operator's `@` addressed.
- * @property {string} [line] - room-line: which room-only line this is — `round-end`.
+ * @property {string} [line] - room-line: `round-end`; subagent-message: `report` or `settled`.
+ * @property {string} [childSessionId] - subagent-message: the source's explicit senderSessionId,
+ *   never inferred from text or replaced by this parent session's id.
+ * @property {string} [summary] - subagent-message: the runtime's settlement summary, if recorded.
+ *   The pinned wire source does not carry a structured outcome or result; do not infer one from prose.
  * @property {number} [round] - room-line: the round number that ended.
  * @property {unknown[]} [turns] - room-line: every member's `RoomTurnRecord` for the round.
  * @property {"start"|"end"} [phase] - turn: which boundary this is.
@@ -175,10 +180,29 @@ function surfaceOpOf(event) {
 function bubble(role, message, base, interrupted) {
   const text = isObject(message) ? blocksText(message.content) : "";
   const thinking = role === "kairos" && isObject(message) ? blocksReasoning(message.content) : "";
-  if (text === "" && thinking === "") return ignore();
   const src = isObject(message) && isObject(message.source) ? message.source : {};
   const kind = typeof src.kind === "string" ? src.kind : undefined;
   const form = typeof src.form === "string" ? src.form : undefined;
+  /* Continuable children report through ordinary user/message events, but
+   * neither report is an operator prompt. Keep child-authored reports apart
+   * from the runtime's settlement notice: continuation.d.ts/js record only
+   * senderSessionId, form, and (for settlement) summary. In particular, these
+   * messages carry no structured outcome/result to guess from their prose.
+   * Recognized kinds with older/malformed metadata still retain their own
+   * attribution and full text; only an explicitly recorded id becomes a link. */
+  if (role === "operator" && (kind === "subagent-report" || kind === "subagent-settled")) {
+    const summary = kind === "subagent-settled" && typeof src.summary === "string" && src.summary.trim() !== ""
+      ? src.summary : undefined;
+    if (text === "" && summary === undefined) return ignore();
+    return {
+      ...base, kind: "subagent-message", line: kind === "subagent-report" ? "report" : "settled",
+      source: kind, form, text,
+      ...(typeof src.senderSessionId === "string" && src.senderSessionId.trim() !== ""
+        ? { childSessionId: src.senderSessionId } : {}),
+      ...(summary === undefined ? {} : { summary }),
+    };
+  }
+  if (text === "" && thinking === "") return ignore();
   /* A room-sourced user message is one of three things (plan 2, deviation 1):
    * a member's ANSWER (a bubble in the bot's own voice), the ROUND END (a
    * line), or - in a member's own session - the DELTA it was prompted with

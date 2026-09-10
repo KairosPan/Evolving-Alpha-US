@@ -310,3 +310,98 @@ test("turn boundaries are surfaced for every session, so the strip can clear a m
   assert.equal(v.sessionId, "s-b");
   assert.equal(v.reason, "completed");
 });
+
+test("native subagent reports preserve child attribution and the complete framed text in live and history views", () => {
+  // dsh-subagent continuation.js deliverReport() prepends this header to the
+  // child's selected content and records only kind/form/senderSessionId.
+  const event = { type: "user/message", seq: 44, data: {
+    content: [
+      { type: "text", text: "Background subagent child-7 reported:" },
+      { type: "text", text: "已核查样本；结论仍待复现。" },
+    ],
+    source: { kind: "subagent-report", form: "relay", senderSessionId: "child-7" },
+  } };
+  const live = mapFrame({ type: "server-request", method: "session/event", rpcId: "f44", payload: { type: "session/event", sessionId: "parent", event } });
+  const history = mapFrame({ sessionId: "parent", event });
+  assert.deepEqual(live, history);
+  assert.deepEqual(live, {
+    seq: 44, sessionId: "parent", surfaceOp: "append", kind: "subagent-message", line: "report",
+    source: "subagent-report", form: "relay", childSessionId: "child-7",
+    text: "Background subagent child-7 reported:\n已核查样本；结论仍待复现。",
+  });
+  assert.equal(live.role, undefined, "a child report is neither an operator nor a room bot");
+  assert.equal(live.bot, undefined);
+  assert.equal(live.summary, undefined);
+  assert.equal(live.outcome, undefined, "reporting does not settle the child");
+});
+
+test("native subagent settlement remains a runtime notice, without turning prose into an outcome", () => {
+  // notifySettlement() writes a bounded summary and the final output into
+  // message content. Its source has no result/outcome/stopReason field.
+  const summary = "Background subagent child-7 was stopped before it finished.";
+  const event = { type: "user/message", seq: 45, surfaceOp: { op: "replace", start: 44, end: 44 }, data: {
+    content: [
+      { type: "text", text: summary },
+      { type: "text", text: "Its closing message:" },
+      { type: "text", text: "这是停止前的部分记录。" },
+    ],
+    source: { kind: "subagent-settled", form: "notice", senderSessionId: "child-7", summary },
+  } };
+  const view = mapFrame({ type: "session/event", sessionId: "parent", event });
+  assert.deepEqual(view, mapFrame({ sessionId: "parent", event }));
+  assert.equal(view.kind, "subagent-message");
+  assert.equal(view.line, "settled");
+  assert.equal(view.source, "subagent-settled");
+  assert.equal(view.form, "notice");
+  assert.equal(view.summary, summary);
+  assert.equal(view.text, `${summary}\nIts closing message:\n这是停止前的部分记录。`);
+  assert.equal(view.childSessionId, "child-7");
+  assert.equal(view.sessionId, "parent");
+  assert.deepEqual(view.surfaceOp, { op: "replace", start: 44, end: 44 });
+  assert.equal(view.role, undefined, "the runtime is not speaking as the child");
+  assert.equal(view.outcome, undefined, "settled is not synonymous with successful completion");
+});
+
+test("subagent messages with legacy or malformed source fields retain raw text without invented identity", () => {
+  for (const kind of ["subagent-report", "subagent-settled"]) {
+    for (const senderSessionId of [undefined, null, [], 2, "", "   "]) {
+      const view = mapFrame({ sessionId: "parent", event: { type: "user/message", seq: 46, data: {
+        content: [{ type: "text", text: "旧日志原文 child-unknown completed" }],
+        source: { kind, senderSessionId, summary: { unsafe: true }, form: [], outcome: "completed", result: { output: "do not replace the log" }, name: "Operator", bot: "room-member" },
+      } } });
+      assert.equal(view.kind, "subagent-message");
+      assert.equal(view.text, "旧日志原文 child-unknown completed");
+      assert.equal(view.childSessionId, undefined);
+      assert.equal(view.summary, undefined);
+      assert.equal(view.form, undefined);
+      assert.equal(view.outcome, undefined);
+      assert.equal(view.role, undefined);
+      assert.equal(view.bot, undefined);
+      assert.equal(view.name, undefined);
+    }
+  }
+});
+
+test("summary-only settlement is visible, while empty reports and unrelated prose keep the existing fallback", () => {
+  const notice = mapFrame({ event: { type: "user/message", seq: 47, data: {
+    content: [], source: { kind: "subagent-settled", summary: "The child ended without a closing message." },
+  } } });
+  assert.equal(notice.kind, "subagent-message");
+  assert.equal(notice.summary, "The child ended without a closing message.");
+  assert.equal(notice.text, "");
+  assert.equal(notice.childSessionId, undefined);
+
+  assert.equal(mapFrame({ event: { type: "user/message", data: {
+    content: [], source: { kind: "subagent-report", summary: "This is not report metadata." },
+  } } }).kind, "ignore");
+
+  for (const kind of ["user", "plugin", "subagent-future-kind"]) {
+    const view = mapFrame({ event: { type: "user/message", data: {
+      content: [{ type: "text", text: "Background subagent child-7 reported:" }],
+      source: { kind, senderSessionId: "child-7" },
+    } } });
+    assert.equal(view.kind, "bubble", "subagent attribution is metadata, never detected from text");
+    assert.equal(view.childSessionId, undefined);
+    assert.equal(view.text, "Background subagent child-7 reported:");
+  }
+});
