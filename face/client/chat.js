@@ -43,6 +43,7 @@ import { renderMarkdown } from "./markdown.js";
 import { renderChannelPage } from "./channels.js";
 import { ARCHIVED_KEY, bucketFor, isBotKey, UNGROUPED_KEY } from "./grouping.js";
 import { proposeBotId } from "./botId.js";
+import { botModelChoices, botSettingsPayload, botToolLabel, draftBotSoul, normalizeBotModel } from "./botSettings.js";
 import { foldChannelName } from "./channelName.js";
 import { HOST_NAME, speakerFor } from "./speaker.js";
 import { avatarGlyph, foldMembers, gateSpeaker, isMemberSession, isMentionText, roundEndLine, stripChips } from "./room.js";
@@ -2115,7 +2116,11 @@ async function panelData(path, body) {
     body: JSON.stringify(body),
   });
   const parsed = await res.json();
-  if (parsed?.ok !== true) throw new Error(String(parsed?.error ?? `HTTP ${res.status}`));
+  if (parsed?.ok !== true) {
+    const error = new Error(String(parsed?.error ?? `HTTP ${res.status}`));
+    error.status = res.status;
+    throw error;
+  }
   return parsed;
 }
 
@@ -2260,57 +2265,326 @@ function openBotHome(bot) {
   status(`new session · ${bot.name} at home · type below`);
 }
 
-/** One bot's page: what it is, where it lives, its home sessions, its soul.
- * The soul is editable here and nowhere else in the client. */
-function openBot(bot) {
-  openDetail(`bot · ${bot.name}`, (inner) => {
-    inner.append(el("div", "detail-title", String(bot.name)));
-    inner.append(el("div", "detail-sub", `${bot.id} · ${bot.description || "no description"}`));
-    if (bot.broken) inner.append(el("div", "sp-note err", `dsh cannot mount this bot: ${bot.broken}`));
-    else if (bot.listed === false) inner.append(el("div", "sp-note err", "the preset roster does not report this directory - is its agent.cordis.yml present?"));
-    inner.append(el("div", "detail-path", String(bot.dir)));
+/** A labelled settings field; labels remain visible after the operator types. */
+function botField(title, control, hint) {
+  const field = el("label", "bot-field");
+  field.append(el("span", "bot-field-title", title), control);
+  if (hint) field.append(el("span", "bot-field-hint", hint));
+  return field;
+}
 
-    const actions = el("div", "detail-actions");
-    const home = el("button", "picker-btn", "open home");
-    home.type = "button";
-    home.disabled = Boolean(bot.broken);
-    home.addEventListener("click", () => openBotHome(bot));
-    actions.append(home);
-    inner.append(actions);
-
-    const homes = lastSessions.filter((s) => s.agentPreset === bot.id);
-    const card = panelCard(`home sessions · ${homes.length}`);
-    for (const s of homes) {
-      const row = el("div", "ch-session");
-      row.setAttribute("role", "button");
-      row.tabIndex = 0;
-      row.append(el("span", "ch-session-title", titleOf(s)));
-      row.addEventListener("click", () => { closeDetail(); void openSession(String(s.sessionId)); });
-      card.append(row);
+/** A catalog is advisory: unavailable listings still allow an exact route. */
+function botModelField(value) {
+  const input = /** @type {HTMLInputElement} */ (el("input", "picker-input"));
+  input.type = "text";
+  input.value = value || "";
+  input.placeholder = "Inherit default (or provider/model)";
+  const list = el("datalist");
+  list.id = `bot-models-${detailSeq}`;
+  input.setAttribute("list", list.id);
+  const field = botField("Default model", input, "Leave empty to inherit the host default. Used for new home conversations.");
+  const catalogNote = el("span", "bot-field-hint", "Loading available models…");
+  field.append(list, catalogNote);
+  void rpc("llm.models", {}).then((catalog) => {
+    for (const choice of botModelChoices(catalog)) {
+      const option = el("option");
+      option.value = choice.value;
+      option.label = choice.label;
+      list.append(option);
     }
-    if (homes.length === 0) card.append(el("div", "sp-note", "none yet - open home and say something"));
-    inner.append(card);
+    const failures = Array.isArray(catalog?.failures) ? catalog.failures : [];
+    catalogNote.textContent = failures.length
+      ? `Some model listings are unavailable: ${failures.map((f) => f.name || f.id).join(", ")}. You can still enter a route.`
+      : list.children.length ? "Choose a suggestion or enter an exact provider/model route." : "No models listed. You can still enter an exact provider/model route.";
+  }).catch(() => { catalogNote.textContent = "Model listing unavailable. You can still enter a provider/model route."; });
+  return { input, field };
+}
 
-    const soulCard = panelCard("soul");
-    const soul = /** @type {HTMLTextAreaElement} */ (el("textarea", "picker-input"));
-    soul.rows = 8;
+/** Optional writing help creates a local draft; only Save writes the bot. */
+function botSoulGuide(soul, changed) {
+  const guide = el("details", "bot-guide");
+  guide.append(el("summary", "", "Role writing guide (optional)"));
+  guide.append(el("div", "sp-note", "Describe the voice's judgment, not just its tone. Fill the parts that matter; preview the draft before adding it to SOUL."));
+  const questions = [
+    ["identity", "Identity and perspective", "Who is this voice, and what perspective does it bring?"],
+    ["focus", "Research focus", "Which questions and risks does it pay attention to?"],
+    ["evidence", "Evidence standard", "What evidence does it require before making a claim?"],
+    ["revise", "Changing its mind", "What observation would make it revise or retire its view?"],
+    ["participation", "Speak or pass", "When should it contribute, disagree, ask, or pass?"],
+    ["style", "Communication style", "How should it express uncertainty and disagreement?"],
+  ];
+  const fields = {};
+  for (const [key, title, placeholder] of questions) {
+    const input = /** @type {HTMLTextAreaElement} */ (el("textarea", "picker-input"));
+    input.rows = 2;
+    input.placeholder = placeholder;
+    fields[key] = input;
+    guide.append(botField(title, input));
+  }
+  const preview = el("button", "picker-btn", "Preview SOUL draft");
+  preview.type = "button";
+  const draft = /** @type {HTMLTextAreaElement} */ (el("textarea", "picker-input bot-soul"));
+  draft.rows = 8;
+  draft.setAttribute("aria-label", "SOUL draft preview");
+  const draftArea = el("div", "bot-draft");
+  draftArea.hidden = true;
+  const use = el("button", "picker-btn", "Append draft to SOUL editor");
+  use.type = "button";
+  use.addEventListener("click", () => {
+    soul.value = [soul.value.trim(), draft.value.trim()].filter(Boolean).join("\n\n");
+    changed();
+    soul.focus();
+    draftArea.hidden = true;
+  });
+  preview.addEventListener("click", () => {
+    draft.value = draftBotSoul(Object.fromEntries(Object.entries(fields).map(([key, input]) => [key, input.value])));
+    draftArea.hidden = false;
+    use.disabled = !draft.value.trim();
+  });
+  draft.addEventListener("input", () => { use.disabled = !draft.value.trim(); });
+  draftArea.append(draft, use, el("div", "sp-note", "This draft stays in the editor until you save settings."));
+  guide.append(preview, draftArea);
+  return guide;
+}
+
+function botToolList(patterns) {
+  const list = el("div", "bot-capabilities");
+  for (const pattern of patterns) {
+    const item = el("div", "bot-capability");
+    item.append(el("span", "", botToolLabel(pattern)), el("code", "", pattern));
+    list.append(item);
+  }
+  return list;
+}
+
+/** Inspect a particular session separately from the bot's saved files. */
+function botRuntimeCard(bot, sessions) {
+  const card = panelCard("Session inspection");
+  card.append(el("div", "sp-note", "Saved settings and a session's loaded context can differ. A preview shows what the session would use now; a last request shows what was actually sent."));
+  if (sessions.length === 0) {
+    card.append(el("div", "sp-note", "Start a new test conversation, send a message, then return here to inspect it."));
+    return card;
+  }
+  const controls = el("div", "bot-inline");
+  const select = /** @type {HTMLSelectElement} */ (el("select", "picker-input"));
+  select.setAttribute("aria-label", "Session to inspect");
+  for (const session of sessions) {
+    const option = el("option");
+    option.value = String(session.sessionId);
+    option.textContent = `${session.sessionId === activeSession ? "Current · " : ""}${titleOf(session)}`;
+    select.append(option);
+  }
+  if (sessions.some((s) => s.sessionId === activeSession)) select.value = activeSession;
+  const inspect = el("button", "picker-btn", "Refresh inspection");
+  inspect.type = "button";
+  controls.append(select, inspect);
+  const result = el("div", "bot-runtime");
+  let generation = 0;
+  const refresh = async () => {
+    const requested = ++generation;
+    inspect.disabled = true;
+    result.replaceChildren(el("div", "sp-note", "Inspecting session…"));
+    try {
+      const { runtime } = await panelData(`/data/bots/runtime?id=${encodeURIComponent(bot.id)}&sessionId=${encodeURIComponent(select.value)}`);
+      if (requested !== generation || !card.isConnected) return;
+      result.replaceChildren();
+      if (!runtime || runtime.source === "unavailable") {
+        result.append(el("div", "sp-note", runtime?.note || "Session details are unavailable. Open this conversation first, then return here."));
+        const open = el("button", "picker-btn", "Open conversation");
+        open.type = "button";
+        open.addEventListener("click", () => void openSession(select.value));
+        result.append(open);
+        return;
+      }
+      kvRow(result, "Source", runtime.source === "mounted" ? "Loaded session preview" : "Last recorded request");
+      kvRow(result, "Model", runtime.model || "Not available");
+      if (runtime.status) kvRow(result, "Status", runtime.status);
+      if (runtime.revisionAtStart) kvRow(result, "Revision at start", runtime.revisionAtStart);
+      kvRow(result, "SOUL vs saved", runtime.soulMatchesSaved === true ? "Matches saved SOUL" : runtime.soulMatchesSaved === false ? "Differs from saved SOUL" : "Not available");
+      if (runtime.note) result.append(el("div", "sp-note", runtime.note));
+      if (typeof runtime.soul === "string") {
+        const disclosure = el("details", "bot-guide");
+        disclosure.append(el("summary", "", "Inspect session SOUL"), el("pre", "bot-code", runtime.soul));
+        result.append(disclosure);
+      }
+      if (Array.isArray(runtime.tools)) {
+        const disclosure = el("details", "bot-guide");
+        disclosure.append(el("summary", "", `${runtime.source === "mounted" ? "Preview" : "Request"} tools · ${runtime.tools.length}`), botToolList(runtime.tools));
+        result.append(disclosure);
+      }
+      if (Array.isArray(runtime.skills)) {
+        const disclosure = el("details", "bot-guide");
+        disclosure.append(el("summary", "", `Session skills · ${runtime.skills.length}`));
+        for (const skill of runtime.skills) disclosure.append(el("div", "sp-note", `${skill.name}${skill.description ? ` · ${skill.description}` : ""}`));
+        result.append(disclosure);
+      }
+      if (runtime.source === "mounted" && runtime.lastRequest) {
+        const last = el("details", "bot-guide");
+        last.append(el("summary", "", "Last recorded request"));
+        kvRow(last, "Model sent", runtime.lastRequest.model || "Not available");
+        last.append(botToolList(runtime.lastRequest.tools || []));
+        result.append(last);
+      }
+    } catch (err) {
+      if (requested === generation) result.replaceChildren(panelError(err, "session inspection"));
+    } finally {
+      if (requested === generation) inspect.disabled = false;
+    }
+  };
+  inspect.addEventListener("click", () => void refresh());
+  select.addEventListener("change", () => void refresh());
+  card.append(controls, result);
+  // The detail builder attaches this card synchronously after returning.
+  queueMicrotask(() => { if (card.isConnected) void refresh(); });
+  return card;
+}
+
+/** Saved bot configuration, local drafting, and a separate session inspection. */
+function openBot(bot, notice = "") {
+  openDetail(`bot · ${bot.name}`, (inner) => {
+    inner.classList.add("bot-settings");
+    inner.append(el("div", "detail-title", String(bot.name)));
+    inner.append(el("div", "detail-sub", `Bot settings · ${bot.id}`));
+    if (bot.rosterStale) inner.append(el("div", "sp-note", "Roster refresh is unavailable. Bot availability below is the last known status."));
+    if (bot.broken) inner.append(el("div", "sp-note err", `This bot cannot load: ${bot.broken}`));
+    else if (bot.listed === false) inner.append(el("div", "sp-note err", "This bot is saved but is not reported by the preset roster."));
+    for (const issue of bot.setupIssues || []) inner.append(el("div", "sp-note err", issue));
+    const feedback = el("div", "sp-note bot-feedback", notice || "Edit the saved configuration below. Existing conversations keep their own context; test changes in a new conversation.");
+    feedback.setAttribute("role", "status");
+    inner.append(feedback);
+    const basic = panelCard("Basic information");
+    const name = /** @type {HTMLInputElement} */ (el("input", "picker-input"));
+    name.value = String(bot.name || "");
+    name.maxLength = 120;
+    const description = /** @type {HTMLTextAreaElement} */ (el("textarea", "picker-input"));
+    description.rows = 2;
+    description.value = String(bot.description || "");
+    const model = botModelField(bot.model);
+    basic.append(botField("Display name", name), botField("Short description", description, "The perspective this voice brings to a room."), model.field);
+    inner.append(basic);
+    const soulCard = panelCard("SOUL · persistent identity");
+    soulCard.append(el("div", "sp-note", "Define the voice's perspective, evidence standard, and response style. Keep temporary tasks in the conversation."));
+    const soul = /** @type {HTMLTextAreaElement} */ (el("textarea", "picker-input bot-soul"));
+    soul.rows = 12;
     soul.value = String(bot.soul ?? "");
-    const save = el("button", "picker-btn", "save soul");
+    soul.spellcheck = false;
+    soul.setAttribute("aria-label", "Saved SOUL editor");
+    const fields = () => ({ name: name.value, description: description.value, model: model.input.value, soul: soul.value });
+    const original = JSON.stringify(fields());
+    const dirty = () => JSON.stringify(fields()) !== original;
+    const actions = el("div", "bot-save-bar");
+    const save = el("button", "picker-btn", "Save settings");
     save.type = "button";
+    const home = el("button", "picker-btn", "New test conversation");
+    home.type = "button";
+    const reload = el("button", "picker-btn", "Reload saved settings");
+    reload.type = "button";
+    reload.hidden = true;
+    let conflict = false;
+    const changed = () => {
+      const unsaved = dirty();
+      save.disabled = conflict || (!unsaved && bot.soulInSync !== false);
+      home.disabled = conflict || unsaved || Boolean(bot.broken) || bot.listed === false;
+      home.title = unsaved ? "Save your edits before testing the new configuration." : "Start a new home conversation with the saved configuration.";
+      if (conflict) return;
+      feedback.textContent = unsaved ? "Unsaved changes. Save settings before starting a test conversation." : notice || "Saved configuration. New settings take effect in new conversations.";
+      feedback.classList.remove("err");
+    };
+    for (const control of [name, description, model.input, soul]) control.addEventListener("input", changed);
+    soulCard.append(botSoulGuide(soul, changed), soul);
+    if (bot.soulInSync === false) {
+      soulCard.append(el("div", "sp-note err", "Saved SOUL differs from the configured persona. Saving settings will synchronize them."));
+      if (typeof bot.compositionSoul === "string") {
+        const current = el("details", "bot-guide");
+        current.append(el("summary", "", "Inspect configured persona"), el("pre", "bot-code", bot.compositionSoul));
+        soulCard.append(current);
+      }
+    }
+    inner.append(soulCard);
     save.addEventListener("click", async () => {
       save.disabled = true;
+      home.disabled = true;
+      const controls = [...new Set([name, description, model.input, soul, ...soulCard.querySelectorAll("input, textarea, button")])];
+      const disabledBefore = controls.map((control) => control.disabled);
+      for (const control of controls) control.disabled = true;
       try {
-        const body = await panelData("/data/bots/soul", { id: bot.id, soul: soul.value });
-        bot = body.bot;
-        status(`saved soul of ${bot.name} - a fresh session will carry it (a running one keeps its prompt)`);
+        const body = await panelData("/data/bots/settings", botSettingsPayload(bot, fields()));
+        // POST reads saved files without consulting the roster: its listed:false
+        // is not evidence of failure. Retain the last known roster status until
+        // GET can replace it, while keeping the successfully saved fields fresh.
+        const previous = botIndex.find((row) => row.id === body.bot.id) ?? bot;
+        const saved = { ...body.bot, listed: previous.listed, broken: previous.broken, rosterStale: true };
+        botIndex = botIndex.some((row) => row.id === saved.id)
+          ? botIndex.map((row) => row.id === saved.id ? saved : row)
+          : [...botIndex, saved];
+        await loadBotIndex();
+        if (!inner.isConnected) return;
+        const fresh = botIndex.find((b) => b.id === saved.id) ?? saved;
+        void refreshAgentPanel();
+        openBot(fresh, "Settings saved. Start a new test conversation to use this configuration.");
       } catch (err) {
-        failed(err, "save soul");
+        if (!inner.isConnected) return;
+        conflict = err?.status === 409 && String(err.message).includes("changed since this view was loaded");
+        feedback.classList.add("err");
+        feedback.textContent = conflict
+          ? "This bot was changed elsewhere. Your draft is still here. Copy any edits you want to keep, then reload saved settings before saving again."
+          : `Could not save settings: ${err instanceof Error ? err.message : String(err)}`;
+        reload.hidden = !conflict;
+        save.disabled = conflict;
+        home.disabled = conflict || dirty() || Boolean(bot.broken) || bot.listed === false;
       } finally {
-        save.disabled = false;
+        controls.forEach((control, i) => { control.disabled = disabledBefore[i]; });
       }
     });
-    soulCard.append(soul, save);
-    inner.append(soulCard);
+    reload.addEventListener("click", async () => {
+      reload.disabled = true;
+      try {
+        const body = await panelData("/data/bots.json");
+        const fresh = body.bots?.find((b) => b.id === bot.id);
+        if (!fresh) throw new Error("Bot no longer exists.");
+        botIndex = body.bots;
+        if (inner.isConnected) openBot(fresh, "Reloaded saved settings.");
+      } catch (err) {
+        feedback.textContent = `Could not reload: ${err instanceof Error ? err.message : String(err)}`;
+        feedback.classList.add("err");
+        reload.disabled = false;
+      }
+    });
+    home.addEventListener("click", () => { if (!dirty()) openBotHome(bot); });
+    actions.append(save, home, reload);
+    inner.append(actions, el("div", "sp-note", "New test conversation uses the saved settings and creates a session when you send the first message."));
+    changed();
+    const capabilities = panelCard("Configured capabilities");
+    capabilities.append(el("div", "sp-note", "These are configured tool patterns. Session inspection shows the tools actually available; write access is controlled separately."));
+    capabilities.append(botToolList(Array.isArray(bot.allow) ? bot.allow : []));
+    if (!bot.allow?.length) capabilities.append(el("div", "sp-note", "No tool patterns declared."));
+    inner.append(capabilities);
+    const skills = panelCard(`Own skills · ${bot.skills?.length || 0}`);
+    skills.append(el("div", "sp-note", "Reusable procedures in this bot's skills folder. Session discovery can differ."));
+    for (const skill of bot.skills || []) {
+      const item = el("div", "bot-skill");
+      item.append(el("strong", "", skill.name), el("div", "sp-note", skill.description || "No description"), el("code", "bot-skill-path", skill.path));
+      skills.append(item);
+    }
+    if (!bot.skills?.length) skills.append(el("div", "sp-note", "No local skills yet."));
+    inner.append(skills);
+    const sessions = lastSessions.filter((s) => s.agentPreset === bot.id);
+    inner.append(botRuntimeCard(bot, sessions));
+    const homes = sessions.filter((s) => s.cwd === bot.homeCwd && !s.parentSessionId && !memberFold.members.has(String(s.sessionId)));
+    const card = panelCard(`Home conversations · ${homes.length}`);
+    for (const session of homes) {
+      const row = el("button", "ch-session bot-session-row");
+      row.type = "button";
+      row.append(el("span", "ch-session-title", titleOf(session)));
+      row.addEventListener("click", () => void openSession(String(session.sessionId)));
+      card.append(row);
+    }
+    if (homes.length === 0) card.append(el("div", "sp-note", "No home conversations yet."));
+    inner.append(card);
+    const location = el("details", "bot-guide");
+    location.append(el("summary", "", "Configuration location"), el("code", "bot-code", String(bot.dir)));
+    if (bot.revision) kvRow(location, "Saved revision", bot.revision);
+    inner.append(location);
   });
 }
 
@@ -2320,7 +2594,8 @@ function openBot(bot) {
 function openNewBot() {
   openDetail("new bot", (inner) => {
     inner.append(el("div", "detail-title", "New bot"));
-    inner.append(el("div", "detail-sub", "copies bots/_template · a voice, not a hand"));
+    inner.classList.add("bot-settings");
+    inner.append(el("div", "detail-sub", "Create a voice with its own perspective, identity, and conversations."));
     /* `col`: the other two `.picker-new` forms are one input beside one button,
      * which the row layout suits; this one is four fields over a button and has
      * to stack (chat.css `.picker-new.col`). */
@@ -2335,6 +2610,7 @@ function openNewBot() {
     const description = /** @type {HTMLInputElement} */ (el("input", "picker-input"));
     description.type = "text";
     description.placeholder = "one line - the stance this voice argues";
+    const model = botModelField("");
     const soul = /** @type {HTMLTextAreaElement} */ (el("textarea", "picker-input"));
     soul.rows = 6;
     soul.placeholder = "persona (optional; the template's if empty; no {{ }})";
@@ -2344,6 +2620,8 @@ function openNewBot() {
       create.disabled = true;
       try {
         const payload = { name: name.value.trim(), id: id.value.trim(), description: description.value.trim() };
+        const route = normalizeBotModel(model.input.value);
+        if (route !== null) payload.model = route;
         if (soul.value.trim() !== "") payload.soul = soul.value;
         const body = await panelData("/data/bots", payload);
         /* Open the FRESH index row, not the one the POST returned: the roster
@@ -2357,10 +2635,11 @@ function openNewBot() {
         create.disabled = false;
       }
     });
-    form.append(name, id, description, soul, create);
+    form.append(
+      botField("Display name", name), botField("Bot id", id), botField("Short description", description), model.field,
+      botSoulGuide(soul, () => {}), botField("SOUL (optional)", soul, "Leave empty to start with the template identity. You can refine it after creation."), create,
+    );
     inner.append(form);
-    inner.append(el("div", "sp-note",
-      "The mask in the composition is visibility, not authority: what a bot may write is its session's sandbox, what it may order is Gate 2."));
   });
 }
 

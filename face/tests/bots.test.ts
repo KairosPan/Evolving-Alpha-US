@@ -1,16 +1,17 @@
 // face/tests/bots.test.ts
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { load } from "js-yaml";
+import { entryListSchema } from "@deepseek-ai/cordis-plugin-include";
+import { dump, load } from "js-yaml";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import { makeBotsRoot } from "./bots-fixture.ts";
 import {
   BOT_PLUGIN_RELATIVE, DEFAULT_ALLOW, TEMPLATE_SOUL, createBot, isBotId, listBots,
-  registerBotRoutes, rejectSoul, renderComposition, renderPresetMeta, updateSoul,
+  registerBotRoutes, rejectSoul, renderComposition, renderPresetMeta, updateBotSettings, updateSoul,
 } from "../src/bots.ts";
 import { HttpError } from "../src/http.ts";
 
@@ -71,11 +72,15 @@ test("createBot copies the template, writes the three files, renders the composi
   await assert.rejects(createBot(root, { id: "probe", name: "Probe" }), (err: HttpError) => err.status === 409);
 });
 
-test("createBot without a soul uses the template's, and proposes an id from the name when none is given", async () => {
+test("createBot without a soul names the bot in its template, and proposes an id from the name when none is given", async () => {
   const root = await makeBotsRoot();
   const made = await createBot(root, { name: "Value Investor" });
   assert.equal(made.id, "value-investor");
-  assert.equal(made.soul, TEMPLATE_SOUL);
+  assert.equal(made.soul, TEMPLATE_SOUL.replace("<bot name>", "Value Investor"));
+  assert.equal(made.soulInSync, true);
+  assert.equal(made.setupIssues.some((issue) => /placeholder/.test(issue)), false);
+  const namedById = await createBot(root, { id: "plain" });
+  assert.match(namedById.soul, /^You are plain,/);
   await assert.rejects(createBot(root, { name: "巴菲特型" }), (err: HttpError) => err.status === 400 && /id/.test(err.message));
 });
 
@@ -157,6 +162,173 @@ test("createBot refuses a model that is not one provider/model pair", async () =
   await assert.rejects(createBot(root, { id: "bad2", name: "Bad", model: "a/b/c" }), (err: HttpError) => err.status === 400);
 });
 
+test("settings update preserves unrelated metadata and composition, and model null clears only its override", async () => {
+  const root = await makeBotsRoot();
+  const bot = await createBot(root, { id: "probe", name: "Probe", description: "before", model: "stub/old", soul: "v1" });
+  const meta = { name: "Probe", description: "before", model: "stub/old", order: 17, operatorNote: "keep me" };
+  await writeFile(join(bot.dir, "preset.yml"), dump(meta));
+  const composition = [
+    { id: "bot", name: "./custom-bot.js", config: { persona: "v1", allow: ["read"], extra: { audit: true } } },
+    { id: "skills", name: "custom-skills", config: { customSkillDirs: ["./skills", "./extra"], includeDefaultRoots: true } },
+    { id: "extra-plugin", name: "./evidence.js", config: { mode: "cite" } },
+  ];
+  await writeFile(join(bot.dir, "agent.cordis.yml"), dump(composition));
+  const before = (await listBots(root, noPresets)).find((row) => row.id === "probe")!;
+  const after = await updateBotSettings(root, { id: "probe", revision: before.revision, name: "  Evidence  ", model: "stub/new", soul: "v2" });
+  assert.equal(after.name, "Evidence");
+  assert.equal(after.description, "before");
+  assert.equal(after.model, "stub/new");
+  assert.equal(after.soul, "v2");
+  assert.equal(after.compositionSoul, "v2");
+  assert.equal(after.soulInSync, true);
+  assert.notEqual(after.revision, before.revision);
+  assert.deepEqual(after.allow, ["read"]);
+  assert.deepEqual(load(await readFile(join(bot.dir, "preset.yml"), "utf8")), { ...meta, name: "Evidence", model: "stub/new" });
+  const expected = structuredClone(composition);
+  expected[0].config.persona = "v2";
+  assert.deepEqual(load(await readFile(join(bot.dir, "agent.cordis.yml"), "utf8")), expected);
+  const savedComposition = await readFile(join(bot.dir, "agent.cordis.yml"), "utf8");
+  const cleared = await updateBotSettings(root, { id: "probe", description: "", model: null });
+  assert.equal(cleared.model, undefined);
+  assert.equal(cleared.description, "");
+  assert.equal(await readFile(join(bot.dir, "agent.cordis.yml"), "utf8"), savedComposition);
+  assert.equal((load(await readFile(join(bot.dir, "preset.yml"), "utf8")) as Record<string, unknown>).operatorNote, "keep me");
+  assert.deepEqual((await readdir(bot.dir)).filter((name) => name.endsWith(".tmp")), []);
+});
+
+test("settings validate every supplied field before changing any saved file", async () => {
+  const root = await makeBotsRoot();
+  const made = await createBot(root, { id: "probe", name: "Probe", soul: "v1" });
+  const original = await Promise.all(["preset.yml", "SOUL.md", "agent.cordis.yml"].map((name) => readFile(join(made.dir, name), "utf8")));
+  for (const patch of [{ name: "" }, { description: null }, { model: "bare-model" }, { soul: "{{model}}" }, { revision: 2 }]) {
+    await assert.rejects(updateBotSettings(root, { id: "probe", name: "New name", soul: "new soul", ...patch }), (err: HttpError) => err.status === 400);
+    assert.deepEqual(await Promise.all(["preset.yml", "SOUL.md", "agent.cordis.yml"].map((name) => readFile(join(made.dir, name), "utf8"))), original);
+  }
+  await assert.rejects(updateBotSettings(root, { id: "ghost", name: "Ghost" }), (err: HttpError) => err.status === 404);
+  await assert.rejects(updateBotSettings(root, { id: "kairos", soul: "x" }), (err: HttpError) => err.status === 400);
+  await writeFile(join(made.dir, "agent.cordis.yml"), dump([{ id: "bot" }, { id: "bot" }]));
+  await assert.rejects(updateBotSettings(root, { id: "probe", name: "New name", soul: "v2" }), (err: HttpError) => err.status === 409);
+  assert.equal(await readFile(join(made.dir, "preset.yml"), "utf8"), original[0]);
+  assert.equal(await readFile(join(made.dir, "SOUL.md"), "utf8"), original[1]);
+});
+
+test("saving a soul round-trips dsh !!js expressions without evaluating or dropping other rows", async () => {
+  const root = await makeBotsRoot();
+  const made = await createBot(root, { id: "probe", name: "Probe", soul: "v1" });
+  const original = [
+    "- id: bot",
+    "  name: ./operator-plugin.js",
+    "  config:",
+    "    persona: v1",
+    "    allow: [read, web_search]",
+    "    extra: !!js '(() => { throw new Error(\"must not evaluate\"); })()'",
+    "- id: skills",
+    "  name: '@deepseek-ai/dsh-skill-filesystem'",
+    "  config:",
+    "    customSkillDirs: ['./skills', './operator-skills']",
+    "    includeDefaultRoots: false",
+    "- id: operator-extension",
+    "  name: ./operator-extension.js",
+    "  disabled: !!js 'feature.disabled'",
+    "  config: !!js '({ enabled: settings.enabled, depth: 3 })'",
+    "",
+  ].join("\n");
+  await writeFile(join(made.dir, "agent.cordis.yml"), original);
+  const before = (await listBots(root, noPresets)).find((row) => row.id === "probe")!;
+  assert.equal(before.compositionSoul, "v1");
+  assert.equal(before.soulInSync, true);
+  assert.deepEqual(before.allow, ["read", "web_search"]);
+  assert.equal(before.setupIssues.some((issue) => /YAML/.test(issue)), false, "dsh expressions are valid composition YAML");
+  const expected = load(original, { schema: entryListSchema }) as { config: Record<string, unknown> }[];
+  expected[0].config.persona = "v2";
+  const after = await updateBotSettings(root, { id: "probe", revision: before.revision, soul: "v2" });
+  assert.equal(after.compositionSoul, "v2");
+  assert.equal(after.soulInSync, true);
+  assert.deepEqual(after.allow, ["read", "web_search"]);
+  const written = await readFile(join(made.dir, "agent.cordis.yml"), "utf8");
+  assert.deepEqual(load(written, { schema: entryListSchema }), expected, "all other plugin configuration and expression nodes survive");
+  assert.equal((written.match(/!!js/g) ?? []).length, 3, "the round trip retains expression tags rather than serializing them as mappings");
+});
+
+test("a dynamic bot config is reported and refuses soul saves without changing any file", async () => {
+  const root = await makeBotsRoot();
+  const made = await createBot(root, { id: "probe", name: "Probe", soul: "v1" });
+  const dynamic = "- id: bot\n  name: ./operator-plugin.js\n  config: !!js '({ persona: settings.persona, allow: [\"read\"] })'\n";
+  await writeFile(join(made.dir, "agent.cordis.yml"), dynamic);
+  const before = (await listBots(root, noPresets)).find((row) => row.id === "probe")!;
+  assert.equal(before.compositionSoul, null);
+  assert.deepEqual(before.allow, []);
+  assert.equal(before.setupIssues.some((issue) => /dynamic !!js/.test(issue)), true);
+  const files = ["preset.yml", "SOUL.md", "agent.cordis.yml"];
+  const original = await Promise.all(files.map((name) => readFile(join(made.dir, name), "utf8")));
+  const refused = (error: HttpError) => error.status === 409 && /dynamic !!js.*manually/.test(error.message);
+  await assert.rejects(updateBotSettings(root, { id: "probe", revision: before.revision, name: "Must not save", soul: "v2" }), refused);
+  await assert.rejects(updateSoul(root, "probe", "v2"), refused);
+  assert.deepEqual(await Promise.all(files.map((name) => readFile(join(made.dir, name), "utf8"))), original);
+});
+
+test("optimistic revisions reject a stale concurrent edit, while omitted-field updates serialize without lost changes", async () => {
+  const root = await makeBotsRoot();
+  const before = await createBot(root, { id: "probe", name: "Probe", soul: "v1" });
+  const outcomes = await Promise.allSettled([
+    updateBotSettings(root, { id: "probe", revision: before.revision, name: "First" }),
+    updateBotSettings(root, { id: "probe", revision: before.revision, soul: "stale" }),
+  ]);
+  assert.equal(outcomes[0].status, "fulfilled");
+  assert.equal(outcomes[1].status, "rejected");
+  if (outcomes[1].status === "rejected") assert.equal((outcomes[1].reason as HttpError).status, 409);
+  await Promise.all([
+    updateBotSettings(root, { id: "probe", description: "parallel metadata" }),
+    updateSoul(root, "probe", "parallel soul"),
+    updateBotSettings(root, { id: "probe", model: "stub/new" }),
+  ]);
+  const after = (await listBots(root, noPresets)).find((row) => row.id === "probe")!;
+  assert.equal(after.name, "First");
+  assert.equal(after.description, "parallel metadata");
+  assert.equal(after.soul, "parallel soul");
+  assert.equal(after.model, "stub/new");
+  assert.equal(after.soulInSync, true);
+  assert.equal((await updateBotSettings(root, { id: "probe", revision: after.revision })).revision, after.revision, "an empty patch leaves the revision stable");
+});
+
+test("saved views diagnose source drift and placeholders, hash all three configuration files, and read only local skills", async () => {
+  const root = await makeBotsRoot();
+  const made = await createBot(root, { id: "probe", name: "Probe", soul: TEMPLATE_SOUL });
+  const skill = join(made.dir, "skills", "evidence");
+  await mkdir(skill);
+  const skillPath = join(skill, "SKILL.md");
+  await writeFile(skillPath, "---\nname: evidence\ndescription: Check original sources\n---\nInstructions.\n");
+  await mkdir(join(made.dir, "skills", "invalid"));
+  await writeFile(join(made.dir, "skills", "invalid", "SKILL.md"), "---\nname: incomplete\n---\n");
+  const outside = join(root, "external-skills");
+  await mkdir(outside);
+  await writeFile(join(outside, "SKILL.md"), "---\nname: must-not-read\ndescription: External data\n---\n");
+  await symlink(outside, join(made.dir, "skills", "linked"));
+  await symlink(join(outside, "SKILL.md"), join(skill, "linked.md"));
+  const read = async () => (await listBots(root, noPresets)).find((row) => row.id === "probe")!;
+  const first = await read();
+  assert.equal(first.revision, made.revision, "skills are not part of the settings revision");
+  assert.deepEqual(first.skills, [{ name: "evidence", description: "Check original sources", path: skillPath }]);
+  assert.equal(first.setupIssues.some((issue) => /placeholder/.test(issue)), true);
+  assert.equal(first.setupIssues.some((issue) => /frontmatter/.test(issue)), true);
+  assert.equal(first.setupIssues.some((issue) => /symbolic link/.test(issue)), true);
+  await writeFile(join(made.dir, "SOUL.md"), "edited outside the face\n");
+  const drifted = await read();
+  assert.notEqual(drifted.revision, first.revision);
+  assert.equal(drifted.soulInSync, false);
+  assert.equal(drifted.compositionSoul, TEMPLATE_SOUL);
+  assert.equal(drifted.setupIssues.some((issue) => /differs/.test(issue)), true);
+  await writeFile(join(made.dir, "preset.yml"), "name: New metadata\n");
+  const renamed = await read();
+  assert.notEqual(renamed.revision, drifted.revision);
+  await writeFile(join(made.dir, "agent.cordis.yml"), "broken: [\n");
+  const broken = await read();
+  assert.notEqual(broken.revision, renamed.revision);
+  assert.equal(broken.compositionSoul, null);
+  assert.deepEqual(broken.allow, []);
+  assert.equal(broken.setupIssues.some((issue) => /valid YAML/.test(issue)), true);
+});
+
 function fakeRes(): { out: { status: number; body: string }; res: ServerResponse } {
   const out = { status: 0, body: "" };
   const res = {
@@ -180,9 +352,9 @@ function routesFor(root: string): Map<string, WebRoute> {
   return new Map(routes.map((r) => [r.path, r]));
 }
 
-test("routes: exactly three, and the fence refuses a forged host, a cross-site fetch, and a foreign origin", async () => {
+test("routes include settings, and the fence refuses a forged host, a cross-site fetch, and a foreign origin", async () => {
   const routes = routesFor(await makeBotsRoot());
-  assert.deepEqual([...routes.keys()].sort(), ["/data/bots", "/data/bots.json", "/data/bots/soul"]);
+  assert.deepEqual([...routes.keys()].sort(), ["/data/bots", "/data/bots.json", "/data/bots/settings", "/data/bots/soul"]);
   for (const req of [getReq("evil.example:3090"), getReq("127.0.0.1:3090", { "sec-fetch-site": "cross-site" }), getReq("127.0.0.1:3090", { origin: "http://evil.example" })]) {
     const r = fakeRes();
     await routes.get("/data/bots.json")!.handler(req, r.res);
@@ -226,4 +398,28 @@ test("routes: soul update carries prose past the 4 KiB default limit and 404s an
   assert.equal(ok.out.status, 200);
   assert.equal(await readFile(join(root, "probe", "SOUL.md"), "utf8"), `${long.trim()}\n`);
   const missing = fakeRes(); await soul.handler(postReq('{"id":"ghost","soul":"x"}'), missing.res); assert.equal(missing.out.status, 404);
+});
+
+test("routes: settings persists an editable profile and reports stale revisions without overwriting", async () => {
+  const root = await makeBotsRoot();
+  const made = await createBot(root, { id: "probe", name: "Probe", soul: "v1" });
+  const route = routesFor(root).get("/data/bots/settings")!;
+  const denied = fakeRes();
+  await route.handler(postReq('{"id":"probe","name":"Intruder"}', "evil.example:3090"), denied.res);
+  assert.equal(denied.out.status, 403);
+  const ok = fakeRes();
+  await route.handler(postReq(JSON.stringify({ id: "probe", revision: made.revision, name: "Investigator", model: "stub/echo", soul: "Check evidence." })), ok.res);
+  assert.equal(ok.out.status, 200);
+  const saved = JSON.parse(ok.out.body).bot;
+  assert.equal(saved.name, "Investigator");
+  assert.equal(saved.model, "stub/echo");
+  assert.equal(saved.soulInSync, true);
+  assert.notEqual(saved.revision, made.revision);
+  const stale = fakeRes();
+  await route.handler(postReq(JSON.stringify({ id: "probe", revision: made.revision, soul: "old browser tab" })), stale.res);
+  assert.equal(stale.out.status, 409);
+  assert.equal(await readFile(join(made.dir, "SOUL.md"), "utf8"), "Check evidence.\n");
+  const bad = fakeRes();
+  await route.handler(postReq("[]"), bad.res);
+  assert.equal(bad.out.status, 400);
 });

@@ -17,9 +17,11 @@
  * (`bots/kairos`), never a bot. Ids are dsh's grammar `[a-z0-9][a-z0-9-]*`.
  * @module
  */
-import { cp, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { cp, lstat, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { join } from "node:path";
+import { join, relative, resolve } from "node:path";
+import { entryListSchema } from "@deepseek-ai/cordis-plugin-include";
 import { dump, load } from "js-yaml";
 import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 import { FORBIDDEN, HttpError, readBody } from "./http.ts";
@@ -69,7 +71,7 @@ export function renderComposition(opts: { soul: string; allow: readonly string[]
     { id: "bot", name: opts.plugin ?? BOT_PLUGIN_RELATIVE, config: { persona: opts.soul, allow: [...opts.allow] } },
     { id: "skills", name: "@deepseek-ai/dsh-skill-filesystem", config: { customSkillDirs: ["./skills"], includeDefaultRoots: false } },
   ];
-  return GENERATED_HEADER + dump(rows, { lineWidth: -1, noRefs: true });
+  return GENERATED_HEADER + dump(rows, { schema: entryListSchema, lineWidth: -1, noRefs: true });
 }
 
 /** `preset.yml`'s face-only `model:` - `<provider>/<model>`, the route a bot's
@@ -97,6 +99,14 @@ export interface BotRow {
   /** The bot's home session cwd - its journal, the one directory it may write. */
   homeCwd: string;
   soul: string;
+  /** Saved-file revision, not a claim about a running session's composition. */
+  revision: string;
+  allow: string[];
+  compositionSoul: string | null;
+  soulInSync: boolean;
+  /** Local skill declarations only; runtime discovery may differ. */
+  skills: { name: string; description: string; path: string }[];
+  setupIssues: string[];
   /** `preset.yml`'s `model:` verbatim, absent when the default route serves the bot. */
   model?: string;
   /** `kairos`: the host composition, not a bot. */
@@ -125,27 +135,105 @@ async function exists(path: string): Promise<boolean> {
   try { await stat(path); return true; } catch { return false; }
 }
 
-async function readMeta(dir: string): Promise<{ name?: string; description?: string; model?: string }> {
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+/** entryListSchema preserves !!js as loader expression nodes without
+ * evaluation. Such a node is not a settings mapping that we may spread. */
+const isCompositionExpression = (value: unknown): boolean => isRecord(value) && "__jsExpr" in value;
+const CONFIG_FILES = ["preset.yml", "SOUL.md", "agent.cordis.yml"] as const;
+type ConfigFiles = Record<(typeof CONFIG_FILES)[number], string | null>;
+
+async function readConfig(dir: string): Promise<ConfigFiles> {
+  const rows = await Promise.all(CONFIG_FILES.map(async (file) => {
+    try { return [file, await readFile(join(dir, file), "utf8")] as const; }
+    catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return [file, null] as const;
+      throw err;
+    }
+  }));
+  return Object.fromEntries(rows) as ConfigFiles;
+}
+
+function configRevision(files: ConfigFiles): string {
+  return createHash("sha256").update(JSON.stringify(CONFIG_FILES.map((name) => [name, files[name]]))).digest("hex").slice(0, 16);
+}
+
+function parseMeta(text: string | null): Record<string, unknown> {
+  if (text === null) return {};
+  const value: unknown = load(text);
+  if (!isRecord(value)) throw new Error("preset.yml must contain a mapping");
+  return value;
+}
+
+/** Do not follow links: the saved view describes files owned by this bot,
+ * never a skill root or SKILL.md redirected elsewhere on the machine. */
+async function localSkills(dir: string, issues: string[]): Promise<BotRow["skills"]> {
+  const root = join(dir, "skills");
+  const skills: BotRow["skills"] = [];
+  const visit = async (path: string): Promise<void> => {
+    const entries = await readdir(path, { withFileTypes: true });
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      const child = join(path, entry.name);
+      if (entry.isDirectory()) await visit(child);
+      else if (entry.isFile() && entry.name === "SKILL.md") {
+        try {
+          const text = await readFile(child, "utf8");
+          const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
+          const meta: unknown = frontmatter === null ? undefined : load(frontmatter[1]);
+          if (!isRecord(meta) || typeof meta.name !== "string" || meta.name.trim() === "" || typeof meta.description !== "string" || meta.description.trim() === "") {
+            issues.push(`${relative(dir, child)} needs name and description frontmatter.`);
+          } else skills.push({ name: meta.name.trim(), description: meta.description.trim(), path: child });
+        } catch { issues.push(`${relative(dir, child)} could not be read as a skill.`); }
+      } else if (entry.isSymbolicLink()) issues.push(`${relative(dir, child)} is a symbolic link; it was not read.`);
+    }
+  };
   try {
-    const parsed: unknown = load(await readFile(join(dir, "preset.yml"), "utf8"));
-    if (parsed === null || typeof parsed !== "object") return {};
-    const { name, description, model } = parsed as { name?: unknown; description?: unknown; model?: unknown };
-    return {
-      ...(typeof name === "string" ? { name } : {}),
-      ...(typeof description === "string" ? { description } : {}),
-      ...(typeof model === "string" ? { model } : {}),
-    };
-  } catch { return {}; }
+    const info = await lstat(root);
+    if (info.isSymbolicLink()) issues.push("skills/ is a symbolic link; it was not read.");
+    else if (info.isDirectory()) await visit(root);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") issues.push("The bot's skills directory could not be read.");
+  }
+  return skills;
 }
 
 async function rowFor(root: string, id: string, presets: Map<string, { broken?: string }>): Promise<BotRow> {
   const dir = join(root, id);
-  const meta = await readMeta(dir);
-  const soul = await readFile(join(dir, "SOUL.md"), "utf8").then((s) => s.trim()).catch(() => "");
+  const files = await readConfig(dir);
+  const setupIssues: string[] = [];
+  let meta: Record<string, unknown> = {};
+  try { meta = parseMeta(files["preset.yml"]); }
+  catch { setupIssues.push("preset.yml could not be read as metadata."); }
+  const soul = files["SOUL.md"]?.trim() ?? "";
+  let compositionSoul: string | null = null;
+  let allow: string[] = [];
+  if (id !== "kairos") {
+    if (soul === "") setupIssues.push("SOUL.md is empty or missing.");
+    try {
+      const rows: unknown = load(files["agent.cordis.yml"] ?? "", { schema: entryListSchema });
+      const bots = Array.isArray(rows) ? rows.filter((row) => isRecord(row) && row.id === "bot") : [];
+      if (bots.length !== 1 || !isRecord(bots[0].config)) setupIssues.push("The composition needs exactly one bot configuration row.");
+      else if (isCompositionExpression(bots[0].config)) setupIssues.push("The bot config is a dynamic !!js expression; edit that configuration manually.");
+      else {
+        const config = bots[0].config;
+        compositionSoul = typeof config.persona === "string" ? config.persona : null;
+        allow = Array.isArray(config.allow) ? config.allow.filter((name: unknown): name is string => typeof name === "string") : [];
+        if (compositionSoul === null || compositionSoul.trim() === "") setupIssues.push("The composition has no bot persona.");
+        if (allow.length === 0 || !Array.isArray(config.allow) || allow.length !== config.allow.length) setupIssues.push("The composition needs a non-empty tool allow list of names.");
+      }
+    } catch { setupIssues.push("agent.cordis.yml is not valid YAML."); }
+    if (/<bot name>/i.test(soul) || /<bot name>/i.test(compositionSoul ?? "")) setupIssues.push("The persona still contains the <bot name> placeholder.");
+    if (soul.includes("{{") || compositionSoul?.includes("{{")) setupIssues.push("The persona contains '{{', which the prompt renderer cannot use.");
+    if (compositionSoul !== null && compositionSoul.trim() !== soul) setupIssues.push("SOUL.md differs from the saved composition; save the soul to synchronize it.");
+    if (meta.model !== undefined && (typeof meta.model !== "string" || !MODEL_ROUTE_RE.test(meta.model))) setupIssues.push("The saved model is not one provider/model route.");
+  }
+  const skills = await localSkills(dir, setupIssues);
   const preset = presets.get(id);
   return {
-    id, name: meta.name ?? id, description: meta.description ?? "", dir, homeCwd: join(dir, "journal"), soul,
-    ...(meta.model === undefined ? {} : { model: meta.model }),
+    id, name: typeof meta.name === "string" ? meta.name : id, description: typeof meta.description === "string" ? meta.description : "", dir, homeCwd: join(dir, "journal"), soul,
+    revision: configRevision(files), allow, compositionSoul, soulInSync: compositionSoul !== null && compositionSoul.trim() === soul, skills, setupIssues,
+    ...(typeof meta.model === "string" ? { model: meta.model } : {}),
     isDefault: id === "kairos",
     ...(preset?.broken === undefined ? {} : { broken: preset.broken }),
     listed: preset !== undefined,
@@ -166,7 +254,58 @@ export async function listBots(root: string, presets: PresetLister): Promise<Bot
     .filter((e) => e.isDirectory() && BOT_ID_RE.test(e.name))
     .map((e) => e.name)
     .sort((a, b) => a.localeCompare(b));
-  return Promise.all(ids.map((id) => rowFor(root, id, reported)));
+  return Promise.all(ids.map((id) => withBotLock(join(root, id), () => rowFor(root, id, reported))));
+}
+
+/** Serialize the face's readers and writers for each bot. An optional revision
+ * additionally rejects an operator edit based on an older saved view. */
+const botLocks = new Map<string, Promise<unknown>>();
+async function withBotLock<T>(dir: string, action: () => Promise<T>): Promise<T> {
+  const key = resolve(dir);
+  const previous = botLocks.get(key) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(action);
+  botLocks.set(key, next);
+  try { return await next; }
+  finally { if (botLocks.get(key) === next) botLocks.delete(key); }
+}
+
+/** Stage every changed file before replacing any. Each rename is atomic; an
+ * ordinary I/O failure rolls completed renames back. This is not a filesystem
+ * transaction across a crash or an unrelated external editor. */
+async function replaceConfig(dir: string, before: ConfigFiles, changes: Partial<ConfigFiles>): Promise<void> {
+  const staged: { name: (typeof CONFIG_FILES)[number]; temp: string }[] = [];
+  const replaced: (typeof CONFIG_FILES)[number][] = [];
+  try {
+    for (const name of CONFIG_FILES) {
+      const text = changes[name];
+      if (text === undefined || text === null || text === before[name]) continue;
+      const temp = join(dir, `.${name}.${randomUUID()}.tmp`);
+      staged.push({ name, temp });
+      await writeFile(temp, text, { encoding: "utf8", flag: "wx" });
+    }
+    for (const { name, temp } of staged) {
+      await rename(temp, join(dir, name));
+      replaced.push(name);
+    }
+  } catch (error) {
+    const rollbackErrors: unknown[] = [];
+    for (const name of replaced.reverse()) {
+      try {
+        const old = before[name];
+        if (old === null) await rm(join(dir, name), { force: true });
+        else {
+          const temp = join(dir, `.${name}.${randomUUID()}.tmp`);
+          staged.push({ name, temp });
+          await writeFile(temp, old, { encoding: "utf8", flag: "wx" });
+          await rename(temp, join(dir, name));
+        }
+      } catch (rollbackError) { rollbackErrors.push(rollbackError); }
+    }
+    if (rollbackErrors.length > 0) throw new AggregateError([error, ...rollbackErrors], "Bot settings could not be saved or fully restored");
+    throw error;
+  } finally {
+    await Promise.all(staged.map(({ temp }) => rm(temp, { force: true }).catch(() => undefined)));
+  }
 }
 
 /** Birth `bots/<id>` from the template. Refuses a malformed or reserved id, a
@@ -178,39 +317,87 @@ export async function createBot(root: string, body: Record<string, unknown>): Pr
     throw new HttpError(400, "invalid bot id (lowercase letters, digits and -; starts with a letter or digit; up to 64; not kairos or _template)");
   }
   const description = typeof body.description === "string" ? body.description.trim() : "";
-  const soul = body.soul === undefined ? TEMPLATE_SOUL : rejectSoul(body.soul);
+  const soul = rejectSoul(body.soul === undefined ? TEMPLATE_SOUL.replace("<bot name>", () => name ?? id) : body.soul);
   const model = body.model === undefined ? undefined : body.model;
   if (model !== undefined && (typeof model !== "string" || !MODEL_ROUTE_RE.test(model))) {
     throw new HttpError(400, "model must be one provider/model route, e.g. deepseek-official/deepseek-v4-flash");
   }
-  const template = join(root, TEMPLATE);
-  if (!(await exists(join(template, "agent.cordis.yml")))) throw new HttpError(500, `bots/${TEMPLATE} missing`);
   const dir = join(root, id);
-  if (await exists(dir)) throw new HttpError(409, "bot already exists");
-  await cp(template, dir, { recursive: true, filter: (src) => !src.includes("__pycache__") });
-  await writeFile(join(dir, "preset.yml"), renderPresetMeta(name ?? id, description, model), "utf8");
-  await writeFile(join(dir, "SOUL.md"), `${soul}\n`, "utf8");
-  await writeFile(join(dir, "agent.cordis.yml"), renderComposition({ soul, allow: DEFAULT_ALLOW }), "utf8");
-  return rowFor(root, id, new Map());
+  return withBotLock(dir, async () => {
+    const template = join(root, TEMPLATE);
+    if (!(await exists(join(template, "agent.cordis.yml")))) throw new HttpError(500, `bots/${TEMPLATE} missing`);
+    if (await exists(dir)) throw new HttpError(409, "bot already exists");
+    const staged = join(root, `.create-${id}-${randomUUID()}`);
+    try {
+      await cp(template, staged, { recursive: true, filter: (src) => !src.includes("__pycache__") });
+      await writeFile(join(staged, "preset.yml"), renderPresetMeta(name ?? id, description, model), "utf8");
+      await writeFile(join(staged, "SOUL.md"), `${soul}\n`, "utf8");
+      await writeFile(join(staged, "agent.cordis.yml"), renderComposition({ soul, allow: DEFAULT_ALLOW }), "utf8");
+      await rename(staged, dir);
+    } finally { await rm(staged, { recursive: true, force: true }); }
+    return rowFor(root, id, new Map());
+  });
 }
 
-/** Rewrite `SOUL.md` AND the composition's persona row - the two must never drift (spec R4). */
-export async function updateSoul(root: string, id: unknown, soul: unknown): Promise<BotRow> {
+/** Update only the bot persona; preserve the operator's plugin paths, skill
+ * roots and additional rows/config. A broken composition retains the legacy
+ * soul editor's repair path by regenerating the template composition. */
+function compositionWithSoul(raw: string, soul: string): string {
+  let rows: unknown;
+  try { rows = load(raw, { schema: entryListSchema }); } catch { rows = null; }
+  if (!Array.isArray(rows)) return renderComposition({ soul, allow: DEFAULT_ALLOW });
+  const botRows = rows.filter((row) => isRecord(row) && row.id === "bot");
+  if (botRows.length > 1) throw new HttpError(409, "the composition has multiple bot rows; repair it before saving a soul");
+  if (botRows.length === 0) rows.unshift({ id: "bot", name: BOT_PLUGIN_RELATIVE, config: { persona: soul, allow: [...DEFAULT_ALLOW] } });
+  else {
+    const row = botRows[0] as Record<string, unknown>;
+    if (isCompositionExpression(row.config)) throw new HttpError(409, "the bot config is a dynamic !!js expression; edit that configuration manually before saving a soul");
+    row.config = { ...(isRecord(row.config) ? row.config : { allow: [...DEFAULT_ALLOW] }), persona: soul };
+  }
+  return GENERATED_HEADER + dump(rows, { schema: entryListSchema, lineWidth: -1, noRefs: true });
+}
+
+/** Partial settings update. Omission preserves a field; model:null removes
+ * the override. All supplied values and serialized outputs validate before
+ * any file changes. revision is optional for older callers. */
+export async function updateBotSettings(root: string, body: Record<string, unknown>): Promise<BotRow> {
+  const id = body.id;
   if (!isBotId(id)) throw new HttpError(400, "invalid bot id");
-  const text = rejectSoul(soul);
+  if (body.name !== undefined && (typeof body.name !== "string" || body.name.trim() === "")) throw new HttpError(400, "name must be a non-empty string");
+  if (body.description !== undefined && typeof body.description !== "string") throw new HttpError(400, "description must be a string");
+  if (body.model !== undefined && body.model !== null && (typeof body.model !== "string" || !MODEL_ROUTE_RE.test(body.model))) {
+    throw new HttpError(400, "model must be one provider/model route, e.g. deepseek-official/deepseek-v4-flash, or null to use the default");
+  }
+  if (body.revision !== undefined && (typeof body.revision !== "string" || body.revision === "")) throw new HttpError(400, "revision must be a non-empty string");
+  const soul = body.soul === undefined ? undefined : rejectSoul(body.soul);
   const dir = join(root, id);
-  if (!(await exists(join(dir, "agent.cordis.yml")))) throw new HttpError(404, "no such bot");
-  // A composition too broken for js-yaml is exactly the one the operator is here to repair
-  // (Rule 5 lists it): read it for the mask if it parses, otherwise regenerate from DEFAULT_ALLOW.
-  const raw = await readFile(join(dir, "agent.cordis.yml"), "utf8");
-  type MaskRows = { id?: string; config?: { allow?: unknown } }[] | null;
-  let current: MaskRows = null;
-  try { current = load(raw) as MaskRows; } catch { current = null; }
-  const allowRow = Array.isArray(current) ? current.find((r) => r?.id === "bot") : undefined;
-  const allow = Array.isArray(allowRow?.config?.allow) ? (allowRow!.config!.allow as string[]) : [...DEFAULT_ALLOW];
-  await writeFile(join(dir, "SOUL.md"), `${text}\n`, "utf8");
-  await writeFile(join(dir, "agent.cordis.yml"), renderComposition({ soul: text, allow }), "utf8");
-  return rowFor(root, id, new Map());
+  return withBotLock(dir, async () => {
+    const before = await readConfig(dir);
+    if (before["agent.cordis.yml"] === null) throw new HttpError(404, "no such bot");
+    if (body.revision !== undefined && body.revision !== configRevision(before)) throw new HttpError(409, "bot settings changed since this view was loaded; reload before saving");
+    const changes: Partial<ConfigFiles> = {};
+    if (body.name !== undefined || body.description !== undefined || body.model !== undefined) {
+      let meta: Record<string, unknown>;
+      try { meta = parseMeta(before["preset.yml"]); }
+      catch { throw new HttpError(409, "preset.yml is invalid; repair it before changing metadata"); }
+      if (typeof body.name === "string") meta.name = body.name.trim();
+      if (typeof body.description === "string") meta.description = body.description.trim();
+      if (body.model === null) delete meta.model;
+      else if (typeof body.model === "string") meta.model = body.model;
+      changes["preset.yml"] = dump(meta, { lineWidth: -1, noRefs: true });
+    }
+    if (soul !== undefined) {
+      changes["SOUL.md"] = `${soul}\n`;
+      changes["agent.cordis.yml"] = compositionWithSoul(before["agent.cordis.yml"], soul);
+    }
+    await replaceConfig(dir, before, changes);
+    return rowFor(root, id, new Map());
+  });
+}
+
+/** Legacy soul endpoint, using the same serialized partial-update path. */
+export async function updateSoul(root: string, id: unknown, soul: unknown): Promise<BotRow> {
+  return updateBotSettings(root, { id, soul: rejectSoul(soul) });
 }
 
 export interface BotRouteDeps {
@@ -248,7 +435,7 @@ export function registerBotRoutes(webServer: RouteRegistrar, deps: BotRouteDeps)
         let body: Record<string, unknown>;
         try {
           const parsed: unknown = JSON.parse(await readBody(req, limit));
-          if (parsed === null || typeof parsed !== "object") throw new Error("not an object");
+          if (!isRecord(parsed)) throw new Error("not an object");
           body = parsed as Record<string, unknown>;
         } catch (err) {
           if (err instanceof HttpError) throw err;
@@ -265,4 +452,5 @@ export function registerBotRoutes(webServer: RouteRegistrar, deps: BotRouteDeps)
   webServer.register({ kind: "exact", path: "/data/bots.json", handler: get(async () => ({ bots: await listBots(deps.botsRoot, deps.listPresets) })) });
   webServer.register({ kind: "exact", path: "/data/bots", handler: post(SOUL_BODY_LIMIT, async (body) => ({ bot: await createBot(deps.botsRoot, body) })) });
   webServer.register({ kind: "exact", path: "/data/bots/soul", handler: post(SOUL_BODY_LIMIT, async (body) => ({ bot: await updateSoul(deps.botsRoot, body.id, body.soul) })) });
+  webServer.register({ kind: "exact", path: "/data/bots/settings", handler: post(SOUL_BODY_LIMIT, async (body) => ({ bot: await updateBotSettings(deps.botsRoot, body) })) });
 }

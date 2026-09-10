@@ -1526,6 +1526,45 @@ body {
    the strip belongs to the room's transcript, and a detail page is not one. */
 .strip[hidden] { display: none; }
 .main.detail-mode .strip { display: none; }
+
+/* Bot settings: editable identity, saved capabilities, and session evidence. */
+.bot-settings .sp-card { margin: 14px 0; padding: 14px 16px; }
+.bot-settings .sp-title { margin-bottom: 10px; }
+.bot-field { display: flex; flex-direction: column; gap: 5px; margin: 12px 0; min-width: 0; }
+.bot-field-title { font: 600 12px/1.4 var(--sans); }
+.bot-field-hint { font: 11px/1.5 var(--sans); color: var(--dim); }
+.bot-settings .picker-input { font-family: var(--sans); padding: 9px 10px; width: 100%; }
+.bot-settings textarea { resize: vertical; }
+.bot-settings .picker-input:focus-visible,
+.bot-settings button:focus-visible,
+.bot-settings summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bot-settings .bot-soul { font: 12px/1.65 var(--mono); min-height: 200px; }
+.bot-guide { margin: 12px 0; font: 12px/1.5 var(--sans); }
+.bot-guide > summary { cursor: pointer; color: var(--accent); padding: 5px 0; }
+.bot-guide[open] > summary { margin-bottom: 8px; }
+.bot-guide .bot-field { margin-left: 8px; }
+.bot-draft { margin: 12px 0; }
+.bot-draft .picker-btn { margin-top: 8px; }
+.bot-feedback { padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--card-bg); }
+.bot-save-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0 6px; }
+.bot-save-bar > .picker-btn:first-child { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.bot-inline { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
+.bot-inline .picker-input { flex: 1; }
+.bot-capabilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 7px; margin: 10px 0; }
+.bot-capability { display: flex; flex-direction: column; gap: 3px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font: 12px/1.4 var(--sans); }
+.bot-capability code { color: var(--dim); font: 10px/1.45 var(--mono); overflow-wrap: anywhere; }
+.bot-skill + .bot-skill { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; }
+.bot-skill { padding: 4px 0; font-size: 12px; }
+.bot-skill .sp-note { padding-left: 0; }
+.bot-skill-path { display: block; font: 10px/1.5 var(--mono); color: var(--dim); overflow-wrap: anywhere; }
+.bot-code { display: block; max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 10px; background: var(--card-bg); border: 1px solid var(--line); border-radius: 6px; font: 11px/1.6 var(--mono); }
+.bot-runtime .sp-v { overflow-wrap: anywhere; }
+.bot-session-row { display: flex; width: 100%; text-align: left; border: 0; background: transparent; color: inherit; }
+@media (max-width: 600px) {
+  .bot-settings .sp-card { padding: 12px; }
+  .bot-inline { align-items: stretch; flex-direction: column; }
+  .bot-capabilities { grid-template-columns: 1fr; }
+}
 .strip-chip {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 3px 9px; border: 1px solid var(--line); border-radius: var(--r-chip);

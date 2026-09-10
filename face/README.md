@@ -480,7 +480,7 @@ nothing on stderr is the failure mode it exists to prevent.
 ## Bots (src/bots.ts + plugins/bot.js + bots/)
 
 A bot is a dsh **agent preset**: one directory under `bots/` holding `agent.cordis.yml`
-(the composition dsh mounts), `preset.yml` (`name`, `description`), `SOUL.md` (the persona
+(the composition dsh mounts), `preset.yml` (`name`, `description`, optional `model`), `SOUL.md` (the persona
 SOURCE), `skills/` (its stance pack, a dsh skill root) and `journal/` (the one directory it
 may write, from its home). The face mounts `@deepseek-ai/dsh-agent-presets` with `bots/` as
 its only root (`faceOverlay`, `AGENT_PRESETS_ROW_ID`, `includeUserRoot: false` — a bot the
@@ -514,12 +514,20 @@ neither is containment.
 **Authoring is the face's own copy.** The **New bot** form (agent face → bots → `+ new bot`;
 `POST /data/bots`) copies `bots/_template`, writes `preset.yml` and `SOUL.md`, and RENDERS
 `agent.cordis.yml` so the persona row's text is the soul's (`renderComposition`) — dsh's
-`!!js` cannot read a sibling file. A soul saved on the bot page (`POST /data/bots/soul`,
-`updateSoul`) rewrites both. `renderComposition` writes the same two rows every time — the
-`kairos-bot` row and the bot's own skill root — so a third row the operator added by hand does
-not survive a soul save, and a composition `js-yaml` cannot parse is regenerated from
-`DEFAULT_ALLOW`, its hand-edited mask discarded. A hand edit to `SOUL.md` reaches nothing
-until the face saves it again, and a running session keeps the prompt it started with: the
+`!!js` cannot read a sibling file. The settings page edits name, description, default model,
+and SOUL together. Its optional role guide builds a local draft from the operator's
+perspective, evidence standard, revision criteria, participation rules, and style.
+Creating without a SOUL replaces the template's `<bot name>` with the chosen name.
+Saving updates the persona inside the existing composition, preserving other plugin rows,
+paths, allow patterns, and skill configuration. The legacy soul endpoint remains supported.
+The parser uses dsh's entry-list schema so `!!js` expressions round-trip without evaluation.
+An entirely dynamic bot config must be edited by hand; SOUL saving refuses it with 409.
+An unparseable composition retains the legacy repair behavior of rebuilding template rows.
+Same-bot reads and writes serialize; the UI supplies a saved-file revision, and a stale
+save returns 409 without losing the editor draft. Files are staged before replacement,
+with rollback on ordinary I/O failure; this is not a crash-safe multi-file transaction.
+A hand edit to `SOUL.md` reaches nothing until the face saves it again. The page flags
+source/persona drift and placeholder text. A running session keeps its mounted persona: the
 preset's generation is keyed on `agent.cordis.yml` alone and never reclaimed until restart
 (dsh-agent-presets README, "A superseded generation is never reclaimed"). No `{{` anywhere in
 a soul: the prompt is a strict template with no escape, and both write paths (`rejectSoul`, on
@@ -540,18 +548,36 @@ pins that a non-empty proposal is always an id `isBotId` accepts) and the server
 else — `kairos` by name (`RESERVED_IDS`) and `_template` by the grammar, which admits no leading
 underscore (both through `isBotId`).
 
+**Default model and inspection** (`src/bot-runtime.ts`). **New test conversation** uses
+saved settings, with the actual session created on the first message. Unsaved edits disable
+that button. A bot's `provider/model` seeds its home session's first request without changing
+the host default; subsequent requests inherit their own logged model. Room model selection
+stays with the room engine. At this dsh pin, `session.selectModel` also saves a host default,
+so it is not used to seed bots. A direct RPC model selection before a bot's first request
+is superseded by that bot's saved initial route; the face has no such model-switch control.
+
+The page lists configured tool patterns and local skill declarations separately from
+**Session inspection**. An idle live session is assembled under `runMaintenance` to show
+its mounted persona, model and tool schemas; its last actual request is labelled separately
+and read from `request/header`. During a turn, inspection reads captured persona and logged
+request facts without assembling. Cold sessions are never resumed just to inspect them.
+The saved revision and startup revision are diagnostics, not claims that every part of a
+request is frozen. Resuming after a host restart can mount the current preset generation.
+
 | Route | What |
 |---|---|
 | `GET /data/bots.json` | every directory in the grammar under `bots/`, with dsh's roster merged in: `broken` reasons shown, a directory the roster does not report flagged `listed: false` (Rule 5) |
-| `POST /data/bots` | create — `{name?, id?, description?, soul?}`, the id the one given or `proposeBotId(name)`; 400 an id outside the grammar or a soul carrying `{{`, 409 exists, 500 `_template` missing. The returned row always reads `listed: false` (it is built without the roster); the next GET reports the bot, because dsh re-scans on every `list()` |
+| `POST /data/bots` | create — `{name?, id?, description?, model?, soul?}`, the id the one given or `proposeBotId(name)`; 400 an id outside the grammar or a soul carrying `{{`, 409 exists, 500 `_template` missing. The returned row always reads `listed: false` (it is built without the roster); the next GET reports the bot, because dsh re-scans on every `list()` |
 | `POST /data/bots/soul` | `{id, soul}` — rewrites `SOUL.md` and the composition together; 400 a bad id or a soul carrying `{{`, 404 unknown bot |
+| `POST /data/bots/settings` | `{id, revision?, name?, description?, model?, soul?}` — omitted fields stay unchanged, `model:null` inherits the default; 409 on a stale revision |
+| `GET /data/bots/runtime?id=…&sessionId=…` | live mounted preview or last-request facts, with a separate saved-SOUL comparison; unattached sessions return unavailable |
 
-All three stand behind `isTrustedDataRequest` (403), the two POSTs behind 405 / 415 / 400 for
+All stand behind `isTrustedDataRequest` (403), the POSTs behind 405 / 415 / 400 for
 method, content type and body, with a 64 KiB body cap because a soul is prose.
 
 **Deleting a bot** is `git rm -r bots/<id>`; there is no button. Its sessions remain history.
 The roster is mounted `trust: "system"`, so the gateway's own `agentPreset.copy` / `remove` /
-`openDocument` RPCs refuse it ("it ships with the deployment") — the face's three routes are the
+`openDocument` RPCs refuse it ("it ships with the deployment") — the face's authoring routes are the
 only authoring path, and no connected client can reach around them into a git-tracked directory.
 
 **A bot in a room** — dispatched by Kairos, addressed by the operator's `@`, its answers in the
@@ -1063,13 +1089,16 @@ delivered — it says `sent` and nothing happens. Answer in the card.
 
 A mask never pulled is presumed decorative.
 
-**Step 0, no model, no key.** `FACE_SMOKE=1 npm test` boots the real tree three extra times.
+**Step 0, no model, no key.** `FACE_SMOKE=1 npm test` boots isolated real trees.
 `bots-smoke.test.ts` proves the roster lists a broken fixture with its reason and never
 `_template`, that a session created with `agentPreset` carries it on its header, that the bot
 sees exactly its allow-list ∩ the tree while Kairos sees the host's whole roster unchanged, that
 the bot's prompt opens with its own persona while Kairos's opens with `persona.md`, and that a
 session naming the broken preset is refused at `session.create` with dsh's own `agent-preset`
 error code.
+`bot-runtime-smoke.test.ts` proves the saved route reaches an actual stub request without
+changing the host default, existing live sessions retain their persona/model across a save,
+new sessions load the new settings, and runtime inspection does not drive or interrupt turns.
 `bot-sandbox-smoke.test.ts` and `askuser-noclient-smoke.test.ts` print one `observed:` line each
 (S4, S7); their findings are recorded in the spec's amendments block.
 
@@ -1083,7 +1112,7 @@ cache headers.
 2. Create. PASS, part two: the bot page opens; `bots/<id>/` exists with `agent.cordis.yml`,
    `preset.yml`, `SOUL.md`, `README.md`, `skills/README.md`, `journal/notes.md`; the boot line
    of a restart, `agent presets: …`, lists the id.
-3. `open home`, say something. PASS, part three: the sidebar shows the session under the bot's
+3. **New test conversation**, say something. PASS, part three: the sidebar shows the session under the bot's
    name, not under `ungrouped`; the reply speaks in the bot's persona, not Kairos's.
 4. Ask the bot to list its tools. PASS, part four: it names the shell, file and web tools and
    `ask_user_question`, and does not name `subagent`, `place_order`, or any `agent_<bin>` — and

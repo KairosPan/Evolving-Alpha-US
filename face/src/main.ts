@@ -15,6 +15,7 @@ import { dirname, join } from "node:path";
 import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import { bootFace } from "./boot.ts";
 import { listBots, registerBotRoutes } from "./bots.ts";
+import { installBotRuntime, registerBotRuntimeRoutes } from "./bot-runtime.ts";
 import { BOTS_ROOT } from "./overlay.ts";
 import { registerDataRoutes } from "./data.ts";
 import { registerStatic } from "./static.ts";
@@ -180,6 +181,8 @@ registerChannelRoutes(booted.ctx.webServer, {
  * the host's own add-only archive has no way to honour. */
 registerSessionRoutes(booted.ctx.webServer, { root: process.cwd(), home: dshHome, hostArchive: workspaceRegistry });
 registerBotRoutes(booted.ctx.webServer, { botsRoot: BOTS_ROOT, listPresets: () => agentPresets.list() });
+const botRuntime = installBotRuntime(booted.ctx, () => listBots(BOTS_ROOT, () => agentPresets.list()));
+registerBotRuntimeRoutes(booted.ctx.webServer, botRuntime);
 /* Rooms: the engine lives on the ROOT context (a root-created member is a
  * runtime root, so it can ask the operator a question; a root listener sees
  * every session). `channelFor` is the same lookup the agent tools use, now
@@ -191,7 +194,7 @@ const room = installRoom({
   channelFor: deps.channelFor,
   listBots: () => listBots(BOTS_ROOT, () => agentPresets.list()),
 });
-disposeRoom = () => { room.dispose(); };
+disposeRoom = () => { room.dispose(); botRuntime.dispose(); };
 registerRoomRoutes(booted.ctx.webServer, room);
 /* The master rail's feeds: in-process reads of the booted tree (skills /
  * tools / loader), which have no RPC at this pin, plus the local-agent
