@@ -46,7 +46,7 @@ import { proposeBotId } from "./botId.js";
 import { botModelChoices, botSettingsPayload, botToolLabel, draftBotSoul, normalizeBotModel } from "./botSettings.js";
 import { foldChannelName } from "./channelName.js";
 import { HOST_NAME, speakerFor } from "./speaker.js";
-import { avatarGlyph, foldMembers, gateSpeaker, isMemberSession, isMentionText, roundEndLine, stripChips } from "./room.js";
+import { avatarGlyph, foldMembers, gateSpeaker, isMemberSession, isMentionText, normalizeRoomDiscussion, roomAnswerDisplay, roundEndLine, stripChips } from "./room.js";
 
 /** Rendered in place of a value the host did not give us. */
 const EM = "—";
@@ -317,9 +317,25 @@ function bubbleNode(view) {
     who.append(el("span", "avatar", avatarGlyph(String(view.bot))), el("span", "who-name", String(view.name ?? view.bot)));
     wrap.append(who);
     const bubble = el("div", "bubble md-bubble");
-    const md = renderMarkdown(String(view.text ?? ""));
+    const answer = roomAnswerDisplay(view);
+    const md = renderMarkdown(answer.text);
     bubble.append(md.node);
     if (md.doc) wrap.classList.add("doc");
+    if (answer.view) {
+      const details = el("details", "room-view-details");
+      details.append(el("summary", "", "依据 · 不确定性 · 改判条件"));
+      details.append(roomViewFields(answer.view));
+      if (answer.view.disagreements.length > 0) {
+        const disagreements = el("div", "room-view-field");
+        disagreements.append(el("div", "room-view-label", "这位 bot 指出的分歧"));
+        const list = el("ul", "room-view-list");
+        for (const item of answer.view.disagreements) list.append(el("li", "", `对 ${item.with}：${item.point}`));
+        disagreements.append(list);
+        details.append(disagreements);
+      }
+      bubble.append(details);
+    }
+    if (answer.issue) bubble.append(el("div", "room-view-note", answer.issue));
     bubble.append(memberTraceNode(view));
     wrap.append(bubble);
     return wrap;
@@ -465,12 +481,115 @@ function memberTraceNode(view) {
   return details;
 }
 
-/** A room fact as one quiet centred line: the round end today. @param {Record<string, any>} view */
+/** A member's own supporting claims. Every field uses textContent, including
+ * strings that look like HTML, Markdown or links. No claim is validated here. */
+function roomViewFields(view) {
+  const fields = el("div", "room-view-fields");
+  for (const [label, items] of [["所列依据", view.evidence], ["不确定性", view.uncertainties], ["改判条件", view.changeConditions]]) {
+    const field = el("div", "room-view-field");
+    field.append(el("div", "room-view-label", label));
+    if (items.length === 0) field.append(el("div", "room-view-empty", "未提供"));
+    else {
+      const list = el("ul", "room-view-list");
+      for (const item of items) list.append(el("li", "", item));
+      field.append(list);
+    }
+    fields.append(field);
+  }
+  return fields;
+}
+
+/** Open the actual member transcript, never a guessed session for that bot. */
+function roomConversationButton(label, sessionId) {
+  const button = el("button", "room-conversation", label);
+  button.type = "button";
+  button.addEventListener("click", () => void openSession(sessionId));
+  return button;
+}
+
+/** The round comparison is derived only from recorded, attributed fields. */
+function roomDiscussionNode(discussion, turns) {
+  const node = el("section", "room-discussion");
+  node.setAttribute("aria-label", "本轮讨论对照");
+  node.append(el("div", "room-discussion-title", "本轮讨论对照"));
+  node.append(el("div", "room-view-note", "按各 bot 的发言整理；所列依据仍需核实。"));
+  if (discussion.brief) {
+    const brief = el("div", "room-brief");
+    brief.append(el("div", "room-view-label", "本轮问题"));
+    if (typeof discussion.brief === "string") brief.append(el("div", "room-brief-question", discussion.brief));
+    else {
+      brief.append(el("div", "room-brief-question", discussion.brief.question));
+      const b = discussion.brief;
+      if (b.context || b.evidence?.length || b.falsification || b.output) {
+        const details = el("details", "room-view-details");
+        details.append(el("summary", "", "讨论背景与要求"));
+        for (const [label, text] of [["背景", b.context], ["证伪条件", b.falsification], ["期望输出", b.output]]) {
+          if (!text) continue;
+          const field = el("div", "room-view-field");
+          field.append(el("div", "room-view-label", label), el("div", "room-brief-text", text));
+          details.append(field);
+        }
+        if (b.evidence?.length) {
+          const field = el("div", "room-view-field");
+          field.append(el("div", "room-view-label", "证据要求"));
+          const list = el("ul", "room-view-list");
+          for (const item of b.evidence) list.append(el("li", "", item));
+          field.append(list);
+          details.append(field);
+        }
+        brief.append(details);
+      }
+    }
+    node.append(brief);
+  }
+  const voices = el("div", "room-discussion-voices");
+  for (const entry of discussion.views) {
+    const voice = el("article", "room-discussion-voice");
+    const head = el("div", "room-discussion-voice-head");
+    head.append(el("span", "room-discussion-name", entry.name), roomConversationButton("查看原对话 ↗", entry.sessionId));
+    if (entry.turn !== undefined) head.append(el("span", "room-view-turn", `第 ${entry.turn} 次发言`));
+    voice.append(head, el("div", "room-view-position", entry.view.position), roomViewFields(entry.view));
+    voices.append(voice);
+  }
+  if (discussion.views.length > 0) node.append(voices);
+  const differences = el("div", "room-disagreements");
+  differences.append(el("div", "room-view-label", "明确指出的分歧"), el("div", "room-view-note", discussion.disagreementNotice));
+  if (discussion.disagreements.length > 0) {
+    const names = new Map(turns.filter((t) => t && typeof t.bot === "string").map((t) => [t.bot, typeof t.name === "string" && t.name !== "" ? t.name : t.bot]));
+    for (const entry of discussion.views) names.set(entry.bot, entry.name);
+    const list = el("ul", "room-view-list");
+    for (const item of discussion.disagreements) list.append(el("li", "", `${item.name} 对 ${names.get(item.with) ?? item.with}：${item.point}`));
+    differences.append(list);
+  }
+  node.append(differences);
+  if (discussion.unstructuredBots.length > 0) {
+    const missing = el("div", "room-discussion-missing");
+    missing.append(el("div", "room-view-note", "以下 bot 的发言未完整记录观点、依据或改判条件，可回看原文："));
+    const list = el("ul", "room-view-list");
+    for (const bot of discussion.unstructuredBots) {
+      const turn = [...turns].reverse().find((t) => t && t.bot === bot);
+      const name = typeof turn?.name === "string" && turn.name !== "" ? turn.name : bot;
+      const item = el("li");
+      item.append(typeof turn?.sessionId === "string" && turn.sessionId !== "" ? roomConversationButton(`${name} · 查看原对话 ↗`, turn.sessionId) : el("span", "", name));
+      list.append(item);
+    }
+    missing.append(list);
+    node.append(missing);
+  }
+  return node;
+}
+
+/** The original state line stays intact; new logs can add a discussion card.
+ * @param {Record<string, any>} view */
 function roomLineNode(view) {
   const node = el("div", "room-line");
   node.append(el("span", "room-line-text", view.line === "round-end" ? roundEndLine(view) : dash(view.text)));
   node.title = dash(view.text);
-  return node;
+  const discussion = normalizeRoomDiscussion(view.discussion);
+  if (!discussion) return node;
+  const group = el("div", "room-round-end");
+  group.append(node, roomDiscussionNode(discussion, Array.isArray(view.turns) ? view.turns : []));
+  return group;
 }
 
 /* ---------- transcript: tool cards ---------- */
@@ -2401,6 +2520,13 @@ function botRuntimeCard(bot, sessions) {
       if (runtime.status) kvRow(result, "Status", runtime.status);
       if (runtime.revisionAtStart) kvRow(result, "Revision at start", runtime.revisionAtStart);
       kvRow(result, "SOUL vs saved", runtime.soulMatchesSaved === true ? "Matches saved SOUL" : runtime.soulMatchesSaved === false ? "Differs from saved SOUL" : "Not available");
+      if (runtime.journal && typeof runtime.journal === "object") {
+        const labels = { loaded: "Loaded", empty: "Empty", missing: "No journal yet", unavailable: "Not available" };
+        const journal = runtime.journal;
+        kvRow(result, "Journal context", `${labels[journal.status] ?? "Not available"}${journal.truncated === true ? " · excerpt only" : ""}${typeof journal.revision === "string" && journal.revision !== "" ? ` · ${journal.revision.slice(0, 12)}` : ""}`);
+        if (journal.truncated === true) result.append(el("div", "sp-note", "The journal exceeded the context limit; only an excerpt was included."));
+        if (typeof journal.note === "string" && journal.note !== "") result.append(el("div", "sp-note", journal.note));
+      }
       if (runtime.note) result.append(el("div", "sp-note", runtime.note));
       if (typeof runtime.soul === "string") {
         const disclosure = el("details", "bot-guide");

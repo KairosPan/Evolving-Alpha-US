@@ -82,6 +82,10 @@
  * @property {string} [name] - a room member's display name: bubbles with `role: "bot"`.
  * @property {string} [memberSessionId] - the member's own session, distinct from this room's sessionId.
  * @property {number} [memberTurn] - the exact member turn that produced this answer.
+ * @property {unknown} [roomView] - the member's structured account, read from source metadata only.
+ * @property {string} [displayText] - the readable answer body supplied by the room producer; text retains the original.
+ * @property {string} [viewIssue] - the producer could not fully record the member's account.
+ * @property {unknown} [discussion] - the round's brief and attributed accounts, before renderer validation.
  * @property {string} [form] - the room `source.form` a room-sourced bubble carried (`answer`, `delta`),
  *   when the frame is one.
  * @property {string[]} [mention] - operator bubbles: the roster ids the operator's `@` addressed.
@@ -187,10 +191,15 @@ function bubble(role, message, base, interrupted) {
         form, text, interrupted: false, source: kind,
         memberSessionId: typeof src.sessionId === "string" ? src.sessionId : undefined,
         memberTurn: typeof src.turn === "number" ? src.turn : undefined,
+        ...(src.view === undefined ? {} : { roomView: src.view }),
+        ...(typeof src.displayText === "string" ? { displayText: src.displayText } : {}),
+        ...(typeof src.viewIssue === "string" ? { viewIssue: src.viewIssue } : {}),
       };
     }
     if (form === "round-end") {
-      return { ...base, kind: "room-line", line: "round-end", round: typeof src.round === "number" ? src.round : undefined, outcome: typeof src.outcome === "string" ? src.outcome : undefined, turns: Array.isArray(src.turns) ? src.turns : [], text };
+      return { ...base, kind: "room-line", line: "round-end", round: typeof src.round === "number" ? src.round : undefined, outcome: typeof src.outcome === "string" ? src.outcome : undefined, turns: Array.isArray(src.turns) ? src.turns : [], text,
+        ...(src.discussion === undefined ? {} : { discussion: src.discussion }),
+      };
     }
   }
   const mention = kind === "user" && Array.isArray(src.mention) ? src.mention.filter((m) => typeof m === "string") : undefined;

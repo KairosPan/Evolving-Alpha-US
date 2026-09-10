@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { RoomEngine, dispatchToolDefinition, gatePending, installRoom, isQuiet, registerRoomRoutes, type RoomDeps } from "../src/room.ts";
 import { ROOM_CAPS, type EventLike, type RosterBot } from "../src/room-rules.ts";
 import { setBots } from "../src/roster.ts";
+import type { DiscussionSummary } from "../src/room-contract.ts";
 import { makeFakeTree, type FakeTree } from "./room-fake.ts";
 import { recorder } from "./route-recorder.ts";
 
@@ -263,6 +264,55 @@ test("a serial round: the later member's delta carries the earlier answer", asyn
   await engine.dispatch("session-room", CHANNEL, { to: ["buffett", "speculator"], mode: "serial", brief: "q", reason: "r" }, roster);
   await tree.clock.advance(100);
   assert.match(prompts.speculator, /巴菲特型: 买/);
+});
+
+test("structured briefs and self-reported views survive the round; malformed views keep their original answers", async () => {
+  const tree = makeFakeTree();
+  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  const brief = { question: "Is the premise supported?", evidence: ["Dated filings"], falsification: "A contradictory filing", output: "Evidence gaps and a next check" };
+  const view = (position: string, extra = {}) => JSON.stringify({ position, evidence: ["Filing dated 2026-08-01"], uncertainties: ["Durability"], changeConditions: ["A lower retention figure"], disagreements: [], ...extra });
+  const first = `My premise is tentative.\n\n\`\`\`room-view\n${view("The premise is supported.")}\n\`\`\``;
+  const second = `I disagree about durability.\n\n\`\`\`room-view\n${view("The evidence is insufficient.", { disagreements: [{ with: "buffett", point: "One quarter does not establish durability." }] })}\n\`\`\``;
+  const malformed = "Plain answer remains visible.\n```room-view\n{not JSON}\n```";
+  let received = "";
+  tree.script("buffett", (m) => { received = m.content[0].text ?? ""; return { kind: "answer", text: first }; });
+  tree.script("speculator", () => ({ kind: "answer", text: second }));
+  tree.script("macro", () => ({ kind: "answer", text: malformed }));
+  const engine = engineOn(tree);
+  await engine.dispatch("session-room", CHANNEL, { to: roster.map((b) => b.id), mode: "serial", brief, reason: "test competing premises" }, roster);
+  await tree.clock.advance(200);
+  assert.match(received, /Is the premise supported\?/);
+  assert.match(received, /Dated filings/);
+  assert.match(received, /A contradictory filing/);
+  const emitted = kairos.session.events.filter((event) => (event.data as { source?: { form?: string } })?.source?.form === "answer")
+    .map((event) => event.data as { content: { text: string }[]; source: Record<string, unknown> });
+  assert.equal(emitted[0].content[0].text, first, "the source answer is preserved for audit and model history");
+  assert.equal(emitted[0].source.displayText, "My premise is tentative.");
+  assert.equal(emitted[2].content[0].text, malformed);
+  assert.equal(emitted[2].source.view, undefined);
+  assert.equal(typeof emitted[2].source.viewIssue, "string");
+  assert.equal(kairos.inbox.nextTurn.length, 1);
+  const end = kairos.inbox.nextTurn[0];
+  const discussion = end.source.discussion as DiscussionSummary;
+  assert.deepEqual(discussion.brief, brief);
+  assert.deepEqual(discussion.views.map((entry) => entry.bot), ["buffett", "speculator"]);
+  assert.deepEqual(discussion.views[1].view.disagreements, [{ with: "buffett", point: "One quarter does not establish durability." }]);
+  assert.deepEqual(discussion.unstructuredBots, ["macro"]);
+  assert.match(end.content[0].text ?? "", /durability/);
+  assert.match(end.content[0].text ?? "", /retention/);
+  engine.dispose();
+});
+
+test("a mention inside structured evidence does not call an extra peer", async () => {
+  const tree = makeFakeTree();
+  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  tree.script("buffett", () => ({ kind: "answer", text: 'My view.\n```room-view\n{"position":"Tentative","evidence":["Quoted @macro is a source label."]}\n```' }));
+  const engine = engineOn(tree);
+  await engine.dispatch("session-room", CHANNEL, { to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, roster);
+  await tree.clock.advance(200);
+  assert.equal(tree.agentsCreated.length, 1);
+  assert.deepEqual(answers(kairos.session.events), ["buffett"]);
+  engine.dispose();
 });
 
 test("a serial round: a peer @ in the first answer never gives an already-dispatched voice a second turn", async () => {

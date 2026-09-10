@@ -16,6 +16,7 @@ import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import { bootFace } from "./boot.ts";
 import { listBots, registerBotRoutes } from "./bots.ts";
 import { installBotRuntime, registerBotRuntimeRoutes } from "./bot-runtime.ts";
+import { readBotJournal } from "./bot-journal.ts";
 import { BOTS_ROOT } from "./overlay.ts";
 import { registerDataRoutes } from "./data.ts";
 import { registerStatic } from "./static.ts";
@@ -181,7 +182,9 @@ registerChannelRoutes(booted.ctx.webServer, {
  * the host's own add-only archive has no way to honour. */
 registerSessionRoutes(booted.ctx.webServer, { root: process.cwd(), home: dshHome, hostArchive: workspaceRegistry });
 registerBotRoutes(booted.ctx.webServer, { botsRoot: BOTS_ROOT, listPresets: () => agentPresets.list() });
-const botRuntime = installBotRuntime(booted.ctx, () => listBots(BOTS_ROOT, () => agentPresets.list()));
+const botRuntime = installBotRuntime(booted.ctx, () => listBots(BOTS_ROOT, () => agentPresets.list()), {
+  readJournal: (id) => readBotJournal(BOTS_ROOT, id),
+});
 registerBotRuntimeRoutes(booted.ctx.webServer, botRuntime);
 /* Rooms: the engine lives on the ROOT context (a root-created member is a
  * runtime root, so it can ask the operator a question; a root listener sees

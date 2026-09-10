@@ -246,6 +246,45 @@ test("the round-end message is a room line carrying the outcome and every turn's
   assert.match(v.text ?? "", /^Round 1 ended/);
 });
 
+test("structured member metadata is preserved identically for live envelopes and history without replacing the original text", () => {
+  const roomView = { position: "暂缓判断", evidence: ["待复核材料"], uncertainties: [], changeConditions: ["材料复核完成"], disagreements: [] };
+  const event = { type: "user/message", seq: 32, data: {
+    content: [{ type: "text", text: "回答正文\n```room-view\n{...}\n```" }],
+    source: { kind: "room", form: "answer", bot: "value", name: "Value", sessionId: "member-1", turn: 4, view: roomView, displayText: "回答正文" },
+  } };
+  const live = mapFrame({ type: "server-request", method: "session/event", rpcId: "f32", payload: { type: "session/event", sessionId: "room", event } });
+  const history = mapFrame({ sessionId: "room", event });
+  assert.deepEqual(live, history);
+  assert.deepEqual(live.roomView, roomView);
+  assert.equal(live.displayText, "回答正文");
+  assert.match(live.text ?? "", /room-view/);
+  assert.equal(live.memberSessionId, "member-1");
+  assert.equal(live.memberTurn, 4);
+});
+
+test("malformed structured metadata stays available for renderer validation and raw-answer fallback", () => {
+  const event = { type: "user/message", seq: 1, data: {
+    content: [{ type: "text", text: "原始回答" }],
+    source: { kind: "room", form: "answer", bot: "member", view: ["malformed"], displayText: "不能替代原文", viewIssue: "Missing fields" },
+  } };
+  const view = mapFrame({ sessionId: "room", event });
+  assert.deepEqual(view.roomView, ["malformed"]);
+  assert.equal(view.text, "原始回答");
+  assert.equal(view.viewIssue, "Missing fields");
+});
+
+test("round comparison metadata survives live/history mapping and is never inferred from ordinary round prose", () => {
+  const discussion = { brief: { question: "能否证伪？" }, views: [], unstructuredBots: ["value"] };
+  const event = { type: "user/message", seq: 33, data: {
+    content: [{ type: "text", text: "Round 1 ended" }],
+    source: { kind: "room", form: "round-end", round: 1, outcome: "settled", turns: [], discussion },
+  } };
+  const live = mapFrame({ type: "session/event", sessionId: "room", event });
+  assert.deepEqual(live, mapFrame({ sessionId: "room", event }));
+  assert.deepEqual(live.discussion, discussion);
+  assert.equal(views[22].discussion, undefined, "the legacy round still renders only its state line");
+});
+
 test("the operator's @ stays an operator bubble and names whom it addressed", () => {
   const v = views[23];
   assert.equal(v.kind, "bubble");

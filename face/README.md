@@ -564,6 +564,16 @@ request facts without assembling. Cold sessions are never resumed just to inspec
 The saved revision and startup revision are diagnostics, not claims that every part of a
 request is frozen. Resuming after a host restart can mount the current preset generation.
 
+**Journal context** (`src/bot-journal.ts`). Before every bot request, the runtime reads that
+bot's own `journal/notes.md`, in both home and room sessions. It is a separate `bot-journal`
+context section, not part of SOUL: historical notes to check against current evidence, not
+new instructions. Reads are bounded to 12 KiB, reject symlinks, and report missing, empty or
+unavailable notes without blocking the request. Inspection shows the status, content revision
+and truncation flag. The actual context is persisted by dsh as a `user/message` with plugin
+source `@deepseek-ai/dsh-system-prompt`, `form: snapshot`, and a `bot-journal` section. An
+edited journal refreshes on the next request; this hook neither writes notes nor retrieves
+other channels' conversations.
+
 | Route | What |
 |---|---|
 | `GET /data/bots.json` | every directory in the grammar under `bots/`, with dsh's roster merged in: `broken` reasons shown, a directory the roster does not report flagged `listed: false` (Rule 5) |
@@ -582,10 +592,10 @@ only authoring path, and no connected client can reach around them into a git-tr
 
 **A bot in a room** — dispatched by Kairos, addressed by the operator's `@`, its answers in the
 room's transcript in its own voice — is the next section. What is still not built (spec §11, on
-purpose): bot-to-bot messaging outside a room, cross-channel memory for a bot, a delete button, a
-channel-scoped 1:1 with a bot.
+purpose): bot-to-bot messaging outside a room, cross-channel conversation retrieval, automatic
+journal writing, a delete button, a channel-scoped 1:1 with a bot.
 
-## Rooms (src/room.ts + src/room-rules.ts + src/room-projection.ts + client/room.js)
+## Rooms (src/room.ts + src/room-rules.ts + src/room-contract.ts + src/room-projection.ts + client/room.js)
 
 A room is an ordinary channel session whose agent is Kairos and which has **members**: one
 session per bot the channel rosters, created lazily the first time that bot is named. Nothing
@@ -601,6 +611,10 @@ the round, and returns at once — the result text names who was called, how, **
 called**, and tells the model to end its turn. Kairos is woken once per round, by a
 `followup` that names who answered and who passed.
 
+The brief accepts the existing string or an object with `question` and optional `context`,
+`evidence` requirements, `falsification` terms and desired `output`. `src/room-contract.ts`
+validates and formats both forms; the tool schema prefers the object for research questions.
+
 **A member session** is created in-process by the engine (`ctx.agents.create`) with the
 channel directory as `cwd`, `parentSession` = the room, `agentPreset` = the bot, the bot's
 `preset.yml` `model:` when the tree serves it (else the default, with a line in the dispatch
@@ -612,19 +626,34 @@ operator a question.
 
 **What a member sees** each turn: the room delta — every operator prompt, Kairos reply and
 member answer since it last spoke, one attributed line each (`操作员:`, `Kairos:`, `<bot> (you):`,
-`<bot>:`) — the brief, and four standing rules carried in the prompt (reply with your view or
-exactly `(pass)`; your text goes to the room verbatim; you remember this room only; address the
-operator directly when the judgment is theirs, write `@<bot>` to pull a peer in). Its cursor is
+`<bot>:`) — the brief, and standing rules carried in the prompt (reply with your view or
+exactly `(pass)`; your original answer is retained in the room; this transcript covers this
+room and any own journal is historical context; address the operator directly when the
+judgment is theirs, write `@<bot>` to pull a peer in). Its cursor is
 the delta prompt in its own log (`source.form === 'delta'`, `messageIds`), so a member never
 re-reads what it saw. Parallel: everyone answers on the same delta and sees no peer this round.
 Serial: each later member sees the earlier answers.
+
+Members answer in their own voice, then are asked to append one terminal `room-view` JSON
+fence: `position`, `evidence`, `uncertainties`, `changeConditions`, and `disagreements`
+(`with` another roster id and `point`). Evidence remains a speaker's claim, not a verified
+source. A member may name only disagreements with peer views it has actually seen; initial
+parallel answers cannot invent them. Valid fields are extracted for display, while the raw
+answer stays intact. Missing or malformed blocks fall back to the full text. Mentions inside
+a valid structured block do not call peers. At round end, Kairos receives an attributed,
+bounded comparison and instructions to distinguish factual, interpretive and risk-preference
+disagreements before giving its conclusion and next check. An empty disagreement list does
+not establish consensus.
 
 **How a room fact is recorded — no `room/*` events.** dsh's persistence refuses to reload a log
 carrying an event type outside its catalog (`KNOWN_SESSION_EVENT_TYPES`), so every room fact
 rides a known event: membership is the member's header; the dispatch is the tool's own
 call/result; an answer is a `user/message` on the room session with `source: { kind: 'room',
 form: 'answer', bot, name, sessionId, turn, round }`; the round end is the waking
-`user/message` with `form: 'round-end'` and every turn's state. Answers are **appended straight
+`user/message` with `form: 'round-end'` and every turn's state. Answer sources can also carry
+`view`, `displayText` or `viewIssue`; the round-end source carries the structured `discussion`
+with its brief, attributed views and unstructured speakers. These fields survive history
+reload without introducing new event types. Answers are **appended straight
 onto the room log** while no Kairos turn is open (a bubble at once, a seq now, in the next
 request's history) and held in a per-room outbox otherwise, flushed at the next `turn/end` and
 before the round-end wake. The `room` projection unit folds these events into the coarse state
@@ -650,7 +679,11 @@ answers the roster, the members the engine drove this boot, and the caps left.
 
 **The client.** A member's answer renders as a bubble in the bot's own voice — its display name
 and an avatar glyph — never as a context row (`client/room.js`, `mapper.js`); the round end is a
-room line; the dispatch card reads as the who-was-called line. The **participants strip** above
+room line followed by a **本轮讨论对照** card when discussion data exists. The card shows the
+brief, each speaker's position and supporting details, declared disagreements and speakers
+who supplied plain text only. Member bubbles expose evidence, uncertainty and change conditions
+in a disclosure and keep the valid JSON fence out of the prose. Old logs still render as before.
+The dispatch card reads as the who-was-called line. The **participants strip** above
 the transcript shows Kairos (`organizing` while its turn is open) and every rostered voice:
 coarse states from the projection, fine states (`thinking` / `writing` / `tool`) from the member
 sessions' own pulses, `waiting for you` when a gate is pending on the member, `left` for a member
@@ -671,7 +704,8 @@ tree-wide (both proven from a bot session in `room-smoke.test.ts` and `bots-smok
 Four voices on one model will tend to converge (R3); parallel first answers are the mitigation,
 not a cure. Dispatch is Kairos's judgment (R2): it may under- or over-call; the "not called"
 clause and the operator's `@` are the answer. A member's pending gate with no client connected
-blocks until the hard cap (R6). A bot does not remember across channels (R5).
+blocks until the hard cap (R6). A bot can read its own shared journal, but does not retrieve
+other channels' conversations or automatically maintain those notes (R5 remains partial).
 
 | Route | What |
 |---|---|
@@ -724,7 +758,7 @@ dropped and the table's meta line says so.
 ```bash
 npm test                  # offline unit tests - no keys, no network, no port
 npm run typecheck         # strict tsc against the pinned .d.ts - the contract test
-FACE_SMOKE=1 npm test     # + the five real boots (throwaway $DSH_HOME, no LLM call)
+FACE_SMOKE=1 npm test     # + isolated real boots; local stubs, no external model calls
 ```
 
 `npm test` works on seams: the composed patch stack, a recorder standing in for
@@ -741,6 +775,12 @@ than assumed. Then the instruments: `/market` and `/account` serve, and
 route/cache/spawn chain (no Python, no bed — the producer has its own suite),
 with a forged `Host` on that route drilled to 403 as well, because `/data` is
 fenced by its own predicate rather than by the harness's.
+
+`bot-runtime-smoke.test.ts` checks the journal's actual request snapshot, refresh after an
+edit, and model isolation. `room-discussion-smoke.test.ts` drives a structured serial round
+through the real engine with a local model stub: peer context, declared disagreements, malformed
+answer fallback, each member's own journal, Kairos's synthesis request, and metadata after
+flushing and reloading the session log.
 
 ## Upgrading dsh — TWO pins, not one
 

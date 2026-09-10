@@ -1,7 +1,7 @@
 // face/tests/room-client.test.ts
 import test from "node:test";
 import assert from "node:assert/strict";
-import { avatarGlyph, foldMembers, gateSpeaker, isMemberSession, isMentionText, roundEndLine, stripChips } from "../client/room.js";
+import { avatarGlyph, foldMembers, gateSpeaker, isMemberSession, isMentionText, normalizeRoomDiscussion, normalizeRoomView, roomAnswerDisplay, roundEndLine, stripChips } from "../client/room.js";
 import { bucketFor } from "../client/grouping.js";
 
 test("avatarGlyph is deterministic per id and differs between the two template bots", () => {
@@ -88,4 +88,81 @@ test("gateSpeaker names the member's bot for a member's gate, else the fallback"
   assert.equal(gateSpeaker("m1", memberRows, bots, "Kairos"), "巴菲特型");
   assert.equal(gateSpeaker("m9", memberRows, bots, "Kairos"), "Kairos");
   assert.equal(gateSpeaker("m1", memberRows, [], "Kairos"), "buffett", "no roster name: the id, never the host");
+});
+
+const account = {
+  position: "需要更多证据。",
+  evidence: ["公司报告中的收入数字尚未交叉核对。"],
+  uncertainties: ["统计口径是否一致？"],
+  changeConditions: ["独立来源确认同一口径。"],
+  disagreements: [{ with: "macro", point: "增长率不能直接证明需求持续。" }],
+};
+
+test("room view validation accepts empty claims but rejects malformed or partially missing accounts", () => {
+  assert.deepEqual(normalizeRoomView(account), account);
+  const empty = { position: "暂不判断", evidence: [], uncertainties: [], changeConditions: [], disagreements: [] };
+  assert.deepEqual(normalizeRoomView(empty), empty);
+  for (const invalid of [null, [], "position", { ...account, position: " " }, { ...account, evidence: "fact" },
+    { ...account, uncertainties: undefined }, { ...account, changeConditions: [3] },
+    { ...account, disagreements: [{ with: "macro" }] }, { ...account, disagreements: [null] }]) {
+    assert.equal(normalizeRoomView(invalid), null);
+  }
+});
+
+test("answer display uses authoritative metadata and preserves raw prose on missing or malformed accounts", () => {
+  const raw = "原始回答\n```room-view\n{...}\n```";
+  assert.deepEqual(roomAnswerDisplay({ text: raw, roomView: account, displayText: "原始回答" }), { text: "原始回答", view: account, issue: null });
+  assert.equal(roomAnswerDisplay({ text: raw, roomView: account, displayText: "  " }).text, account.position);
+  assert.equal(roomAnswerDisplay({ text: raw, displayText: "不可信的替代正文" }).text, raw);
+  const malformed = roomAnswerDisplay({ text: raw, roomView: { position: "不完整" }, displayText: "替代正文", viewIssue: "Internal parser detail" });
+  assert.equal(malformed.text, raw);
+  assert.equal(malformed.view, null);
+  assert.equal(malformed.issue, "观点字段未完整记录，已保留原文。");
+  assert.deepEqual(roomAnswerDisplay({ text: "旧回答，无结构化字段" }), { text: "旧回答，无结构化字段", view: null, issue: null });
+});
+
+test("discussion validates contributions independently and retains unstructured speakers for reviewing original text", () => {
+  const brief = { question: "收入能持续吗？", context: "只讨论已披露材料", evidence: ["季度报告"], falsification: "口径不一致", output: "给出下一项核查" };
+  const discussion = normalizeRoomDiscussion({
+    brief,
+    views: [
+      { bot: "value", name: "Value", sessionId: "v1", turn: 2, view: account },
+      { bot: "broken", name: "Broken", sessionId: "b1", view: { position: "缺失依据" } },
+      { bot: "missing-session", view: account },
+      null,
+    ],
+    unstructuredBots: ["legacy", "legacy", 42],
+  });
+  assert.ok(discussion);
+  assert.deepEqual(discussion.brief, brief);
+  assert.equal(discussion.views.length, 1);
+  assert.equal(discussion.views[0].turn, 2);
+  assert.deepEqual(discussion.unstructuredBots, ["legacy", "broken", "missing-session"]);
+  assert.deepEqual(discussion.disagreements, [{ bot: "value", name: "Value", with: "macro", point: account.disagreements[0].point }]);
+});
+
+test("no declared disagreement never becomes inferred consensus, even with matching positions", () => {
+  const view = { ...account, disagreements: [] };
+  const discussion = normalizeRoomDiscussion({
+    brief: "同样的判断是否依据相同？",
+    views: [{ bot: "a", name: "A", sessionId: "a1", view }, { bot: "b", name: "B", sessionId: "b1", view }],
+    unstructuredBots: [],
+  });
+  assert.ok(discussion);
+  assert.deepEqual(discussion.disagreements, []);
+  assert.equal(discussion.disagreementNotice, "未记录明确分歧；这不代表已经达成共识。");
+});
+
+test("old or malformed round metadata degrades to the original state line without inventing a brief", () => {
+  for (const payload of [undefined, null, [], "agreement", { views: [] }, { views: {}, unstructuredBots: [] }]) assert.equal(normalizeRoomDiscussion(payload), null);
+  const malformedBrief = normalizeRoomDiscussion({ brief: { question: 5, context: "x" }, views: [], unstructuredBots: [] });
+  assert.equal(malformedBrief?.brief, undefined);
+});
+
+test("structured account strings remain literal data, never parsed as markup or inferred into claims", () => {
+  const literal = { ...account, position: '<img src=x onerror="alert(1)">', evidence: ["**verified** [source](javascript:alert(1))"] };
+  const normalized = normalizeRoomView(literal);
+  assert.deepEqual(normalized, literal);
+  normalized!.evidence.push("local display change");
+  assert.equal(literal.evidence.length, 1, "normalization does not mutate the original event");
 });

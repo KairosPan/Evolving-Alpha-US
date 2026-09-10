@@ -39,6 +39,7 @@ import { FORBIDDEN, HttpError, readBody } from "./http.ts";
 import { DEFAULT_PRESET } from "./overlay.ts";
 import { readRosters } from "./roster.ts";
 import { registerRoomProjection } from "./room-projection.ts";
+import { BRIEF_SCHEMA, formatDiscussionSummary, parseMemberView, type DiscussionSummary, type RoomBrief } from "./room-contract.ts";
 import {
   ROOM_CAPS, dispatchResultText, finalTextOf, formatDelta, isPass, memberPrompt, parseModelRoute,
   resolveMentions, roomLinesOf, roundEndText, validateDispatch,
@@ -146,6 +147,8 @@ export interface Round {
   continuations: string[];
   continuationsRun: number;
   turns: RoomTurnRecord[];
+  /** Self-reported views, never an inferred consensus or organizer verdict. */
+  discussion?: DiscussionSummary;
 }
 export interface Room {
   id: string;
@@ -481,7 +484,7 @@ export class RoomEngine {
     return { text: formatDelta(fresh, member.bot), messageIds: fresh.map((line) => line.id) };
   }
 
-  async runMemberTurn(room: Room, member: Member, roster: readonly RosterBot[], trigger: TurnTrigger, brief?: string): Promise<MemberTurnResult> {
+  async runMemberTurn(room: Room, member: Member, roster: readonly RosterBot[], trigger: TurnTrigger, brief?: RoomBrief): Promise<MemberTurnResult> {
     const delta = this.deltaFor(room, roster, member);
     const text = memberPrompt({ roomName: room.channel.name, roster, self: member.bot, delta: delta.text, trigger, ...(brief === undefined ? {} : { brief }) });
     const message = createUserMessage({
@@ -607,14 +610,18 @@ export class RoomEngine {
     };
   }
 
-  private answerMessage(record: RoomTurnRecord, text: string, round: number): MessageLike {
+  private answerMessage(record: RoomTurnRecord, text: string, round: number, parsed: ReturnType<typeof parseMemberView>): MessageLike {
     return createUserMessage({
       content: [{ type: "text", text }],
-      source: { kind: "room", form: "answer", bot: record.bot, name: record.name, sessionId: record.sessionId, turn: record.turn ?? 0, round },
+      source: { kind: "room", form: "answer", bot: record.bot, name: record.name, sessionId: record.sessionId, turn: record.turn ?? 0, round,
+        ...(parsed.view ? { view: parsed.view, displayText: parsed.prose || parsed.view.position } : {}),
+        ...(parsed.issue ? { viewIssue: parsed.issue } : {}) },
     }) as unknown as MessageLike;
   }
 
-  private async runRound(room: Room, round: Round, to: readonly string[], roster: readonly RosterBot[], trigger: TurnTrigger, brief?: string): Promise<void> {
+  private async runRound(room: Room, round: Round, to: readonly string[], roster: readonly RosterBot[], trigger: TurnTrigger, brief?: RoomBrief): Promise<void> {
+    const discussion: DiscussionSummary = { ...(brief === undefined ? {} : { brief }), views: [], unstructuredBots: [] };
+    round.discussion = discussion;
     /* Everything before the prompt: the roster row, the caps, the member session.
      * A parallel round overlaps the TURNS, not the member sessions coming up, so
      * this runs in `to` order there too and every voice is prompted in the order
@@ -636,12 +643,16 @@ export class RoomEngine {
       const result = await this.enqueue(member, () => this.runMemberTurn(room, member, roster, trig, brief));
       round.turns.push(result.record);
       if (result.record.state !== "answered") return;
-      this.post(room, this.answerMessage(result.record, result.text, round.n));
+      const parsed = parseMemberView(result.text, roster.map((bot) => bot.id), member.bot);
+      if (parsed.view) discussion.views.push({ bot: result.record.bot, name: result.record.name,
+        sessionId: result.record.sessionId, ...(result.record.turn === undefined ? {} : { turn: result.record.turn }), view: parsed.view });
+      else discussion.unstructuredBots.push(result.record.bot);
+      this.post(room, this.answerMessage(result.record, result.text, round.n, parsed));
       /* Spec §4.4 rule 2: a peer's `@` pulls in ONE continuation turn for a voice
        * that has not spoken this round - `called` is what makes "one continuation
        * for macro however many peers named it" true, and keeps two members that
        * name each other from trading turns inside one round. */
-      for (const peer of resolveMentions(result.text, roster.filter((b) => b.id !== member.bot))) {
+      for (const peer of resolveMentions(parsed.prose, roster.filter((b) => b.id !== member.bot))) {
         if (round.called.has(peer) || round.continuations.includes(peer)) continue;
         if (round.continuationsRun + round.continuations.length >= this.caps.maxContinuations) break;
         round.continuations.push(peer);
@@ -685,10 +696,12 @@ export class RoomEngine {
     try {
       await this.whenQuiet(room);
       this.flush(room);
-      const text = roundEndText(round.n, outcome, round.turns, Math.max(0, this.caps.maxRounds - room.roundsThisSend));
+      const text = [roundEndText(round.n, outcome, round.turns, Math.max(0, this.caps.maxRounds - room.roundsThisSend)),
+        ...(round.discussion ? [formatDiscussionSummary(round.discussion)] : [])].join("\n\n");
       const end = createUserMessage({
         content: [{ type: "text", text }],
-        source: { kind: "room", form: "round-end", round: round.n, outcome, turns: round.turns },
+        source: { kind: "room", form: "round-end", round: round.n, outcome, turns: round.turns,
+          ...(round.discussion ? { discussion: round.discussion } : {}) },
       });
       this.roomAgent(room).followup(end as unknown as MessageLike);
     } catch (err) {
@@ -778,7 +791,8 @@ const errorText = (error: unknown): string => {
 export const dispatchDescription = (caps: RoomCaps): string =>
   "Ask the bots on this channel's roster for their views, each in its own voice. You are the organizer: choose whom (bot ids " +
   "from the roster), the mode (parallel: everyone answers independently and sees no peer this round - use it first on a fresh " +
-  "question; serial: each later bot sees the earlier answers), a brief (the question or task for this batch) and a reason " +
+  "question; serial: each later bot sees the earlier answers). Prefer a structured brief with question, context, evidence requirements, " +
+  "falsification and desired output. Also give a reason " +
   "(why these, why this mode - it lands in the transcript). The call returns at once; END YOUR TURN after it. You will be " +
   "woken once when the round ends, with who answered and who passed; every answer will be in this conversation, attributed. " +
   "Then name the disagreements before you conclude. A bot that is not on the roster cannot be called; the refusal names the " +
@@ -796,7 +810,7 @@ export function dispatchToolDefinition(engine: RoomEngine, deps: Pick<RoomDeps, 
       properties: {
         to: { type: "array", items: { type: "string" }, description: "bot ids from this channel's roster, in speaking order for serial" },
         mode: { type: "string", enum: ["parallel", "serial"] },
-        brief: { type: "string", description: "the question or task for this batch" },
+        brief: BRIEF_SCHEMA,
         reason: { type: "string", description: "why these bots, why this mode" },
       },
       required: ["to", "mode", "brief", "reason"],

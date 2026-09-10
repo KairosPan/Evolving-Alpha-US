@@ -133,6 +133,88 @@ export function roundEndLine(view) {
     .filter((part) => part !== null).join(" · ");
 }
 
+/**
+ * The discussion fields are a member's own account, carried by source metadata.
+ * Never infer them from prose, and never turn missing fields into agreement.
+ * @typedef {{position: string, evidence: string[], uncertainties: string[], changeConditions: string[], disagreements: {with: string, point: string}[]}} RoomView
+ */
+const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const words = (value) => typeof value === "string" && value.trim() !== "";
+const wordList = (value) => Array.isArray(value) && value.every(words);
+
+/** @param {unknown} value @returns {RoomView|null} */
+export function normalizeRoomView(value) {
+  if (!record(value)) return null;
+  const v = /** @type {any} */ (value);
+  if (!words(v.position) || !wordList(v.evidence) || !wordList(v.uncertainties) || !wordList(v.changeConditions)
+    || !Array.isArray(v.disagreements) || !v.disagreements.every((d) => record(d) && words(d.with) && words(d.point))) return null;
+  return {
+    position: v.position,
+    evidence: [...v.evidence],
+    uncertainties: [...v.uncertainties],
+    changeConditions: [...v.changeConditions],
+    disagreements: v.disagreements.map((d) => ({ with: d.with, point: d.point })),
+  };
+}
+
+/** Keep the raw answer whenever the structured account is absent or malformed.
+ * @param {{text?: unknown, roomView?: unknown, displayText?: unknown, viewIssue?: unknown}} answer
+ * @returns {{text: string, view: RoomView|null, issue: string|null}}
+ */
+export function roomAnswerDisplay(answer) {
+  const view = normalizeRoomView(answer.roomView);
+  const raw = typeof answer.text === "string" ? answer.text : "";
+  return {
+    text: view && typeof answer.displayText === "string" ? answer.displayText.trim() === "" ? view.position : answer.displayText : raw,
+    view,
+    issue: words(answer.viewIssue) || (answer.roomView !== undefined && view === null)
+      ? "观点字段未完整记录，已保留原文。" : null,
+  };
+}
+
+/** @typedef {{question: string, context?: string, evidence?: string[], falsification?: string, output?: string}} RoomBrief */
+/** @typedef {{bot: string, name: string, sessionId: string, turn?: number, view: RoomView}} DiscussionEntry */
+/** @typedef {{brief?: string|RoomBrief, views: DiscussionEntry[], unstructuredBots: string[], disagreements: {bot: string, name: string, with: string, point: string}[], disagreementNotice: string}} RoomDiscussion */
+
+/** Validate each contribution independently so one malformed member does not
+ * hide valid peers; the missing member stays explicitly listed for review.
+ * @param {unknown} value @returns {RoomDiscussion|null}
+ */
+export function normalizeRoomDiscussion(value) {
+  if (!record(value)) return null;
+  const d = /** @type {any} */ (value);
+  if (!Array.isArray(d.views) || !Array.isArray(d.unstructuredBots)) return null;
+  /** @type {DiscussionEntry[]} */
+  const views = [];
+  const missing = new Set(d.unstructuredBots.filter(words));
+  for (const entry of d.views) {
+    if (!record(entry) || !words(entry.bot)) continue;
+    const view = normalizeRoomView(entry.view);
+    if (!view || !words(entry.sessionId)) { missing.add(entry.bot); continue; }
+    views.push({
+      bot: entry.bot,
+      name: words(entry.name) ? entry.name : entry.bot,
+      sessionId: entry.sessionId,
+      ...(Number.isInteger(entry.turn) && entry.turn >= 0 ? { turn: entry.turn } : {}),
+      view,
+    });
+  }
+  /** @type {string|RoomBrief|undefined} */
+  let brief;
+  if (words(d.brief)) brief = d.brief;
+  else if (record(d.brief) && words(d.brief.question)) {
+    brief = { question: d.brief.question };
+    for (const key of ["context", "falsification", "output"]) if (words(d.brief[key])) brief[key] = d.brief[key];
+    if (wordList(d.brief.evidence)) brief.evidence = [...d.brief.evidence];
+  }
+  const disagreements = views.flatMap((entry) => entry.view.disagreements.map((item) => ({ bot: entry.bot, name: entry.name, ...item })));
+  return {
+    ...(brief === undefined ? {} : { brief }), views,
+    unstructuredBots: [...missing], disagreements,
+    disagreementNotice: disagreements.length === 0 ? "未记录明确分歧；这不代表已经达成共识。" : "以下分歧由发言者明确指出。",
+  };
+}
+
 /** Whose gate this is: the member's bot name when the session is a member of the room on screen, else the fallback (the session's own voice).
  * @param {string|undefined} sessionId @param {ReadonlyArray<{sessionId: unknown, agentPreset?: unknown}>} memberRows @param {ReadonlyArray<{id: string, name?: unknown}>} bots @param {string} fallback */
 export function gateSpeaker(sessionId, memberRows, bots, fallback) {

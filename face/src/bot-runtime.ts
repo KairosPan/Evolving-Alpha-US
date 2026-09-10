@@ -1,5 +1,7 @@
 /** Bot home model defaults and an operator view of the mounted configuration.
- * Saved files are not runtime evidence. Inspections never resume a cold agent
+ * Saved files are not runtime evidence. Own-journal context is captured afresh
+ * as a standard system-prompt plugin snapshot on each assembly.
+ * Inspections never resume a cold agent
  * or assemble concurrently with a turn; last-request facts come from its log.
  */
 import { resolve } from "node:path";
@@ -9,20 +11,25 @@ import { resolveSessionPreset } from "@deepseek-ai/dsh-agent-presets";
 import type { PromptAssembly } from "@deepseek-ai/dsh-system-prompt";
 import type { LlmCallConfig } from "@deepseek-ai/dsh-llm";
 import { isBotId, type BotRow } from "./bots.ts";
+import { formatBotJournal, type BotJournalSnapshot } from "./bot-journal.ts";
 import { isTrustedDataRequest } from "./data.ts";
 import { FORBIDDEN, HttpError } from "./http.ts";
 import type { RouteRegistrar } from "./static.ts";
 
 type Seed = { id: string; revision: string; route?: { provider: string; model: string } };
 type Snapshot = { soul: string | null; model: string | null; tools: string[] };
+type JournalInfo = Omit<BotJournalSnapshot, "text">;
 const routeName = (config: { provider?: string; model?: string } | undefined): string | null =>
   config?.provider && config.model ? `${config.provider}/${config.model}` : null;
 const toolNames = (tools: readonly { name: string }[]): string[] => tools.map((t) => t.name).sort();
 
-export function installBotRuntime(ctx: Context, listBots: () => Promise<BotRow[]>) {
+export function installBotRuntime(ctx: Context, listBots: () => Promise<BotRow[]>, options: {
+  readJournal?: (botId: string) => Promise<BotJournalSnapshot>;
+} = {}) {
   const seeds = new WeakMap<Agent, Promise<Seed | undefined>>();
   const snapshots = new WeakMap<Agent, Snapshot>();
   const assembledRoutes = new WeakMap<Agent, LlmCallConfig>();
+  const journals = new WeakMap<Agent, JournalInfo>();
   const seedFor = (agent: Agent): Promise<Seed | undefined> => {
     const id = resolveSessionPreset(agent.session);
     if (!isBotId(id)) return Promise.resolve(undefined);
@@ -61,6 +68,7 @@ export function installBotRuntime(ctx: Context, listBots: () => Promise<BotRow[]
       if (!isBotId(resolveSessionPreset(agent.session))) {
         assembledRoutes.delete(agent);
         snapshots.delete(agent);
+        journals.delete(agent);
         return next();
       }
       const seed = await seedFor(agent);
@@ -70,6 +78,18 @@ export function installBotRuntime(ctx: Context, listBots: () => Promise<BotRow[]
         catch { throw new HttpError(409, `Bot model ${routeName(seed.route)} is unavailable. Update the saved route and start a new conversation.`); }
       }
       const assembly = await next();
+      if (options.readJournal) {
+        const id = resolveSessionPreset(agent.session)!;
+        let journal: BotJournalSnapshot;
+        try { journal = await options.readJournal(id); }
+        catch { journal = { status: "unavailable", text: "", revision: null, truncated: false, note: "The journal could not be read for this request." }; }
+        const { text: _text, ...info } = journal;
+        journals.set(agent, info);
+        // dsh records this as a user/message from system-prompt, form:snapshot,
+        // with named sections. It is data alongside the room delta, never SOUL.
+        assembly.contexts = [...assembly.contexts.filter((entry) => entry.name !== "bot-journal"),
+          { name: "bot-journal", text: formatBotJournal(journal) }];
+      }
       if (selected) {
         assembledRoutes.set(agent, selected);
         assembly.variables = { ...assembly.variables, provider: selected.provider, model: selected.model };
@@ -123,7 +143,8 @@ export function installBotRuntime(ctx: Context, listBots: () => Promise<BotRow[]
       model: source === "mounted" ? snapshot?.model ?? null : lastRequest?.model ?? null,
       tools: source === "mounted" ? snapshot?.tools ?? [] : lastRequest?.tools ?? [],
       skills: skillRows.map(({ name, description }) => ({ name, description })), lastRequest,
-      ...(source === "mounted" ? { note: "Mounted preview; last request records what was actually sent. Saving applies to new conversations." }
+      ...(journals.has(agent) ? { journal: journals.get(agent)! } : {}),
+      ...(source === "mounted" ? { note: "Mounted preview; last request records what was actually sent. Test saved persona/model changes in new conversations; journal notes refresh on each request." }
         : { note: "A turn is running. Showing the last captured persona and logged request; no preview was assembled." }),
     };
   }
