@@ -9,8 +9,9 @@ Specs: `../docs/superpowers/specs/2026-08-30-face-chat-light-design.md` and
 
 ## Deploy the frontend to Vercel
 
-Production: [evo-alpha.vercel.app](https://evo-alpha.vercel.app).
+Production: [kairos-face.vercel.app](https://kairos-face.vercel.app).
 Project: `kairospans-projects/evo-alpha`.
+The project was renamed; its existing production domain remains in use.
 
 Use `face/` as the Vercel project root. `vercel.json` runs the dependency-free
 `node scripts/build-static.mjs` build and publishes `dist/`; locally, run
