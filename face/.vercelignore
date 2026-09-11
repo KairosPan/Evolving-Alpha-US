@@ -1,0 +1,10 @@
+# Upload only the dependency-free static build and browser source files.
+*
+!package.json
+!vercel.json
+!scripts
+!scripts/build-static.mjs
+!client
+!client/*.html
+!client/*.css
+!client/*.js
