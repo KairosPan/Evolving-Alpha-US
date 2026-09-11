@@ -9,8 +9,8 @@ Specs: `../docs/superpowers/specs/2026-08-30-face-chat-light-design.md` and
 
 ## Deploy the frontend to Vercel
 
-Production: [kairos-face.vercel.app](https://kairos-face.vercel.app).
-Project: `kairospans-projects/kairos-face`.
+Production: [evo-alpha.vercel.app](https://evo-alpha.vercel.app).
+Project: `kairospans-projects/evo-alpha`.
 
 Use `face/` as the Vercel project root. `vercel.json` runs the dependency-free
 `node scripts/build-static.mjs` build and publishes `dist/`; locally, run
@@ -30,7 +30,7 @@ To deploy again after signing in with `vercel login`:
 
 ```bash
 cd face
-vercel link --yes --project kairos-face --scope kairospans-projects
+vercel link --yes --project evo-alpha --scope kairospans-projects
 vercel deploy --prod --yes --scope kairospans-projects
 ```
 
