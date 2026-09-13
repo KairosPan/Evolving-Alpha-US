@@ -1,6 +1,6 @@
 # AQR room 启动简报
 
-由 Codex 根据 operator 的“创建一下跑一下”请求整理。以下正文将在三个 bot 经明确授权创建、加入本频道后发送给 dsh；本文存在不表示已发送。
+由 Codex 根据 operator 的“创建一下跑一下”请求整理。Operator 已明确授权本次创建三个 bot；宿主已创建并将它们加入本频道，无需 dsh 再创建或修改 bot。正式发送状态与会话身份以 room.json 为准。
 
 请在本 room 完成 AQR Russell 1000 复制课程项目。你是 dsh 主脑。先读当前目录 brief/assignment.md、brief/requirements.md、protocol.md、THESIS.md；完整编排参考仓库根 docs/aqr-room-orchestration.md。项目目录是当前 strategies/aqr-r1000，不使用原设计中的 projects/ 路径。原题PDF在 brief/aqr_takehome-project.pdf。
 
