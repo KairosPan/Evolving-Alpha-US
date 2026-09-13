@@ -1,0 +1,9 @@
+status: researching
+one_line: "AQR Russell 1000 复制课题已初始化，尚未取数或产生绩效。"
+next: "配置独立 room，启动历史数据、复制方法和独立审计的第一轮讨论。"
+numbers:
+  AS_OF: "2024-03-31"
+  EVAL: "2024-04-01..2024-06-30"
+  track: "A"
+  fits_budget: 14
+  fits_completed: 0

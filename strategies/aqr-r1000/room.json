@@ -1,0 +1,22 @@
+{
+  "base": "http://127.0.0.1:3090",
+  "workspaceId": "730b58ba-c954-4654-b335-670693c77dde",
+  "dir": "/Users/pan/Desktop/self-evolve/evolving-alpha-us/strategies/aqr-r1000",
+  "bots": [
+    "aqr-data",
+    "aqr-method",
+    "aqr-audit"
+  ],
+  "agents": [
+    "claude",
+    "codex"
+  ],
+  "sessionId": "session-3385d134-37d7-4979-9e30-ddef5f87b9e1",
+  "title": "AQR Russell 1000 · dsh 研究室",
+  "setup_status": "awaiting_explicit_bot_creation_approval",
+  "bots_created": false,
+  "source_pdf_sha256": "6aa5fe72aac6c9253f3ac2dfcc245c5d80e660fa0e648874d7da90c6a9be8b1e",
+  "research_prompt_sent": false,
+  "preflight_prompt_sent": true,
+  "preflight_status": "completed"
+}
