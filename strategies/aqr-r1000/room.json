@@ -13,11 +13,38 @@
   ],
   "sessionId": "session-3385d134-37d7-4979-9e30-ddef5f87b9e1",
   "title": "AQR Russell 1000 · dsh 研究室",
-  "setup_status": "configured",
+  "setup_status": "research_running",
   "bots_created": true,
   "source_pdf_sha256": "6aa5fe72aac6c9253f3ac2dfcc245c5d80e660fa0e648874d7da90c6a9be8b1e",
-  "research_prompt_sent": false,
+  "research_prompt_sent": true,
   "preflight_prompt_sent": true,
   "preflight_status": "completed",
-  "bot_creation_authorization": "Operator explicitly authorized this one-time exception to AGENTS.md for aqr-data, aqr-method and aqr-audit on 2026-09-13."
+  "bot_creation_authorization": "Operator explicitly authorized this one-time exception to AGENTS.md for aqr-data, aqr-method and aqr-audit on 2026-09-13.",
+  "research_launch_marker": "AQR-RESEARCH-LAUNCH-20260913",
+  "research_prompt_sha256": "556b732993014f230451a87823ec4db6fae59d3996f216b6bfefae2f2ba97e73",
+  "members": {
+    "aqr-data": {
+      "sessionId": "session-1ed3c958-ec29-43ad-9fd8-4ef54ae94e17",
+      "name": "AQR 数据溯源"
+    },
+    "aqr-method": {
+      "sessionId": "session-800088a2-6fa9-414a-8165-27eb3dac4829",
+      "name": "AQR 复制方法"
+    },
+    "aqr-audit": {
+      "sessionId": "session-71621077-9560-46f3-b5f9-b8bb747a4001",
+      "name": "AQR 独立审计"
+    }
+  },
+  "launch_verified_at": "2026-09-13T20:35:02.710477+00:00",
+  "engineering_workers": [
+    {
+      "sessionId": "6e5a2463-1062-46ef-87ce-f5bb138b03ae",
+      "running_at_verification": true
+    },
+    {
+      "sessionId": "98eb4b23-b5b5-4b65-8c7f-10b19b1f9ed5",
+      "running_at_verification": true
+    }
+  ]
 }
