@@ -51,12 +51,12 @@ function reqWithHost(host?: string): IncomingMessage {
 
 /* The route SHAPE is the contract with the host webserver, exactly as in
  * static.test.ts: two EXACT paths, and no prefix or fallback claim. */
-test("registerDataRoutes mounts exactly the two exact routes it claims", () => {
+test("registerDataRoutes mounts exactly the three exact data routes", () => {
   const routes: WebRoute[] = [];
   registerDataRoutes({ register: (route) => routes.push(route) }, { spawn: async () => ({ stdout: "{}", code: 0 }), now: () => 0 });
   assert.deepEqual(
     routes.map((r) => `${r.kind} ${r.path}`).sort(),
-    ["exact /data/account.json", "exact /data/market.json"],
+    ["exact /data/account.json", "exact /data/market.json", "exact /data/watchlist.json"],
   );
 });
 
@@ -209,23 +209,26 @@ test("each mode is spawned with its own timeout and a fixed argv", async () => {
   const seen: Array<{ argv: string[]; timeoutMs: number }> = [];
   const spawn: Spawner = async (argv, timeoutMs) => {
     seen.push({ argv, timeoutMs });
-    return { stdout: '{"ok":true}', code: 0 };
+    return { stdout: '{"ok":true,"assets":[],"markets":[]}', code: 0 };
   };
   const byPath = routesWith(spawn, () => 0);
   await call(byPath.get("/data/market.json")!);
   await call(byPath.get("/data/account.json")!);
+  await call(byPath.get("/data/watchlist.json")!);
 
   assert.equal(SPAWN_TIMEOUT_MS.market, 600_000);
   assert.equal(SPAWN_TIMEOUT_MS.account, 30_000);
   assert.equal(TTL_MS.market, 900_000);
   assert.equal(TTL_MS.account, 60_000);
-  assert.deepEqual(seen.map((s) => s.timeoutMs), [SPAWN_TIMEOUT_MS.market, SPAWN_TIMEOUT_MS.account]);
+  assert.equal(SPAWN_TIMEOUT_MS.watchlist, 30_000);
+  assert.deepEqual(seen.map((s) => s.timeoutMs), [SPAWN_TIMEOUT_MS.market, SPAWN_TIMEOUT_MS.account, SPAWN_TIMEOUT_MS.watchlist]);
 
   /* No request data ever reaches the child: the argv is the script path and the
    * mode word, nothing else (spec v2 section 3.1). */
-  assert.deepEqual(seen.map((s) => s.argv.length), [2, 2]);
+  assert.deepEqual(seen.map((s) => s.argv.length), [2, 2, 2]);
   assert.ok(seen[0]!.argv[0]!.endsWith(join("scripts", "face_data.py")), seen[0]!.argv[0]);
-  assert.deepEqual(seen.map((s) => s.argv[1]), ["market", "account"]);
+  assert.ok(seen[2]!.argv[0]!.endsWith(join("scripts", "face_watchlist.py")), seen[2]!.argv[0]);
+  assert.deepEqual(seen.map((s) => s.argv[1]), ["market", "account", "watchlist"]);
 });
 
 /* The DNS-rebinding fence, the same one dsh-client-connection puts in front of
@@ -260,8 +263,8 @@ test("isLoopbackHost accepts the loopback spellings and nothing else", () => {
 });
 
 test("the fence 403s a foreign Host and serves a loopback one", async () => {
-  const byPath = routesWith(async () => ({ stdout: '{"ok":true}', code: 0 }), () => 0);
-  for (const path of ["/data/market.json", "/data/account.json"]) {
+  const byPath = routesWith(async () => ({ stdout: '{"ok":true,"assets":[],"markets":[]}', code: 0 }), () => 0);
+  for (const path of ["/data/market.json", "/data/account.json", "/data/watchlist.json"]) {
     const route = byPath.get(path)!;
     const forged = await call(route, reqWithHost("evil.example.com"));
     assert.equal(forged.status, 403, path);
@@ -287,7 +290,60 @@ test("a fenced request never reaches the spawn", async () => {
   const byPath = routesWith(async () => { calls++; return { stdout: '{"ok":true}', code: 0 }; }, () => 0);
   await call(byPath.get("/data/market.json")!, reqWithHost("evil.example.com"));
   await call(byPath.get("/data/account.json")!, reqWithHost(undefined));
+  await call(byPath.get("/data/watchlist.json")!, reqWithHost("evil.example.com"));
   assert.equal(calls, 0);
+});
+
+test("watchlist merges reference metadata, preserves real quotes, and caches the merged body", async () => {
+  let calls = 0;
+  const byPath = routesWith(async () => {
+    calls++;
+    return { stdout: JSON.stringify({ ok: true, generated_at: "2026-09-15T12:00:00Z",
+      markets: [{ id: "us", status: "snapshot", as_of: "2026-07-09" }], assets: [{
+        id: "us:AAPL", market: "us", symbol: "AAPL", name: "AAPL", currency: "USD", exchange: "US",
+        price: 100, change: 1, change_pct: 1.010101, volume: 500, as_of: "2026-07-09",
+        source: "test snapshot", quote_status: "snapshot", spark: [99, 100],
+      }] }), code: 0 };
+  }, () => 0);
+  const route = byPath.get("/data/watchlist.json")!;
+  const first = await call(route);
+  assert.equal(first.status, 200);
+  const payload = JSON.parse(first.body);
+  const apple = payload.assets.find((row: { id: string }) => row.id === "us:AAPL");
+  assert.equal(apple.name, "Apple");
+  assert.equal(apple.exchange, "NASDAQ");
+  assert.ok(apple.aliases.includes("苹果"));
+  assert.equal(apple.price, 100);
+  assert.equal(apple.as_of, "2026-07-09");
+  assert.deepEqual(apple.spark, [99, 100]);
+  const bitcoin = payload.assets.find((row: { id: string }) => row.id === "crypto:BTC/USD");
+  assert.equal(bitcoin.quote_status, "unavailable");
+  assert.equal(bitcoin.price, null);
+  assert.equal(bitcoin.as_of, null);
+  assert.equal(bitcoin.source, null);
+  assert.deepEqual(bitcoin.spark, []);
+  assert.deepEqual(payload.markets.map((row: { id: string }) => row.id), ["us", "cn", "crypto"]);
+  assert.equal(payload.assets.length, 35);
+  assert.match(payload.note, /非全市场/);
+  const second = await call(route);
+  assert.equal(second.body, first.body);
+  assert.equal(calls, 1);
+});
+
+test("watchlist invalid producer payload keeps a previous good cache marked stale", async () => {
+  let clock = 0;
+  let invalid = false;
+  const byPath = routesWith(async () => ({
+    stdout: invalid ? '{"ok":true}' : '{"ok":true,"assets":[],"markets":[]}', code: 0,
+  }), () => clock);
+  const route = byPath.get("/data/watchlist.json")!;
+  const first = await call(route);
+  invalid = true;
+  clock = TTL_MS.watchlist + 1;
+  const second = await call(route);
+  assert.equal(second.status, 200);
+  assert.equal(JSON.parse(second.body).stale, true);
+  assert.deepEqual(JSON.parse(second.body).assets, JSON.parse(first.body).assets);
 });
 
 /* main.ts turns ANY unhandled rejection into a process shutdown. The in-flight

@@ -1,32 +1,58 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Market — KAIROS</title>
-<!-- Absolute paths, same reason as index.html: the page is served at `/market`
-     (static.ts's exact route) while its assets live under the `/client`
-     prefix, so a relative href would ask for `/chat.css` and 404. -->
 <link rel="stylesheet" href="/client/chat.css">
+<link rel="stylesheet" href="/client/market.css">
 </head>
-<body class="inst-body">
+<body class="market-body">
 <nav class="rail" data-navigation="market" aria-label="primary navigation"></nav>
-<div class="page-workspace">
-<!-- The frame only. Every reading below is built by market.js from
-     /data/market.json through the DOM API - this file holds not one byte of
-     market data, so nothing here can ever be stale against the payload. -->
-<main class="inst-wrap">
-  <header class="inst-head">
-    <a class="inst-mark" href="/">KAIROS</a>
-    <span class="inst-title">Market</span>
-    <a class="inst-link" href="/account">account →</a>
-    <span id="asof" class="inst-note"></span>
-    <span id="stamp" class="inst-note"></span>
-    <button id="refresh" class="inst-refresh" type="button" title="re-fetch">refresh</button>
+<div class="market-workspace page-workspace">
+  <header class="market-topbar">
+    <a class="market-brand" href="/">KAIROS</a><span class="market-divider" aria-hidden="true">/</span><span class="market-section">Market</span>
+    <button id="search-open" class="market-search-trigger" type="button" aria-haspopup="dialog" aria-controls="symbol-search">
+      <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg>
+      <span>搜索股票、加密货币</span><kbd id="search-shortcut">⌘ K</kbd>
+    </button>
   </header>
-  <div id="root"><p class="inst-note">loading…</p></div>
-</main>
+  <main class="market-main">
+    <div class="market-heading">
+      <div><p class="market-eyebrow">YOUR MARKETS, TOGETHER</p><h1>自选股<span class="market-heading-dot">.</span></h1><p class="market-description">美股、A 股与加密货币，关注尽在一处。</p></div>
+      <button id="add-symbol" class="market-button primary" type="button"><span aria-hidden="true">＋</span> 添加自选</button>
+    </div>
+    <div id="storage-notice" class="market-notice" role="status" hidden></div>
+    <section class="watchlist" aria-label="自选行情">
+      <div class="watchlist-toolbar">
+        <div id="market-filters" class="market-tabs" role="group" aria-label="按市场筛选">
+          <button type="button" class="market-tab active" data-market="all" aria-pressed="true">全部<span class="market-count" data-count="all">0</span></button>
+          <button type="button" class="market-tab" data-market="us" aria-pressed="false">美股<span class="market-count" data-count="us">0</span></button>
+          <button type="button" class="market-tab" data-market="cn" aria-pressed="false">A 股<span class="market-count" data-count="cn">0</span></button>
+          <button type="button" class="market-tab" data-market="crypto" aria-pressed="false">加密货币<span class="market-count" data-count="crypto">0</span></button>
+        </div>
+        <div class="watchlist-actions">
+          <label class="market-sr-only" for="watchlist-sort">自选排序</label>
+          <select id="watchlist-sort"><option value="default">添加顺序</option><option value="symbol:asc">代码 A → Z</option><option value="change_pct:desc">涨幅优先</option><option value="change_pct:asc">跌幅优先</option></select>
+          <button id="refresh" class="market-icon-button" type="button" aria-label="刷新行情" title="刷新行情"><svg viewBox="0 0 20 20" width="17" height="17" aria-hidden="true"><path d="M16 7.5a6.5 6.5 0 1 0 .2 4M16 3.5v4h-4"/></svg></button>
+        </div>
+      </div>
+      <div id="watchlist-content"></div>
+      <div class="watchlist-footer"><span id="list-summary">0 个自选</span><span>原币报价<span class="market-footer-divider">·</span><span class="market-up">绿涨</span> / <span class="market-down">红跌</span></span></div>
+    </section>
+    <div class="market-data-status"><span id="data-status" role="status">正在读取行情目录…</span><span class="market-local-note"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2M3 7h10v7H3z"/></svg>自选保存在此浏览器</span></div>
+    <p id="data-note" class="market-data-note"></p>
+  </main>
 </div>
+<dialog id="symbol-search" class="symbol-dialog" aria-labelledby="search-title">
+  <div class="symbol-dialog-heading"><div><p class="market-eyebrow">DISCOVER & FOLLOW</p><h2 id="search-title">添加自选</h2></div><button id="search-close" class="market-icon-button" aria-label="关闭搜索" type="button">×</button></div>
+  <div class="symbol-search-field"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><label class="market-sr-only" for="symbol-query">搜索代码或名称</label><input id="symbol-query" type="search" placeholder="搜索代码或名称，如 AAPL、茅台、BTC" autocomplete="off" spellcheck="false"><kbd>ESC</kbd></div>
+  <div id="search-filters" class="symbol-search-filters" role="group" aria-label="搜索市场"><button type="button" data-market="all" class="active" aria-pressed="true">全部市场</button><button type="button" data-market="us" aria-pressed="false">美股</button><button type="button" data-market="cn" aria-pressed="false">A 股</button><button type="button" data-market="crypto" aria-pressed="false">加密货币</button></div>
+  <div class="symbol-results-heading"><span id="search-results-label">浏览标的</span><span id="search-count" role="status"></span></div>
+  <div id="search-results" class="symbol-results"></div>
+  <div class="symbol-dialog-footer"><span id="search-catalog-note">搜索已收录标的，行情以各标的时间为准。</span><span class="symbol-key-hint">↑ ↓ 选择 · Enter 添加</span></div>
+</dialog>
+<div id="market-toast" class="market-toast" role="status" hidden><span></span><button id="undo-remove" type="button" hidden>撤销</button></div>
 <script type="module" src="/client/navigation.js"></script>
 <script type="module" src="/client/market.js"></script>
 </body>

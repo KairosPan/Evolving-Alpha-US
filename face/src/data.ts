@@ -1,5 +1,5 @@
-/** `/data/market.json` + `/data/account.json`: cached, single-flight spawns of
- * `scripts/face_data.py`.
+/** `/data/market.json`, `/data/account.json`, `/data/watchlist.json`: cached,
+ * single-flight spawns of fixed read-only producer scripts.
  *
  * The face holds no market state of its own. Each route is a thin cache in
  * front of ONE producer process whose argv is FIXED — the script path and a
@@ -25,6 +25,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { RouteRegistrar } from "./static.ts";
+import { withWatchlistCatalog } from "./watchlist.ts";
 
 /** Run the producer and report what it wrote and how it exited.
  *
@@ -40,7 +41,7 @@ export type Spawner = (argv: string[], timeoutMs: number) => Promise<{ stdout: s
  * data is a daily bed walk — 15 minutes of staleness is invisible; an account
  * carries positions the operator may have just changed, so it re-reads within
  * the minute. */
-export const TTL_MS = { market: 900_000, account: 60_000 } as const;
+export const TTL_MS = { market: 900_000, account: 60_000, watchlist: 900_000 } as const;
 
 /** How long one spawn may run before it is killed, per mode.
  *
@@ -54,7 +55,7 @@ export const TTL_MS = { market: 900_000, account: 60_000 } as const;
  * Account gets 30s: it is a couple of REST calls, but it still pays the market
  * stack's import cost (~1-3s of Python imports) on every spawn.
  */
-export const SPAWN_TIMEOUT_MS = { market: 600_000, account: 30_000 } as const;
+export const SPAWN_TIMEOUT_MS = { market: 600_000, account: 30_000, watchlist: 30_000 } as const;
 
 /* Resolved from this module, never from the working directory: main.ts anchors
  * the process at the repo root, but a producer path that DEPENDS on that would
@@ -62,6 +63,7 @@ export const SPAWN_TIMEOUT_MS = { market: 600_000, account: 30_000 } as const;
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(moduleDir, "..", "..");
 const SCRIPT = join(REPO_ROOT, "scripts", "face_data.py");
+const WATCHLIST_SCRIPT = join(REPO_ROOT, "scripts", "face_watchlist.py");
 
 /** Body of a refused (non-loopback) request. Fixed text: the Host that was
  * refused is attacker-controlled and is never echoed back. */
@@ -178,15 +180,14 @@ export function defaultSpawner(python: string): Spawner {
   });
 }
 
-/** The producer's two modes; the same keys carry the TTL and the timeout. */
+/** The producer modes; the same keys carry the TTL and the timeout. */
 type Mode = keyof typeof TTL_MS;
 
 /** One cached payload and the clock reading it was stored at. */
 interface Entry { body: string; at: number }
 
 /**
- * Mount the data routes: `exact /data/market.json` and
- * `exact /data/account.json`.
+ * Mount the exact market, account, and watchlist JSON data routes.
  *
  * Every request is fenced to a loopback `Host` FIRST (see
  * {@link isLoopbackHost}): a foreign or missing Host is a fixed-body 403 that
@@ -236,7 +237,7 @@ export function registerDataRoutes(
 
     let flight = inflight.get(mode);
     if (!flight) {
-      flight = spawn([SCRIPT, mode], SPAWN_TIMEOUT_MS[mode]);
+      flight = spawn([mode === "watchlist" ? WATCHLIST_SCRIPT : SCRIPT, mode], SPAWN_TIMEOUT_MS[mode]);
       inflight.set(mode, flight);
       /* `then(clear, clear)`, NOT `finally(clear)`: a `finally` on a rejecting
        * promise DERIVES a second rejected promise that nobody awaits, and
@@ -255,8 +256,9 @@ export function registerDataRoutes(
        * caching that would serve an empty 200 body for a whole TTL — a blank
        * instrument the client cannot tell from a parse failure. */
       if (code === 0 && stdout !== "") {
-        cache.set(mode, { body: stdout, at: now() });
-        return send(res, 200, stdout);
+        const body = mode === "watchlist" ? withWatchlistCatalog(stdout) : stdout;
+        cache.set(mode, { body, at: now() });
+        return send(res, 200, body);
       }
       /* The producer's honest error payload: served, never cached. */
       if (hit) return send(res, 200, markStale(hit.body));
@@ -277,6 +279,7 @@ export function registerDataRoutes(
 
   webServer.register({ kind: "exact", path: "/data/market.json", handler: handler("market") });
   webServer.register({ kind: "exact", path: "/data/account.json", handler: handler("account") });
+  webServer.register({ kind: "exact", path: "/data/watchlist.json", handler: handler("watchlist") });
 }
 
 /** Re-serve a cached body flagged `stale: true`, so the client can say so.

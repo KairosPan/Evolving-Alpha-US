@@ -1,355 +1,306 @@
-/** `/market` — the captured bed, rendered live. Data: `/data/market.json`.
- *
- * A read-only instrument over ONE producer payload. It holds no state, keeps
- * no timer, and asks nothing of the harness: every reading on the page is a
- * field of the last fetch, and a re-read is the same fetch again.
- *
- * THE HONESTY RULES THIS FILE IMPLEMENTS, and what each is defending against:
- *
- *   1. Missing is never zero. `null` renders as an em-dash, and a null in a
- *      series LIFTS THE PEN (see {@link runs}) instead of being bridged by a
- *      straight line — breadth's `pct_above_200dma` is null for every day the
- *      200DMA is still immature, and a bridge would draw readings nobody took.
- *   2. Immature is not missing. The bed's bars start AT its window start, so
- *      long indicators mature late. {@link maturity} draws the FULL bed window
- *      with those spans hatched, under the charted span — so a chart that
- *      starts late reads as "the bed could not say yet", not as "the market
- *      began here". A bed whose warmup boundaries are unknown says so instead
- *      of borrowing the shipped bed's dates.
- *   3. Truncation is disclosed. The producer caps each screen at 40 rows; when
- *      a screen comes back exactly full, the page says the cap was hit rather
- *      than presenting the head of a list as the list.
- *   4. Two clocks, both shown. `assembled_at` is when the bed walk ran (the
- *      producer's disk cache can be much older than this page load) and
- *      `generated_at` is when it was served; `stale: true` means the serve was
- *      a re-play of the last good payload after a failure.
- *   5. Every panel keeps its raw pointer — the code that produced it, quoted
- *      from the payload, so a number on screen can be traced back by hand.
- *
- * No framework, no imports: hand-rolled SVG and the DOM API, same as chat.js.
- * @module
- */
+/** Personal cross-market watchlist. Prices only come from the producer; the
+ * shared reference directory contains identities, never sample quotations. */
+import { REFERENCE_ASSETS } from "./market-catalog.js";
+import { STORAGE_KEY, MARKET_INFO, normalizeAsset, readWatchlist, saveWatchlist, filterWatchlist, sortWatchlist, number, price, signed, percent, quoteTime } from "./market-model.js";
 
-const $ = (s) => document.querySelector(s);
+const $ = (selector) => document.querySelector(selector);
+const dialog = $("#symbol-search");
+const query = $("#symbol-query");
+let storage;
+try { storage = window.localStorage; } catch { storage = null; }
+const saved = readWatchlist(storage);
+const state = { items: saved.items, market: "all", searchMarket: "all", sort: { key: "default", direction: "asc" } };
+let catalog = REFERENCE_ASSETS.map(normalizeAsset).filter(Boolean);
+for (const asset of state.items) if (!catalog.some((entry) => entry.id === asset.id)) catalog.push(asset);
+let quotes = Object.create(null);
+let loading = false;
+let payload = null;
+let refreshFailed = false;
+let undo = null;
+let toastTimer;
+let returnFocus;
+let unsavedChanges = false;
 
-/** Rendered in place of a value the producer did not give us. */
-const EM = "—";
-
-/** Said while the fetch is open. A COLD payload is a full bed walk (minutes);
- * the endpoint holds the response for it rather than failing fast, so the page
- * must not imply that a long wait means something is wrong. */
-const LOADING = "loading — a first-ever assembly can take a few minutes";
-
-const NS = "http://www.w3.org/2000/svg";
-
-/** Vertical breathing room inside a spark's viewBox, in viewBox units. */
-const PAD = 5;
-
-/** How many rows the producer keeps per screen. Mirrors `face_data.py`'s
- * `screen_limit`; a screen that comes back exactly this long was cut. */
-const SCREEN_LIMIT = 40;
-
-/** Format a value, or the em-dash when the producer had nothing to say. */
-const fmt = (v, f = (x) => String(x)) => (v === null || v === undefined ? EM : f(v));
-
-/** A number with an explicit sign, so a fall never reads as a rise at a glance. */
-const signed = (v, unit = "%") => `${v >= 0 ? "+" : ""}${Number(v).toFixed(2)}${unit}`;
-
-function el(tag, cls, text) {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text !== undefined) n.textContent = text;
-  return n;
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
-
-function stat(label, value) {
-  const s = el("div", "inst-stat");
-  s.append(el("div", "inst-stat-label", label), el("div", "inst-stat-value mono", value));
-  return s;
+function tone(value) { const n = number(value); return n === null || n === 0 ? "" : n > 0 ? "market-up" : "market-down"; }
+function setNotice(message) { $("#storage-notice").textContent = message || ""; $("#storage-notice").hidden = !message; }
+function persist() {
+  const error = saveWatchlist(storage, state.items);
+  unsavedChanges = Boolean(error);
+  setNotice(error);
+  return error;
 }
-
-/** A quiet line carrying the payload's own words. Absent text renders nothing
- * at all — an empty note would be a line of page furniture claiming a caveat
- * that was never made. */
-function note(text, cls = "inst-note") {
-  return typeof text === "string" && text !== "" ? el("div", cls, text) : null;
+function has(id) { return state.items.some((item) => item.id === id); }
+function assetIdentity(asset) {
+  const wrap = el("div", "market-asset");
+  const mark = asset.market === "cn" ? asset.name.slice(0, 1) : asset.symbol.split("/")[0].slice(0, 3);
+  const info = el("div");
+  const symbol = el("span", "asset-symbol", asset.symbol);
+  symbol.append(el("span", "asset-market", MARKET_INFO[asset.market].label));
+  info.append(symbol, el("span", "asset-name", asset.name));
+  wrap.append(el("span", `asset-mark ${asset.market}`, mark), info);
+  return wrap;
 }
-
-/** Append every argument that is an element; `null` (an absent note) is
- * skipped, so a caller can build a card in one call without branching. */
-function put(parent, ...kids) {
-  for (const kid of kids) if (kid) parent.append(kid);
-  return parent;
+function toast(message, canUndo = false) {
+  clearTimeout(toastTimer);
+  if (!canUndo) undo = null;
+  $("#market-toast span").textContent = message;
+  $("#undo-remove").hidden = !canUndo;
+  $("#market-toast").hidden = false;
+  toastTimer = setTimeout(() => {
+    if (document.activeElement === $("#undo-remove")) (dialog.open ? query : $("#add-symbol")).focus();
+    $("#market-toast").hidden = true;
+    undo = null;
+  }, 6000);
 }
-
-/** An ISO stamp trimmed to whole seconds, UTC as the producer wrote it.
- * Unparseable text is shown exactly as it arrived rather than guessed at. */
-function stamp(s) {
-  if (typeof s !== "string" || s === "") return EM;
-  const t = Date.parse(s);
-  return Number.isNaN(t) ? s : `${new Date(t).toISOString().replace("T", " ").slice(0, 19)}Z`;
+function addAsset(asset) {
+  if (has(asset.id)) return;
+  state.items.push(asset);
+  // Adding from another market should make the new row visible immediately.
+  if (state.market !== "all" && state.market !== asset.market) state.market = "all";
+  const error = persist();
+  renderWatchlist();
+  toast(`已添加 ${asset.name}${error ? " · 本次修改尚未保存" : ""}`);
 }
-
-/**
- * Split (index, value) readings into drawable runs, scaled to a viewBox.
- *
- * A null is a GAP, not a value: it ends the current run and starts a new one,
- * so the line is drawn only where readings exist. `x` stays the reading's
- * position in the FULL series, which keeps each gap its true width. A series
- * whose readings are all equal is drawn flat down the middle rather than
- * pinned to the floor by a divide-by-zero fallback.
- * @returns an array of runs, each an array of `[x, y]`; empty when nothing is
- * drawable.
- */
-function runs(rows, value, w, h, pad = PAD) {
-  const nums = rows.map((r) => {
-    const v = value(r);
-    return typeof v === "number" && Number.isFinite(v) ? v : null;
-  });
-  const seen = nums.filter((v) => v !== null);
-  if (rows.length < 2 || seen.length === 0) return [];
-  const lo = Math.min(...seen);
-  const hi = Math.max(...seen);
-  const span = hi - lo;
-  const y = (v) => (span === 0 ? h / 2 : h - pad - ((v - lo) / span) * (h - pad * 2));
-  const out = [];
-  let run = [];
-  nums.forEach((v, i) => {
-    if (v === null) {
-      if (run.length) out.push(run);
-      run = [];
-      return;
-    }
-    run.push([(i / (rows.length - 1)) * w, y(v)]);
-  });
-  if (run.length) out.push(run);
-  return out;
+function removeAsset(id) {
+  const index = state.items.findIndex((asset) => asset.id === id);
+  if (index < 0) return;
+  const asset = state.items[index];
+  undo = { asset, index };
+  state.items.splice(index, 1);
+  const error = persist();
+  renderWatchlist();
+  toast(`已移除 ${asset.name}${error ? " · 本次修改尚未保存" : ""}`, true);
 }
-
-/** One `<svg>` holding one polyline per run. A run of a SINGLE reading is a
- * dot: a lone measurement is not a line, and dropping it would hide it. */
-function svgLine(segs, w, h, cls) {
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-  svg.setAttribute("class", cls);
-  svg.setAttribute("aria-hidden", "true");
-  for (const seg of segs) {
-    if (seg.length === 1) {
-      const dot = document.createElementNS(NS, "circle");
-      dot.setAttribute("cx", seg[0][0].toFixed(2));
-      dot.setAttribute("cy", seg[0][1].toFixed(2));
-      dot.setAttribute("r", "1.6");
-      dot.setAttribute("fill", "currentColor");
-      svg.append(dot);
-      continue;
-    }
-    const poly = document.createElementNS(NS, "polyline");
-    poly.setAttribute("fill", "none");
-    poly.setAttribute("stroke", "currentColor");
-    poly.setAttribute("stroke-width", "1.5");
-    poly.setAttribute("points", seg.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" "));
-    svg.append(poly);
+function openSearch(market = state.market) {
+  returnFocus = document.activeElement;
+  state.searchMarket = market;
+  query.value = "";
+  renderSearch();
+  // A modal makes sibling content inert, including an otherwise visible undo.
+  dialog.append($("#market-toast"));
+  dialog.showModal();
+  query.focus();
+}
+function updateMarketButtons(container, market) {
+  for (const button of container.querySelectorAll("button[data-market]")) {
+    const active = button.dataset.market === market;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
   }
-  return svg;
 }
-
-/** A spark, or an honest line saying why there isn't one. */
-function spark(rows, value, w, h, cls) {
-  const segs = runs(rows, value, w, h);
-  return segs.length ? svgLine(segs, w, h, cls) : el("p", "inst-note", "not plottable — fewer than two readings");
-}
-
-/**
- * The maturity rail: the bed's whole window, with each long indicator's
- * immature span hatched and the charted span bracketed underneath.
- *
- * Rendered ONLY when the payload carries real warmup boundaries. A bed the
- * producer could not date (`warmup_note` instead of `warmup`) gets that note
- * and no rail — drawing the shipped bed's dates over a foreign bed would be
- * the exact lie this instrument exists to prevent.
- */
-function maturity(bed, chartStart, chartEnd) {
-  const warmup = bed?.warmup;
-  const t0 = Date.parse(bed?.window?.start ?? "");
-  const t1 = Date.parse(bed?.window?.end ?? "");
-  if (!warmup || Number.isNaN(t0) || Number.isNaN(t1) || t1 <= t0) {
-    return note(bed?.warmup_note ?? "warmup boundaries unknown for this bed");
+function renderEmpty() {
+  const empty = el("div", "market-empty");
+  const symbol = el("div", "market-empty-symbol");
+  symbol.setAttribute("aria-hidden", "true");
+  // Fixed decorative markup, never interpolated with provider data.
+  symbol.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30"><path d="m15 3 3.5 7.1 7.8 1.1-5.6 5.5 1.3 7.8-7-3.7-7 3.7 1.3-7.8-5.6-5.5 7.8-1.1Z"/></svg>';
+  const title = state.items.length ? `还没有${MARKET_INFO[state.market]?.label || ""}自选` : "从你关注的第一个标的开始";
+  const description = state.items.length ? "搜索并添加这个市场的标的，建立你的关注列表。" : "把关注的公司与加密货币加入自选，在这里查看它们的行情。";
+  const button = el("button", "market-button", "搜索并添加");
+  button.type = "button";
+  button.addEventListener("click", () => openSearch());
+  empty.append(symbol, el("h2", "", title), el("p", "", description), button);
+  const suggestions = el("div", "market-suggestions");
+  const samples = ["us:AAPL", "cn:600519", "crypto:BTC/USD"];
+  for (const id of samples) {
+    const asset = catalog.find((item) => item.id === id);
+    if (!asset || has(id) || (state.market !== "all" && asset.market !== state.market)) continue;
+    const chip = el("button", "market-suggestion");
+    chip.type = "button";
+    chip.setAttribute("aria-label", `添加 ${asset.name} 到自选`);
+    chip.append(el("span", "", MARKET_INFO[asset.market].label), el("strong", "", asset.symbol.split("/")[0]), el("b", "", "+"));
+    chip.addEventListener("click", () => { addAsset(asset); $("#add-symbol").focus(); });
+    suggestions.append(chip);
   }
-  const pct = (d) => {
-    const t = Date.parse(d ?? "");
-    if (Number.isNaN(t)) return null;
-    return `${(Math.min(Math.max((t - t0) / (t1 - t0), 0), 1) * 100).toFixed(1)}%`;
+  empty.append(suggestions);
+  return empty;
+}
+function renderWatchlist() {
+  const root = $("#watchlist-content");
+  const active = document.activeElement;
+  const focusWasInside = root.contains(active);
+  const focusedId = active?.closest("tr[data-asset-id]")?.dataset.assetId;
+  const restoreFocus = () => {
+    if (!focusWasInside) return;
+    const row = Array.from(root.querySelectorAll("tr[data-asset-id]")).find((node) => node.dataset.assetId === focusedId);
+    (row?.querySelector(".watchlist-remove") || root.querySelector(".market-empty .market-button") || $("#add-symbol")).focus();
   };
-
-  const rail = el("div", "inst-rail");
-  const track = el("div", "inst-track");
-  for (const [key, label] of [["sma200_valid_from", "200DMA"], ["week52_valid_from", "52wk"], ["trend_template_valid_from", "trend-t"]]) {
-    const from = warmup[key];
-    const lane = el("div", "inst-lane");
-    const width = pct(from);
-    if (width !== null) {
-      const hatch = el("div", "inst-lane-immature");
-      hatch.style.width = width;
-      hatch.title = `${label} immature before ${from} — immature, not missing`;
-      lane.append(hatch);
-    }
-    lane.append(el("span", "inst-lane-label", `${label} · ${fmt(from)}`));
-    track.append(lane);
+  updateMarketButtons($("#market-filters"), state.market);
+  for (const node of document.querySelectorAll("[data-count]")) {
+    node.textContent = node.dataset.count === "all" ? state.items.length : state.items.filter((item) => item.market === node.dataset.count).length;
   }
-  const left = pct(chartStart);
-  const right = pct(chartEnd);
-  if (left !== null && right !== null) {
-    const bracket = el("div", "inst-lane-bracket");
-    bracket.style.left = left;
-    bracket.style.width = `calc(${right} - ${left})`;
-    bracket.title = `charted span · ${chartStart} → ${chartEnd}`;
-    track.append(bracket);
+  const assets = state.items.map((item) => catalog.find((entry) => entry.id === item.id) || item);
+  const rows = sortWatchlist(filterWatchlist(assets, state.market), quotes, state.sort);
+  $("#list-summary").textContent = state.market === "all" ? `${state.items.length} 个自选` : `${rows.length} 个${MARKET_INFO[state.market].label}自选 · 共 ${state.items.length} 个`;
+  if (!rows.length) { root.replaceChildren(renderEmpty()); restoreFocus(); return; }
+  const scroll = el("div", "market-table-scroll");
+  const table = el("table", "market-table");
+  table.append(el("caption", "market-sr-only", "自选股行情；缺失数据以横线表示，历史快照不是实时价格。"));
+  const head = el("thead");
+  const header = el("tr");
+  for (const [label, cls] of [["标的 / 名称", ""], ["最新价", ""], ["涨跌额", "quote-change-col"], ["涨跌幅", ""], ["成交量", "quote-volume-col"], ["行情来源 / 时间", "quote-source-col"], ["", ""]]) {
+    const cell = el("th", cls, label); cell.scope = "col"; header.append(cell);
   }
-  rail.append(track);
-  put(rail, note(`bed window ${bed.window.start} → ${bed.window.end}; hatched = immature`), note(warmup.note));
-  return rail;
-}
-
-function tapeCard(tape, bed) {
-  const s = Array.isArray(tape?.series) ? tape.series : [];
-  const last = s[s.length - 1];
-  const card = el("section", "inst-card");
-  put(card,
-      el("h2", "inst-card-title", "The tape"),
-      el("div", "inst-note", `${s.length} sessions · 100 = ${s[0]?.date ?? EM} · last ${fmt(last?.level, (v) => Number(v).toFixed(1))} on ${last?.date ?? EM} · ${fmt(last?.n)} members`),
-      spark(s, (r) => r.level, 720, 160, "spark tape"),
-      maturity(bed, s[0]?.date, last?.date),
-      note(tape?.note),
-      note(`raw · ${tape?.raw ?? EM}`, "inst-note inst-raw"));
-  return card;
-}
-
-function breadthCard(breadth) {
-  const s = Array.isArray(breadth?.series) ? breadth.series : [];
-  const last = s[s.length - 1] ?? {};
-  const card = el("section", "inst-card");
-  card.append(el("h2", "inst-card-title", "Breadth"));
-  const grid = el("div", "inst-grid");
-  grid.append(stat("% > 200DMA", fmt(last.pct_above_200dma, (v) => `${(v * 100).toFixed(1)}%`)),
-              stat("net new highs", fmt(last.net_new_highs)),
-              stat("advances", fmt(last.advances)),
-              stat("declines", fmt(last.declines)));
-  put(card,
-      el("div", "inst-note", `${s.length} sessions · latest ${last.date ?? EM}`),
-      grid,
-      spark(s, (r) => r.pct_above_200dma, 720, 64, "spark"),
-      note(breadth?.note),
-      note(`raw · ${breadth?.raw ?? EM}`, "inst-note inst-raw"));
-  return card;
-}
-
-/** One screen's table. The columns are the producer's own fields; a row cell
- * is never computed here beyond formatting. */
-function screenTable(rows) {
-  const t = el("table", "inst-table");
-  const head = el("tr");
-  for (const c of ["symbol", "close", "Δ%", "gap%", "rs", "last 60"]) head.append(el("th", "", c));
-  t.append(head);
-  for (const r of rows) {
-    const row = el("tr");
-    row.append(el("td", "mono", r.symbol ?? EM),
-               el("td", "mono", fmt(r.close, (v) => Number(v).toFixed(2))),
-               el("td", `mono ${sign(r.pct_change)}`, fmt(r.pct_change, (v) => signed(v))),
-               el("td", `mono ${sign(r.gap_pct)}`, fmt(r.gap_pct, (v) => signed(v))),
-               el("td", "mono", fmt(r.rs_percentile, (v) => Number(v).toFixed(1))));
-    /* The row spark is 80x20 of ink in a table cell: too small for the
-     * "not plottable" sentence {@link spark} would put there, so an
-     * undrawable one is the em-dash every other empty cell uses. */
-    const cell = el("td");
-    const segs = Array.isArray(r.spark) ? runs(r.spark, (v) => v, 80, 20, 3) : [];
-    if (segs.length) cell.append(svgLine(segs, 80, 20, "spark row"));
-    else cell.textContent = EM;
-    row.append(cell);
-    t.append(row);
+  head.append(header);
+  const body = el("tbody");
+  for (const asset of rows) {
+    const quote = quotes[asset.id] || {};
+    const available = number(quote.price) !== null;
+    const row = el("tr"); row.dataset.assetId = asset.id;
+    const identity = el("td"); identity.append(assetIdentity(asset));
+    const latest = el("td", "quote-price", price(quote.price, asset.currency));
+    const shortTime = available ? quoteTime(quote.as_of) : "暂无报价";
+    // The quote date stays visible even when the source column folds on mobile.
+    latest.append(el("span", "quote-unit", `${asset.currency} · ${shortTime}`));
+    const change = el("td", `quote-change-col ${tone(quote.change)}`, signed(quote.change));
+    const percentage = el("td"); percentage.append(el("span", `quote-change-pill ${tone(quote.change_pct)}`, percent(quote.change_pct)));
+    const volume = number(quote.volume);
+    const quantity = el("td", "quote-volume-col", volume === null ? "—" : volume.toLocaleString("zh-CN", { maximumFractionDigits: 2 }));
+    const source = el("td", "quote-source-col");
+    const status = available ? (refreshFailed || payload?.stale ? "上次快照" : quote.quote_status === "snapshot" ? "历史快照" : "报价") : "暂无报价";
+    const sourceText = el("div", "quote-source", status);
+    sourceText.title = typeof quote.source === "string" ? quote.source : "";
+    source.append(sourceText, el("span", "quote-time", typeof quote.source === "string" ? quote.source : "行情未接入"));
+    const actions = el("td");
+    const remove = el("button", "watchlist-remove", "×");
+    remove.type = "button";
+    remove.setAttribute("aria-label", `移除 ${asset.name}`);
+    remove.title = `移除 ${asset.name}`;
+    remove.addEventListener("click", () => { const index = rows.findIndex((item) => item.id === asset.id); removeAsset(asset.id); const buttons = root.querySelectorAll(".watchlist-remove"); (buttons[Math.min(index, buttons.length - 1)] || $("#add-symbol")).focus(); });
+    actions.append(remove);
+    row.append(identity, latest, change, percentage, quantity, source, actions);
+    body.append(row);
   }
-  const scroller = el("div", "inst-scroll");
-  scroller.append(t);
-  return scroller;
+  table.append(head, body); scroll.append(table); root.replaceChildren(scroll); restoreFocus();
 }
-
-/** Green/red only where the sign is a real reading; a null gets neither. */
-function sign(v) {
-  return typeof v === "number" && Number.isFinite(v) ? (v >= 0 ? "pos" : "neg") : "";
+function renderSearch() {
+  const focusedId = document.activeElement?.dataset?.searchId;
+  updateMarketButtons($("#search-filters"), state.searchMarket);
+  const matches = filterWatchlist(catalog, state.searchMarket, query.value);
+  const rows = matches.slice(0, 60);
+  $("#search-results-label").textContent = query.value.trim() ? "搜索结果" : "浏览标的";
+  $("#search-count").textContent = `${matches.length} 个标的${matches.length > rows.length ? ` · 显示前 ${rows.length} 个` : ""}`;
+  const results = $("#search-results");
+  const nodes = rows.map((asset) => {
+    const result = el("button", "symbol-result"); result.type = "button";
+    result.dataset.searchId = asset.id;
+    const selected = has(asset.id);
+    result.setAttribute("aria-pressed", String(selected));
+    result.setAttribute("aria-label", `${selected ? "移除" : "添加"} ${asset.name} ${asset.symbol}，${MARKET_INFO[asset.market].label}`);
+    const meta = el("div", "symbol-result-meta");
+    meta.append(el("span", "symbol-exchange", asset.exchange || asset.currency), el("span", "symbol-add-mark", selected ? "✓" : "+"));
+    result.append(assetIdentity(asset), meta);
+    result.addEventListener("click", () => { if (has(asset.id)) removeAsset(asset.id); else addAsset(asset); renderSearch(); });
+    return result;
+  });
+  if (!nodes.length) nodes.push(el("div", "symbol-result-empty", "未找到已收录的标的。试试其他代码或名称，或切换到全部市场。"));
+  results.replaceChildren(...nodes);
+  if (focusedId) (Array.from(results.querySelectorAll("button")).find((button) => button.dataset.searchId === focusedId) || query).focus();
 }
-
-function screensCard(screens) {
-  const card = el("section", "inst-card");
-  card.append(el("h2", "inst-card-title", "Screens"));
-  const kinds = Object.entries(screens ?? {});
-  if (!kinds.length) card.append(el("p", "inst-note", `no screens in this payload ${EM}`));
-  for (const [kind, data] of kinds) {
-    const rows = Array.isArray(data?.rows) ? data.rows : [];
-    put(card,
-        el("h3", "inst-sub", `${kind} · ${rows.length}`),
-        /* The cap is disclosed, never silent: a full 40 is the head of a list
-         * whose tail the payload never carried. */
-        rows.length === SCREEN_LIMIT
-          ? note(`top ${SCREEN_LIMIT} by the screen's own order — the payload caps here, so this is not the whole screen`)
-          : null,
-        rows.length ? screenTable(rows) : el("p", "inst-note", "no names passed this screen on the as-of day"),
-        note(`raw · ${data?.raw ?? EM}`, "inst-note inst-raw"));
-  }
-  return card;
-}
-
-/** Wipe the header readings. Called before every fetch and on every failure:
- * an as-of line left over from a previous payload would date a page that is
- * no longer showing it. */
-function clearHead() {
-  $("#asof").textContent = "";
-  $("#stamp").textContent = "";
-  $("#stamp").classList.remove("inst-stale");
-}
-
-/** True while a fetch is open — the refresh button is disabled for the same
- * span, so a cold assembly cannot be piled up on by an impatient click. */
-let inflight = false;
-
 async function load() {
-  if (inflight) return;
-  inflight = true;
-  const root = $("#root");
-  const button = $("#refresh");
-  button.disabled = true;
-  clearHead();
-  root.replaceChildren(el("p", "inst-note", LOADING));
+  if (loading) return;
+  loading = true;
+  $("#refresh").disabled = true;
+  $("#refresh").setAttribute("aria-label", "正在刷新行情");
+  $("#data-status").textContent = "正在读取行情目录…";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
   try {
-    const res = await fetch("/data/market.json");
-    const text = await res.text();
+    const res = await fetch("/data/watchlist.json", { signal: controller.signal });
     let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      throw new Error(`HTTP ${res.status} — the response was not JSON`);
+    try { data = await res.json(); } catch { throw new Error("行情服务未连接"); }
+    if (!res.ok || data?.ok !== true || !Array.isArray(data.assets)) throw new Error("行情暂不可用");
+    const merged = new Map(REFERENCE_ASSETS.map((asset) => [asset.id, normalizeAsset(asset)]));
+    const nextQuotes = Object.create(null);
+    for (const row of data.assets) {
+      const asset = normalizeAsset(row);
+      if (!asset) continue;
+      merged.set(asset.id, asset); nextQuotes[asset.id] = row;
     }
-    if (!data.ok) {
-      root.replaceChildren(el("p", "inst-note", `no reading — ${data.error ?? "producer failed"}`));
-      return;
-    }
-    const bed = data.bed ?? {};
-    const counts = [
-      bed.symbols === undefined ? null : `${bed.symbols} sym`,
-      bed.captured_days === undefined ? null : `${bed.captured_days} sessions`,
-    ].filter((p) => p !== null);
-    $("#asof").textContent = [`as of ${data.as_of ?? EM}`, `bed ${bed.root ?? EM}`, ...counts].join(" · ");
-    /* Both clocks: the walk can predate the serve by days (the producer caches
-     * a static bed on disk), so one stamp alone would misdate the reading. */
-    $("#stamp").textContent = `${data.stale ? "STALE · " : ""}assembled ${stamp(data.assembled_at)} · served ${stamp(data.generated_at)}`;
-    $("#stamp").classList.toggle("inst-stale", Boolean(data.stale));
-    root.replaceChildren(tapeCard(data.tape ?? {}, bed), breadthCard(data.breadth ?? {}), screensCard(data.screens));
-  } catch (err) {
-    clearHead();
-    root.replaceChildren(el("p", "inst-note", `no reading — ${err}`));
+    // Saved identities remain searchable when a newer directory no longer lists them.
+    for (const asset of state.items) if (!merged.has(asset.id)) merged.set(asset.id, asset);
+    catalog = Array.from(merged.values()).filter(Boolean);
+    quotes = nextQuotes;
+    payload = data; refreshFailed = false;
+    $("#data-status").textContent = `${data.stale ? "保留上次行情 · " : "目录读取于 "}${quoteTime(data.generated_at)}`;
+    $("#data-note").textContent = typeof data.note === "string" ? data.note : "美股显示历史日线快照；A 股与加密货币暂无报价。";
+    $("#search-catalog-note").textContent = "搜索已收录标的，目录不代表全市场；报价以标注日期为准。";
+  } catch {
+    refreshFailed = true;
+    $("#data-status").textContent = payload ? "刷新失败，保留上次行情。" : "行情未连接 · 仍可搜索、添加与管理自选";
+    $("#data-note").textContent = payload ? `上次读取：${quoteTime(payload.generated_at)}。各标的报价时间见列表，点击刷新重试。` : "当前可搜索基础标的目录；完整目录及报价需连接本地行情服务。";
+    $("#search-catalog-note").textContent = "基础标的目录，非完整市场；连接行情服务后可读取更多标的。";
   } finally {
-    inflight = false;
-    button.disabled = false;
+    clearTimeout(timeout); loading = false; $("#refresh").disabled = false; $("#refresh").setAttribute("aria-label", "刷新行情");
+    renderWatchlist(); if (dialog.open) renderSearch();
   }
 }
 
-$("#refresh").onclick = () => void load();
+$("#search-open").setAttribute("aria-label", "搜索股票、加密货币");
+$("#search-open").addEventListener("click", () => openSearch("all"));
+$("#add-symbol").addEventListener("click", () => openSearch());
+$("#search-close").addEventListener("click", () => dialog.close());
+dialog.addEventListener("close", () => {
+  document.body.append($("#market-toast"));
+  (returnFocus?.isConnected ? returnFocus : $("#add-symbol")).focus();
+});
+dialog.addEventListener("click", (event) => { if (event.target === dialog) { const rect = dialog.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close(); } });
+query.addEventListener("input", renderSearch);
+$("#search-filters").addEventListener("click", (event) => { const button = event.target.closest("button[data-market]"); if (!button) return; state.searchMarket = button.dataset.market; renderSearch(); });
+$("#market-filters").addEventListener("click", (event) => { const button = event.target.closest("button[data-market]"); if (!button) return; state.market = button.dataset.market; renderWatchlist(); });
+$("#watchlist-sort").addEventListener("change", (event) => { const [key, direction = "asc"] = event.target.value.split(":"); state.sort = { key, direction }; renderWatchlist(); });
+$("#refresh").addEventListener("click", () => void load());
+$("#undo-remove").addEventListener("click", () => {
+  if (!undo || has(undo.asset.id)) return;
+  const { asset, index } = undo; undo = null;
+  state.items.splice(Math.min(index, state.items.length), 0, asset);
+  const error = persist();
+  renderWatchlist(); if (dialog.open) renderSearch();
+  toast(`已恢复 ${asset.name}${error ? " · 本次修改尚未保存" : ""}`);
+  (dialog.open ? query : $("#add-symbol")).focus();
+});
+dialog.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !event.isComposing) {
+    event.preventDefault();
+    dialog.close();
+    return;
+  }
+  // Enter confirms a Chinese IME candidate before it can act on a search result.
+  if (event.isComposing || event.keyCode === 229) return;
+  const buttons = Array.from($("#search-results").querySelectorAll("button"));
+  if (!buttons.length) return;
+  const index = buttons.indexOf(document.activeElement);
+  if (document.activeElement !== query && index < 0) return;
+  if (event.key === "ArrowDown") { event.preventDefault(); buttons[Math.min(index + 1, buttons.length - 1)].focus(); }
+  if (event.key === "ArrowUp") { event.preventDefault(); if (index <= 0) query.focus(); else buttons[index - 1].focus(); }
+  if (event.key === "Enter" && document.activeElement === query) {
+    event.preventDefault();
+    if (has(buttons[0].dataset.searchId)) toast("该标的已在自选中");
+    else buttons[0].click();
+    query.focus();
+  }
+});
+const apple = /Mac|iPhone|iPad/.test(navigator.platform);
+$("#search-shortcut").textContent = apple ? "⌘ K" : "Ctrl K";
+document.addEventListener("keydown", (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); if (!dialog.open) openSearch("all"); else query.focus(); }
+});
+window.addEventListener("storage", (event) => {
+  if (event.key !== STORAGE_KEY && event.key !== null) return;
+  if (event.storageArea && event.storageArea !== storage) return;
+  const latest = readWatchlist(storage);
+  if (latest.error) { setNotice(`${latest.error} 页面当前自选已保留。`); return; }
+  if (unsavedChanges) { setNotice("其他页面已更新自选；本页有未保存的修改，当前列表已保留。"); return; }
+  state.items = latest.items;
+  for (const asset of state.items) if (!catalog.some((entry) => entry.id === asset.id)) catalog.push(asset);
+  setNotice(null); renderWatchlist(); if (dialog.open) renderSearch();
+});
+setNotice(saved.error);
+renderWatchlist();
 void load();

@@ -147,79 +147,82 @@ Two things about that directory are NOT yours:
   `src/overlay.ts`. The same warning is in the patch file's own header, which is
   where an operator would actually look.
 
-## Instruments
+## Market and Account
 
-Two read-only pages beside the chat, reached from the primary navigation rail
-and from each other: **`/market`** (above strategy) — the composite tape, the
-bed's maturity rail, breadth, and both screens — and **`/account`** (at the
-bottom of the rail) — balances, positions, Alpaca's most recent 50 orders
-(all statuses, not just the open ones). Account uses a compact trading-console
-layout: total equity first, then cash, buying power and unrealized P&L, with
-positions and orders in tabs. Symbol search and order-status filters narrow the
-loaded rows only; they do not query a complete order history. Unrealized P&L is
-shown only when every position reports its amount. Account and order-gate
-details stay collapsed until opened. Both pages remain read-only: refresh
-re-reads the snapshot, and no control places or cancels an order, changes an
-account, or operates a gate. The account environment badge follows the actual
-read hostname: only `paper-api.alpaca.markets` is labelled Paper.
+The primary navigation opens **`/market`**, a personal watchlist spanning US
+stocks, A shares and cryptocurrency pairs, and **`/account`**, the read-only
+account console. These pages never place or cancel orders.
 
-Each page fetches one endpoint — `/data/market.json`, `/data/account.json` —
-and each endpoint is a thin cache in front of ONE producer: `scripts/face_data.py`,
-spawned with no shell and a FIXED argv (the script path and a mode word; no
-request data ever reaches the child). Those routes carry the same loopback
-`Host` fence the harness applies to `/api`, restated in `src/data.ts` because
-that one covers `/api` only and `/data/account.json` carries the operator's
-positions.
+### Market watchlist
+
+The top search button (also **Cmd/Ctrl K**) searches codes, names and aliases
+across the available directory. Search supports market filters, keyboard
+navigation and adding/removing selections. The list supports market tabs,
+addition-order/code/percentage-change sorting and undoing the most recent
+removal. Missing prices remain em dashes and sort after available prices.
+Quotes retain their own currency, source and observation date; green means a
+rise and red a fall across all three markets.
+
+A first visit starts empty. Selections are stored under
+`kairos.market.watchlist.v1` in this browser's `localStorage`, with
+market-qualified identifiers such as `us:AAPL`, `cn:600519` and
+`crypto:BTC/USD`. They are independent of the broker account and are not
+synchronized across devices. Same-origin browser tabs synchronize through
+storage events. Storage failures are shown explicitly.
+
+`GET /data/watchlist.json` runs the fixed, read-only
+`scripts/face_watchlist.py` producer, then merges the shared reference directory
+from `client/market-catalog.js`. The producer reads the latest captured US
+snapshot through `GuardedSource` and `AsOfGuard`; the face's former breadth
+walk is not needed to open Market. The shipped 2yr bed currently supplies 797
+US rows dated **2026-07-09**, with raw daily closes and changes relative to the
+previous close. These are historical snapshots, not live quotations.
+
+The shared fallback directory contains 12 US instruments, 15 A shares and 8
+cryptocurrency pairs. **A-share and cryptocurrency quotations are not connected**;
+their identities can be searched and saved, with prices left unavailable. The
+directory is explicitly partial. When the local backend is disconnected,
+including on the static deployment, the fallback directory and watchlist
+management still work. Previously saved identities remain searchable.
+
+### Account console
+
+`/account` reads `/data/account.json`: balances, positions and Alpaca's latest
+50 orders (all statuses). Equity comes first, with cash, buying power and
+unrealized P&L, then positions/orders tabs. Search and order-status filters
+narrow the loaded rows only. Unrealized P&L is shown only when every position
+reports its amount. Connection and order-gate details remain collapsed until
+opened. The environment badge follows the actual read hostname: only
+`paper-api.alpaca.markets` is labelled Paper.
 
 | Env | Default | What |
 |---|---|---|
-| `FACE_PYTHON` | `python3` | the producer's interpreter — it must be able to `import alpaca_kit`, so `pip install -e .` at the repo root, in whichever environment this names |
-| `ALPHA_PIT_ROOT` | `data/pit/2yr` | the PIT bed `/market` is assembled from |
-| `APCA_API_KEY_ID` / `APCA_API_SECRET_KEY` | — | `/account`'s paper credentials: `source ../.env.alpaca` BEFORE `npm start` |
+| `FACE_PYTHON` | `python3` | interpreter able to import `alpaca_kit`; install the project into that environment |
+| `ALPHA_PIT_ROOT` | `data/pit/2yr` | captured bed for US watchlist quotes and the legacy market data endpoint |
+| `APCA_API_KEY_ID` / `APCA_API_SECRET_KEY` | — | account credentials inherited at startup; source `../.env.alpaca` before `npm start` |
 
-The account keys are inherited by the face process, not read per request — the
-same trust posture as the dsh MCP mount. Without them `/account` is not an
-error page: the producer answers `available: false` with the reason AND the
-real computed gate state, because the gate reads the environment and stays
-computable with no broker client at all. The redesigned account view presents
-this as an unconnected account rather than a zero balance, with the gate state
-available in its collapsed details. `ALPACA_KIT_ENABLE_ORDERS` stays
-unset, so Gate 1 reads unregistered; Gate 2 reads not-validated and points at
-the drill below — the details state that intent rather than claiming a
-validation only a live run can give.
+Without account credentials the page shows an unconnected account, not a zero
+balance. The actual computed gate state is still available in details.
+`ALPACA_KIT_ENABLE_ORDERS` stays unset; these views do not operate either gate.
 
-**Timings.** A COLD `/market` — the first assembly ever, or the first after the
-cache is invalidated — walks the whole bed: **~284 s, measured**. Warm it is a
-file read, **under a second**. The spawn budgets are sized for exactly that:
-market gets 10 minutes, account 30 s (a few REST calls, plus the market stack's
-import cost on every spawn). So a cold first request SITS for minutes rather
-than failing, and a budget short enough to kill it would fail forever — a
-killed run never writes the cache that would have made the next one fast.
+### Data routes and caches
 
-**The cache** is the producer's own, on disk under `data/.face_cache`
-(gitignored, and deliberately outside any bed, whose identity is its
-`CHECKSUMS` manifest). One file per bed + producer version + as-of day: the key
-hashes the RESOLVED bed path AND the source of `face_data.py`, so editing the
-assembler invalidates every cached payload instead of serving one built by code
-that no longer exists. Delete the directory to force a full reassembly — and
-budget the ~284 s again. In front of it each endpoint holds the last good
-payload in memory for its own TTL: **market 15 minutes, account 60 seconds**.
+All three routes retain the loopback Host/Origin fence from `src/data.ts`.
+Request data never enters the child process arguments. A successful payload
+is cached in memory: **watchlist 15 minutes, legacy market 15 minutes, account
+60 seconds**. Concurrent cache misses share one producer process. Watchlist
+and account producers have a 30-second timeout; the old market producer has
+a 10-minute timeout. Refresh re-reads the relevant endpoint and respects its
+cache. After a later read failure, the previous good payload is returned with
+`stale: true`; the watchlist marks it as a retained snapshot.
 
-**Stale.** Once an endpoint has served a good payload, a later producer failure
-re-serves THAT payload flagged `stale: true` rather than blanking the
-instrument, and the page stamps it `STALE`. With nothing to fall back on the
-endpoint answers 503 carrying the producer's own `{ok:false,error}` JSON, and
-the page says `no reading — <error>`. Either way an honest state, never a
-half-drawn one. `/market` carries two stamps because a payload can be older
-than its serve: `assembled` is when the bed walk ran, `served` is when this
-process handed it over.
-
-**The maturity rail** on `/market` renders the shipped 2yr bed's warmup
-boundaries (200DMA from 2025-03-20, 52-week from 2025-06-04, trend_template
-names from 2025-06-05 — the CLAUDE.md gotcha, drawn). Point `ALPHA_PIT_ROOT` at
-any other bed and the rail is replaced by "warmup boundaries unknown for this
-bed": those dates describe THAT capture, and drawing them over a different one
-would be a lie.
+The original **`/data/market.json` remains available for compatibility**, with
+its tape, breadth, screens, warmup metadata and two assembly/serve timestamps.
+It is no longer the `/market` page's data source. A cold legacy assembly walks
+the whole bed (~284 seconds measured); later runs read its disk cache under
+`data/.face_cache`. That cache key includes the resolved bed path, producer
+source and as-of day. `scripts/face_data.py` still produces both this legacy
+payload and account data.
 
 ## Channels (src/channels.ts + src/roster.ts + the session picker)
 
