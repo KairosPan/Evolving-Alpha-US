@@ -1,6 +1,7 @@
-/** Personal cross-market watchlist. Prices only come from the producer; the
- * shared reference directory contains identities, never sample quotations. */
+/** Personal cross-market watchlist. Search discovers instruments on demand;
+ * reference suggestions contain identities, never sample quotations. */
 import { REFERENCE_ASSETS } from "./market-catalog.js";
+import { createSymbolSearch } from "./market-search.js";
 import { STORAGE_KEY, MARKET_INFO, normalizeAsset, readWatchlist, saveWatchlist, filterWatchlist, sortWatchlist, number, price, signed, percent, quoteTime } from "./market-model.js";
 
 const $ = (selector) => document.querySelector(selector);
@@ -20,6 +21,18 @@ let undo = null;
 let toastTimer;
 let returnFocus;
 let unsavedChanges = false;
+let composingSearch = false;
+let searchState = { status: "idle", assets: [], partial: false, truncated: false, note: "" };
+const SEARCH_NOTE = "输入名称或代码查询市场标的；搜索结果不代表实时报价。";
+const symbolSearch = createSymbolSearch((next) => {
+  searchState = next;
+  if (next.status === "success") {
+    const merged = new Map(catalog.map((asset) => [asset.id, asset]));
+    for (const asset of next.assets) merged.set(asset.id, asset);
+    catalog = [...merged.values()];
+  }
+  if (dialog.open) renderSearch();
+});
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -81,6 +94,8 @@ function openSearch(market = state.market) {
   returnFocus = document.activeElement;
   state.searchMarket = market;
   query.value = "";
+  composingSearch = false;
+  symbolSearch.search("", market);
   renderSearch();
   // A modal makes sibling content inert, including an otherwise visible undo.
   dialog.append($("#market-toast"));
@@ -182,11 +197,23 @@ function renderWatchlist() {
 function renderSearch() {
   const focusedId = document.activeElement?.dataset?.searchId;
   updateMarketButtons($("#search-filters"), state.searchMarket);
-  const matches = filterWatchlist(catalog, state.searchMarket, query.value);
+  const searching = composingSearch || Boolean(query.value.trim());
+  const pending = searching && (composingSearch || searchState.status === "loading");
+  const failed = searching && searchState.status === "error";
+  const suggestions = [...new Map([...REFERENCE_ASSETS, ...state.items].map((asset) => [asset.id, asset])).values()];
+  const matches = searching
+    ? searchState.status === "success" && !composingSearch ? searchState.assets : []
+    : filterWatchlist(suggestions, state.searchMarket);
   const rows = matches.slice(0, 60);
-  $("#search-results-label").textContent = query.value.trim() ? "搜索结果" : "浏览标的";
-  $("#search-count").textContent = `${matches.length} 个标的${matches.length > rows.length ? ` · 显示前 ${rows.length} 个` : ""}`;
+  $("#search-results-label").textContent = searching ? "搜索结果" : "自选与常用";
+  $("#search-count").textContent = pending ? "正在搜索…" : failed ? "搜索暂不可用"
+    : `${matches.length} 个标的${searching && searchState.partial ? " · 部分结果" : ""}${matches.length > rows.length ? ` · 显示前 ${rows.length} 个` : ""}`;
+  $("#search-catalog-note").textContent = [
+    searching && searchState.note ? searchState.note : SEARCH_NOTE,
+    searching && searchState.truncated ? "显示最相关的匹配，输入更完整的名称或代码可缩小范围。" : "",
+  ].filter(Boolean).join(" ");
   const results = $("#search-results");
+  results.setAttribute("aria-busy", String(pending));
   const nodes = rows.map((asset) => {
     const result = el("button", "symbol-result"); result.type = "button";
     result.dataset.searchId = asset.id;
@@ -199,7 +226,19 @@ function renderSearch() {
     result.addEventListener("click", () => { if (has(asset.id)) removeAsset(asset.id); else addAsset(asset); renderSearch(); });
     return result;
   });
-  if (!nodes.length) nodes.push(el("div", "symbol-result-empty", "未找到已收录的标的。试试其他代码或名称，或切换到全部市场。"));
+  if (!nodes.length) {
+    const message = pending ? (composingSearch ? "输入名称或代码…" : "正在查询市场标的…")
+      : failed ? (searchState.note || "搜索服务暂不可用，请稍后重试。")
+      : searching ? (searchState.partial ? "暂未找到匹配标的；部分市场查询未成功，请重试。"
+        : "未找到匹配标的，请检查名称、代码或切换市场。") : "这里还没有常用标的，输入名称或代码开始搜索。";
+    const empty = el("div", "symbol-result-empty", message);
+    if (failed || (searching && searchState.partial)) {
+      const retry = el("button", "market-button", "重新搜索"); retry.type = "button";
+      retry.addEventListener("click", () => symbolSearch.search(query.value, state.searchMarket));
+      empty.append(retry);
+    }
+    nodes.push(empty);
+  }
   results.replaceChildren(...nodes);
   if (focusedId) (Array.from(results.querySelectorAll("button")).find((button) => button.dataset.searchId === focusedId) || query).focus();
 }
@@ -208,7 +247,7 @@ async function load() {
   loading = true;
   $("#refresh").disabled = true;
   $("#refresh").setAttribute("aria-label", "正在刷新行情");
-  $("#data-status").textContent = "正在读取行情目录…";
+  $("#data-status").textContent = "正在读取报价…";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 45000);
   try {
@@ -223,19 +262,19 @@ async function load() {
       if (!asset) continue;
       merged.set(asset.id, asset); nextQuotes[asset.id] = row;
     }
-    // Saved identities remain searchable when a newer directory no longer lists them.
+    // Keep saved identities even when the quote source does not cover them.
     for (const asset of state.items) if (!merged.has(asset.id)) merged.set(asset.id, asset);
     catalog = Array.from(merged.values()).filter(Boolean);
     quotes = nextQuotes;
     payload = data; refreshFailed = false;
-    $("#data-status").textContent = `${data.stale ? "保留上次行情 · " : "目录读取于 "}${quoteTime(data.generated_at)}`;
+    $("#data-status").textContent = `${data.stale ? "保留上次行情 · " : "报价读取于 "}${quoteTime(data.generated_at)}`;
     $("#data-note").textContent = typeof data.note === "string" ? data.note : "美股显示历史日线快照；A 股与加密货币暂无报价。";
-    $("#search-catalog-note").textContent = "搜索已收录标的，目录不代表全市场；报价以标注日期为准。";
+
   } catch {
     refreshFailed = true;
-    $("#data-status").textContent = payload ? "刷新失败，保留上次行情。" : "行情未连接 · 仍可搜索、添加与管理自选";
-    $("#data-note").textContent = payload ? `上次读取：${quoteTime(payload.generated_at)}。各标的报价时间见列表，点击刷新重试。` : "当前可搜索基础标的目录；完整目录及报价需连接本地行情服务。";
-    $("#search-catalog-note").textContent = "基础标的目录，非完整市场；连接行情服务后可读取更多标的。";
+    $("#data-status").textContent = payload ? "刷新失败，保留上次行情。" : "报价暂不可用 · 可继续管理自选";
+    $("#data-note").textContent = payload ? `上次读取：${quoteTime(payload.generated_at)}。各标的报价时间见列表，点击刷新重试。` : "报价读取失败，可点击刷新重试；标的搜索独立查询。";
+
   } finally {
     clearTimeout(timeout); loading = false; $("#refresh").disabled = false; $("#refresh").setAttribute("aria-label", "刷新行情");
     renderWatchlist(); if (dialog.open) renderSearch();
@@ -247,12 +286,19 @@ $("#search-open").addEventListener("click", () => openSearch("all"));
 $("#add-symbol").addEventListener("click", () => openSearch());
 $("#search-close").addEventListener("click", () => dialog.close());
 dialog.addEventListener("close", () => {
+  symbolSearch.cancel();
+  composingSearch = false;
   document.body.append($("#market-toast"));
   (returnFocus?.isConnected ? returnFocus : $("#add-symbol")).focus();
 });
 dialog.addEventListener("click", (event) => { if (event.target === dialog) { const rect = dialog.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close(); } });
-query.addEventListener("input", renderSearch);
-$("#search-filters").addEventListener("click", (event) => { const button = event.target.closest("button[data-market]"); if (!button) return; state.searchMarket = button.dataset.market; renderSearch(); });
+query.addEventListener("compositionstart", () => { composingSearch = true; symbolSearch.cancel(); renderSearch(); });
+query.addEventListener("compositionend", () => { composingSearch = false; symbolSearch.search(query.value, state.searchMarket); });
+query.addEventListener("input", (event) => {
+  if (event.isComposing || composingSearch) renderSearch();
+  else symbolSearch.search(query.value, state.searchMarket);
+});
+$("#search-filters").addEventListener("click", (event) => { const button = event.target.closest("button[data-market]"); if (!button) return; state.searchMarket = button.dataset.market; symbolSearch.search(query.value, state.searchMarket); renderSearch(); });
 $("#market-filters").addEventListener("click", (event) => { const button = event.target.closest("button[data-market]"); if (!button) return; state.market = button.dataset.market; renderWatchlist(); });
 $("#watchlist-sort").addEventListener("change", (event) => { const [key, direction = "asc"] = event.target.value.split(":"); state.sort = { key, direction }; renderWatchlist(); });
 $("#refresh").addEventListener("click", () => void load());
@@ -266,14 +312,17 @@ $("#undo-remove").addEventListener("click", () => {
   (dialog.open ? query : $("#add-symbol")).focus();
 });
 dialog.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !event.isComposing) {
+  // Candidate confirmation/cancellation belongs to the IME, not the dialog.
+  if (composingSearch || event.isComposing || event.keyCode === 229) {
+    if (event.key === "Escape") event.preventDefault();
+    return;
+  }
+  if (event.key === "Escape") {
     event.preventDefault();
     dialog.close();
     return;
   }
-  // Enter confirms a Chinese IME candidate before it can act on a search result.
-  if (event.isComposing || event.keyCode === 229) return;
-  const buttons = Array.from($("#search-results").querySelectorAll("button"));
+  const buttons = Array.from($("#search-results").querySelectorAll("button[data-search-id]"));
   if (!buttons.length) return;
   const index = buttons.indexOf(document.activeElement);
   if (document.activeElement !== query && index < 0) return;
@@ -302,5 +351,6 @@ window.addEventListener("storage", (event) => {
   setNotice(null); renderWatchlist(); if (dialog.open) renderSearch();
 });
 setNotice(saved.error);
+$("#search-catalog-note").textContent = SEARCH_NOTE;
 renderWatchlist();
 void load();

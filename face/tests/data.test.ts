@@ -50,13 +50,13 @@ function reqWithHost(host?: string): IncomingMessage {
 }
 
 /* The route SHAPE is the contract with the host webserver, exactly as in
- * static.test.ts: two EXACT paths, and no prefix or fallback claim. */
-test("registerDataRoutes mounts exactly the three exact data routes", () => {
+ * static.test.ts: exact paths, and no prefix or fallback claim. */
+test("registerDataRoutes mounts the producer routes and on-demand symbol search", () => {
   const routes: WebRoute[] = [];
   registerDataRoutes({ register: (route) => routes.push(route) }, { spawn: async () => ({ stdout: "{}", code: 0 }), now: () => 0 });
   assert.deepEqual(
     routes.map((r) => `${r.kind} ${r.path}`).sort(),
-    ["exact /data/account.json", "exact /data/market.json", "exact /data/watchlist.json"],
+    ["exact /data/account.json", "exact /data/market.json", "exact /data/symbols/search", "exact /data/watchlist.json"],
   );
 });
 
@@ -324,7 +324,7 @@ test("watchlist merges reference metadata, preserves real quotes, and caches the
   assert.deepEqual(bitcoin.spark, []);
   assert.deepEqual(payload.markets.map((row: { id: string }) => row.id), ["us", "cn", "crypto"]);
   assert.equal(payload.assets.length, 35);
-  assert.match(payload.note, /非全市场/);
+  assert.match(payload.note, /按需查询/);
   const second = await call(route);
   assert.equal(second.body, first.body);
   assert.equal(calls, 1);

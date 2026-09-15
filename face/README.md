@@ -155,8 +155,8 @@ account console. These pages never place or cancel orders.
 
 ### Market watchlist
 
-The top search button (also **Cmd/Ctrl K**) searches codes, names and aliases
-across the available directory. Search supports market filters, keyboard
+The top search button (also **Cmd/Ctrl K**) queries an on-demand instrument
+search API by name or code. Search supports market filters, keyboard
 navigation and adding/removing selections. The list supports market tabs,
 addition-order/code/percentage-change sorting and undoing the most recent
 removal. Missing prices remain em dashes and sort after available prices.
@@ -178,12 +178,27 @@ walk is not needed to open Market. The shipped 2yr bed currently supplies 797
 US rows dated **2026-07-09**, with raw daily closes and changes relative to the
 previous close. These are historical snapshots, not live quotations.
 
-The shared fallback directory contains 12 US instruments, 15 A shares and 8
-cryptocurrency pairs. **A-share and cryptocurrency quotations are not connected**;
-their identities can be searched and saved, with prices left unavailable. The
-directory is explicitly partial. When the local backend is disconnected,
-including on the static deployment, the fallback directory and watchlist
-management still work. Previously saved identities remain searchable.
+`GET /data/symbols/search?q=兆易创新&market=all` queries Tencent smartbox for
+A shares and Yahoo Finance search for US stocks/ETFs and USD cryptocurrency
+pairs. `market` accepts `all`, `us`, `cn`, or `crypto`. Search does not download
+or save a whole-market directory. The backend caches up to 128 successful
+queries in memory for 60 seconds, shares duplicate in-flight requests, and
+bounds each provider request to six seconds. The API uses the same browser
+trust checks as the other data routes and requires a running local backend
+with outbound HTTPS access to the providers.
+
+The frontend debounces input, cancels superseded requests and ignores late
+responses. Provider outages appear as search errors or explicitly partial
+results; they are not reported as a successful empty search. A blank query
+shows saved selections and 35 built-in suggestions (12 US instruments, 15
+A shares, 8 cryptocurrency pairs); these do not limit online search coverage.
+On a static deployment or disconnected backend, these suggestions and
+watchlist management remain available, while online search reports an error.
+
+**A-share and cryptocurrency quotations are not connected**; online search
+returns instrument identities, not prices. Search results can be saved with
+unavailable prices left as em dashes. Search is independent of the historical
+US quote producer.
 
 ### Account console
 

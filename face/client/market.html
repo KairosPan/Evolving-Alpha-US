@@ -40,7 +40,7 @@
       <div id="watchlist-content"></div>
       <div class="watchlist-footer"><span id="list-summary">0 个自选</span><span>原币报价<span class="market-footer-divider">·</span><span class="market-up">绿涨</span> / <span class="market-down">红跌</span></span></div>
     </section>
-    <div class="market-data-status"><span id="data-status" role="status">正在读取行情目录…</span><span class="market-local-note"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2M3 7h10v7H3z"/></svg>自选保存在此浏览器</span></div>
+    <div class="market-data-status"><span id="data-status" role="status">正在读取报价…</span><span class="market-local-note"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2M3 7h10v7H3z"/></svg>自选保存在此浏览器</span></div>
     <p id="data-note" class="market-data-note"></p>
   </main>
 </div>
@@ -48,9 +48,9 @@
   <div class="symbol-dialog-heading"><div><p class="market-eyebrow">DISCOVER & FOLLOW</p><h2 id="search-title">添加自选</h2></div><button id="search-close" class="market-icon-button" aria-label="关闭搜索" type="button">×</button></div>
   <div class="symbol-search-field"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><label class="market-sr-only" for="symbol-query">搜索代码或名称</label><input id="symbol-query" type="search" placeholder="搜索代码或名称，如 AAPL、茅台、BTC" autocomplete="off" spellcheck="false"><kbd>ESC</kbd></div>
   <div id="search-filters" class="symbol-search-filters" role="group" aria-label="搜索市场"><button type="button" data-market="all" class="active" aria-pressed="true">全部市场</button><button type="button" data-market="us" aria-pressed="false">美股</button><button type="button" data-market="cn" aria-pressed="false">A 股</button><button type="button" data-market="crypto" aria-pressed="false">加密货币</button></div>
-  <div class="symbol-results-heading"><span id="search-results-label">浏览标的</span><span id="search-count" role="status"></span></div>
+  <div class="symbol-results-heading"><span id="search-results-label">自选与常用</span><span id="search-count" role="status"></span></div>
   <div id="search-results" class="symbol-results"></div>
-  <div class="symbol-dialog-footer"><span id="search-catalog-note">搜索已收录标的，行情以各标的时间为准。</span><span class="symbol-key-hint">↑ ↓ 选择 · Enter 添加</span></div>
+  <div class="symbol-dialog-footer"><span id="search-catalog-note">输入名称或代码查询市场标的；搜索结果不代表实时报价。</span><span class="symbol-key-hint">↑ ↓ 选择 · Enter 添加</span></div>
 </dialog>
 <div id="market-toast" class="market-toast" role="status" hidden><span></span><button id="undo-remove" type="button" hidden>撤销</button></div>
 <script type="module" src="/client/navigation.js"></script>

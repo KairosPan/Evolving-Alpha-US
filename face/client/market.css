@@ -108,6 +108,7 @@
 .symbol-add-mark { width: 25px; height: 25px; display: grid; place-items: center; border: 1px solid #e1e7f0; border-radius: 5px; color: #7390b5; font-size: 17px; }
 .symbol-result[aria-pressed='true'] .symbol-add-mark { background: #edf3fb; color: var(--accent); border-color: #dce7f6; font-size: 13px; }
 .symbol-result-empty { padding: 40px 24px; text-align: center; color: var(--dim); font-size: 12px; line-height: 1.8; }
+.symbol-result-empty .market-button { display: flex; margin: 14px auto 0; }
 .symbol-dialog-footer { display: flex; justify-content: space-between; gap: 20px; padding: 13px 25px; border-top: 1px solid var(--line); color: #8a97a7; font-size: 9px; background: #fafbfd; }
 .symbol-key-hint { white-space: nowrap; }
 .market-toast { position: fixed; bottom: 27px; left: calc(50% + var(--rail-width) / 2); transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 20px; max-width: calc(100vw - 90px); padding: 12px 17px; border: 1px solid #3e4b5c; border-radius: 9px; background: #24303f; color: white; box-shadow: 0 5px 20px #24303f22; font-size: 12px; }

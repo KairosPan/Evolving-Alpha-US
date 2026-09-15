@@ -54,6 +54,6 @@ export function withWatchlistCatalog(body: string): string {
       { id: "crypto", label: "加密货币", status: "unavailable", source: null, as_of: null,
         note: "参考标的目录；加密货币行情尚未连接。" },
     ],
-    note: "美股为本地历史快照，非实时行情；A 股和加密货币行情尚未连接。搜索仅覆盖已收录目录，非全市场。",
+    note: "美股为本地历史快照，非实时行情；A 股和加密货币报价尚未连接。添加自选时通过搜索服务按需查询标的。",
   });
 }

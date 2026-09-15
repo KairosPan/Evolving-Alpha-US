@@ -1,7 +1,7 @@
 /** `/data/market.json`, `/data/account.json`, `/data/watchlist.json`: cached,
  * single-flight spawns of fixed read-only producer scripts.
  *
- * The face holds no market state of its own. Each route is a thin cache in
+ * The face holds no market state of its own. Each producer route is a thin cache in
  * front of ONE producer process whose argv is FIXED — the script path and a
  * mode word, nothing else. No request data ever reaches the child (spec v2
  * section 3.1), so these routes cannot be turned into a command-injection
@@ -17,7 +17,8 @@
  *
  * The spawner is injected so tests can drive the whole cache/single-flight/
  * stale machine without a Python process; {@link defaultSpawner} is the real
- * one.
+ * one. The independent `/data/symbols/search` route delegates to symbol-search.ts
+ * for on-demand public instrument suggestions, without a producer or disk cache.
  * @module
  */
 import { execFile } from "node:child_process";
@@ -26,6 +27,7 @@ import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { RouteRegistrar } from "./static.ts";
 import { withWatchlistCatalog } from "./watchlist.ts";
+import { registerSymbolSearchRoutes } from "./symbol-search.ts";
 
 /** Run the producer and report what it wrote and how it exited.
  *
@@ -187,13 +189,13 @@ type Mode = keyof typeof TTL_MS;
 interface Entry { body: string; at: number }
 
 /**
- * Mount the exact market, account, and watchlist JSON data routes.
+ * Mount the market, account, watchlist, and on-demand symbol search data routes.
  *
  * Every request is fenced to a loopback `Host` FIRST (see
  * {@link isLoopbackHost}): a foreign or missing Host is a fixed-body 403 that
  * reaches neither the cache nor a producer process.
  *
- * Past the fence each route is cached for its mode's {@link TTL_MS},
+ * Past the fence each producer route is cached for its mode's {@link TTL_MS},
  * single-flighted (concurrent misses share one child), and stale-on-error:
  * once a good payload exists, a later failure serves it again with
  * `stale: true` rather than blanking the instrument. A failure with NO cache is
@@ -280,6 +282,7 @@ export function registerDataRoutes(
   webServer.register({ kind: "exact", path: "/data/market.json", handler: handler("market") });
   webServer.register({ kind: "exact", path: "/data/account.json", handler: handler("account") });
   webServer.register({ kind: "exact", path: "/data/watchlist.json", handler: handler("watchlist") });
+  registerSymbolSearchRoutes(webServer, { isTrusted: isTrustedDataRequest, now });
 }
 
 /** Re-serve a cached body flagged `stale: true`, so the client can say so.
