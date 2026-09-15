@@ -79,6 +79,7 @@ let dispose: (() => Promise<void>) | undefined;
  * because the engine is installed ON the booted tree rather than by it, and a
  * deadline that outlives the process's stop can still cancel a member. */
 let disposeRoom: (() => void) | undefined;
+let disposeData: (() => void) | undefined;
 
 /** Tear the tree down, then leave with `code`. A dispose that rejects still
  * exits, and says why: a signal the process has already acknowledged must not
@@ -88,6 +89,7 @@ let disposeRoom: (() => void) | undefined;
 async function shutdown(code: number): Promise<void> {
   try {
     disposeRoom?.();
+    disposeData?.();
     await dispose?.();
   } catch (err) {
     console.error(`${BIN}: dispose failed during shutdown:`, err);
@@ -117,7 +119,7 @@ registerStatic(booted.ctx.webServer, clientDir);
  * at its defaults on purpose: the producer is spawned with `$FACE_PYTHON` (else
  * `python3`) from the repo root this process just chdir'd to, and no injection
  * seam belongs on the entry point — `spawn`/`now` exist for the tests. */
-registerDataRoutes(booted.ctx.webServer);
+disposeData = registerDataRoutes(booted.ctx.webServer);
 /* The channel picker's data (sidebar + landing page) and the new-channel copy
  * action. `process.cwd()` is the workbench repo root — the chdir above put it
  * there. `dshHome` is resolved the same way every other route family here

@@ -41,6 +41,11 @@ cd face
 npm install
 npm run setup            # creates $DSH_HOME/profiles/face (never overwrites)
 source ../.env.deepseek  # DEEPSEEK_API_KEY - see below
+# Optional market credentials, exported to the server process:
+set -a
+[ ! -f ../.env.alpaca ] || source ../.env.alpaca
+[ ! -f ../.env.ifind ] || source ../.env.ifind
+set +a
 npm start                # http://127.0.0.1:3090/  (profile: face)
 ```
 
@@ -170,13 +175,46 @@ market-qualified identifiers such as `us:AAPL`, `cn:600519` and
 synchronized across devices. Same-origin browser tabs synchronize through
 storage events. Storage failures are shown explicitly.
 
-`GET /data/watchlist.json` runs the fixed, read-only
+The live Market page uses `GET /data/quotes/stream?ids=us:AAPL,cn:603986,crypto:BTC/USD`
+for Server-Sent Events (SSE). Each named `quotes` event contains the current
+selected-set snapshot; named `heartbeat` events arrive every 15 seconds.
+`GET /data/quotes?ids=...` provides the same JSON contract for manual refresh
+and a 15-second browser fallback when SSE is unavailable. Only selected
+identities are requested, with at most 100 per page. Empty selections make
+no upstream requests. Adding/removing a selection updates subscriptions;
+hidden pages release their connections and reconnect when visible.
+
+The server shares one Alpaca and one Coinbase socket across active pages,
+subscribing to their union without whole-market wildcards. A latest-value
+cache stays in RAM (at most 512 identities), with no market-directory download
+or disk quote cache. Browser events are coalesced to 500ms; identical snapshot
+reads share work and use a five-second cache. Upstream REST bodies, timeouts,
+Coinbase request starts and browser connections are bounded. Slow/disconnected
+SSE clients release their subscriptions. Provider failures preserve the last
+known quote with its original timestamp and an explicit stale status.
+
+| Market | Provider and update path | Coverage and interpretation |
+|---|---|---|
+| US stocks/ETFs | Alpaca snapshots, trades and daily-bar WebSocket updates | `iex` by default, covering only IEX. Its stream subscribes to at most 30 symbols; remaining selected symbols use periodic snapshots. `sip` requires its entitlement; `delayed_sip` is explicitly labelled 15-minute delayed. Changes use the previous session's close. |
+| A shares | iFinD `real_time_quotation`, only requested codes | Requires an iFinD access or refresh token. Without one the page says the source is unconfigured. Polling defaults to 30 seconds while selected. Event timestamps are interpreted as Beijing time. Volume stays unavailable until its provider units can be verified with an account. |
+| Cryptocurrency | Coinbase Exchange ticker/heartbeat WebSocket, per-product REST ticker/stats | Public USD pairs supported by Coinbase; a search result is not a guarantee of Coinbase coverage. Changes and volume use a rolling 24-hour window, and are labelled accordingly. |
+
+Snapshots initialize the display and refresh US/crypto baselines every 60
+seconds while streaming, or every 15 seconds while their socket is unavailable.
+Market state distinguishes connection status from data availability. Alpaca's
+clock describes the regular session; closed does not rule out extended-hours
+trades. Quote time always comes from a provider event, never local retrieval
+time. Old or missing data is not replaced by historical PIT prices. These
+live, interactive reads are not guarded replay/backtest evidence.
+
+The legacy `GET /data/watchlist.json` remains available and runs the fixed, read-only
 `scripts/face_watchlist.py` producer, then merges the shared reference directory
 from `client/market-catalog.js`. The producer reads the latest captured US
 snapshot through `GuardedSource` and `AsOfGuard`; the face's former breadth
 walk is not needed to open Market. The shipped 2yr bed currently supplies 797
 US rows dated **2026-07-09**, with raw daily closes and changes relative to the
-previous close. These are historical snapshots, not live quotations.
+previous close. These are historical snapshots, not live quotations, and the
+live Market page no longer requests this route.
 
 `GET /data/symbols/search?q=兆易创新&market=all` queries Tencent smartbox for
 A shares and Yahoo Finance search for US stocks/ETFs and USD cryptocurrency
@@ -195,10 +233,31 @@ A shares, 8 cryptocurrency pairs); these do not limit online search coverage.
 On a static deployment or disconnected backend, these suggestions and
 watchlist management remain available, while online search reports an error.
 
-**A-share and cryptocurrency quotations are not connected**; online search
-returns instrument identities, not prices. Search results can be saved with
-unavailable prices left as em dashes. Search is independent of the historical
-US quote producer.
+Online search returns instrument identities, not prices. Results can be saved
+even when the selected quote provider does not cover them; missing prices stay
+em dashes. Search and live quotes operate independently.
+
+#### Market credentials
+
+| Environment variable | Default | Purpose |
+|---|---|---|
+| `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY` | — | Existing Alpaca credentials, held only by the backend. |
+| `ALPHA_DATA_FEED` | `iex` | `iex`, `sip`, or `delayed_sip`; no silent entitlement downgrade. |
+| `IFIND_ACCESS_TOKEN` | — | iFinD token, preferred when set. |
+| `IFIND_REFRESH_TOKEN` | — | Alternative: obtain the current access token through the official token endpoint; cache it only in memory. |
+| `FACE_IFIND_POLL_MS` | `30000` | iFinD refresh period while selected; minimum 15000ms. Set according to the account's data quota. |
+
+Copy `market-env.example` to the repo's gitignored `.env.ifind`, enter the
+credentials locally, export it before starting the server, then restart.
+No token is sent to the browser or returned in errors. Coinbase public market
+data needs no credential. iFinD's adapter is covered by mocked tests, but A-share
+live validation remains pending until an account is configured.
+
+Provider references: [Alpaca streams](https://docs.alpaca.markets/us/docs/real-time-stock-pricing-data),
+[Alpaca coverage](https://docs.alpaca.markets/us/docs/about-market-data-api),
+[Coinbase channels](https://docs.cdp.coinbase.com/exchange/websocket-feed/channels),
+[iFinD manual](https://quantapi.10jqka.com.cn/gwstatic/static/ds_web/quantapi-web/help-center/manual.html),
+[iFinD quotas](https://quantapi.10jqka.com.cn/gwstatic/static/ds_web/quantapi-web/help-center/permission.html).
 
 ### Account console
 
@@ -222,7 +281,7 @@ balance. The actual computed gate state is still available in details.
 
 ### Data routes and caches
 
-All three routes retain the loopback Host/Origin fence from `src/data.ts`.
+All producer, search and quote routes retain the loopback Host/Origin fence from `src/data.ts`.
 Request data never enters the child process arguments. A successful payload
 is cached in memory: **watchlist 15 minutes, legacy market 15 minutes, account
 60 seconds**. Concurrent cache misses share one producer process. Watchlist

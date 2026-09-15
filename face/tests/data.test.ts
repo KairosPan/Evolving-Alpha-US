@@ -56,7 +56,7 @@ test("registerDataRoutes mounts the producer routes and on-demand symbol search"
   registerDataRoutes({ register: (route) => routes.push(route) }, { spawn: async () => ({ stdout: "{}", code: 0 }), now: () => 0 });
   assert.deepEqual(
     routes.map((r) => `${r.kind} ${r.path}`).sort(),
-    ["exact /data/account.json", "exact /data/market.json", "exact /data/symbols/search", "exact /data/watchlist.json"],
+    ["exact /data/account.json", "exact /data/market.json", "exact /data/quotes", "exact /data/quotes/stream", "exact /data/symbols/search", "exact /data/watchlist.json"],
   );
 });
 

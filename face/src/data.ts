@@ -28,6 +28,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { RouteRegistrar } from "./static.ts";
 import { withWatchlistCatalog } from "./watchlist.ts";
 import { registerSymbolSearchRoutes } from "./symbol-search.ts";
+import { registerQuoteRoutes } from "./quotes.ts";
 
 /** Run the producer and report what it wrote and how it exited.
  *
@@ -215,7 +216,7 @@ interface Entry { body: string; at: number }
 export function registerDataRoutes(
   webServer: RouteRegistrar,
   opts: { spawn?: Spawner; now?: () => number; python?: string } = {},
-): void {
+): () => void {
   /* `||` on the env var, not `??` — the face's convention throughout (main.ts,
    * setup.ts): `FACE_PYTHON=""` is a var the operator meant to leave at its
    * default, and `??` would take it literally and try to execFile "". */
@@ -283,6 +284,7 @@ export function registerDataRoutes(
   webServer.register({ kind: "exact", path: "/data/account.json", handler: handler("account") });
   webServer.register({ kind: "exact", path: "/data/watchlist.json", handler: handler("watchlist") });
   registerSymbolSearchRoutes(webServer, { isTrusted: isTrustedDataRequest, now });
+  return registerQuoteRoutes(webServer, { isTrusted: isTrustedDataRequest });
 }
 
 /** Re-serve a cached body flagged `stale: true`, so the client can say so.

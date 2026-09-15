@@ -1,0 +1,11 @@
+# Copy to ../.env.ifind, enter values locally, export it, then restart Kairos.
+# Do not put credentials in browser JavaScript or commit the configured file.
+IFIND_ACCESS_TOKEN=
+# Alternatively, supply a refresh token instead of an access token:
+# IFIND_REFRESH_TOKEN=
+
+# Poll only selected A shares. Increase this interval for a smaller data quota.
+FACE_IFIND_POLL_MS=30000
+
+# Alpaca keys remain in the existing ../.env.alpaca.
+# ALPHA_DATA_FEED=iex

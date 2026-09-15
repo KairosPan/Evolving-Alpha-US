@@ -2,6 +2,7 @@
  * reference suggestions contain identities, never sample quotations. */
 import { REFERENCE_ASSETS } from "./market-catalog.js";
 import { createSymbolSearch } from "./market-search.js";
+import { createLiveQuotes, describeQuote, quoteConnectionLabel, quoteSource } from "./market-quotes.js";
 import { STORAGE_KEY, MARKET_INFO, normalizeAsset, readWatchlist, saveWatchlist, filterWatchlist, sortWatchlist, number, price, signed, percent, quoteTime } from "./market-model.js";
 
 const $ = (selector) => document.querySelector(selector);
@@ -14,9 +15,7 @@ const state = { items: saved.items, market: "all", searchMarket: "all", sort: { 
 let catalog = REFERENCE_ASSETS.map(normalizeAsset).filter(Boolean);
 for (const asset of state.items) if (!catalog.some((entry) => entry.id === asset.id)) catalog.push(asset);
 let quotes = Object.create(null);
-let loading = false;
-let payload = null;
-let refreshFailed = false;
+let quoteState = { status: "idle", refreshing: false, providers: [], note: "添加自选后自动连接行情。", limited: 0 };
 let undo = null;
 let toastTimer;
 let returnFocus;
@@ -33,6 +32,31 @@ const symbolSearch = createSymbolSearch((next) => {
   }
   if (dialog.open) renderSearch();
 });
+const liveQuotes = createLiveQuotes((next) => {
+  quoteState = next;
+  quotes = next.quotes;
+  renderQuoteStatus();
+  renderWatchlist();
+});
+
+function renderQuoteStatus() {
+  $("#data-status").textContent = quoteConnectionLabel(quoteState.status, quoteState.providers, state.items.map((asset) => asset.market));
+  $("#refresh").disabled = !state.items.length || quoteState.refreshing;
+  $("#refresh").setAttribute("aria-label", quoteState.refreshing ? "正在刷新行情" : "刷新行情");
+  const selectedMarkets = new Set(state.items.map((asset) => asset.market));
+  const providerNotes = quoteState.providers.filter((provider) => selectedMarkets.has(provider.market)).map((provider) => {
+    const label = MARKET_INFO[provider.market].label;
+    if (provider.id === "ifind" && provider.status === "unconfigured") return "A 股行情待配置 iFinD";
+    const status = { connecting: "连接中", connected: provider.transport === "poll" ? "定时更新" : "已连接", unconfigured: "待配置", error: "连接异常", limited: "订阅受限" }[provider.status];
+    const source = quoteSource(provider.source, provider.feed);
+    return `${label}：${source} ${status}${provider.message ? ` · ${provider.message}` : ""}`;
+  });
+  if (selectedMarkets.has("cn") && !quoteState.providers.some((provider) => provider.market === "cn")) providerNotes.push("A 股行情待配置 iFinD");
+  $("#data-note").textContent = [quoteState.note, ...providerNotes,
+    state.items.length ? "美股与 A 股涨跌以昨收为基准；加密货币为过去 24 小时。时间显示行情事件时间，非页面刷新时间。" : "",
+    quoteState.limited ? `最多连接 100 个标的；另有 ${quoteState.limited} 个暂未订阅。` : "",
+  ].filter(Boolean).join(" ");
+}
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -73,10 +97,12 @@ function toast(message, canUndo = false) {
 }
 function addAsset(asset) {
   if (has(asset.id)) return;
+  if (state.items.length >= 100) { toast("最多添加 100 个自选，请先移除一个标的。"); return; }
   state.items.push(asset);
   // Adding from another market should make the new row visible immediately.
   if (state.market !== "all" && state.market !== asset.market) state.market = "all";
   const error = persist();
+  liveQuotes.setAssets(state.items);
   renderWatchlist();
   toast(`已添加 ${asset.name}${error ? " · 本次修改尚未保存" : ""}`);
 }
@@ -87,6 +113,7 @@ function removeAsset(id) {
   undo = { asset, index };
   state.items.splice(index, 1);
   const error = persist();
+  liveQuotes.setAssets(state.items);
   renderWatchlist();
   toast(`已移除 ${asset.name}${error ? " · 本次修改尚未保存" : ""}`, true);
 }
@@ -144,7 +171,7 @@ function renderWatchlist() {
   const restoreFocus = () => {
     if (!focusWasInside) return;
     const row = Array.from(root.querySelectorAll("tr[data-asset-id]")).find((node) => node.dataset.assetId === focusedId);
-    (row?.querySelector(".watchlist-remove") || root.querySelector(".market-empty .market-button") || $("#add-symbol")).focus();
+    (row?.querySelector(".watchlist-remove") || root.querySelector(".market-empty .market-button") || $("#add-symbol")).focus({ preventScroll: true });
   };
   updateMarketButtons($("#market-filters"), state.market);
   for (const node of document.querySelectorAll("[data-count]")) {
@@ -156,7 +183,7 @@ function renderWatchlist() {
   if (!rows.length) { root.replaceChildren(renderEmpty()); restoreFocus(); return; }
   const scroll = el("div", "market-table-scroll");
   const table = el("table", "market-table");
-  table.append(el("caption", "market-sr-only", "自选股行情；缺失数据以横线表示，历史快照不是实时价格。"));
+  table.append(el("caption", "market-sr-only", "自选行情；缺失数据以横线表示。各标的标明行情来源、事件时间及实时、延迟或过期状态。"));
   const head = el("thead");
   const header = el("tr");
   for (const [label, cls] of [["标的 / 名称", ""], ["最新价", ""], ["涨跌额", "quote-change-col"], ["涨跌幅", ""], ["成交量", "quote-volume-col"], ["行情来源 / 时间", "quote-source-col"], ["", ""]]) {
@@ -170,18 +197,24 @@ function renderWatchlist() {
     const row = el("tr"); row.dataset.assetId = asset.id;
     const identity = el("td"); identity.append(assetIdentity(asset));
     const latest = el("td", "quote-price", price(quote.price, asset.currency));
-    const shortTime = available ? quoteTime(quote.as_of) : "暂无报价";
+    const description = describeQuote(asset, quote, quoteState.providers, quoteState.status);
+    const status = description.status;
+    const shortTime = available ? quoteTime(quote.as_of) : status;
     // The quote date stays visible even when the source column folds on mobile.
     latest.append(el("span", "quote-unit", `${asset.currency} · ${shortTime}`));
+    if (available) latest.append(el("span", "quote-unit", status));
     const change = el("td", `quote-change-col ${tone(quote.change)}`, signed(quote.change));
-    const percentage = el("td"); percentage.append(el("span", `quote-change-pill ${tone(quote.change_pct)}`, percent(quote.change_pct)));
+    const percentage = el("td");
+    percentage.append(el("span", `quote-change-pill ${tone(quote.change_pct)}`, percent(quote.change_pct)),
+      el("span", "quote-unit", quote.basis === "24h" || asset.market === "crypto" ? "24 小时" : "较昨收"));
     const volume = number(quote.volume);
-    const quantity = el("td", "quote-volume-col", volume === null ? "—" : volume.toLocaleString("zh-CN", { maximumFractionDigits: 2 }));
+    const quantity = el("td", "quote-volume-col", volume === null ? "—" : volume.toLocaleString("zh-CN", { maximumFractionDigits: asset.market === "crypto" ? 8 : 2 }));
+    if (volume !== null && description.volumeUnit) quantity.append(el("span", "quote-unit", description.volumeUnit));
     const source = el("td", "quote-source-col");
-    const status = available ? (refreshFailed || payload?.stale ? "上次快照" : quote.quote_status === "snapshot" ? "历史快照" : "报价") : "暂无报价";
-    const sourceText = el("div", "quote-source", status);
-    sourceText.title = typeof quote.source === "string" ? quote.source : "";
-    source.append(sourceText, el("span", "quote-time", typeof quote.source === "string" ? quote.source : "行情未接入"));
+    const sourceText = el("div", "quote-source", description.source);
+    sourceText.title = [quote.message, quote.received_at ? `接收时间：${quoteTime(quote.received_at)}` : ""].filter(Boolean).join(" · ");
+    source.append(sourceText, el("span", "quote-time", status));
+    if (volume !== null && quote.volume_as_of) quantity.title = `成交量时间：${quoteTime(quote.volume_as_of)}`;
     const actions = el("td");
     const remove = el("button", "watchlist-remove", "×");
     remove.type = "button";
@@ -192,7 +225,8 @@ function renderWatchlist() {
     row.append(identity, latest, change, percentage, quantity, source, actions);
     body.append(row);
   }
-  table.append(head, body); scroll.append(table); root.replaceChildren(scroll); restoreFocus();
+  const previousScroll = root.querySelector(".market-table-scroll")?.scrollLeft || 0;
+  table.append(head, body); scroll.append(table); root.replaceChildren(scroll); scroll.scrollLeft = previousScroll; restoreFocus();
 }
 function renderSearch() {
   const focusedId = document.activeElement?.dataset?.searchId;
@@ -242,45 +276,6 @@ function renderSearch() {
   results.replaceChildren(...nodes);
   if (focusedId) (Array.from(results.querySelectorAll("button")).find((button) => button.dataset.searchId === focusedId) || query).focus();
 }
-async function load() {
-  if (loading) return;
-  loading = true;
-  $("#refresh").disabled = true;
-  $("#refresh").setAttribute("aria-label", "正在刷新行情");
-  $("#data-status").textContent = "正在读取报价…";
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000);
-  try {
-    const res = await fetch("/data/watchlist.json", { signal: controller.signal });
-    let data;
-    try { data = await res.json(); } catch { throw new Error("行情服务未连接"); }
-    if (!res.ok || data?.ok !== true || !Array.isArray(data.assets)) throw new Error("行情暂不可用");
-    const merged = new Map(REFERENCE_ASSETS.map((asset) => [asset.id, normalizeAsset(asset)]));
-    const nextQuotes = Object.create(null);
-    for (const row of data.assets) {
-      const asset = normalizeAsset(row);
-      if (!asset) continue;
-      merged.set(asset.id, asset); nextQuotes[asset.id] = row;
-    }
-    // Keep saved identities even when the quote source does not cover them.
-    for (const asset of state.items) if (!merged.has(asset.id)) merged.set(asset.id, asset);
-    catalog = Array.from(merged.values()).filter(Boolean);
-    quotes = nextQuotes;
-    payload = data; refreshFailed = false;
-    $("#data-status").textContent = `${data.stale ? "保留上次行情 · " : "报价读取于 "}${quoteTime(data.generated_at)}`;
-    $("#data-note").textContent = typeof data.note === "string" ? data.note : "美股显示历史日线快照；A 股与加密货币暂无报价。";
-
-  } catch {
-    refreshFailed = true;
-    $("#data-status").textContent = payload ? "刷新失败，保留上次行情。" : "报价暂不可用 · 可继续管理自选";
-    $("#data-note").textContent = payload ? `上次读取：${quoteTime(payload.generated_at)}。各标的报价时间见列表，点击刷新重试。` : "报价读取失败，可点击刷新重试；标的搜索独立查询。";
-
-  } finally {
-    clearTimeout(timeout); loading = false; $("#refresh").disabled = false; $("#refresh").setAttribute("aria-label", "刷新行情");
-    renderWatchlist(); if (dialog.open) renderSearch();
-  }
-}
-
 $("#search-open").setAttribute("aria-label", "搜索股票、加密货币");
 $("#search-open").addEventListener("click", () => openSearch("all"));
 $("#add-symbol").addEventListener("click", () => openSearch());
@@ -301,12 +296,13 @@ query.addEventListener("input", (event) => {
 $("#search-filters").addEventListener("click", (event) => { const button = event.target.closest("button[data-market]"); if (!button) return; state.searchMarket = button.dataset.market; symbolSearch.search(query.value, state.searchMarket); renderSearch(); });
 $("#market-filters").addEventListener("click", (event) => { const button = event.target.closest("button[data-market]"); if (!button) return; state.market = button.dataset.market; renderWatchlist(); });
 $("#watchlist-sort").addEventListener("change", (event) => { const [key, direction = "asc"] = event.target.value.split(":"); state.sort = { key, direction }; renderWatchlist(); });
-$("#refresh").addEventListener("click", () => void load());
+$("#refresh").addEventListener("click", () => liveQuotes.refresh());
 $("#undo-remove").addEventListener("click", () => {
   if (!undo || has(undo.asset.id)) return;
   const { asset, index } = undo; undo = null;
   state.items.splice(Math.min(index, state.items.length), 0, asset);
   const error = persist();
+  liveQuotes.setAssets(state.items);
   renderWatchlist(); if (dialog.open) renderSearch();
   toast(`已恢复 ${asset.name}${error ? " · 本次修改尚未保存" : ""}`);
   (dialog.open ? query : $("#add-symbol")).focus();
@@ -348,9 +344,15 @@ window.addEventListener("storage", (event) => {
   if (unsavedChanges) { setNotice("其他页面已更新自选；本页有未保存的修改，当前列表已保留。"); return; }
   state.items = latest.items;
   for (const asset of state.items) if (!catalog.some((entry) => entry.id === asset.id)) catalog.push(asset);
+  liveQuotes.setAssets(state.items);
   setNotice(null); renderWatchlist(); if (dialog.open) renderSearch();
 });
 setNotice(saved.error);
 $("#search-catalog-note").textContent = SEARCH_NOTE;
+document.addEventListener("visibilitychange", () => liveQuotes.setVisible(document.visibilityState !== "hidden"));
+window.addEventListener("pagehide", () => liveQuotes.setVisible(false));
+window.addEventListener("pageshow", () => liveQuotes.setVisible(document.visibilityState !== "hidden"));
+liveQuotes.setVisible(document.visibilityState !== "hidden");
+liveQuotes.setAssets(state.items);
+renderQuoteStatus();
 renderWatchlist();
-void load();

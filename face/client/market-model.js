@@ -204,7 +204,7 @@ export function quoteTime(value) {
   if (dateOnly) return new Date(parsed).toISOString().slice(0, 10) === stamp ? stamp.replaceAll("-", "/") : EM;
   if (!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(stamp)) return `${stamp.replace("T", " ")}（时区未注明）`;
   const formatted = new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
     hourCycle: "h23", timeZoneName: "shortOffset",
   }).format(new Date(parsed));
   return `${formatted}（本地）`;
