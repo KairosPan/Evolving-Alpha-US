@@ -25,7 +25,8 @@ carry continuing research perspectives into rooms (§7.1). Temporary subagents p
 delegated work (§7.2). One principal agent does not mean only one execution context.
 
 - **MARKET** — point-in-time US equities data (Alpaca bars and corporate actions, EDGAR
-  filings, two offline PIT beds), guarded against lookahead in code.
+  filings, two offline PIT beds), guarded against lookahead in code. AKShare MCP adds
+  public A-share queries for interactive research; those reads have no PIT guard.
 - **STRATEGY** — Kairos's arena. A strategy is a directory under `strategies/`, meant to be
   git-versioned: a thesis with falsification terms, an executable screen, backtests, a journal,
   a lifecycle state. In the face, each strategy directory is a **channel**: its conversations,
@@ -67,7 +68,7 @@ reports the conflict — never silently defers to style, never silently override
 skills are law, not style: findings never overrule them.
 
 **P3 — Point-in-time honesty is enforced in code, not prose.** Every dated market read through
-the two sanctioned channels — `replay_days` for backtests, the MCP tools for interactive queries
+the two sanctioned `alpaca_kit` channels — `replay_days` for backtests, its MCP tools for interactive queries
 — passes a lookahead guard in code; the library seam returns a RAW source by contract, and the
 rule that backtests use the replay channel is the first backtest rule (P4). The guard surfaces
 are pinned by name in meta-gate tests, so deleting one turns the suite red. A backtest that

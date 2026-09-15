@@ -39,7 +39,7 @@
  * — the face's `port` wins, and NOTHING is printed. The operator is warned
  * where they would actually look, in the patch file's own header
  * (`setup.ts` PATCH_HEADER). Note also that {@link composedRowIds} deliberately
- * composes the three layers BELOW the overlay only: the row-presence switches
+ * composes the layers BELOW the overlay only: the row-presence switches
  * ask "did the profile bring this row?", which is a question about the tree the
  * face is patching, not about the face's own rows.
  * @module
@@ -63,6 +63,7 @@ import { provideCmdline } from "@deepseek-ai/dsh-cmdline";
 import type { Config as SystemPromptConfig } from "@deepseek-ai/dsh-system-prompt";
 import { BOTS_ROOT, SYSTEM_PROMPT_ROW_ID, faceOverlay } from "./overlay.ts";
 import { PERSONA_PATH, readPersona } from "./persona.ts";
+import { aksharePatches } from "./akshare.ts";
 import {
   auditOrderTools, effectiveApprovalPolicy, isOrderTool, orderApprovalDecision, orderGuardReason,
   type ApprovalEventLike, type ApprovalPolicyLike, type PreToolDecision, type ToolSchemaLike,
@@ -102,8 +103,8 @@ const PROFILE_ROOT_FILENAME = "cordis.yml";
 
 /** The empty root entry list the whole face tree patches over. */
 const PROFILE_ROOT_CONFIG = `# kairos-face profile root - an empty entry list. The tree is composed as
-# patches: each bundle in package.json's dsh.profile.bundles, then
-# cordis.patch.yml, then the face's own host rows. Edit cordis.patch.yml,
+# patches: bundles, project market connections, profile/home user patches,
+# then the face's own host rows. Edit cordis.patch.yml,
 # not this file - kairos-face rewrites it on every boot.
 []
 `;
@@ -147,7 +148,8 @@ function resolveTelemetryPatch(disabledEnv: string | undefined, hasRow: boolean)
 
 /**
  * Compose the face's full patch stack over its profile, in application order:
- * bundle layers in `dsh.profile.bundles` order, the profile's own user layer,
+ * bundle layers in `dsh.profile.bundles` order, the project's AKShare connection,
+ * the profile's own user layer,
  * the machine-local home layer (`$DSH_HOME/cordis.patch.yml`, which outranks
  * the per-profile one), the telemetry switch, then the face's host rows last.
  *
@@ -172,8 +174,9 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
    * `baseUrl` at the profile directory. */
   writeFileSync(rootConfig, PROFILE_ROOT_CONFIG);
   const bundlePatches = profile.layers.flatMap((layer) => layer.patches);
+  const marketPatches = aksharePatches();
   const homePatches = loadOptionalPatches(BIN, join(home, PROFILE_PATCH_FILENAME)) ?? [];
-  const patches: FacePatchList = [...bundlePatches, ...profile.patches, ...homePatches];
+  const patches: FacePatchList = [...bundlePatches, ...marketPatches, ...profile.patches, ...homePatches];
   /* Both switches below are guarded on the row actually being in the composed
    * tree. A patch that matches nothing is inert and — measured, not assumed —
    * SILENT: the include plugin does call a warn sink for it, but nothing
@@ -181,7 +184,7 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
    * would look like it had taken effect while doing nothing at all. The guard
    * is what keeps "telemetry disabled" from being a lie on a profile that
    * never mounted the row. */
-  const rows = composedRowIds([bundlePatches, profile.patches, homePatches]);
+  const rows = composedRowIds([bundlePatches, marketPatches, profile.patches, homePatches]);
   const telemetry = resolveTelemetryPatch(process.env.DSH_TELEMETRY_DISABLED, rows.has(TELEMETRY_ROW_ID));
   if (telemetry !== undefined) patches.push(telemetry);
   if (rows.has(HMR_ROW_ID)) patches.push({ id: HMR_ROW_ID, disabled: true });

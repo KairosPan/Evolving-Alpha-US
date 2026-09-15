@@ -9,6 +9,13 @@ strategies/.
   replay_days and the MCP tools wrap it for you, a bare make_source() does NOT — it returns
   a RAW source by contract. Never read one directly in a backtest; go through replay_days,
   or wrap it yourself in GuardedSource with an AsOfGuard for the day.
+- AKShare MCP (`mcp__akshare__*`) — A-share and other public market queries in
+  Kairos. Use `akshare_discover` to find the method and its category tool. These
+  vendor reads have NO PIT guard; do not use them as replay/backtest evidence.
+  `stock_zh_a_spot_tx` is the verified Tencent A-share snapshot method; Eastmoney
+  and Xueqiu endpoints may fail or require a valid login. Check returned errors,
+  timestamps and `truncated`: the default response limit is 500 rows, so a
+  truncated result is not the whole market. Retrieval time is not exchange time.
 - strategies/<name>/ — one directory per strategy: THESIS.md, screen.py, backtest.py,
   backtests/, journal.md, status.yaml. Lifecycle, declared in status.yaml:
   idea | researching | validated | paper | retired — paper is a reserved forward-testing

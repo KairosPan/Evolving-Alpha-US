@@ -3,6 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { GenerateOptions } from "@deepseek-ai/dsh-llm";
@@ -79,6 +80,10 @@ test("room discussion smoke: structured brief, private journals, serial disagree
     const channelDir = await realpath(channelPath);
     await mkdir(join(root, ".git"));
     setupFaceProfile(home);
+    const patchPath = join(home, "profiles", "face", "cordis.patch.yml");
+    const patch = readFileSync(patchPath, "utf8").replace(/^\[\][ \t]*$/m, "");
+    // This smoke owns a scratch profile and must not start the operator's data server.
+    writeFileSync(patchPath, `${patch}\n- id: mcp-akshare\n  disabled: true\n`);
     const { ctx, dispose } = await bootFace({ profileName: "face", port: 0, dshHome: home, botsRoot: bots });
     let disposeRuntime = (): void => undefined;
     let disposeRoom = (): void => undefined;

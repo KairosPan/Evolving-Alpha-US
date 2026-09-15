@@ -64,6 +64,7 @@ workspace" below means outside the whole repo.
 | `DEEPSEEK_API_KEY` | — | resolved per request through the credential seam, then the environment |
 | `DSH_TELEMETRY_DISABLED` | unset | ANY non-empty value (`0` and `false` included) disables the telemetry row |
 | `DSH_PERMISSION_MODE` | `workspace-write` | sandbox mode. `danger-full-access` also sets the approval policy to `never` — it DISARMS the Gate-2 surface below |
+| `FACE_AKSHARE_MCP_COMMAND` | `~/.local/bin/akshare-mcp` (expanded absolute path) | AKShare MCP executable; no shell command or arguments |
 
 `FACE_PORT` and `FACE_PROFILE` read an empty value as unset, not as a literal:
 `FACE_PROFILE=""` would otherwise resolve to `$DSH_HOME/profiles` itself, and
@@ -72,6 +73,46 @@ restart. `"0"` is a non-empty string, so deliberately asking for an OS-assigned
 port still works.
 
 Ctrl-C (SIGINT) leaves 130, SIGTERM leaves 0; both dispose the tree first.
+
+## AKShare MCP — A-share queries in Kairos
+
+The project mounts AKShare through `src/akshare.ts` on each boot. This is a dsh
+connection, independent of any Codex MCP configuration. The installed executable
+can be shared by both clients; each client starts its own stdio server process.
+
+Install the selected community implementation once with uv:
+
+```bash
+uv tool install --python 3.12 --with 'mcp<2' \
+  'git+https://github.com/xiaozhozho/akshare-mcp.git@9b6a22b6d83cce2a996a5072743bb06686040ce0'
+```
+
+The Git source is intentional: PyPI's normalized `akshare-mcp` package name
+belongs to a different implementation. This revision uses the MCP SDK 1.x
+FastMCP API, so retain the `mcp<2` constraint. Startup does not install or update
+packages. A missing executable is logged without taking down the chat host.
+
+After starting/restarting the face, **Plugin → akshare** shows the live tool
+roster. `/data/plugins.json` should list `server: "akshare"` with 14 tools,
+including `mcp__akshare__akshare_discover` and `mcp__akshare__akshare_stock_a`.
+Use discovery first; the Tencent A-share snapshot call is:
+
+```json
+{"method":"stock_zh_a_spot_tx"}
+```
+
+Pass that to `mcp__akshare__akshare_stock_a`. This fetches the whole vendor
+snapshot before returning at most 500 rows; inspect `truncated` and `row_count`
+before drawing whole-market conclusions. Calls have a 120-second timeout.
+These public-source queries have no PIT guard and are for interactive research;
+they do not supply historical replay or the `/market` page's US PIT instruments.
+Data timestamps and retrieval time are different, and source errors must remain
+visible (the Eastmoney and Xueqiu quote tests failed on 2026-09-15).
+
+The `mcp-akshare` row is composed after the base bundle and before operator
+profile/home patches. An operator patch can replace its config or disable it
+with `- { id: mcp-akshare, disabled: true }`. No installed profile patch is
+rewritten to add this connection.
 
 ## The profile
 

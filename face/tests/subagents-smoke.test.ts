@@ -3,6 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { GenerateOptions, StreamChunk } from "@deepseek-ai/dsh-llm";
@@ -41,6 +42,10 @@ test("native subagents: continuable and foreground calls, parent notices, read-o
     await mkdir(join(root, ".git"));
     await writeFile(join(root, "AGENTS.md"), "# Fixture\nComplete only the scripted subtask.\n");
     setupFaceProfile(home);
+    const patchPath = join(home, "profiles", "face", "cordis.patch.yml");
+    const patch = readFileSync(patchPath, "utf8").replace(/^\[\][ \t]*$/m, "");
+    // This smoke owns a scratch profile and must not start the operator's data server.
+    writeFileSync(patchPath, `${patch}\n- id: mcp-akshare\n  disabled: true\n`);
     let booted = await bootFace({ profileName: "face", port: 0, dshHome: home, botsRoot: bots });
     stop = booted.dispose;
     let ctx = booted.ctx;

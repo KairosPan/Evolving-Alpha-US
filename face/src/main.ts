@@ -5,7 +5,7 @@
  * installed by `composeFace`/`bootFace` (see boot.ts's header): process-level
  * failure belongs to the process's entry, and this is it.
  *
- * Configuration is two environment variables and nothing else. There is no
+ * Configuration comes from environment variables. There is no
  * argument parsing on purpose: `bootFace` hands the tree an empty command line,
  * so a flag here would be a second, divergent notion of "the face's arguments".
  * @module

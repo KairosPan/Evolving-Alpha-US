@@ -339,6 +339,14 @@ bundling `dsh-base` only, `cordis.patch.yml` with a load-bearing trailing `[]`,
 rows above into `cordis.patch.yml`; `<profile>/cordis.yml` is face-managed and rewritten to `[]`
 on every boot (§4.1). `toolCallTimeoutMs: 300000` on the MCP row is required for cold screens.
 
+AKShare is a project-owned default in `face/src/akshare.ts`: a separate stdio
+`mcp-akshare` row, inserted after bundle layers and before operator profile/home
+patches, which can override or disable it. It launches the separately installed
+`~/.local/bin/akshare-mcp` (override: `FACE_AKSHARE_MCP_COMMAND`), passes a 500-row
+response limit and uses a 120-second tool timeout. Startup failure is logged and
+does not stop the host. These vendor reads have no PIT guard. Installation,
+source limitations and the live-roster check are in `face/README.md`.
+
 ### 3.2 Skill packs
 
 | Pack | Owner (charter §4) | Content |
@@ -434,6 +442,7 @@ operator- or face-specific. The frozen row list is
 | `web_search` | `tool-web` (`fetch: false`) over `web-search-deepseek` | outbound to `https://api.deepseek.com/anthropic/v1` with `DEEPSEEK_API_KEY`; no page fetch |
 | `ask_user_question` | `tool-ask-user` (face overlay) | §4.3; the answer is model-visible, so not a gate |
 | `mcp__alpaca-kit__*` | the operator's MCP row | §2.7 registration matrix |
+| `mcp__akshare__*` | project `mcp-akshare` row | public A-share/other market queries, unguarded; check source errors and truncation |
 | `agent_<bin>` | face `agents.ts` | roster-gated per channel (§6.5) |
 
 ### 3.7 The bot directory contract
@@ -511,7 +520,7 @@ instruments, channels, the master rail, bots, the upgrade order, and the four dr
    resolve `$DSH_HOME`, heal the profiles module fallback (links the face's dependency closure
    into `$DSH_HOME/profiles/node_modules`), load the profile, **rewrite `<profile>/cordis.yml`
    to `[]`** (the loader's write-back would otherwise bake composed rows in and double every
-   bundle insert next boot), stack the patches — bundle layers (`dsh-base`) → the profile's
+   bundle insert next boot), stack the patches — bundle layers (`dsh-base`) → project AKShare → the profile's
    `cordis.patch.yml` → the home's `cordis.patch.yml` — apply the guarded switches
    (`session-telemetry-otel` disabled when `DSH_TELEMETRY_DISABLED` is non-empty and the row is
    composed; `hmr` disabled whenever composed), then push **the face overlay last**. This
@@ -546,6 +555,7 @@ files.
 | `main.ts` | entry: chdir, signal handlers, boot, mount every route family (the room engine included), print the URL |
 | `boot.ts` | the mirror of dsh CLI's private `prepareProfile / composeProfile / runProfile` against the pinned typings; the three boot assertions (the Gate 2 services, `ask_user_question` in the live registry, a resolvable default preset); Gate 2 registration |
 | `overlay.ts` | the twelve host rows `dsh-base` does not mount, `satisfies`-checked against each plugin's own config type |
+| `akshare.ts` | project AKShare MCP defaults, composed below operator profile/home patches |
 | `orders.ts` | Gate 2 decision logic, pure: `isOrderTool`, `effectiveApprovalPolicy`, `orderApprovalDecision`, `describeOrder`, `hasApprovalGrant`, `isGatedTool`, `orderGuardReason`, `auditOrderTools`, `OPERATOR_GATED_MARKER` — depends on nothing (structural types only) |
 | `setup.ts` | one-shot `$DSH_HOME/profiles/<name>` creation; refuses to overwrite |
 | `http.ts` | `HttpError`, `readBody` (4,096 B cap → 413), the fixed `FORBIDDEN` body |

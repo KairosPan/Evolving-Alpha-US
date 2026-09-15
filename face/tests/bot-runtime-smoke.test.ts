@@ -4,6 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installModelSelection, type Agent } from "@deepseek-ai/dsh-agent";
@@ -48,6 +49,10 @@ test("bot runtime smoke: actual home routing, saved-versus-mounted identity, rea
     await writeFile(join(made.homeCwd, "notes.md"), JOURNAL_V1);
     await mkdir(join(otherCwd, ".git"));
     setupFaceProfile(home);
+    const patchPath = join(home, "profiles", "face", "cordis.patch.yml");
+    const patch = readFileSync(patchPath, "utf8").replace(/^\[\][ \t]*$/m, "");
+    // This smoke owns a scratch profile and must not start the operator's data server.
+    writeFileSync(patchPath, `${patch}\n- id: mcp-akshare\n  disabled: true\n`);
     const { ctx, dispose } = await bootFace({ profileName: "face", port: 0, dshHome: home, botsRoot: bots });
     let disposeRuntime = (): void => undefined;
     try {

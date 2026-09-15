@@ -9,7 +9,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -59,6 +59,10 @@ test("room smoke: dispatch → two members → answers in the room log → one w
     await mkdir(join(root, ".git"), { recursive: true });
     await writeFile(join(root, "AGENTS.md"), `# smoke\n${MARKER}\n`);
     setupFaceProfile(home);
+    const patchPath = join(home, "profiles", "face", "cordis.patch.yml");
+    const patch = readFileSync(patchPath, "utf8").replace(/^\[\][ \t]*$/m, "");
+    // This smoke owns a scratch profile and must not start the operator's data server.
+    writeFileSync(patchPath, `${patch}\n- id: mcp-akshare\n  disabled: true\n`);
     const { ctx, dispose } = await bootFace({ profileName: "face", port: 0, dshHome: home, botsRoot: bots });
     try {
       /* `as unknown as`: dsh's own `SessionHeader` is a closed interface, not a `Record`. */

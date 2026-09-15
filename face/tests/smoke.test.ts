@@ -24,7 +24,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -78,6 +78,10 @@ function sendWithHost(port: number, path: string, host: string, body?: string): 
 test("boot smoke: face serves its pages, /api and /data answer, Kairos can ask, both fences hold", { skip: gated && "set FACE_SMOKE=1" }, async () => {
   const home = mkdtempSync(join(tmpdir(), "face-smoke-"));
   setupFaceProfile(home);
+  const patchPath = join(home, "profiles", "face", "cordis.patch.yml");
+  const patch = readFileSync(patchPath, "utf8").replace(/^\[\][ \t]*$/m, "");
+  // This smoke owns a scratch profile and must not start the operator's data server.
+  writeFileSync(patchPath, `${patch}\n- id: mcp-akshare\n  disabled: true\n`);
   const { ctx, dispose } = await bootFace({ profileName: "face", port: 0, dshHome: home });
   try {
     const clientDir = join(dirname(fileURLToPath(import.meta.url)), "..", "client");
