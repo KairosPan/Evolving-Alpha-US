@@ -1,7 +1,10 @@
 # Agent Wallet — Design
 
-**Status:** design, revised 2026-09-20 after a three-lens adversarial pass (charter/security, wallet
-accounting, face feasibility; the record is in §9), being built in the same arc. Extends the
+**Status:** built 2026-09-21 (face `feat/agent-wallet`; agentpay `agent-surface` @ `73fe702`,
+the submodule pin). Designed 2026-09-20 and revised the same day after a three-lens adversarial
+pass (charter/security, wallet accounting, face feasibility; the record is in §9). The as-built
+truth is consolidated in `DEVELOPMENT.md` (§1 homes, §3.6, §4.2, §4.4–4.7, §6.9, §7.3–7.4, §9
+R-W1..R-W7, §10 item 11); one built mechanism differs from §8's note, recorded there. Extends the
 bots-and-rooms design (`2026-09-07-bots-and-rooms-design.md`) and amends the charter (§5). The
 payment substrate is the `payment/` submodule (agentpay: x402 V2 `exact` / EIP-3009 on the
 official `@x402/*` packages, verified on Base Sepolia on 2026-09-19).
@@ -376,30 +379,40 @@ payTo, maxTimeoutSeconds }], resource?, description? }` or `{ ok: true, status, 
 
 ## 7. Plan decomposition
 
-1. agentpay `agent-surface`: context, holders/callers, chain accounting, effective remaining,
-   reconcile re-check, lock, verification, host pre-flight, tests (pins rewritten as §9 records).
-2. agentpay: CLI commands, tool table, SKILL/README/technical report; commit.
-3. Kairos: submodule pin → the agent-surface commit; `npm ci` in `payment/`; CLAUDE.md row.
-4. Face: `wallet.ts` (tools, context, caller, pre-flight, lock, alerts, routes, seam) +
-   `budgets.ts` (Gate 3) + boot/main wiring + tests.
-5. Face client: `/wallet` page, pay card, badges, channel spend tile, plugin panel + tests.
-6. `docs/design/kairos-intro.html` redrawn for x402 and the surfaces of §2.
-7. Documents: charter, CLAUDE.md, AGENTS.md, DEVELOPMENT.md, ROADMAP.md, face/README.md (with the
-   drill run and its PASS line).
+All seven steps done 2026-09-21.
+
+1. ✓ agentpay `agent-surface`: context, holders/callers, chain accounting, effective remaining,
+   reconcile re-check, lock, verification, host pre-flight, tests (pins rewritten as §9 records)
+   — `584b60d`.
+2. ✓ agentpay: CLI commands, tool table, SKILL/README/technical report — `73fe702`.
+3. ✓ Kairos: submodule pin → `73fe702`; `npm ci` in `payment/`; CLAUDE.md row.
+4. ✓ Face: `wallet.ts` + `wallet-payload.ts` (the payload split out pure) + `budgets.ts` (Gate 3)
+   + boot/main wiring + tests (`budgets`, `wallet`, `budget-gate`, `wallet-smoke`).
+5. ✓ Face client: `/wallet` page, pay card, badges, channel spend tile, plugin panel +
+   `wallet-model` tests and the `static`/`panels`/`channels` pins.
+6. ✓ `docs/design/kairos-intro.html` redrawn for x402 and the surfaces of §2.
+7. ✓ Documents: charter, CLAUDE.md, AGENTS.md, DEVELOPMENT.md, ROADMAP.md, face/README.md. The
+   manual drill's PASS line is the operator's to record (README, "The budget-card drill").
 
 ## 8. Drills
 
-- Automated (`FACE_SMOKE=1`): the budget gate (ask with a decidable line; bot preset denied;
-  agentless denied; guard refuses without a grant).
+- Automated (`FACE_SMOKE=1`): `budget-gate` (ask with a decidable line; bot preset denied;
+  agentless denied; guard refuses without a grant), `wallet-smoke` (the real wallet on a booted
+  tree paying a stub payee on the local network through dsh's own registry; the ledger row
+  names the gateway session; a bot refused) and `wallet-approve-smoke` (the positive path of
+  Gate 3 — a test answerer granting the card, the guard admitting, the body creating the
+  mandate; the R-W5 twin the order gate lacks; being written as this status line is set).
 - Manual, in a scratch harness home with a local chain (`payment/`'s demo stack: hardhat +
   facilitator + payee): `agentpay init --home <scratch>/face/agentpay --from-deployment localhost
   --key <hardhat #1>`; start the face on that home; ask Kairos for a budget for `127.0.0.1:4021`
   → the card names purpose, limit, hosts; Deny → the tool result says so and nothing is in
   `/wallet`; ask again, Approve → the mandate is on `/wallet`; ask Kairos to fetch
   `http://127.0.0.1:4021/predict` → a pay card with a tx and `/wallet` shows the payment. Note: the
-  private-range refusal must be lifted for the drill's loopback payee — `FACE_AGENTPAY_ALLOW_LOCAL=1`
-  is honoured only when the home is under a scratch `$DSH_HOME`, and the README says never to set
-  it in the real home.
+  private-range refusal must be lifted for the drill's loopback payee. **As built** this is not
+  an environment variable: `wallet.ts` lifts the refusal when the configured network is the local
+  chain `eip155:31337` (`LOCAL_NETWORK`) and on no other — a loopback payee on Base Sepolia is
+  refused before any request, whatever mandate names it. No `FACE_AGENTPAY_ALLOW_LOCAL` exists.
+  The steps are in `face/README.md`, "The budget-card drill"; not yet run.
 
 ## 9. Review record (2026-09-20)
 

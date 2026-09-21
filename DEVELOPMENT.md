@@ -1,8 +1,9 @@
 # Kairos Workbench — Development Reference
 
-**Status:** living, as-built · **Owner:** the operator · **Last full pass:** 2026-09-09 on
-`feat/rooms` @ `ce07925` (388 pytest; 313 face tests, 307 pass + 6 skipped without `FACE_SMOKE`;
-313 under `FACE_SMOKE=1`; typecheck clean).
+**Status:** living, as-built · **Owner:** the operator · **Last full pass:** 2026-09-21 on
+`feat/agent-wallet` (388 pytest; 541 face tests, 529 pass + 12 skipped without `FACE_SMOKE`;
+541 under `FACE_SMOKE=1`; typecheck clean; agentpay 196). The 2026-09-09 pass on `feat/rooms` @
+`ce07925` (313 face tests) is the one most sections below were last read against.
 
 **Authority.** `Kairos-Design.md` (the charter) outranks this document on intent. This document
 describes mechanism *as built*: where it disagrees with the code, the code is the fact and this
@@ -22,11 +23,11 @@ edit above it.
 |---|---|
 | `ROADMAP.md` | the five-item forward index from the 2026-08-29 reset plus a built log; §10 below is the ordered detail and cites its items by number — move both together |
 | `docs/backtest-rules.md` | the five honest-eval rules, the bed-window table, the warmup facts |
-| `docs/superpowers/specs/`, `plans/`, `runbooks/` | only the five specs and five plans dated 2026-08-29 or later (skeleton, face chat-light, face instruments, channels, bots-and-rooms) describe this system; the 54 earlier specs, 50 earlier plans and the one runbook are the retired product's history, filed unmarked in the same directories |
+| `docs/superpowers/specs/`, `plans/`, `runbooks/` | only the six specs and five plans dated 2026-08-29 or later (skeleton, face chat-light, face instruments, channels, bots-and-rooms, agent wallet) describe this system; the 54 earlier specs, 50 earlier plans and the one runbook are the retired product's history, filed unmarked in the same directories |
 | `docs/design/prototypes/` | the face prototypes (`BRIEF.md`, rounds a/b/c and r2–r4) that §5.5 refers to; the R2 instrument grammar and the R4 palette live here |
 | `docs/research/` | frozen inputs, never edited: `2026-09-03-face-composition-snapshot.md` is the ground-truth list of rows and tools the face composes, `2026-08-22-deepseek-harness-dsh-survey.md` the survey the profile template cites |
 | `dsh/README.md` | the profile install path (its steps 2 and 6 predate the face and Gate 2 — §10 item 4) |
-| `face/README.md` | run, profile, instruments, channels, master rail, bots, upgrade order, the four drills |
+| `face/README.md` | run, profile, instruments, channels, master rail, bots, the agent wallet, upgrade order, the drills |
 
 ---
 
@@ -44,9 +45,11 @@ external services on five hostnames.
  │  ├─ face overlay rows (twelve, §4.3): webserver · connection · api-gateway · storage   │
  │  │   chain · directory-picker · host-runner · ask-user · projection-cache ·            │
  │  │   agent-presets                                                                     │
- │  ├─ face routes: `/` `/market` `/account` `/client/*` `/data/*`                        │
- │  ├─ Gate 2: registered by `bootFace` on `tools/pre-execute` + `tools.guard`;           │
- │  │   the rules live in `src/orders.ts`                                                 │
+ │  ├─ face routes: `/` `/market` `/account` `/wallet` `/client/*` `/data/*`              │
+ │  ├─ Gates 2 and 3: registered by `bootFace` on `tools/pre-execute` + `tools.guard`;    │
+ │  │   the rules live in `src/orders.ts` and `src/budgets.ts`                            │
+ │  ├─ the agent wallet: eight `wallet_*` tools (`src/wallet.ts` over `payment/`),        │
+ │  │   an HTTP client to x402 payees inside the face process (§3.6)                      │
  │  └─ children:                                                                          │
  │       ├─ alpaca-kit MCP server  (`python -m alpaca_kit.mcp`, stdio, operator-mounted)  │
  │       ├─ `scripts/face_data.py market|account`  (per `/data` request, fixed argv)      │
@@ -61,12 +64,13 @@ external services on five hostnames.
                                  (EDGAR facts, submissions, CIK map)
 ```
 
-Three homes on disk:
+Three homes on disk, and the wallet home inside the second:
 
 | Home | What lives there | Who writes |
 |---|---|---|
-| the repo root | code, `strategies/`, `dsh/` (the profile *template* and skill packs), `docs/`; also the session project directory and the sandbox workspace root | operator, coding agents, Kairos (in `strategies/`) |
+| the repo root | code, `strategies/`, `dsh/` (the profile *template* and skill packs), `docs/`, `payment/` (the agentpay submodule, whose `node_modules` the face imports through); also the session project directory and the sandbox workspace root | operator, coding agents, Kairos (in `strategies/`) |
 | `$DSH_HOME` (default `~/.dsh`) | `profiles/face/` (the installed profile), `sessions/`, `storages/` (workspace registry), `face/` (`archived.json`, `channels.json`, `roster.log`, `agents.json`), `.env`, `.credentials.yaml` (dsh's own key store, mode 0600), `settings.yaml` (`agent-default-model`: the provider, model id and reasoning effort Kairos actually runs with; `ui-theme`, `locale`, `ui-onboarding`), `.anonymous-user-id` | the operator (the patch file, keys) and the face — including the dsh plugins it hosts (`credentials-local`, `settings-file`) — for everything else |
+| `$DSH_HOME/face/agentpay` (the wallet home; `FACE_AGENTPAY_HOME` overrides) | `config.json` (the payer key, network, RPC, token; 0600), `mandates.json` (the budgets, store version 2), `ledger.jsonl` (every payment with its `context`), `wallet.lock` (the face's pid while it runs), `face-state.json` (the last balance and the ledger's settled total at that moment, for the outflow alert) | the operator writes `config.json` once (`agentpay init --home`); the face writes the rest — mandates on Kairos's card-gated request or its ungated delegate/disable, ledger rows on payment — and is the home's only writer while it holds the lock; the CLI's mutating commands refuse a locked home. Readable by every shell turn (charter D16; §9 R-W2) |
 | `data/` (gitignored) | `pit/2yr`, `pit/broad` (the PIT beds), `.screen_cache`, `.face_cache` | capture scripts; the two caches |
 
 Credentials: `.env.alpaca` and `.env.deepseek` are gitignored files at the repo root that the
@@ -440,6 +444,7 @@ operator- or face-specific. The frozen row list is
 | `todo`, `goal`, `workflow`, plan mode | `tool-todo`, `tool-goal`, `tool-workflow`, `plan-mode` | |
 | `skill` | `tool-skill` + `skill-filesystem` | loads one `SKILL.md` by catalog name; the catalog (name + description) is what the model chooses from |
 | `web_search` | `tool-web` (`fetch: false`) over `web-search-deepseek` | outbound to `https://api.deepseek.com/anthropic/v1` with `DEEPSEEK_API_KEY`; no page fetch |
+| `wallet_offer`, `wallet_pay`, `wallet_budget_request`, `wallet_budget_delegate`, `wallet_budget_disable`, `wallet_budgets`, `wallet_report`, `wallet_reconcile` | face `wallet.ts` (in-process, registered after `bootFace` and only when the wallet home is configured) | the one HTTP client Kairos has, and it is not a fetch tool: before any request leaves the face the URL's host must be one a mandate the caller can spend names (agentpay's `requireMandateHost` pre-flight refuses `host_not_allowed` first); loopback, link-local, RFC 1918, unique-local, `.local` and unparsable hosts are refused outright (`isPrivateHost`; lifted only on the local chain `eip155:31337`, `LOCAL_NETWORK`); the wallet's fetch never follows a redirect (`noRedirectFetch`: a 3xx is a `host_not_allowed` refusal, since the landing host was never checked); `wallet_offer` sends no model-supplied body or headers. Absent from every bot (the allow-list mask), refused for a bot by the caller rule anyway; `wallet_budget_request` is Gate 3 (§4.7) |
 | `ask_user_question` | `tool-ask-user` (face overlay) | §4.3; the answer is model-visible, so not a gate |
 | `mcp__alpaca-kit__*` | the operator's MCP row | §2.7 registration matrix |
 | `mcp__akshare__*` | project `mcp-akshare` row | public A-share/other market queries, unguarded; check source errors and truncation |
@@ -557,6 +562,9 @@ files.
 | `overlay.ts` | the twelve host rows `dsh-base` does not mount, `satisfies`-checked against each plugin's own config type |
 | `akshare.ts` | project AKShare MCP defaults, composed below operator profile/home patches |
 | `orders.ts` | Gate 2 decision logic, pure: `isOrderTool`, `effectiveApprovalPolicy`, `orderApprovalDecision`, `describeOrder`, `hasApprovalGrant`, `isGatedTool`, `orderGuardReason`, `auditOrderTools`, `OPERATOR_GATED_MARKER` — depends on nothing (structural types only) |
+| `budgets.ts` | Gate 3 decision logic, pure, built to Gate 2's shape: `isBudgetTool` (`BUDGET_RAW_NAME`, exact — the face registers the tool itself, so no server prefix), `requesterOf` (total: the live preset from the last `agent-preset/selected` event else the header, `origin`, `parentSession`), `classifyRequester` (the one ordered rule: `origin === 'subagent'` → child; no preset or the default → principal; else bot), `describeBudgetRequest` (purpose ≤ `PURPOSE_CHARS`, limit, per-call cap, validity, every host in full), `budgetRequestRefusal` (more than `MAX_BUDGET_HOSTS`, `*`, `*.<tld>`, malformed hosts — refused before any card), `budgetApprovalDecision` (bot or child denied in the face's words before the `never` and `ask` branches), `budgetGuardReason` (via `hasApprovalGrant`) |
+| `wallet.ts` | the agent wallet: `installWallet` (synchronous through registration; `walletHomeOf`; not configured when `config.json` is absent, `resolveConfig` refuses — with an EMPTY env, the shell's `AGENTPAY_*` never consulted — or `lockedBy` names a live pid; else one `CommandContext` with `lock: true` and `requireMandateHost: true`, the eight `WALLET_TOOLS` registered through `walletToolDefinition`, `verifyMandates` once after registration disabling and naming what does not recover to the payer), `callerOf` (the caller rule over `requesterOf`/`classifyRequester`; throws for a bot, and for a child on a `principalOnly` tool), `isPrivateHost` + `LOCAL_NETWORK` + `privateHostRefusal`, `noRedirectFetch`, `callTitle`/`resultTitle` (the pending and completed card titles), the single-flight balance cache (`BALANCE_TTL_MS`, `BALANCE_TIMEOUT_MS`), reconcile-on-load (`RECONCILE_MIN_INTERVAL_MS`), `face-state.json`, `GET /data/wallet.json`, `spendFor` and `walletTools` seams; `WalletInstall.dispose` unregisters and releases the lock |
+| `wallet-payload.ts` | `/data/wallet.json`'s body as pure functions: `usd` (atomic → six-decimal string), `mandateView`, `paymentView`, `spendOf` (by workspace id and by session; `unattributed_usd` for rows with no channel), `channelSpend` (the landing tile), `alertsOf` (every alert kind from the same inputs; `unexplained_outflow` compares the balance's fall with the ledger's settlement since the last look), `buildWalletPayload`, `nextFaceState`; `MAX_PAYMENTS` |
 | `setup.ts` | one-shot `$DSH_HOME/profiles/<name>` creation; refuses to overwrite |
 | `http.ts` | `HttpError`, `readBody` (4,096 B cap → 413), the fixed `FORBIDDEN` body |
 | `static.ts` | `/`, `/market`, `/account`, `/client/*` with a traversal-safe resolver; the `RouteRegistrar` contract |
@@ -610,16 +618,17 @@ in §9.
 
 | Route | Module | Does |
 |---|---|---|
-| `/`, `/market`, `/account`; `/client/*` | `static.ts` | pages and assets; no fence, no cache headers; path containment on the resolved absolute path |
+| `/`, `/market`, `/account`, `/wallet`; `/client/*` | `static.ts` | pages and assets; no fence, no cache headers; path containment on the resolved absolute path |
+| `GET /data/wallet.json` | `wallet.ts` | fence first; `{ok:true, configured:false, reason, home}` when no wallet is installed, else the spec §4.4 body: address, network, token, balance (`{usd, at}` from a single-flight cache — one RPC read per minute, 3 s timeout — or `{unavailable}`), every mandate with its chain-effective `remaining_usd`, the newest `MAX_PAYMENTS` ledger rows with their `context`, spend by channel and session, the alerts block, and `reconcile` when loading the page ran one (only with an RPC, only when rows are `rejected`/`unknown`, at most once a minute). Never serializes the key; a store or RPC error is the fixed `request failed`. Writes `face-state.json` after a look that read the balance |
 | `GET /data/market.json`, `/data/account.json` | `data.ts` | fence first, then cache, then spawn `$FACE_PYTHON scripts/face_data.py <mode>` from the repo root (market: 600 s budget, 15 min TTL; account: 30 s, 60 s); single-flight; a later failure re-serves the last good payload flagged `stale:true`; with nothing to fall back on, 503 carrying the producer's own `{ok:false}` when it wrote one, the fixed `producer failed` when it exited 0 with no output, or `producer spawn failed` + the error code (`ENOENT`, `null` for a timeout kill, an exit number) — **never the child's error text**, which carries stderr and possibly keys |
 | `GET /data/channels.json` | `channels.ts` | **reconciles on every GET**: registry `create` per directory, `attachSession`, `seedRoster`; returns `{root, channels, ungrouped, archived}` |
-| `POST /data/channels/overview` `{workspaceId}` | `channels.ts` | reconcile + `status.yaml`, thesis, the whole journal newest-first (the client folds entries past five), backtests newest-first with the newest dated one parsed as `latest`, file list, roster |
+| `POST /data/channels/overview` `{workspaceId}` | `channels.ts` | reconcile + `status.yaml`, thesis, the whole journal newest-first (the client folds entries past five), backtests newest-first with the newest dated one parsed as `latest`, file list, roster; `spend: {settled_usd, count}` through the optional `ChannelRouteDeps.spendFor` seam — present only when the wallet is configured AND the channel has a settled payment, which is why `main.ts` installs the wallet before these routes |
 | `POST /data/channels/agents` `{workspaceId, agents[]}` | `channels.ts` | `setRoster` → `channels.json` (409 on a corrupt file), then a dated line to `roster.log` and stdout |
 | `POST /data/channels/bots` `{workspaceId, bots[]}` | `channels.ts` | `setBots` → `channels.json` (`bots[]` beside `agents[]`; 400 an id outside the bot grammar or more than `ROOM_CAPS.maxMembers` ids, 404 no such channel, 409 a corrupt file), then a dated `bots` line to `roster.log`. The overview answers `bots` (the roster) and `allBots` (every preset dsh reports, `broken` reasons included) |
 | `POST /data/channels` `{name}` | `channels.ts` | `NAME_RE` + NFC; copies `_template` (409 if exists); a reconcile failure after the copy is a warning, not a 500 — the directory exists and a 500 would make the retry 409 |
 | `GET /data/sessions-meta.json`; `POST /data/sessions/archive`, `/delete` | `sessions.ts` | the archive set (409 on un-archiving a host-archived id — the host is add-only at this pin); delete reads the session header's `cwd` from the first zstd frame and `rm -rf`s **only if it is inside the repo root** (ids are unique across every project under `$DSH_HOME/sessions`); an unreadable header is a 404, never "safe" |
 | `GET /data/memory.json`, `POST /data/memory/skill` | `panels.ts` | the skill catalog grouped by pack; one skill's content |
-| `GET /data/plugins.json` | `panels.ts` | loader rows (config never serialized) + `mcp__*` / `agent_*` tool schemas |
+| `GET /data/plugins.json` | `panels.ts` | loader rows (config never serialized) + `mcp__*` / `agent_*` tool schemas + `walletTools: [{name, description}]` from the `PanelDeps.walletTools` seam (what the FACE registered, not a prefix scan; `[]` when no wallet is configured) so money-moving tools are visible (charter Rule 5) |
 | `GET /data/agents.json`; `POST /data/agents/connect`, `/disconnect`, `/rescan` | `panels.ts` | probe fifteen known CLIs (`--version` 3 s, auth 10 s, 60 s cache); connect writes `agents.json` and registers `agent_<bin>` live; disconnect disposes it |
 | `GET /data/bots.json` | `bots.ts` | every directory under `bots/` in the id grammar, `listBots` merging dsh's own roster in: `broken` carries dsh's reason, `listed:false` marks a directory the roster did not report |
 | `POST /data/bots` `{name?, id?, description?, soul?}` | `bots.ts` | `createBot`: id = the one given or `proposeBotId(name)`; copies `_template` and writes `preset.yml`, `SOUL.md` and the rendered composition. 400 an id outside the grammar or reserved, 400 a soul carrying `{{` or empty, 409 the directory exists (never overwritten), 500 `_template` missing. The returned row reads `listed:false` — it is built without the roster, which re-scans on the next GET |
@@ -640,6 +649,11 @@ in §9.
 | `$DSH_HOME/face/channels.json` | `roster.ts` | `{version:1, channels:{<wsId>:{agents[], bots[]}}}`; file lock + atomic write, mode 0600; the one file that needs a cross-process lock because the reconcile writes on GET |
 | `$DSH_HOME/face/roster.log` | `roster.ts` | append-only, one dated line per operator roster write |
 | `$DSH_HOME/face/agents.json` | `panels.ts` | `{connected:[{bin,label}]}` |
+| `$DSH_HOME/face/agentpay/config.json` | the operator (`agentpay init --home`), never the face | the payer key; its absence is the "not configured" state the face runs in |
+| `$DSH_HOME/face/agentpay/mandates.json` | agentpay's store through `wallet.ts` | a root mandate on a card-approved `wallet_budget_request`; a sub-mandate on `wallet_budget_delegate` (no card); `isEnabled=false` on `wallet_budget_disable` and on a mandate `verifyMandates` cannot recover; budget counters on every payment (`adjustBudget`, chain-wide) |
+| `$DSH_HOME/face/agentpay/ledger.jsonl` | agentpay's ledger through `wallet.ts` | append per payment attempt with `context` (`channel`, `channelName`, `session`, `parentSession`, `origin`, `callId`); status patched by `reconcile` |
+| `$DSH_HOME/face/agentpay/wallet.lock` | `MandateWallet` (`lock: true`) | the face's pid, refreshed on save, released by `dispose`; a live pid refuses a second install and the CLI's mutating commands; a dead pid's lock is removed by `lockedBy` |
+| `$DSH_HOME/face/agentpay/face-state.json` | `wallet.ts` | `{last_balance, ledger_settled_at_that_time}` after any `/data/wallet.json` look that read the balance; the outflow alert's anchor |
 | `$DSH_HOME/sessions/<slug>/<id>/` | `deleteSession` | removed, cwd-fenced |
 | `strategies/<name>/` | `createChannel` | copied from `_template`, never overwritten |
 | `bots/<id>/` | `createBot`, `updateSoul` | copied from `_template`; `preset.yml`, `SOUL.md` and the composition's persona row rewritten together; never overwritten by create |
@@ -664,7 +678,8 @@ by the face's `WorkspaceLike`). Recorded, not fixed.
 | `DSH_TELEMETRY_DISABLED` | `boot.ts` | unset | any non-empty value (`0`, `false` included) disables the telemetry row |
 | `DSH_PERMISSION_MODE` | dsh, not the face | `workspace-write` | `danger-full-access` sets approval policy `never`: it disarms the sandbox-escalation card but **not** Gate 2, which then denies in its own words |
 | `ALPACA_KIT_ENABLE_ORDERS` | the MCP child only | unset | Gate 1; the face cannot read it and consults the tool registry instead |
-| `FACE_SMOKE` | tests | unset | `=1` enables the five real-boot tests |
+| `FACE_SMOKE` | tests | unset | `=1` enables the real-boot tests |
+| `FACE_AGENTPAY_HOME` | `wallet.ts` (`walletHomeOf`) | `$DSH_HOME/face/agentpay` | the wallet home; `""` means default. The shell's `AGENTPAY_*` variables are NOT read by the face — its wallet is the `config.json` in the home and nothing else |
 | `DEEPSEEK_API_KEY`, `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY` | dsh's credential seam; the producer; the MCP row | — | not auto-loaded from the repo's `.env.*` files |
 
 Every child the face spawns for a local agent run or probe has these scrubbed — an enumerated
@@ -715,6 +730,21 @@ runs inside the face — a dsh tree composed without the face has Gate 1 alone. 
 not containment** (§9, R2), and the log proves a grant was recorded, not who recorded it (§9,
 R3a). Drill status is in §7.4: the refusing half is automated, the admitting half is unit-tested
 only, the human half has not been run.
+
+**Gate 3, the budget card** (`face/src/budgets.ts`, registered by `bootFace` beside Gate 2 with
+its own prepended listener and its own guard, 2026-09-20) is the same two-part shape applied to
+one face-registered tool, `wallet_budget_request`, matched by its exact name. What differs: WHO
+asks is decided before WHAT is asked — the listener reads the requester off the calling session
+(`requesterOf`, the live preset outranking the header) and denies a bot ("has no wallet") or a
+child task ("ask the parent to delegate") in its own words before the `never` and `ask` branches,
+so the transcript never says an operator refused a card they never saw; a request that cannot be
+read on one card (more than five hosts, `*`, `*.<tld>`) is denied before any card; and the `ask`
+line carries the five terms and every host in full plus the requester class (the boot wiring has
+no channel resolver, so the card reads `from no channel by principal`; the channel is on the
+tool RESULT instead). The body (`wallet.ts`) creates the mandate in `signed` state — the
+operator's click is the approval, the logged `approval/asked` + `approval/decided{allowed-once}`
+pair its audit. Paying raises no card: a mandate is the pre-approval. Same residuals as Gate 2
+(§9, R-W1, R-W5, R-W6).
 
 ---
 
@@ -937,18 +967,41 @@ flushed, then ONE `followup` naming who answered and who passed → Kairos's syn
 step is a known event; the `room` projection folds them; the client renders each answer in the
 bot's voice as it lands and the strip from the projection plus the members' own pulses.
 
+**6.9 A budget and a payment.** Operator runs `agentpay init --home $DSH_HOME/face/agentpay
+--from-deployment <name> --key …` → the face boots, `installWallet` finds `config.json`, takes
+`wallet.lock`, registers the eight tools before the first `await` and logs `wallet: 8 tools
+registered, home …` → Kairos, in a channel session, calls `wallet_budgets` (nothing held) → calls
+`wallet_budget_request {purpose, limit_usd, hosts}` → the prepended Gate 3 listener classifies the
+requester as principal, finds the hosts readable, returns `ask` with the `BUDGET - …` line →
+dsh raises the card and logs `approval/asked{callId}` → the operator answers →
+`approval/decided{outcome}` → the guard admits only on a logged `allowed-once` for that `callId`
+→ the body re-derives the terms from `exec.arguments` and creates a root mandate in `signed`
+state (Deny: an error result the model reads, nothing in the store) → Kairos calls `wallet_pay
+{url}` → `callerOf` reads the session header (principal), `channelFor(cwd)` names the channel →
+`isPrivateHost` (refused on any network but the local chain) → agentpay's `requireMandateHost`
+pre-flight → `MandateWallet.fetch` with `context` and `caller`: the 402, the policy gate over the
+whole chain, a single-use EIP-3009 authorization, the retry, the settlement in the payee's
+response → a ledger row carrying the channel, session and `callId` → the tool value is the
+envelope, rendered as a pay card (`$0.001 · settled · <host>`; a refusal carries
+`payment_model_context` and renders in the danger colour) → `/wallet` lists the mandate and the
+payment, attributed; the channel landing page gains its `spend` tile. A child task of that
+session pays only from a sub-mandate its parent delegated with `wallet_budget_delegate
+{for: {children: true}}` (signed at once, no card, bounded by the parent, its spend counted up the
+chain); a bot is refused by the caller rule and never sees the tools.
+
 ---
 
 ## 7. Tests and drills
 
 ### 7.1 Commands that work
 
-| Command | From | Needs | Measured 2026-09-09 |
+| Command | From | Needs | Measured 2026-09-21 |
 |---|---|---|---|
-| `python -m pytest` | repo root | nothing — offline, no keys, no bed | 388 passed, ~4 s |
-| `cd face && npm test` | `face/` | nothing — no port, no key | 313 tests, 307 pass, 6 skipped |
+| `python -m pytest` | repo root | nothing — offline, no keys, no bed | 388 passed, ~4 s (2026-09-09) |
+| `cd face && npm test` | `face/` | `payment/node_modules` installed (`(cd payment && npm ci)`); no port, no key | 541 tests, 529 pass, 12 skipped |
 | `cd face && npm run typecheck` | `face/` | | clean |
-| `cd face && FACE_SMOKE=1 npm test` | `face/` | boots six real trees into `mkdtemp` homes, binds a port; still no LLM or key | the six skipped tests; 313/313, ~10 s |
+| `cd face && FACE_SMOKE=1 npm test` | `face/` | boots real trees into `mkdtemp` homes, binds ports; the wallet smokes run a stub payee on loopback; still no LLM or key | the twelve skipped tests; 541/541 |
+| `cd payment && npm test` | `payment/` | spawns its own hardhat nodes | 196 |
 
 ### 7.2 The Python suite
 
@@ -975,7 +1028,9 @@ order path.
 
 ### 7.3 The face suite
 
-313 tests (307 pass, 6 skipped without `FACE_SMOKE=1`) across `channels`, `orders` (pure gate
+541 tests (529 pass, 12 skipped without `FACE_SMOKE=1`; 313 at the 2026-09-09 pass this
+paragraph was written against — the market, subagent and wallet suites came after) across
+`channels`, `orders` (pure gate
 logic: raw and minted names, renamed server caught, read-only listing not gated, deny under
 `never`, one-shot grants for this `callId` only, marker only on `mcp__` tools, the guard reasons),
 `panels`, `data` (TTL, single-flight, stale, 503 bodies never leak, fence), `mapper` (against
@@ -992,7 +1047,35 @@ name for a session: the host for no preset, for `kairos` and for a blank one, a 
 display name, the id when the roster has no name for it or never loaded at all — and the FALLBACK
 is never the host, though a roster that names a bot `Kairos` is obeyed), `bot-plugin` (both
 registrations ride `ctx.effect` and return disposers; `expandAllow`), `persona`, the four room
-suites, and the six `FACE_SMOKE` boots.
+suites, the wallet suites, and the `FACE_SMOKE` boots.
+
+The wallet suites are `budgets` (pure, like `orders`: the exact-name match, `requesterOf` reading
+the header and the LAST `agent-preset/selected` event, total on a missing header; the three
+requester classes; the card line carrying every term and every host un-elided, the purpose
+bound visible; the refusals — six hosts, `*`, a bare top-level wildcard with or without a port,
+malformed hosts; a bot and a child denied in the face's words BEFORE the request is looked at
+and before `never`; `never` denying itself; the guard satisfied only by this call's and this
+tool's `allowed-once`), `wallet` (offline, over a fake context on a temp home with the wallet
+package's stub payee: `walletHomeOf`, `isPrivateHost` over every range and the fail-closed
+parse, the card titles, the payload builders and every alert kind, `installWallet` not
+configured with no `config.json` or a refusing config and the shell's `AGENTPAY_*` ignored,
+then on a stub payee: eight tools registered, the caller rule for a bot and for a child on a
+principal-only tool, `context` from the header, holder routing, the page, `spendFor`, the lock
+refusing a second install; on `eip155:84532` a loopback payee refused before any request and a
+public host reaching agentpay's own pre-flight; a 3xx refused as `host_not_allowed`),
+`wallet-model` (the client's pure model: usd strings, tx links only on Base Sepolia, the
+not-configured body, alerts grouped by level, mandate rows with holder and effective remaining,
+status precedence, payment attribution, spend grouping, the pay line for settled / refused /
+402), `panels` (`walletTools` is the seam's list, `[]` when absent), `channels` (`spend` on the
+overview only when the seam answers), `static` (the `/wallet` route pin), and under
+`FACE_SMOKE=1`: `budget-gate` (Gate 3 on a real tree through a stand-in registered AFTER boot
+under the exact name: the principal is asked with every host on the line, a bot preset denied,
+an agentless call denied, the guard refusing the body without a grant), `wallet-smoke`
+(`installWallet` on a booted tree with the stub payee on the local network: a gateway-created
+principal session pays through dsh's own `tools.execute` and the ledger row carries that
+session's id; a bot is refused) and `wallet-approve-smoke` (being written in parallel with
+this pass: the positive path of Gate 3 — a test answerer granting the card, the guard admitting,
+the body creating the mandate — the R-W5 twin of the order gate's missing admit test).
 
 The room suites are `room-rules` (the caps block verbatim, `AGENTS.md`'s caps sentence pinned to
 `ROOM_CAPS`, mention resolution, `isPass`, `finalTextOf`, dispatch validation and its two result
@@ -1051,6 +1134,8 @@ tool content (D12) and never woke Kairos; a home session writes its journal and 
 | **Bots** — manual (`face/README.md`) | create → home → persona → tools named and not named → `{{` refused; the sidebar buckets the home session under the bot; a restart's boot line lists the id; the transcript names the speaker on all four surfaces (second run) | no automated test pins the four naming surfaces or the reconnect path; per-message attribution in a room is the Room rows below | passes as of 2026-09-07; re-run 2026-09-08 on `main` with the R12 fix in, passed |
 | **Room** — automated (`room-smoke`) | a real round on a stub model: dispatch → three members (answered / passed / failed) → answers on the log before one wake → synthesis in one turn; members parented, preset-joined, `read-only` first, `AGENTS.md` chain, no `dispatch`; the projection on the row and in the cache; the `@` route with a member's write refused in content; a home refused on `../SOUL.md` | that a human can read the strip; a real model's behaviour on the four standing rules | passes as of 2026-09-09 |
 | **Room** — manual (`face/README.md`, eight parts) | check-in → dispatch line → attributed bubbles and the strip → the fold → `@` → an inline member question with the needs-you mark → a member's write refused → `left` and re-check → a restart keeps states and titles | per-message attribution across a mux reconnect; convergence of four voices on one model (spec §12, R3); the peer-`@` continuation, which the operator's next `@` superseded before it ran (by design) — that path stands on the engine tests | **Drilled and PASSED 2026-09-09** on the operator's own face (`feat/rooms` @ `31b2e68`, two fresh template bots, DeepSeek as the model); one client finding (F1, the strip missing on a session's first round) fixed the same day and re-verified |
+| **Budget card** — automated (`budget-gate`, `wallet-smoke`, `wallet-approve-smoke`) | Gate 3 is registered on a real tree and asks the principal with a decidable line; a bot and an agentless call are denied; the guard refuses without a grant; a real session's payment through dsh's registry lands on the ledger attributed to it; the approve path once `wallet-approve-smoke` lands | that a human can read the card; a real 402 payee over the network; containment (R-W1, R-W2, R-W6) | `budget-gate` and `wallet-smoke` pass as of 2026-09-21; `wallet-approve-smoke` in progress |
+| **Budget card** — manual (`face/README.md`, in a scratch harness home on `payment/`'s local demo stack) | the card names purpose, limit and hosts; Deny leaves nothing on `/wallet`; Approve puts the mandate there; a paid fetch renders a pay card with a tx and `/wallet` shows the payment | | **not yet run** — the operator records the PASS line |
 | **Ask-user** — `ask_user_question` offered, called, answered, cancelled | the seam | that it is a gate (the answer is model-visible); the instruction half (README step 6 — on a thin brief that does not name the tool, Kairos asks before it builds, per `AGENTS.md`), left to the operator and not run | passed 2026-09-03 with a real model, 26 tools offered; re-run 2026-09-08 on `main`, passed (34 tools offered; answered, then Stop → `closed · cancelled`) |
 
 ---
@@ -1198,6 +1283,32 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   Three things push against it and none removes it: the tool result names who was NOT called, the
   operator's `@` reaches any rostered voice directly, and the round-end text asks for the
   disagreements before the conclusion.
+- **R-W1 — A budget card is answerable from the workspace.** R3a applied to Gate 3: a shell turn
+  can answer the card it raised over loopback, and can mint a principal session over loopback and
+  request from it. The log then holds a genuine pair.
+- **R-W2 — The payer key is readable by every shell turn.** `config.json` sits under `$DSH_HOME`,
+  which the sandbox protects from WRITES only; a copy of the home under `$TMPDIR` runs the CLI
+  with self-approved mandates and no card. Unlike R1 there is no paper-hostname analogue: the
+  float the operator keeps in the wallet is the bound, and the `/wallet` outflow alert (the
+  balance fell by more than the ledger settled since the last look) is the detection (charter
+  D16).
+- **R-W3 — Attribution is exact for tool calls and absent for the CLI.** A payment through
+  `wallet_pay` carries the channel, session and `callId` the face READ off the session; a shell
+  turn running `agentpay pay` directly records whatever `--context` it chose, or nothing, and
+  lands in `unattributed_usd`.
+- **R-W4 — The hosted facilitator fails most concurrent settlements** (3 of 5, measured in
+  `payment/`'s README). The face does not queue: several child tasks paying at once will see
+  refusals recorded honestly as `rejected` and released by reconcile.
+- **R-W5 — The budget card's positive path has Gate 2's test gap.** `budget-gate` proves ask,
+  deny and the guard's refusal; the grant → guard → body path is the `wallet-approve-smoke` test
+  being written, and the manual drill covers it until then.
+- **R-W6 — Gate 3 is a gate, not containment** (R2 applied): a `tools/execute` wrapper can
+  rename or mutate a call after the guard, and the card describes what the body will create only
+  absent such a wrapper.
+- **R-W7 — The wallet tools are an HTTP client inside the face.** The charter disabled
+  `tool-web`'s fetch on purpose; what keeps `wallet_offer`/`wallet_pay` from being that fetch tool
+  is the mandate-host pre-flight, the private-range refusal (lifted on the local chain only) and
+  the no-redirect rule (§3.6) — rules in the face and in agentpay, not a network boundary.
 
 ---
 
@@ -1237,6 +1348,18 @@ In order; each with what "done" is and which charter row it reopens.
 10. **A2A voices** — the charter's §7.1 admits an agent reached over A2A as a voice; no spec,
    nothing built; the day anything outside this machine can call in, the last row of the
    charter's §8 revisit table fires ("A second human, or any hosted deployment").
+11. **The agent wallet** — built 2026-09-20/21 (the eight tools, Gate 3, `/wallet`); the
+   automated half of its drill passes, the manual half is not yet run (§7.4). What the payment
+   gap list leaves open, in order: **(B) a first real payee** — every payment so far has gone to
+   `payment/`'s own demo payee or the wallet package's stub; a paid resource Kairos actually
+   wants (a data API behind x402) is what turns the wallet from a drill into a tool, and
+   `wallet_offer` against it is the first step; **(B) `upto` and batching** — the wallet signs
+   `exact` only, one authorization per call; a metered resource or several children paying at
+   once (R-W4) want the `upto` scheme and a send queue, and the hosted facilitator's concurrency
+   failure stands until one of them lands; **(C) mainnet, funding and custody** — no mainnet
+   record, no funding flow beyond "send test USDC here", no facilitator failover, and the key is
+   a raw EOA readable by every shell turn (D16, R-W2); a mainnet key placed in the wallet home
+   fires the charter's §8 trigger and reopens D16 and §4 before anything else.
 
 ---
 
@@ -1258,5 +1381,6 @@ In order; each with what "done" is and which charter row it reopens.
 | `DSH_PERMISSION_MODE` | dsh | sandbox preset; `danger-full-access` ⇒ approval policy `never` |
 | `DSH_TELEMETRY_DISABLED` | face boot | any non-empty value disables telemetry |
 | `FACE_PORT`, `FACE_PROFILE`, `FACE_PYTHON` | face | port, profile name, producer interpreter |
-| `FACE_SMOKE` | face tests | enables the five real boots |
+| `FACE_AGENTPAY_HOME` | face `wallet.ts` | the wallet home, default `$DSH_HOME/face/agentpay`; the shell's `AGENTPAY_*` are never read by the face |
+| `FACE_SMOKE` | face tests | enables the real boots |
 | `FASTMCP_LOG_LEVEL` | MCP row | `WARNING` silences FastMCP's INFO noise; never edit `server.py` for it |

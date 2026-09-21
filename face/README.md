@@ -2,7 +2,7 @@
 
 One Node 22 process. It boots the DeepSeek Harness from the `face` profile
 (bundles: `@deepseek-ai/dsh-base` only), inserts its own host rows on top, and
-serves the operator's chat UI — and the two read-only instrument pages below —
+serves the operator's chat UI — and the three read-only instrument pages below —
 at http://127.0.0.1:3090/. No build step — `tsx` runs the TypeScript directly.
 Specs: `../docs/superpowers/specs/2026-08-30-face-chat-light-design.md` and
 `../docs/superpowers/specs/2026-08-31-face-instruments-design.md`.
@@ -14,7 +14,7 @@ Project: `kairospans-projects/evo-alpha`.
 
 Use `face/` as the Vercel project root. `vercel.json` runs the dependency-free
 `node scripts/build-static.mjs` build and publishes `dist/`; locally, run
-`npm run build`. The output contains the three pages (`/`, `/market`, `/account`)
+`npm run build`. The output contains the four pages (`/`, `/market`, `/account`, `/wallet`)
 and `/client/` assets only. `.vercelignore` limits CLI uploads to the browser
 sources and build configuration, excluding the local host and its runtime data.
 
@@ -70,6 +70,7 @@ workspace" below means outside the whole repo.
 | `DSH_TELEMETRY_DISABLED` | unset | ANY non-empty value (`0` and `false` included) disables the telemetry row |
 | `DSH_PERMISSION_MODE` | `workspace-write` | sandbox mode. `danger-full-access` also sets the approval policy to `never` — it DISARMS the Gate-2 surface below |
 | `FACE_AKSHARE_MCP_COMMAND` | `~/.local/bin/akshare-mcp` (expanded absolute path) | AKShare MCP executable; no shell command or arguments |
+| `FACE_AGENTPAY_HOME` | `$DSH_HOME/face/agentpay` | the agent wallet's home (see "Agent wallet"); an empty value means the default. The shell's `AGENTPAY_*` variables are NOT read by the face |
 
 `FACE_PORT` and `FACE_PROFILE` read an empty value as unset, not as a literal:
 `FACE_PROFILE=""` would otherwise resolve to `$DSH_HOME/profiles` itself, and
@@ -118,6 +119,93 @@ The `mcp-akshare` row is composed after the base bundle and before operator
 profile/home patches. An operator patch can replace its config or disable it
 with `- { id: mcp-akshare, disabled: true }`. No installed profile patch is
 rewritten to add this connection.
+
+## Agent wallet — paying for x402 resources inside approved budgets
+
+The face gives Kairos a wallet through `src/wallet.ts`, over the `payment/`
+submodule (agentpay: x402 V2 `exact` / EIP-3009 on the official `@x402/*`
+packages). Nothing is installed as an MCP row: the eight `wallet_*` tools are
+registered in-process on the root context, the way `dispatch` and `agent_<bin>`
+are, so each call knows WHICH session made it — attribution is read off the
+session header, never claimed in arguments. Spec:
+`../docs/superpowers/specs/2026-09-20-agent-wallet-design.md`.
+
+Set it up once. The wallet home is `$DSH_HOME/face/agentpay` (the face's own
+metadata directory in the harness home; `FACE_AGENTPAY_HOME` overrides):
+
+```bash
+(cd ../payment && npm ci)      # the substrate; again after EVERY submodule update —
+                               # src/wallet.ts imports it by relative path and needs its node_modules
+cd ../payment && npm run cli -- init --home "$DSH_HOME/face/agentpay" \
+  --from-deployment base-sepolia --key 0x…      # writes config.json (0600): the payer key, network, RPC, token
+```
+
+`--from-deployment` names a record under `payment/packages/contracts/deployments/`
+(`base-sepolia`, or `localhost` after `npm run deploy:local` on a local chain).
+Send test USDC to the address `agentpay address` prints; no ETH is needed
+(the payee's facilitator pays gas).
+
+**What boots when the home is absent.** The face runs; `installWallet` logs
+one line, `wallet: not configured (no config.json at …)`, registers nothing,
+`/wallet` shows the setup step, `/data/wallet.json` answers
+`{configured: false, reason, home}`, the plugin panel lists no wallet tools,
+and Kairos has no `wallet_*` tool at all. A `config.json` the CLI's own
+`resolveConfig` refuses is reported the same way with its message. The face
+reads the config file and nothing else: a shell session's `AGENTPAY_KEY` /
+`AGENTPAY_HOME` never redirects the face's wallet.
+
+**The lock.** When configured, the face takes `<home>/wallet.lock` (its pid,
+refreshed on every store save, released on shutdown) and is the home's only
+writer while it runs. agentpay's mutating CLI commands (`pay`, `mandate-*`,
+`reconcile`) refuse a locked home naming the pid; `mandate-list`, `report`,
+`ledger`, `address`, `balance` and `offer` still read it. A second face on the
+same home — or the same face installing twice — boots NOT configured with
+`locked by pid …`; a dead pid's lock is removed on the next look. The boot line
+when it works: `wallet: 8 tools registered, home … (eip155:84532, 0x…)`.
+
+**The eight tools**, all Kairos's; a bot never sees one (its allow-list mask
+excludes them without naming them, and the caller rule refuses a bot preset
+anyway); a child task (origin `subagent`) gets the first two and `wallet_budgets`:
+
+| Tool | Who | What |
+|---|---|---|
+| `wallet_offer {url, method?}` | principal, child | one probe, no body, no model headers; the 402 terms without paying |
+| `wallet_pay {url, method?, body?, headers?, mandate_id?}` | principal; a child with a held sub-budget | the paid fetch; the envelope (`paid`, `amount_usd`, `tx`, `ledger_status`, body ≤ 8 KB) is the tool value whether `ok` is true or false — a refusal carries `payment_model_context` the model needs |
+| `wallet_budget_request {purpose, limit_usd, hosts[], valid_for_hours?, per_call_usd?, category?}` | principal only | **Gate 3**: the budget card; on Approve a root mandate exists, on Deny an error the model reads |
+| `wallet_budget_delegate {parent_id, limit_usd, for: {children:true} \| {session}, …}` | principal only | a sub-budget for this session's own child tasks, signed at once (narrower than the parent, its spend counted up the chain); no card |
+| `wallet_budget_disable {id}` | principal only | reclaim: `isEnabled=false` |
+| `wallet_budgets {}` | principal, child | what the caller may spend now, with effective remaining, plus address, balance and the standing alerts |
+| `wallet_report {}` | principal only | totals, by strategy / session / host / resource, denials |
+| `wallet_reconcile {}` | principal only | settle `unknown` rows against the chain |
+
+Amounts cross the tool boundary as USD strings (`"0.25"`). Before any request
+leaves the face: the host must be one a mandate the caller holds names
+(agentpay's `requireMandateHost` pre-flight); loopback, link-local, private
+ranges and `.local` are refused outright on every network but the local chain
+`eip155:31337`; a redirect is refused, never followed. The wallet is not a
+fetch tool, and these three rules are what keep it from being one.
+
+**`/wallet`** is the third instrument page, beside `/market` and `/account`:
+address and USDC balance (`unavailable` when the RPC does not answer in 3 s;
+one RPC read per minute), every mandate as a row (purpose · holder · effective
+remaining / limit · per call · valid until · status), the newest payments with
+tx links (Base Sepolia only), spend by strategy and by session, and an alerts
+block — budget exhausted or under 10 %, balance below the root budgets'
+remaining, `unknown` rows, mandates expiring within a day, a mandate whose
+signature does not recover to the payer (disabled at boot), and **unexplained
+outflow**: the balance fell by more than the ledger settled since the last
+look, which is what raw-key spend outside the face looks like. Loading the page
+runs `reconcile()` when rows are pending, at most once a minute; nothing runs
+on a timer. A pay card renders inside the answer trace for every `wallet_pay`;
+the channel landing page shows a `spend` tile once a channel has a settled
+payment; the plugin panel lists the wallet tools by name.
+
+**Never set a mainnet key here.** The key in `config.json` is readable by every
+shell turn — Kairos's, any bot's, any child's — because the sandbox denies
+writes only, and there is no paper-hostname pin to bound what a copied key can
+do (charter D16). Gate 3 holds the tool surface; the float in the wallet is the
+bound. Keep it small and testnet; a mainnet key placed in the wallet home is a
+charter §8 trigger, not a configuration step.
 
 ## The profile
 
@@ -1447,3 +1535,132 @@ member sessions as plain `untitled` rows (shown and counted, not yet labelled by
 handed an un-rostered `@` as a prompt, assumed the voice would answer — `AGENTS.md` should say that
 such an `@` named nobody (the sentence landed the same day, in its Rooms paragraph); the peer-`@` continuation was superseded by the operator's next `@` before
 it ran (by design), so that path stands on the engine tests, not on this drill.
+
+## The budget-card drill (run after any face, dsh or payment change)
+
+A gate never pulled is presumed broken; a wallet that has only ever paid a stub
+is presumed decorative.
+
+**What actually holds Gate 3 here.** `src/budgets.ts`, registered in `bootFace`
+beside Gate 2 with the same two parts: a prepended `tools/pre-execute` listener
+that answers `ask` for `wallet_budget_request` — by its exact name; the face
+registers the tool itself, so there is no server prefix to survive — with a
+line naming purpose, limit, per-call cap, validity, every host in full and the
+requester; and a deny-only guard that admits the body only on a logged
+`approval/asked` + `approval/decided{allowed-once}` pair for that exact
+`callId`. Two things Gate 2 does not do: WHO asks is decided first (a bot
+preset or a child task is denied in the face's own words before the `never`
+and `ask` branches, so no card is raised and the transcript never says an
+operator refused one), and a request that cannot be read on one card — more
+than five hosts, `*`, `*.<tld>` — is denied before any card. Paying raises no
+card: the mandate is the pre-approval, and a payment meets a mandate.
+
+**The automated half — `FACE_SMOKE=1 npm test`**, no key, no model, no chain:
+
+- `budget-gate.test.ts` boots a real tree and registers a stand-in under the
+  exact name AFTER boot (the order the face uses), then fires
+  `tools/pre-execute`: the principal gets `ask` with every host on the line; a
+  bot preset and an agentless call are denied; `bash` is left alone; and the
+  guard, through the registry's real `execute`, refuses the body without a
+  grant. It does not prove the card renders or the approve path.
+- `wallet-smoke.test.ts` installs the real wallet on a booted tree, on the
+  local network with the wallet package's stub payee on loopback and a root
+  mandate signed through the wallet API: a gateway-created principal session
+  pays through dsh's own `tools.execute`, and the ledger row carries THAT
+  session's id — attribution measured where the face reads it; a bot is
+  refused.
+- `wallet-approve-smoke.test.ts`: the positive path — a scripted model asks
+  for a budget and then pays; a test answerer on `approval/request` grants one
+  session's card and rejects another's; the guard finds the pair, the body
+  creates the mandate, the payment settles with that session on its ledger
+  row; the denied session gets an error the model reads and leaves nothing
+  behind; a session under policy `never` is denied in the gate's words with no
+  `approval/asked` at all — the twin the order gate still lacks.
+
+Run it first; if it fails, stop — the cause is composition, not the model.
+
+**Step 0b, if you changed anything under `client/`.** Hard-reload;
+`registerStatic` sets no cache headers.
+
+**The manual half — the card needs your eyes**, in a SCRATCH harness home on
+`payment/`'s local demo stack, never your real home and never a real key:
+
+1. The stack, three terminals in `payment/` (its README, "Running the pieces
+   yourself"): `(cd packages/contracts && npx hardhat node --port 8545)`;
+   `npm run deploy:local` (writes `deployments/localhost.json`); the facilitator
+   with hardhat #3's key (`FACILITATOR_PK=… npm run facilitator`); `npm run payee`
+   (pays to hardhat #2; `curl -i http://127.0.0.1:4021/predict` answers 402).
+   All Hardhat dev keys are public; never use them with funds.
+2. A scratch home: `export DSH_HOME=$(mktemp -d)`; `npm run setup` in `face/`
+   (the profile), then `npm run cli -- init --home "$DSH_HOME/face/agentpay"
+   --from-deployment localhost --key <hardhat #1>` in `payment/`. Boot the face
+   against it. PASS, part one: the boot line reads `wallet: 8 tools registered,
+   home … (eip155:31337, 0x…)`, and the plugin panel lists the eight tools.
+   The private-host refusal lifts on this network and on this network only —
+   the drill's payee is loopback by construction; on any other network
+   `127.0.0.1` is refused before a request, whatever mandate names it.
+3. Open a channel session and ask Kairos for a budget: *"Request a budget of
+   $1 for 127.0.0.1:4021, valid one hour, purpose 'drill'."* PASS, part two: an
+   `approval · wallet_budget_request` card renders whose reason line reads
+   `BUDGET - "drill" · limit $1 · per call none · valid 1h · hosts 127.0.0.1:4021
+   · from no channel by principal` — purpose, limit, hosts, all on it. A card
+   that says only the tool's name is a click-through, not a decision.
+   **Deny.** The tool result is an error the model reads; `/wallet` lists no
+   mandate; `mandates.json` is unchanged.
+4. Ask again and **Approve**. PASS, part three: the mandate is on `/wallet`
+   (purpose `drill`, no holder, `1.000000` remaining, `signed`), and the
+   session log holds the paired `approval/asked` + `approval/decided`
+   (`allowed-once`) records under `$DSH_HOME/sessions`.
+5. Ask Kairos to fetch `http://127.0.0.1:4021/predict` with the wallet. PASS,
+   part four: no card; a pay card in the answer trace reads
+   `$0.001000 · settled · 127.0.0.1:4021` with a tx hash; `/wallet` shows the
+   payment attributed to this channel and session, the mandate's remaining
+   down by the price, and the channel landing page a `spend` tile.
+6. Optional: ask for a budget naming `*` (denied before any card, in the
+   face's words) and ask a child task to pay (refused with `no_held_mandate`
+   until Kairos delegates one with `wallet_budget_delegate`).
+7. Tear down: stop the face, `rm -rf "$DSH_HOME"`, stop the three terminals.
+   Your real harness home keeps whatever wallet it had — and no mainnet key.
+
+**What it proves.** The card carries what the operator decides on; Deny leaves
+nothing behind; Approve is one mandate with its audit pair; a payment inside
+it settles on chain with no card and lands on the ledger attributed to the
+session that made it; the operator can see all of it on `/wallet`.
+
+**What it does not prove.** Containment: a shell turn can answer the card over
+loopback (R-W1), read the key (R-W2) and run the CLI with no card; a
+`tools/execute` wrapper can mutate a guard-approved call (R-W6). A real payee
+over the network and the hosted facilitator's concurrency (R-W4). The approve
+path with a real model: the automated smoke and the drill below both drive the
+turn with a scripted model (the test `StubAdapter`), so what a real model does
+with the card's answer is not measured here.
+
+**Drilled and PASSED 2026-09-21** on `feat/agent-wallet` (the wallet commit
+`11c6d18`, payment submodule at `73fe702`), in a scratch `$DSH_HOME` on the
+local demo stack (hardhat 8545, the self-hosted facilitator on 3001 with
+hardhat #3, the example payee on 4021), the wallet initialised with hardhat #1
+(`$10000.000000` of MockUSDC). One deviation from the steps above: no model
+key was involved — the turn was driven by the test `StubAdapter` mounted as a
+scratch cordis plugin row (`- insert: [{ id, name: <abs path>.mjs }]` in the
+scratch profile's `cordis.patch.yml`, provider `stub`, selected with
+`session.selectModel`), scripted to request a budget of `$0.05` (per call
+`$0.01`, 1 h, host `127.0.0.1:4021`) and then pay `/predict`. Observed, in
+the browser: part one — the boot line `wallet: 8 tools registered, home …
+(eip155:31337, 0x7099…79C8)` and `/data/wallet.json` `configured: true`; part
+two — the card `approval · wallet_budget_request` with the line `BUDGET -
+"drill: ETH-USD predictions from the local payee" · limit $0.05 · per call
+$0.01 · valid 1h · hosts 127.0.0.1:4021 · from no channel by principal`;
+**Deny** → `answered · deny`, the trace shows `WALLET_BUDGET_REQUEST Error: the
+user rejected … · failed` and the script's follow-up `WALLET_PAY refused before
+signing · mandate_required` in the danger colour, `/wallet` lists no mandate;
+part three — ask again, **Approve** → `answered · approve`,
+`WALLET_BUDGET_REQUEST budget im_92c2e485ad5d · $0.050000`; part four — no
+card, the pay card `$0.001 · GET 127.0.0.1:4021/predict · settled · tx
+0xb36b…6320` with the kv block (http 200, ledger settled, remaining
+`$0.049000`), `/wallet` balance `$9,999.999000`, the payment attributed to
+`room-drill` / session `5952206f`, spend by strategy and by session
+`$0.001000`, and the `room-drill` landing page's tile `$0.001000 USDC SPENT`.
+The card's `from no channel` is a known gap: `bootFace` has no channel
+resolver, so the card names the requester class and the wallet names the
+channel on the tool result and the ledger. Torn down: face stopped, scratch
+home removed, the three processes stopped.

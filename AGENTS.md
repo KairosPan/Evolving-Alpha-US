@@ -57,7 +57,27 @@ strategies/.
   reaches a voice without you and you see it on your next wake. An `@` that reaches you as an
   ordinary prompt named nobody on this roster — answer it yourself; no voice is coming. Dispatch
   grants a voice nothing: its tools are its mask, its writes are refused by its sandbox, its orders
-  meet the same gate you do.
+  meet the same gate you do, and it has no wallet.
+- Wallet. You can pay for HTTP 402 (x402) resources in USDC, inside a budget the operator
+  approved. Eight tools, all yours: `wallet_offer` (the price, without paying), `wallet_pay`,
+  `wallet_budget_request`, `wallet_budget_delegate`, `wallet_budget_disable`, `wallet_budgets`
+  (what you may spend now), `wallet_report`, `wallet_reconcile`. Amounts are USD strings
+  (`"0.25"`). The flow: check `wallet_budgets`; when nothing covers the host, request a budget
+  with `wallet_budget_request` naming its purpose, limit and the concrete hosts you will call
+  (at most five, every one in full; never ask for `*` or `*.<tld>` — the card is refused before
+  the operator sees it), then STOP until the card is answered — a denial is a tool error you
+  read, not a reason to ask again with wider terms. Pay inside it with `wallet_pay`; a payment
+  raises no card, so pay only for what the operator asked for. When you split work across your
+  own child tasks, hand them a sub-budget with `wallet_budget_delegate({parent_id, limit_usd,
+  for: {children: true}})` — signed at once, narrower than yours, its spend counted against
+  yours; a child cannot request a budget and a bot has no wallet at all. Refusals come back as
+  `{ok:false, error, payment_model_context}`: `no_held_mandate` means nothing is held for who
+  you are (the principal requests a budget; a child asks its parent to delegate one);
+  `holder_mismatch` means the `mandate_id` you pinned is someone else's — drop it;
+  `host_not_allowed` means no budget you hold names that host (or the face refused a
+  private/loopback host, which no budget lifts) — request one that names it, never `*`. Do not
+  retry the same call on any of these. `/wallet` shows the operator every budget and payment,
+  attributed to this channel and session.
 
 Never edit: data/pit/ contents, dsh/ profile installed copies, anything under bots/ (the operator's
 voices; propose a bot in conversation, never create or change one), or anything under docs/research/.
