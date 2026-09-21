@@ -68,6 +68,7 @@ import {
   auditOrderTools, effectiveApprovalPolicy, isOrderTool, orderApprovalDecision, orderGuardReason,
   type ApprovalEventLike, type ApprovalPolicyLike, type PreToolDecision, type ToolSchemaLike,
 } from "./orders.ts";
+import { budgetApprovalDecision, budgetGuardReason, isBudgetTool, requesterOf } from "./budgets.ts";
 
 /** Diagnostic prefix dsh-app-boot puts on every error and warning raised from
  * here. Purely a label (nothing branches on it), so it names the face rather
@@ -373,6 +374,53 @@ export async function bootFace(opts: FaceBootOptions): Promise<{ ctx: Context; d
   if (audit.gated.length > 0) {
     console.log(`${BIN}: order gate armed for ${audit.gated.join(", ")}`);
   }
+  /* GATE 3 FOR BUDGETS (`budgets.ts`, spec decision 2). The same two
+   * registrations as Gate 2, for the same reasons: only a `tools/pre-execute`
+   * listener can `ask`, only a guard is monotonic, and the guard asks the
+   * session LOG rather than the listener's memory.
+   *
+   * WHY A SECOND LISTENER AND A SECOND GUARD CANNOT COLLIDE WITH GATE 2'S.
+   * Each listener returns `next()` unless its OWN predicate matches, and
+   * `isOrderTool` / `isBudgetTool` are disjoint by construction (raw names
+   * `place_order` / `cancel_order` against the exact `wallet_budget_request`),
+   * so for any one call at most one of them decides and the other is a
+   * pass-through - whichever `prepend` put outermost. Guards are evaluated in
+   * registration order until one returns a reason
+   * (`dsh-tools/lib/index.js:2536-2541`), and each returns `undefined` for
+   * every name outside its predicate, so a second guard adds a denial only for
+   * its own tool. Gate 2 is untouched; it neither knows nor needs to know that
+   * Gate 3 exists.
+   *
+   * The requester is READ off the session (`requesterOf`), never taken from
+   * arguments, so a bot or a child task is refused before any card by what the
+   * session store stamped on it. `channelName` is `undefined` here: boot has no
+   * channel resolver, and the card still names the requester CLASS; the wallet
+   * module supplies channel names on the tool RESULT (the pay card and the
+   * ledger row's context), not on this card. */
+  gateCtx.on("tools/pre-execute", async (exec, next) => {
+    if (!isBudgetTool(exec.name)) return next();
+    const session = exec.agent?.session;
+    if (approval === undefined || session === undefined) {
+      return {
+        kind: "deny",
+        reason: `${exec.name} needs a budget approval card and this call has no session to ask in`,
+      };
+    }
+    const decision = budgetApprovalDecision(
+      exec.name,
+      effectiveApprovalPolicy(approval, session),
+      exec.arguments,
+      requesterOf(session),
+    );
+    return decision ?? next();
+  }, { prepend: true });
+  tools.guard((exec) =>
+    budgetGuardReason(
+      exec.name,
+      (exec.agent?.session as { events?: ApprovalEventLike[] } | undefined)?.events,
+      exec.callId,
+    )
+  );
   /* The preset roster: every session.create the gateway serves resolves a
    * preset - the named one or `default` - and fails at resolution if the
    * roster cannot supply it. Assert it here, against the LIVE service, so a
