@@ -5,7 +5,7 @@ STRATEGY runs on DeepSeek Harness (dsh). This directory is the repo's half of th
 | Path | What |
 |---|---|
 | `profile/cordis.yml` | profile TEMPLATE — mounts the alpaca-kit MCP server, the skill roots, and the INTENDED approval list (see step 6) |
-| `skills/mechanics/` | neutral mechanics, always apply: `backtest-rules`, `alpaca-kit-guide` |
+| `skills/mechanics/` | neutral mechanics, always apply: `backtest-rules`, `alpaca-kit-guide`, `bought-data` (buying vendor data with the wallet into a strategy's `vendor/` and turning it into a PIT bed) |
 | `skills/style-kairos/` | the operator's own style: `doctrine`, `signals`, `lessons` — converted from the retired `seeds_v2/` JSON packs by `scripts/convert_seeds.py` |
 
 Mechanics vs style is the load-bearing split. Mechanics are how the data and the honest-eval

@@ -6,7 +6,7 @@ const faceDir = fileURLToPath(new URL("../", import.meta.url));
 const clientDir = join(faceDir, "client");
 const outputDir = join(faceDir, "dist");
 const allowedExtensions = new Set([".html", ".css", ".js"]);
-const pages = ["index.html", "market.html", "account.html"];
+const pages = ["index.html", "market.html", "account.html", "wallet.html"];
 const notice = "前端已上线，后端尚未连接。聊天、行情和账户数据暂不可用。";
 const noticeStyle = `<style>
 .deployment-notice { flex: none; margin: 16px 20px; padding: 12px 16px; border: 1px solid #d8cba9; border-radius: 8px; background: #fff8e8; color: #57431d; font: 14px/1.6 system-ui, sans-serif; }

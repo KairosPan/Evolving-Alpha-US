@@ -795,13 +795,20 @@ function toolCardNode(card) {
 function fillResult(node, card) {
   const producer = node.querySelector(".producer");
   if (producer) producer.textContent = card.title ?? (card.isError ? "failed" : "done");
-  node.classList.toggle("danger", card.isError === true);
   node.querySelector(".tool-out")?.remove();
   node.querySelector(".viz")?.remove();
   /* Pretty view when the tool and shape are both recognized; the raw pre stays
    * in the DOM as the fallback and as the head's `raw` toggle target. Errors
    * never render pretty. */
   const pretty = card.isError === true ? null : renderResult(node.dataset.tool ?? "", card.text);
+  /* A wallet card (spec §2): `pay` names the surface; `danger` on a failed call
+   * OR on a refusal — which is a SUCCESSFUL tool value (`ok:false` inside an
+   * envelope the model reads its hints from), so `isError` alone would draw a
+   * refused payment in the calm colour. render.js marks the refusal on the
+   * pretty node's `data-status`, the same attribute that says `settled`. */
+  const isWallet = typeof node.dataset.tool === "string" && node.dataset.tool.startsWith("wallet_");
+  node.classList.toggle("pay", isWallet);
+  node.classList.toggle("danger", card.isError === true || pretty?.dataset.status === "refused");
   node.classList.toggle("has-pretty", pretty !== null);
   if (pretty) node.append(pretty);
   const out = el("pre", "tool-out", dash(card.text));
@@ -3450,6 +3457,22 @@ async function refreshPluginPanel() {
     panel.append(indexRow(line, () => openMcpServer(server)));
   }
 
+  /* The wallet tools (spec §2, charter Rule 5): money-moving tools are
+   * registered in-process, not as an MCP row, so without this list nothing on
+   * the plugin face would show they exist. `walletTools` is `[]` when the
+   * wallet is not configured, and the group is then absent rather than empty
+   * - an empty "wallet" heading would claim a surface that is not there. */
+  const walletTools = Array.isArray(body.walletTools) ? body.walletTools.filter((t) => typeof t?.name === "string") : [];
+  if (walletTools.length > 0) {
+    panel.append(spGroup("wallet", String(walletTools.length)));
+    for (const tool of walletTools) {
+      const line = el("div", "sp-plug");
+      line.append(phaseDot("active"), el("span", "sp-plug-name", String(tool.name)));
+      line.title = String(tool.description ?? "");
+      panel.append(indexRow(line, () => openWalletTools(walletTools)));
+    }
+  }
+
   const rows = Array.isArray(body.rows) ? body.rows : [];
   const failed = rows.filter((row) => row.phase === "failed").length;
   panel.append(spGroup("composed rows"));
@@ -3498,6 +3521,26 @@ function openMcpServer(server) {
       tbody.append(tr);
     }
     inner.append(wrap);
+  });
+}
+
+/** The wallet tools' page: the nine in-process tools by name and
+ * description, like an MCP server's roster, plus where their records live.
+ * @param {Record<string, any>[]} tools - plugins.json `walletTools`. */
+function openWalletTools(tools) {
+  openDetail("wallet tools · plugin", (inner) => {
+    inner.append(el("div", "detail-title", "wallet tools"));
+    inner.append(el("div", "detail-sub", `registered in-process by the face · ${tools.length} tools · Kairos only, no bot sees them`));
+    const { wrap, tbody } = detailTable(["tool", "description"]);
+    for (const tool of tools) {
+      const tr = el("tr");
+      tr.append(el("td", "sym", String(tool.name)), el("td", null, String(tool.description ?? "")));
+      tbody.append(tr);
+    }
+    inner.append(wrap);
+    const link = el("a", "sp-note", "budgets, payments and alerts are on /wallet ↗");
+    link.href = "/wallet";
+    inner.append(link);
   });
 }
 

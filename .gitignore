@@ -64,3 +64,7 @@ deck.png
 # face/plugins/ for the SHIPPED relative plugin path to resolve, so the smoke
 # mkdtemps one here and removes it (face/tests/bots-fixture.ts).
 .bots-smoke-*
+
+# bought data: what a channel session paid a vendor for (wallet_pay save_to lands
+# under <channel>/vendor; the sha256 in the ledger is the receipt, the bytes are not ours)
+strategies/*/vendor/

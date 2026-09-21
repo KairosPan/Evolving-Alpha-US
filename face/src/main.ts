@@ -24,6 +24,7 @@ import { registerSessionRoutes } from "./sessions.ts";
 import { listSessionHeads, registerChannelRoutes, type RegistryLike } from "./channels.ts";
 import { hasExec, panelDeps, readAgentsMeta, registerPanelRoutes } from "./panels.ts";
 import { installRoom, registerRoomRoutes, type RoomContextLike } from "./room.ts";
+import { installWallet, type WalletContextLike } from "./wallet.ts";
 
 /** Diagnostic label, the same string boot.ts uses for `BIN`. Not imported
  * because boot.ts does not export it, and it is a label rather than a contract:
@@ -80,6 +81,9 @@ let dispose: (() => Promise<void>) | undefined;
  * deadline that outlives the process's stop can still cancel a member. */
 let disposeRoom: (() => void) | undefined;
 let disposeData: (() => void) | undefined;
+/** The wallet's unwind: the nine tools and `wallet.lock` (a lock left behind
+ * would make the CLI refuse the home until the pid was seen dead). */
+let disposeWallet: (() => void) | undefined;
 
 /** Tear the tree down, then leave with `code`. A dispose that rejects still
  * exits, and says why: a signal the process has already acknowledged must not
@@ -89,6 +93,7 @@ let disposeData: (() => void) | undefined;
 async function shutdown(code: number): Promise<void> {
   try {
     disposeRoom?.();
+    disposeWallet?.();
     disposeData?.();
     await dispose?.();
   } catch (err) {
@@ -159,10 +164,30 @@ const sessionPersistence = booted.ctx.get("sessionPersistence") as {
  * Hoisted above the channel routes, which read the same roster for their
  * overview's `allBots`. */
 const agentPresets = booted.ctx.get("agentPresets") as { list(): Promise<{ id: string; broken?: string }[]> };
+/* The panel seams (`channelFor` among them) are built here, ahead of the
+ * channel routes, because the wallet needs `channelFor` and the channel
+ * overview needs the wallet's `spendFor` - and the overview handler cannot be
+ * extended after registration (wallet spec §9). */
+const deps = panelDeps(booted.ctx, process.cwd());
+/* The agent wallet: registered BEFORE the first `await` below, so the nine
+ * `wallet_*` tools are in the tree before any session exists (wallet spec
+ * §4.2). Not configured (no `config.json` in the wallet home, or another live
+ * pid holding its lock) is a state the face runs in: the tools are absent,
+ * `/data/wallet.json` says why, and the wallet's own line (`wallet: 9 tools
+ * registered, home …` / `wallet: not configured (…)`) says so on stdout. */
+const wallet = installWallet({
+  ctx: booted.ctx as unknown as WalletContextLike,
+  home: dshHome,
+  channelFor: deps.channelFor,
+  log: (line) => console.log(`${BIN}: ${line}`),
+});
+disposeWallet = wallet.dispose;
+wallet.registerRoutes(booted.ctx.webServer);
 registerChannelRoutes(booted.ctx.webServer, {
   registry: workspaceRegistry,
   root: process.cwd(),
   home: dshHome,
+  ...(wallet.spendFor === undefined ? {} : { spendFor: wallet.spendFor }),
   listSessions: () => listSessionHeads(
     async () => (await sessionPersistence.list()).map((h) => ({ sessionId: String(h.id), cwd: h.cwd })),
     () => sessions.list().map((s) => ({ sessionId: String(s.id), cwd: s.header.cwd })),
@@ -192,7 +217,6 @@ registerBotRuntimeRoutes(booted.ctx.webServer, botRuntime);
  * runtime root, so it can ask the operator a question; a root listener sees
  * every session). `channelFor` is the same lookup the agent tools use, now
  * carrying the channel directory a member session is created in. */
-const deps = panelDeps(booted.ctx, process.cwd());
 const room = installRoom({
   ctx: booted.ctx as unknown as RoomContextLike,
   home: dshHome,
@@ -205,7 +229,7 @@ registerRoomRoutes(booted.ctx.webServer, room);
  * tools / loader), which have no RPC at this pin, plus the local-agent
  * roster — awaited, because every agent already on the roster is registered
  * as a tool for Kairos before the face reports itself up. */
-await registerPanelRoutes(booted.ctx.webServer, deps);
+await registerPanelRoutes(booted.ctx.webServer, { ...deps, walletTools: () => wallet.walletTools });
 /* The URL line belongs to the shell, not to the webserver plugin (which states
  * outright that it never prints). This is that shell. Host and port are read
  * back off the service rather than off the config, so an OS-assigned port

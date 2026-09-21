@@ -110,6 +110,9 @@ const SCRUBBED_ENV = [
   "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
   // the workbench's own secrets — no business in a coding agent's child
   "APCA_API_KEY_ID", "APCA_API_SECRET_KEY", "DEEPSEEK_API_KEY",
+  // where the payer key lives (wallet.ts): a child that learns the wallet
+  // home can run the CLI against it with no card (spec D16, R-W2)
+  "FACE_AGENTPAY_HOME",
 ] as const;
 
 /** `process.env` (or `base`) minus {@link SCRUBBED_ENV}. */

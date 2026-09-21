@@ -7,6 +7,7 @@
  * @module
  */
 import { renderMarkdown } from "./markdown.js";
+import { usd } from "./wallet-model.js";
 
 /** @param {string} tag @param {string|null} [cls] @param {string} [text] */
 const el = (tag, cls, text) => {
@@ -123,16 +124,26 @@ export function renderChannelPage(inner, payload, actions) {
   head.append(bchips);
   inner.append(head);
 
-  /* 2 - headline */
-  if (status.one_line || status.next || status.numbers) {
+  /* 2 - headline. `spend` (wallet spec §2/§4.4: USDC settled in this channel,
+   * present only when the wallet is configured AND the channel has paid for
+   * something) is one more figure tile beside status.yaml's numbers — the
+   * server summed it from the ledger by workspace id; nothing is added up here. */
+  const spend = payload.spend && typeof payload.spend === "object" ? payload.spend : null;
+  if (status.one_line || status.next || status.numbers || spend) {
     const card = el("div", "ch-card");
     if (status.one_line) card.append(el("p", "ch-oneline", status.one_line));
     if (status.next) card.append(el("p", "ch-next", `next: ${status.next}`));
-    if (status.numbers) {
+    if (status.numbers || spend) {
       const row = el("div", "ch-numbers");
-      for (const [k, v] of Object.entries(status.numbers)) {
+      for (const [k, v] of Object.entries(status.numbers ?? {})) {
         const fig = el("div", "ch-fig");
         fig.append(el("div", "ch-fig-v", v), el("div", "ch-fig-k", k));
+        row.append(fig);
+      }
+      if (spend) {
+        const fig = el("div", "ch-fig ch-fig-spend");
+        fig.append(el("div", "ch-fig-v", usd(spend.settled_usd)), el("div", "ch-fig-k", "USDC spent"));
+        fig.title = typeof spend.count === "number" ? `${spend.count} settled payment${spend.count === 1 ? "" : "s"} · details on /wallet` : "details on /wallet";
         row.append(fig);
       }
       card.append(row);

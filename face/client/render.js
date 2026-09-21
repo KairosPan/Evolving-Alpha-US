@@ -9,13 +9,19 @@
  * Shapes (alpaca_kit/mcp/tools.py): rows-frames `{ok, rows, truncated?}` for
  * market_snapshot / screen / daily_bars / positions / orders / earnings /
  * corp_actions; flat objects for breadth and account; `{ok, days}` for
- * calendar. `{ok:false}` stays on the raw path.
+ * calendar. `{ok:false}` stays on the raw path — with ONE exception: the
+ * `wallet_*` tools (spec 2026-09-20-agent-wallet-design §4.4), whose refusal
+ * is a successful envelope `{ok:false, error, payment_model_context}` the
+ * model needs the hints in, and the operator needs to SEE (§2: "refusals
+ * render in the danger colour even though the tool value is a successful
+ * envelope"). Those are handed to `walletResult` before the `ok` gate.
  *
  * Color note: the up/down pair is a red–green polarity that no palette can make
  * CVD-safe (deutan ΔE ~5), so the SIGN is always printed with the number —
  * color never carries the direction alone.
  * @module
  */
+import { balanceView, mandateRows, payFields, payLine, payStatus, shortHex, txLink, usd } from "./wallet-model.js";
 
 const EM = "—";
 const SVG = "http://www.w3.org/2000/svg";
@@ -322,6 +328,198 @@ function parsePayload(text) {
   return null;
 }
 
+/* ---------- the wallet tools (spec §4.4) ---------- */
+
+/** A key/value grid from label → text pairs; `null` when there are none. A
+ * `tx` row becomes an explorer link when the envelope also names a network
+ * the model knows an explorer for (the local chain never does).
+ * @param {Array<[string, string]>} pairs @param {unknown} [network] */
+function kvBlock(pairs, network) {
+  if (!pairs.length) return null;
+  const grid = el("dl", "viz-kv");
+  for (const [k, v] of pairs) {
+    grid.append(el("dt", null, k));
+    const dd = el("dd");
+    const href = k === "tx" ? txLink(network, v) : null;
+    if (href === null) dd.textContent = v;
+    else {
+      const a = el("a", "viz-link", v);
+      a.href = href;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      dd.append(a);
+    }
+    grid.append(dd);
+  }
+  return grid;
+}
+
+/** The pay card: the one line §2 shows the operator, then the envelope's
+ * facts. `data-status` is the ledger word (settled / unknown / …) or
+ * `refused`, which chat.js reads to colour the row danger. The line is the
+ * `.viz-meta`, so the collapsed row's summary is that line and nothing else.
+ * @param {Record<string, any>} payload @param {string|null} partial */
+function payCard(payload, partial) {
+  const wrap = el("div", "viz pay-card");
+  wrap.dataset.status = payload.ok === true ? payStatus(payload) : "refused";
+  wrap.append(el("div", "viz-meta pay-line", payLine(payload) + (partial ? ` · ${partial}` : "")));
+  const grid = kvBlock(payFields(payload), payload.network);
+  if (grid) wrap.append(grid);
+  return wrap;
+}
+
+/** Mandates as a compact table: id · purpose · holder · remaining / limit ·
+ * per call · valid until · status — the wallet page's row, narrower. */
+function mandateTable(mandates) {
+  const rows = mandateRows(mandates, Date.now());
+  if (!rows.length) return el("div", "viz-meta", "no mandates");
+  const table = el("table", "viz-table");
+  table.append(tableHead(["id", "purpose", "holder", "remaining", "limit", "per call", "valid until", "status"], new Set(["remaining", "limit", "per call"])));
+  const tbody = el("tbody");
+  for (const r of rows) {
+    const tr = el("tr");
+    tr.append(el("td", "sym", r.id));
+    tr.append(el("td", null, r.purpose));
+    tr.append(el("td", null, r.holder));
+    tr.append(el("td", "num", r.pct === null ? r.remaining : `${r.remaining} (${r.pct}%)`));
+    tr.append(el("td", "num", r.limit));
+    tr.append(el("td", "num", r.perCall));
+    tr.append(el("td", null, r.validUntil === null ? EM : `${r.validUntil.slice(0, 16).replace("T", " ")}${r.expired ? " · expired" : ""}`));
+    const status = el("td");
+    const badge = el("span", "ch-badge", r.status);
+    badge.dataset.status = r.status;
+    status.append(badge);
+    tr.append(status);
+    tbody.append(tr);
+  }
+  table.append(tbody);
+  return tableShell(`${rows.length} mandates`, table);
+}
+
+/** A `{key: scalar | {scalars}}` object as a table: one row per key, the
+ * value's scalar fields as columns (the first row decides them). Used for
+ * the report's `byChannel` / `bySession` / `byHost` / `byResource` blocks,
+ * whose exact fields agentpay owns — the renderer only asks that they be flat. */
+function objectTable(title, obj) {
+  const entries = Object.entries(obj);
+  if (!entries.length) return null;
+  const scalar = (v) => v === null || ["number", "string", "boolean"].includes(typeof v);
+  const nested = entries.every(([, v]) => v !== null && typeof v === "object" && !Array.isArray(v));
+  const cols = nested ? Object.keys(entries[0][1]).filter((k) => scalar(entries[0][1][k])).slice(0, 6) : ["value"];
+  const table = el("table", "viz-table");
+  table.append(tableHead(["key", ...cols], new Set(cols.filter((c) => entries.some(([, v]) => typeof (nested ? v[c] : v) === "number")))));
+  const tbody = el("tbody");
+  for (const [k, v] of entries) {
+    const tr = el("tr");
+    tr.append(el("td", "sym", k));
+    for (const c of cols) {
+      const cell = nested ? v[c] : v;
+      tr.append(el("td", typeof cell === "number" ? "num" : null, scalar(cell) ? fmtCell(cell) : Array.isArray(cell) ? `${cell.length} items` : "{…}"));
+    }
+    tbody.append(tr);
+  }
+  table.append(tbody);
+  return tableShell(`${title} · ${entries.length}`, table);
+}
+
+/** `wallet_report`: the report's scalars (and its `totals`) as a kv block,
+ * every flat sub-object as a table, every array of rows as a frame table.
+ * Nothing is filtered by name — whatever agentpay adds to the report shows. */
+function reportView(report) {
+  const wrap = el("div", "viz");
+  const pairs = [];
+  const scalar = (v) => v === null || ["number", "string", "boolean"].includes(typeof v);
+  /* The collapsed row's line: the totals in USD when the report carries them
+   * (§4.4: usd strings beside the atomic ones), else just the word. */
+  const totals = report.totals && typeof report.totals === "object" ? report.totals : {};
+  wrap.append(el("div", "viz-meta", ["report",
+    totals.spent_usd === undefined ? null : `spent ${usd(totals.spent_usd)}`,
+    totals.pending_usd === undefined ? null : `pending ${usd(totals.pending_usd)}`,
+  ].filter((x) => x !== null).join(" · ")));
+  for (const [k, v] of Object.entries(report)) if (scalar(v)) pairs.push([label(k), fmtCell(v)]);
+  if (report.totals && typeof report.totals === "object") {
+    for (const [k, v] of Object.entries(report.totals)) if (scalar(v)) pairs.push([`totals ${label(k)}`, fmtCell(v)]);
+  }
+  const grid = kvBlock(pairs);
+  if (grid) wrap.append(grid);
+  for (const [k, v] of Object.entries(report)) {
+    if (k === "totals" || v === null || typeof v !== "object") continue;
+    const node = Array.isArray(v)
+      ? (v.length && typeof v[0] === "object" ? genericTable({ rows: v }) : null)
+      : objectTable(label(k), v);
+    if (node) {
+      const meta = node.querySelector(".viz-meta");
+      if (meta && Array.isArray(v)) meta.textContent = `${label(k)} · ${meta.textContent}`;
+      wrap.append(node);
+    }
+  }
+  return wrap.childElementCount > 1 ? wrap : null; // the meta line alone is no report
+}
+
+/** `wallet_offer`: the 402 terms as a table, or the non-402 note. */
+function offerView(payload) {
+  if (Array.isArray(payload.offer) && payload.offer.length) {
+    const rows = payload.offer.map((o) => ({ ...o, amount_usd: usd(o?.amount_usd) }));
+    const node = genericTable({ rows });
+    if (node) {
+      const meta = node.querySelector(".viz-meta");
+      if (meta) meta.textContent = `402 · ${payload.url ?? EM}${payload.resource ? ` · ${payload.resource}` : ""} · ${rows.length} accepted`;
+    }
+    return node;
+  }
+  return flatObject(payload);
+}
+
+/** `wallet_discover`: the catalogue's payable rows as a table — resource ·
+ * price · network · pay_to (short) · payers · calls — ranked as the tool
+ * ranks them (distinct payers first); the meta line counts them against
+ * what the catalogue matched. The example input and tags stay in raw. */
+function discoverView(payload) {
+  const resources = Array.isArray(payload.resources) ? payload.resources : [];
+  if (!resources.length) return el("div", "viz viz-meta", `0 resources · ${payload.matched ?? 0} matched, none this wallet can pay`);
+  const rows = resources.map((r) => ({
+    resource: fmtCell(r?.resource), price_usd: usd(r?.price_usd), network: fmtCell(r?.network),
+    pay_to: shortHex(r?.pay_to), payers_30d: r?.payers_30d ?? 0, calls_30d: r?.calls_30d ?? 0,
+  }));
+  const node = genericTable({ rows });
+  if (node) {
+    const meta = node.querySelector(".viz-meta");
+    if (meta) meta.textContent = `${rows.length} resource${rows.length === 1 ? "" : "s"} · ${fmtCell(payload.network)}${typeof payload.matched === "number" ? ` · ${payload.matched} matched` : ""}${payload.partial ? " · partial" : ""}`;
+  }
+  return node;
+}
+
+/**
+ * Every `wallet_*` value, `ok` either way. A refusal (`ok:false`) from ANY
+ * wallet tool renders as the refused pay card — same shape, same danger
+ * colour, the hints on it — because the model's next move depends on the
+ * operator reading the same reason it did.
+ * @param {string} name - the tool name, prefix stripped and lower-cased.
+ * @param {Record<string, any>} payload @param {string|null} partial
+ */
+function walletResult(name, payload, partial) {
+  if (payload.ok !== true) return payCard(payload, partial);
+  if (name === "wallet_pay") return payCard(payload, partial);
+  if (name === "wallet_budgets") {
+    const wrap = el("div", "viz");
+    const balance = balanceView(payload.balance);
+    const pairs = [["address", fmtCell(payload.address)], ["network", fmtCell(payload.network)],
+      ["balance", balance.available ? balance.text : balance.reason ? `unavailable · ${balance.reason}` : EM],
+      ["caller", payload.caller ? `${fmtCell(payload.caller.kind)}${payload.caller.id ? ` · ${payload.caller.id}` : ""}` : EM]];
+    if (Array.isArray(payload.alerts) && payload.alerts.length) pairs.push(["alerts", payload.alerts.map((a) => a?.text ?? a?.kind).filter(Boolean).join(" · ")]);
+    wrap.append(kvBlock(pairs), mandateTable(payload.mandates));
+    return wrap;
+  }
+  if (name === "wallet_report") return payload.report && typeof payload.report === "object" ? reportView(payload.report) : null;
+  if (name === "wallet_budget_request" || name === "wallet_budget_delegate") {
+    return payload.mandate && typeof payload.mandate === "object" ? mandateTable([payload.mandate]) : null;
+  }
+  if (name === "wallet_offer") return offerView(payload);
+  if (name === "wallet_discover") return discoverView(payload);
+  if (name === "wallet_budget_disable" || name === "wallet_reconcile") return flatObject(payload);
+  return null;
+}
+
 /**
  * @param {string} toolName - the call card's tool name (e.g. mcp__alpaca-kit__screen).
  * @param {string} text - the result text as delivered.
@@ -332,9 +530,20 @@ export function renderResult(toolName, text) {
   const parsed = parsePayload(text);
   if (parsed === null) return null;
   const { payload, partial } = parsed;
-  if (payload === null || typeof payload !== "object" || payload.ok !== true) return null;
-  if (partial) payload.truncated = payload.truncated ? `${payload.truncated} · ${partial}` : partial;
+  if (payload === null || typeof payload !== "object") return null;
   const name = toolName.toLowerCase().replace(/^mcp__[a-z0-9_-]+__/, "");
+  /* BEFORE the `ok` gate (spec §4.2): a wallet refusal is `ok:false` and must
+   * still draw its card. Same fallback discipline as below — a shape surprise
+   * keeps the raw pre rather than a half-drawn card. */
+  if (name.startsWith("wallet_")) {
+    try {
+      return walletResult(name, payload, partial);
+    } catch {
+      return null;
+    }
+  }
+  if (payload.ok !== true) return null;
+  if (partial) payload.truncated = payload.truncated ? `${payload.truncated} · ${partial}` : partial;
   try {
     if (name === "market_snapshot" && Array.isArray(payload.rows)) return snapshotTable(payload);
     if (name === "daily_bars" && Array.isArray(payload.rows) && payload.rows.length) return barsChart(payload);
