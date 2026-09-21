@@ -361,30 +361,70 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
   clip:rect(0,0,0,0);white-space:nowrap;border:0;
 }
 
-/* payment surfaces — the agent's wallet. Every payment state on this page is
-   spelled with the strategy badge, so signed / enqueued / settled / draft read
-   the same way wherever they appear; the wallet page itself is built from the
-   account page's classes, so it folds exactly where the account folds. */
+/* payment surfaces — the agent's wallet. Every state on this page is spelled
+   with the strategy badge, so a payment's settled / rejected / unknown /
+   expired-unused and a budget's signed / disabled read the same way wherever
+   they appear; the wallet page itself is built from the account page's
+   classes, so it folds exactly where the account folds. The four payment
+   words are the ledger row's own `status` and nothing here invents a fifth:
+   there is no queue between the signature and the chain, so there is no
+   word for "waiting in one". */
 .mono{font-family:var(--mono)}
 .ch-badge[data-status="settled"]{color:var(--green);border-color:currentColor}
-.ch-badge[data-status="enqueued"],.ch-badge[data-status="signed"]{color:var(--accent);border-color:currentColor}
+.ch-badge[data-status="signed"]{color:var(--accent);border-color:currentColor}
+.ch-badge[data-status="unknown"]{color:var(--danger);border-color:currentColor}
 .ch-badge[data-status="rejected"],.ch-badge[data-status="expired-unused"]{color:var(--red);border-color:currentColor}
-.ch-badge[data-status="draft"]{color:var(--danger);border-color:var(--danger)}
 .ch-badge[data-status="disabled"]{opacity:.5}
 .account-table .mono{font-size:11px}
 .account-table th.text,.account-table td.text{text-align:left}
+/* the two lines in these tables allowed to wrap: a reason cut to "fac…" says nothing */
+.account-table .account-subvalue.wrap{white-space:normal;max-width:210px;line-height:1.5}
 /* a label, not a control: the wallet's record groups are single tables, so the
    tab is a span and neither offers a click nor needs greying out */
 .account-tab.static{cursor:default}
-/* the one line in this table allowed to wrap: a status cut to "e…" says nothing */
-.quote-pay{display:block;max-width:190px;white-space:normal;color:#8a95a3;font-size:9px;line-height:1.5;margin-top:3px}
-.quote-pay .mono{font-size:9px}
-/* a collapsible card has no visible left border, so the colour lives in the
-   kind label, as it does for dispatch */
+/* an inert tx link. The product links every settled row to the explorer of
+   the network it settled on; a local test chain has no explorer and this page
+   makes no requests, so the anchor carries no href, and the dotted underline
+   is what says "a link, in the product". */
+.tx-link{color:var(--accent);text-decoration:underline dotted;text-underline-offset:2px;cursor:default}
+/* the alerts block: one line per standing alert, in the notice's colours,
+   because the dot on the rail's wallet entry points at exactly these lines */
+.wallet-alerts{margin:0 0 16px;padding:0;list-style:none;border:1px solid #e9d8c0;border-radius:8px;background:#fffaf2}
+.wallet-alerts li{display:flex;gap:10px;align-items:baseline;padding:9px 15px;border-top:1px solid #f0e4d0;font-size:11px;line-height:1.6;color:#80602f}
+.wallet-alerts li:first-child{border-top:0}
+.alert-kind{flex:none;font:600 9.5px/1.7 var(--mono);letter-spacing:.06em}
+.alert-kind.info{color:var(--dim)}
+.rail-dot{color:var(--danger);font-size:7px;margin-left:3px;vertical-align:top}
+/* the two spend groups sit side by side above the account's second fold and
+   stack below it, where the account's info grid stacks too */
+.wallet-spend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:24px}
+.wallet-spend .account-records{margin-top:0}
+/* the channel landing page's headline card and its figure tiles, as
+   channels.js draws them: the spend tile is one of these */
+.ch-card{margin:16px 0 0;padding:14px 16px;background:var(--card-bg);border:1px solid var(--line);border-radius:var(--r-card)}
+.ch-numbers{display:flex;flex-wrap:wrap;gap:8px 22px}
+.ch-fig-v{font:600 17px/1.3 var(--mono)}
+.ch-fig-k{font:500 10px/1.3 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-top:2px}
+/* pay cards and the budget card, as chat.css draws them. A collapsible card
+   has no visible left border, so the colour lives in the kind label, as it
+   does for dispatch; a refusal is drawn in the danger colour even though the
+   tool value is a successful envelope, because the model needs the hints in
+   it and the operator needs to see it was refused. The budget card is an
+   answerable card — the same shape as the order card — so it keeps the full
+   card body and the accent border every gate has; answered, it greys out and
+   keeps the outcome as its last line. */
 .card.pay .kind{color:var(--green)}
 .card.pay .sum{color:var(--text)}
-.card.pay.refused .kind{color:var(--danger)}
+.card.pay.refused .kind,.card.pay.refused .sum{color:var(--danger)}
 .card-body{margin:4px 0 0 18px;font:11px/1.6 var(--mono);color:var(--dim);white-space:pre-wrap}
+.card.ask{border-left-color:var(--accent)}
+.card.ask .kind{color:var(--accent)}
+.card.ask .card-head{cursor:default}
+.card.answered{border-left-color:var(--line)}
+.card.answered .kind{color:var(--dim)}
+.card-line{margin-top:6px;font:12px/1.6 var(--mono);color:var(--dim);overflow-wrap:anywhere}
+.card-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.ask-btn{padding:6px 16px;border:1px solid var(--line);border-radius:var(--r-chip);background:var(--panel);color:var(--text);font:500 12px var(--sans)}
 
 /* sidebar channel list — shared chrome, filled in for the strategy surface */
 .conv-group{
@@ -689,6 +729,7 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
   .account-details-hint{font-size:9px}
   .account-details-content{padding:18px 17px}
   .account-info{gap:18px 15px}
+  .wallet-spend{grid-template-columns:1fr}
 }
 
 /* the room's comparison card: the voices stop sitting side by side */
@@ -742,7 +783,7 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
 </head>
 <body>
 <div class="site-banner">
-  以下为产品界面复刻，所有行情、账户、对话与付款数据均为虚构样例；链上哈希取自本地测试链的一次演示运行，不对应任何真实资产。
+  以下为产品界面复刻，所有行情、账户、对话与付款数据均为虚构样例；钱包地址、预算 id、会话 id 与交易哈希也是按真实形状选的样例，不对应任何真实资产。
 </div>
 
 <div class="site-frame">
@@ -768,7 +809,7 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
         <path d="M2 8h14"></path>
         <path d="M11 11.5h3"></path>
       </svg>
-      <span class="rail-label">wallet</span>
+      <span class="rail-label">wallet<span class="rail-dot" title="an alert stands on the wallet page" aria-label="有告警">●</span></span>
     </a>
     <span class="rail-btn rail-off" data-nav="memory" aria-disabled="true">
       <span class="rail-glyph" aria-hidden="true">▤</span><span class="rail-label">memory</span>
@@ -902,7 +943,7 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
 
           <div class="market-table-scroll">
             <table class="market-table">
-              <caption class="market-sr-only">自选行情；缺失数据以横线表示。各标的标明行情来源、事件时间及实时、延迟或过期状态；每行末尾的付费一行来自钱包账本，写明单价、mandate 摘要与结算状态。</caption>
+              <caption class="market-sr-only">自选行情；缺失数据以横线表示。各标的标明行情来源、事件时间及实时、延迟或过期状态。</caption>
               <thead>
                 <tr>
                   <th scope="col">标的 / 名称</th>
@@ -910,7 +951,7 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
                   <th scope="col" class="quote-change-col">涨跌额</th>
                   <th scope="col">涨跌幅</th>
                   <th scope="col" class="quote-volume-col">成交量</th>
-                  <th scope="col" class="quote-source-col">行情来源 / 时间 / 付费</th>
+                  <th scope="col" class="quote-source-col">行情来源 / 时间</th>
                   <th scope="col"><span class="market-sr-only">操作</span></th>
                 </tr>
               </thead>
@@ -938,7 +979,6 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
                   <td class="quote-source-col">
                     <div class="quote-source">示例行情源</div>
                     <span class="quote-time">2026/09/15 GMT-4 16:00:02（本地）— 实时</span>
-                    <span class="quote-pay">付费 $0.001 · <span class="mono">0x3ecce516..dfcf</span> · settled</span>
                   </td>
                   <td><button class="watchlist-remove" type="button" aria-label="移除 Apple" title="移除 Apple" disabled>×</button></td>
                 </tr>
@@ -965,7 +1005,6 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
                   <td class="quote-source-col">
                     <div class="quote-source">示例行情源</div>
                     <span class="quote-time">2026/09/15 GMT-4 16:00:02（本地）— 定时更新 · 常规交易休市</span>
-                    <span class="quote-pay">付费 $0.001 · <span class="mono">0xe831823a..3c3a</span> · settled</span>
                   </td>
                   <td><button class="watchlist-remove" type="button" aria-label="移除 SPDR S&amp;P 500 ETF" title="移除 SPDR S&amp;P 500 ETF" disabled>×</button></td>
                 </tr>
@@ -992,7 +1031,6 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
                   <td class="quote-source-col">
                     <div class="quote-source">示例行情源</div>
                     <span class="quote-time">2026/09/15 GMT+8 15:00:00（本地）— 定时更新</span>
-                    <span class="quote-pay">免费来源 · 未签 mandate</span>
                   </td>
                   <td><button class="watchlist-remove" type="button" aria-label="移除 贵州茅台" title="移除 贵州茅台" disabled>×</button></td>
                 </tr>
@@ -1019,7 +1057,6 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
                   <td class="quote-source-col">
                     <div class="quote-source">示例行情源</div>
                     <span class="quote-time">2026/09/16 GMT+8 09:41:18（本地）— 实时</span>
-                    <span class="quote-pay">付费 $0.001 · <span class="mono">0xf2424453..09df</span> · enqueued</span>
                   </td>
                   <td><button class="watchlist-remove" type="button" aria-label="移除 Bitcoin" title="移除 Bitcoin" disabled>×</button></td>
                 </tr>
@@ -1045,7 +1082,6 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
                   <td class="quote-source-col">
                     <div class="quote-source">示例行情源</div>
                     <span class="quote-time">— — 暂无报价</span>
-                    <span class="quote-pay">未付费 · 签名前被拒：mandate_insufficient_budget</span>
                   </td>
                   <td><button class="watchlist-remove" type="button" aria-label="移除 Ethereum" title="移除 Ethereum" disabled>×</button></td>
                 </tr>
@@ -1068,10 +1104,6 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
           拿不到数据就显示横线，并写明「暂无报价」。缺失会被说出来，不会被补成 0，也不会被静默跳过。
         </div>
         <div class="note">
-          <span class="note-i">行情来源下面的付费一行</span>
-          这一行是钱包账本的记录，不是行情源给的：金额是这条报价的单价，状态跟着结算处理器（SP）的结算走。免费来源不会有签名；ETH/USD 那一行拿不到报价，是因为这次付费在签名前就被预算拒了，原因照写在这里。协议里数据源是先把 mandate 交给 SP 排队、再交付结果，所以「没拿到数据就不付钱」是对数据源的信任，不是协议给的保证。
-        </div>
-        <div class="note">
           <span class="note-i">涨跌幅的正负号与页脚的绿涨 / 红跌</span>
           方向永远同时由符号和颜色表示。窄屏下会依次折叠成交量、涨跌额和来源列，但带符号的涨跌幅始终保留。
         </div>
@@ -1084,7 +1116,7 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
           <span>行情已连接</span>
           <span class="market-local-note">🔒 自选保存在此浏览器</span>
         </div>
-        <p class="market-data-note">美股与 A 股涨跌以昨收为基准；加密货币为过去 24 小时。时间显示行情事件时间，非页面刷新时间。付费一行来自钱包账本，不来自行情源；行情源只知道它收到了一张 mandate。</p>
+        <p class="market-data-note">美股与 A 股涨跌以昨收为基准；加密货币为过去 24 小时。时间显示行情事件时间，非页面刷新时间。这一页只有行情：Kairos 为数据付的钱记在钱包账本里，在导航栏的 wallet 一站，不在行情源的任何一格。</p>
       </div>
     </section>
     <section data-surface="strategy" class="surface strategy-page" hidden>
@@ -1104,6 +1136,15 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
             <span class="ch-chip">数据核查</span>
             <span class="ch-chip on">反向视角</span>
             <span class="ch-chip">基准率检查</span>
+          </div>
+        </div>
+
+        <div class="ch-card">
+          <div class="ch-numbers">
+            <div class="ch-fig">
+              <div class="ch-fig-v">$12.400000</div>
+              <div class="ch-fig-k">usdc settled · 12 payments</div>
+            </div>
           </div>
         </div>
 
@@ -1175,8 +1216,12 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
           表里的每一行都按记录原本的精度照抄，浮点数不做四舍五入。这不是记录的全部字段：讲方法的那些行按同一个决定被略去，跟着它们一起略去的还有一批结果行——换一组取值、换一个窗口、换一个持有期算出来的那些对照，都没有列在这里。
         </div>
         <div class="note">
+          <span class="note-i">标题下面那一格 USDC</span>
+          这个频道里 Kairos 为数据付出去、并且已经在链上结算的 USDC 合计。数字来自钱包账本按频道分组的结果，由频道总览一并送到这一页；它不写进策略目录里的任何文件——策略由 Kairos 写、git 是账本，花掉的钱不是研究记录的一部分。频道没有付过费时这一格不出现。
+        </div>
+        <div class="note">
           <span class="note-i">哪些是记录，哪些是样例</span>
-          thesis、Falsification 与 Verdict 三节是把真实研究记录译成中文后的呈现，其中的研究方法细节已被略去；标题旁的路径行、chip 与侧栏的频道列表都是为这个介绍页搭建的样例外壳，不代表任何真实频道。
+          thesis、Falsification 与 Verdict 三节是把真实研究记录译成中文后的呈现，其中的研究方法细节已被略去；标题旁的路径行、chip、那格 USDC 与侧栏的频道列表都是为这个介绍页搭建的样例外壳，不代表任何真实频道。
         </div>
       </div>
     </section>
@@ -1209,9 +1254,27 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
 
         <details class="answer-trace trace-pending">
           <summary class="trace-toggle">
-            <span>思考轨迹</span><span class="trace-count">1</span><span class="trace-chevron" aria-hidden="true">⌄</span>
+            <span>思考轨迹</span><span class="trace-count">5</span><span class="trace-chevron" aria-hidden="true">⌄</span>
           </summary>
           <div class="trace-content">
+            <article class="card ask answered">
+              <div class="card-head">
+                <span class="kind">approval</span>
+                <span class="producer">wallet_budget_request</span>
+                <span class="raw" title="approvalId apr_6e1c…0b3d · callId call_91a4…f7e2">raw</span>
+              </div>
+              <div class="card-line">BUDGET - "three quotes for the reversal review" · limit $0.003 · per call $0.001 · valid 1d · hosts quotes.example.net · from strategies/follow-up-research by kairos</div>
+              <div class="card-line">answered · approve</div>
+            </article>
+            <div class="card collapsible collapsed tool pay">
+              <div class="card-head"><span class="chev">▸</span><span class="kind">wallet_pay</span><span class="sum">$0.001 · GET quotes.example.net/quote/AAPL · settled · tx 0x3ecce516…dfcf</span><span class="producer">200</span></div>
+            </div>
+            <div class="card collapsible collapsed tool pay">
+              <div class="card-head"><span class="chev">▸</span><span class="kind">wallet_pay</span><span class="sum">$0.001 · GET quotes.example.net/quote/SPY · settled · tx 0xe831823a…3c3a</span><span class="producer">200</span></div>
+            </div>
+            <div class="card collapsible collapsed tool pay">
+              <div class="card-head"><span class="chev">▸</span><span class="kind">wallet_pay</span><span class="sum">$0.001 · GET quotes.example.net/quote/BTC-USD · settled · tx 0xf2424453…09df</span><span class="producer">200</span></div>
+            </div>
             <div class="card collapsible collapsed tool dispatch">
               <div class="card-head">
                 <span class="chev">▸</span>
@@ -1256,9 +1319,6 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
                 <span>思考轨迹</span><span class="trace-count"></span><span class="trace-chevron" aria-hidden="true">⌄</span>
               </summary>
               <div class="trace-content">
-                <div class="card collapsible collapsed tool pay">
-                  <div class="card-head"><span class="chev">▸</span><span class="kind">pay</span><span class="sum">GET /quote/AAPL · quotes.example.net · $0.001000 · im_cc3f74a85f72 · 0x3ecce516..dfcf · settled · tx 0xab8e12a9..fe74</span><span class="producer">200</span></div>
-                </div>
                 <div class="card collapsible collapsed think">
                   <div class="card-head"><span class="chev">▸</span><span class="kind">think</span><span class="sum">权衡「流程跑通」与「机制成立」是否是一回事</span></div>
                 </div>
@@ -1309,12 +1369,6 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
                 <span>思考轨迹</span><span class="trace-count"></span><span class="trace-chevron" aria-hidden="true">⌄</span>
               </summary>
               <div class="trace-content">
-                <div class="card collapsible collapsed tool pay">
-                  <div class="card-head"><span class="chev">▸</span><span class="kind">pay</span><span class="sum">GET /quote/SPY · quotes.example.net · $0.001000 · im_cc3f74a85f72 · 0xe831823a..3c3a · settled · tx 0xab8e12a9..fe74</span><span class="producer">200</span></div>
-                </div>
-                <div class="card collapsible collapsed tool pay">
-                  <div class="card-head"><span class="chev">▸</span><span class="kind">pay</span><span class="sum">GET /quote/BTC-USD · quotes.example.net · $0.001000 · im_1f3218efc2a7 · 0xf2424453..09df · enqueued · SP 承诺 17:31:58 前结算</span><span class="producer">200</span></div>
-                </div>
                 <div class="card collapsible collapsed think">
                   <div class="card-head"><span class="chev">▸</span><span class="kind">think</span><span class="sum">按样本量核对命中率差异是否可区分</span></div>
                 </div>
@@ -1373,7 +1427,7 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
         </div>
 
         <div class="room-round-end">
-          <div class="room-line"><span class="room-line-text">round 1 · settled · answered: 多头视角, 数据核查, 反向视角 · passed: 基准率检查 · paid $0.003000 (3)</span></div>
+          <div class="room-line"><span class="room-line-text">round 1 · settled · answered: 多头视角, 数据核查, 反向视角 · passed: 基准率检查</span></div>
           <section class="room-discussion" aria-label="本轮讨论对照">
             <div class="room-discussion-title">本轮讨论对照</div>
             <div class="room-view-note">按各 bot 的发言整理；所列依据仍需核实。</div>
@@ -1522,14 +1576,17 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
             </div>
             <details class="answer-trace">
               <summary class="trace-toggle">
-                <span>思考轨迹</span><span class="trace-count">2</span><span class="trace-chevron" aria-hidden="true">⌄</span>
+                <span>思考轨迹</span><span class="trace-count">3</span><span class="trace-chevron" aria-hidden="true">⌄</span>
               </summary>
               <div class="trace-content">
                 <div class="card collapsible collapsed think">
                   <div class="card-head"><span class="chev">▸</span><span class="kind">think</span><span class="sum">比较三份立场的共同点与分歧点</span></div>
                 </div>
+                <div class="card collapsible collapsed tool">
+                  <div class="card-head"><span class="chev">▸</span><span class="kind">wallet_budget_delegate</span><span class="sum">im_58d0c3a4e19f · $0.50 of im_1f3218efc2a7 · for: children of this session · hosts text.example.net · per call $0.01 · valid 1h · siblings share the parent's remaining</span><span class="producer">done</span></div>
+                </div>
                 <div class="card collapsible collapsed think">
-                  <div class="card-head"><span class="chev">▸</span><span class="kind">think</span><span class="sum">起草整理意见，避免把未填字段读成同意</span></div>
+                  <div class="card-head"><span class="chev">▸</span><span class="kind">think</span><span class="sum">起草整理意见，避免把未填字段读成同意；把新闻摘要交给子任务</span></div>
                 </div>
               </div>
             </details>
@@ -1540,9 +1597,24 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
 
         <details class="answer-trace trace-pending">
           <summary class="trace-toggle">
-            <span>思考轨迹</span><span class="trace-count">1</span><span class="trace-chevron" aria-hidden="true">⌄</span>
+            <span>思考轨迹</span><span class="trace-count">3</span><span class="trace-chevron" aria-hidden="true">⌄</span>
           </summary>
           <div class="trace-content">
+            <div class="card collapsible tool pay refused">
+              <div class="card-head"><span class="chev">▾</span><span class="kind">wallet_pay</span><span class="sum">未付费 · 签名前被拒 · mandate_insufficient_budget · GET quotes.example.net/quote/ETH-USD · im_cc3f74a85f72 remaining $0.000000 &lt; $0.001000</span><span class="producer">refused</span></div>
+              <div class="card-body">mandate_insufficient_budget: remaining budget 0 is below the price 1000 (atomic units).
+Do not retry: the same call will be refused until the budget changes.
+Ask the operator for a larger or an additional budget (wallet_budget_request).</div>
+            </div>
+            <article class="card ask answered">
+              <div class="card-head">
+                <span class="kind">approval</span>
+                <span class="producer">wallet_budget_request</span>
+                <span class="raw" title="approvalId apr_2c7f…9a41 · callId call_d05e…3b18">raw</span>
+              </div>
+              <div class="card-line">BUDGET - "one more quote (ETH-USD)" · limit $0.002 · per call $0.001 · valid 1d · hosts quotes.example.net · from strategies/follow-up-research by kairos</div>
+              <div class="card-line">answered · deny</div>
+            </article>
             <div class="card collapsible collapsed tool dispatch">
               <div class="card-head">
                 <span class="chev">▸</span>
@@ -1587,12 +1659,6 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;
                 <span>思考轨迹</span><span class="trace-count"></span><span class="trace-chevron" aria-hidden="true">⌄</span>
               </summary>
               <div class="trace-content">
-                <div class="card collapsible tool pay refused">
-                  <div class="card-head"><span class="chev">▾</span><span class="kind">pay</span><span class="sum">GET /quote/ETH-USD · refused before signing · mandate_insufficient_budget · im_cc3f74a85f72 · remaining $0.000000 &lt; $0.001000 · 已提交预算请求 im_7d02c41e9b50（等待批准）</span><span class="producer">—</span></div>
-                  <div class="card-body">Remaining budget 0 is below the price 1000 (atomic units).
-Do not retry: the same call will be refused until the budget changes.
-Ask the user to approve a larger or additional intent mandate.</div>
-                </div>
                 <div class="card collapsible collapsed think">
                   <div class="card-head"><span class="chev">▸</span><span class="kind">think</span><span class="sum">比较按日历取样与按事件取样的样本量</span></div>
                 </div>
@@ -1642,7 +1708,7 @@ Ask the user to approve a larger or additional intent mandate.</div>
         </div>
 
         <div class="room-round-end">
-          <div class="room-line"><span class="room-line-text">round 1 · settled · answered: 数据核查, 反向视角 · passed: 多头视角, 基准率检查 · paid $0.000000 · refused 1</span></div>
+          <div class="room-line"><span class="room-line-text">round 1 · settled · answered: 数据核查, 反向视角 · passed: 多头视角, 基准率检查</span></div>
           <section class="room-discussion" aria-label="本轮讨论对照">
             <div class="room-discussion-title">本轮讨论对照</div>
             <div class="room-view-note">按各 bot 的发言整理；所列依据仍需核实。</div>
@@ -1753,12 +1819,20 @@ Ask the user to approve a larger or additional intent mandate.</div>
           bot 可以选择不发言，这时它不会产生气泡，但会被写进轮次行，并在参与者条上标成 passed。沉默被记录，而不是被填满。轮次编号按每一次提问重新从 1 开始计，所以第二次提问之后的那一轮，行首同样写 round 1。
         </div>
         <div class="note">
-          <span class="note-i">轨迹里的 pay 卡片</span>
-          bot 的每次付费调用和它的回答放在同一条轨迹里：调了哪个资源、花了多少、从哪个预算出、mandate 摘要、有没有结算，都写出来。付费和回答一样只隔一次点击；轮次行末尾把这一轮的付费合计也记上。
+          <span class="note-i">Kairos 轨迹开头的 approval · wallet_budget_request 卡</span>
+          这是第三道闸，和下单那张卡同一个形状：Kairos 想花钱，先得请一笔预算，卡上一行写清用途、额度、单笔上限、有效期、每一个 host 的全名和请求者（哪个策略、谁）。你点 Approve，这笔预算才存在，付款从此在它里面进行、不再逐笔弹卡；你点 Deny，工具把错误交给模型，钱包页上什么也不会出现。第二次提问里那张就被拒了。超过五个 host、或者用通配写 host 的请求，在弹卡之前就被拒。
+        </div>
+        <div class="note">
+          <span class="note-i">轨迹里的 wallet_pay 卡片</span>
+          Kairos 的每次付费和它的整理放在同一条轨迹里：花了多少、买了哪个资源、结算了没有、链上那笔交易的哈希。每一张卡就是一笔链上转账——签一张授权，数据源交给 facilitator 提交上链，USDC 从 Kairos 自己的账户直接转给数据源，gas 由 facilitator 出。付费不弹卡：预算那张卡已经是事先的批准。付费和回答一样只隔一次点击。
         </div>
         <div class="note">
           <span class="note-i">refused 那一张</span>
-          拒绝发生在签名之前：数据源没有收到请求，也没有钱移动。卡片正文是钱包给 bot 的原话，它告诉 bot 不要重试、去问用户。bot 做的是提出一条新的预算请求（钱包页里那条 draft），然后停下来等人批。
+          拒绝发生在签名之前：数据源没有收到请求，也没有钱移动，钱包账本里也没有这一条（没有签名就没有条目）。卡片用告警色画，但它不是工具出错——工具返回的是一个成功的信封，正文是钱包给模型的原话，告诉它不要重试、去向操作者要预算。Kairos 接着做的正是这件事：提出一条新的预算请求，然后停下来等你。
+        </div>
+        <div class="note">
+          <span class="note-i">为什么 bot 的轨迹里没有付费</span>
+          bot 没有任何钱包工具。一个声音需要付费资源时，它在回答里说出来，由 Kairos 决定付不付；Kairos 自己派出去的子任务可以花钱，但只能从 Kairos 用 wallet_budget_delegate 划给它们的子预算里花（上面整理气泡的轨迹里那一张），子预算超不过父预算，也不弹卡。
         </div>
         <div class="note">
           <span class="note-i">Kairos 的整理气泡</span>
@@ -1791,32 +1865,41 @@ Ask the user to approve a larger or additional intent mandate.</div>
           </div>
         </div>
 
-        <p class="account-notice" role="status">本页为界面复刻，余额、预算与支付记录均为虚构样例；地址、mandate 摘要与交易哈希取自本地测试链上的一次演示运行，不对应任何公网资产。</p>
+        <p class="account-notice" role="status">本页为界面复刻，余额、预算、支付记录与告警均为虚构样例；地址、预算 id、会话 id 与交易哈希是按真实形状选的样例，不对应任何公网资产。</p>
 
-        <section class="account-overview" aria-label="链上余额">
+        <section class="account-overview" aria-label="地址与余额">
           <div class="account-overview-head">
             <span class="account-label">链上余额 · USDC</span>
-            <span class="account-badge paper">测试链 · eip155:31337</span>
+            <span class="account-badge paper">本地测试链 · eip155:31337</span>
           </div>
-          <div class="account-balance">$9.976000</div>
+          <div class="account-balance">$9.965000</div>
           <div class="account-change">
-            <span>可扣 $7.976000</span>
-            <span>提现待解锁 $2.000000 · 09/16 GMT+8 17:32:07 解锁</span>
+            <span>付款方 <span class="mono">0x70997970C51812dc3A010C7d01b50e0d17dc79C8</span></span>
+            <span>把测试 USDC 打到这个地址 · 余额读取于 14:32:07</span>
           </div>
           <dl class="account-metrics">
             <div class="account-metric">
-              <dt>已授权 SP</dt>
-              <dd class="mono">0x90F79bf6..b906</dd>
+              <dt>根预算剩余合计</dt>
+              <dd>$4.970000</dd>
             </div>
             <div class="account-metric">
-              <dt>队列中</dt>
-              <dd>1 笔 · $0.001000</dd>
+              <dt>待对账</dt>
+              <dd>1 笔 · $0.010000</dd>
             </div>
             <div class="account-metric">
               <dt>累计已结算</dt>
-              <dd>24 笔 · $0.024000</dd>
+              <dd>26 笔 · $12.423000</dd>
             </div>
           </dl>
+        </section>
+
+        <section aria-label="告警">
+          <ul class="wallet-alerts" role="status">
+            <li><span class="alert-kind">budget_exhausted</span><span>im_cc3f74a85f72「三次报价」已用完：$0.003000 / $0.003000，再付一笔就会被拒。</span></li>
+            <li><span class="alert-kind">unknown_rows</span><span>1 条支付状态为 unknown（POST /analyze · $0.010000）：授权已签出，facilitator 没有在时限内答复；下一次对账会去链上核对。</span></li>
+            <li><span class="alert-kind">unexplained_outflow</span><span>自上次查看（14:05:30）以来余额少了 $0.260000，账本在这段时间只结算了 $0.010000：有 $0.250000 是账本之外的支出。</span></li>
+            <li><span class="alert-kind info">expiring</span><span>im_58d0c3a4e19f（子预算）将在 15:29:41 到期；im_cc3f74a85f72 将在明天 14:29:41 到期。</span></li>
+          </ul>
         </section>
 
         <section class="account-records" aria-label="预算">
@@ -1828,13 +1911,13 @@ Ask the user to approve a larger or additional intent mandate.</div>
           <div class="account-records-panel">
             <div class="account-table-scroll" tabindex="0" aria-label="预算明细">
               <table class="account-table">
-                <caption class="account-sr-only">预算（intent mandate）明细；未填写的字段以横线表示。</caption>
+                <caption class="account-sr-only">预算（intent mandate）明细；没有持有人、没有单笔上限的字段以横线表示。剩余是整条预算链上最小的那个数。</caption>
                 <thead>
                   <tr>
                     <th scope="col">预算</th>
-                    <th scope="col">额度</th>
-                    <th scope="col">已花</th>
-                    <th scope="col">剩余</th>
+                    <th scope="col" class="text">持有人</th>
+                    <th scope="col">剩余 / 额度</th>
+                    <th scope="col">单笔上限</th>
                     <th scope="col" class="text">允许 host</th>
                     <th scope="col">有效期至</th>
                     <th scope="col" class="text">状态</th>
@@ -1842,244 +1925,289 @@ Ask the user to approve a larger or additional intent mandate.</div>
                 </thead>
                 <tbody>
                   <tr>
-                    <td><div class="account-symbol"><strong class="mono">im_1f3218efc2a7</strong><span class="account-subvalue">行情与文本分析</span></div></td>
-                    <td>$5.000000</td>
-                    <td>$0.022000<span class="account-subvalue">预留 $0.000000</span></td>
-                    <td>$4.978000</td>
-                    <td class="text mono">quotes.example.net, text.example.net</td>
+                    <td><div class="account-symbol"><strong class="mono">im_1f3218efc2a7</strong><span class="account-subvalue">文本分析（反向假设复核）</span></div></td>
+                    <td class="text">—<span class="account-subvalue">只有 Kairos 本人</span></td>
+                    <td>$4.970000<span class="account-subvalue">/ $5.000000 · 待对账 $0.010000</span></td>
+                    <td>$0.010000</td>
+                    <td class="text mono">text.example.net</td>
+                    <td>09/23 14:05:30</td>
+                    <td class="text"><span class="ch-badge" data-status="signed">signed</span></td>
+                  </tr>
+                  <tr>
+                    <td><div class="account-symbol"><strong class="mono">im_58d0c3a4e19f</strong><span class="account-subvalue">子任务：新闻摘要 · 父预算 im_1f3218efc2a7</span></div></td>
+                    <td class="text mono">children:s_2f8a91c0<span class="account-subvalue">这个会话的直接子任务</span></td>
+                    <td>$0.490000<span class="account-subvalue">/ $0.500000 · 待对账 $0.010000</span></td>
+                    <td>$0.010000</td>
+                    <td class="text mono">text.example.net</td>
                     <td>09/16 15:29:41</td>
                     <td class="text"><span class="ch-badge" data-status="signed">signed</span></td>
                   </tr>
                   <tr>
-                    <td><div class="account-symbol"><strong class="mono">im_cc3f74a85f72</strong><span class="account-subvalue">三次报价</span></div></td>
-                    <td>$0.003000</td>
-                    <td>$0.003000<span class="account-subvalue">预留 $0.000000</span></td>
-                    <td>$0.000000</td>
+                    <td><div class="account-symbol"><strong class="mono">im_cc3f74a85f72</strong><span class="account-subvalue">三次报价（反向假设复核）</span></div></td>
+                    <td class="text">—<span class="account-subvalue">只有 Kairos 本人</span></td>
+                    <td>$0.000000<span class="account-subvalue">/ $0.003000 · 已用完</span></td>
+                    <td>$0.001000</td>
                     <td class="text mono">quotes.example.net</td>
-                    <td>09/16 15:29:41</td>
+                    <td>09/17 14:29:41</td>
                     <td class="text"><span class="ch-badge" data-status="signed">signed</span></td>
-                  </tr>
-                  <tr>
-                    <td><div class="account-symbol"><strong class="mono">im_7d02c41e9b50</strong><span class="account-subvalue">反向假设复核 · 新闻全文（数据核查请求）</span></div></td>
-                    <td>$3.000000</td>
-                    <td>—</td>
-                    <td>—</td>
-                    <td class="text mono">news.example.net</td>
-                    <td>—</td>
-                    <td class="text"><span class="ch-badge" data-status="draft">draft · 等待你批准</span></td>
                   </tr>
                   <tr>
                     <td><div class="account-symbol"><strong class="mono">im_a91c5e0d27b4</strong><span class="account-subvalue">回测数据集下载（市场情绪频道，已退役）</span></div></td>
-                    <td>$20.000000</td>
-                    <td>$12.400000<span class="account-subvalue">预留 $0.000000</span></td>
-                    <td>$7.600000</td>
+                    <td class="text">—<span class="account-subvalue">只有 Kairos 本人</span></td>
+                    <td>$7.600000<span class="account-subvalue">/ $20.000000</span></td>
+                    <td>—</td>
                     <td class="text mono">data.example.net</td>
                     <td>09/30 00:00:00</td>
-                    <td class="text"><span class="ch-badge" data-status="disabled">disabled</span></td>
+                    <td class="text"><span class="ch-badge" data-status="disabled">disabled</span><span class="account-subvalue">已收回 · 09/02</span></td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <div class="account-table-footer" role="status">4 个预算 · 预算是承诺上限，不是余额</div>
+            <div class="account-table-footer" role="status">4 个预算 · 预算是你批过的上限，不是余额；子预算花的钱同时记在它自己和它的每一级父预算上</div>
           </div>
         </section>
 
         <section class="account-records" aria-label="支付记录">
           <div class="account-toolbar">
             <div class="account-tabs">
-              <span class="account-tab active static">支付记录<span class="account-tab-count">25</span></span>
+              <span class="account-tab active static">支付记录<span class="account-tab-count">27</span></span>
             </div>
           </div>
           <div class="account-records-panel">
             <div class="account-table-scroll" tabindex="0" aria-label="支付记录明细">
               <table class="account-table">
-                <caption class="account-sr-only">钱包账本；未结算的记录在结算 tx 一列以横线表示。</caption>
+                <caption class="account-sr-only">钱包账本，最新在前；没有上链的记录在 tx 一列以横线表示，原因写在状态下方。</caption>
                 <thead>
                   <tr>
                     <th scope="col">时间</th>
                     <th scope="col" class="text">资源</th>
-                    <th scope="col">金额</th>
-                    <th scope="col" class="text">mandate</th>
+                    <th scope="col">金额 / 预算</th>
+                    <th scope="col" class="text">策略 · 会话</th>
                     <th scope="col" class="text">状态</th>
-                    <th scope="col">SP 承诺结算时限</th>
-                    <th scope="col" class="text">结算 tx</th>
+                    <th scope="col" class="text">tx</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
                     <td>09/16 14:31:58</td>
                     <td class="text"><div class="account-symbol"><strong>GET /quote/BTC-USD</strong><span class="account-subvalue">quotes.example.net</span></div></td>
-                    <td>$0.001000</td>
-                    <td class="text mono">0xf2424453..09df</td>
-                    <td class="text"><span class="ch-badge" data-status="enqueued">enqueued</span></td>
-                    <td>09/16 17:31:58</td>
-                    <td class="text">—</td>
-                  </tr>
-                  <tr>
-                    <td>09/16 14:29:41</td>
-                    <td class="text"><div class="account-symbol"><strong>POST /analyze</strong><span class="account-subvalue">text.example.net</span></div></td>
-                    <td>$0.010000</td>
-                    <td class="text mono">0x72b9eb6d..a52b</td>
+                    <td>$0.001000<span class="account-subvalue mono">im_cc3f74a85f72</span></td>
+                    <td class="text"><div class="account-symbol"><strong>跟进研究</strong><span class="account-subvalue mono">s_2f8a91c0</span></div></td>
                     <td class="text"><span class="ch-badge" data-status="settled">settled</span></td>
-                    <td>09/16 17:29:41</td>
-                    <td class="text mono">0xab8e12a9..fe74</td>
+                    <td class="text mono"><a class="tx-link" aria-disabled="true" title="在产品里指向所结算网络的区块浏览器；本地测试链没有">0xf2424453…09df</a></td>
                   </tr>
                   <tr>
-                    <td>09/16 14:29:41</td>
-                    <td class="text"><div class="account-symbol"><strong>GET /quote/AAPL</strong><span class="account-subvalue">quotes.example.net</span></div></td>
-                    <td>$0.001000</td>
-                    <td class="text mono">0x3ecce516..dfcf</td>
-                    <td class="text"><span class="ch-badge" data-status="settled">settled</span></td>
-                    <td>09/16 17:29:41</td>
-                    <td class="text mono">0xab8e12a9..fe74</td>
-                  </tr>
-                  <tr>
-                    <td>09/16 14:29:40</td>
+                    <td>09/16 14:31:57</td>
                     <td class="text"><div class="account-symbol"><strong>GET /quote/SPY</strong><span class="account-subvalue">quotes.example.net</span></div></td>
-                    <td>$0.001000</td>
-                    <td class="text mono">0xe831823a..3c3a</td>
+                    <td>$0.001000<span class="account-subvalue mono">im_cc3f74a85f72</span></td>
+                    <td class="text"><div class="account-symbol"><strong>跟进研究</strong><span class="account-subvalue mono">s_2f8a91c0</span></div></td>
                     <td class="text"><span class="ch-badge" data-status="settled">settled</span></td>
-                    <td>09/16 17:29:40</td>
-                    <td class="text mono">0xab8e12a9..fe74</td>
+                    <td class="text mono"><a class="tx-link" aria-disabled="true" title="在产品里指向所结算网络的区块浏览器；本地测试链没有">0xe831823a…3c3a</a></td>
                   </tr>
                   <tr>
-                    <td>09/16 14:29:39</td>
-                    <td class="text"><div class="account-symbol"><strong>GET /quote/BTC-USD</strong><span class="account-subvalue">quotes.example.net</span></div></td>
-                    <td>$0.001000</td>
-                    <td class="text mono">0xf81a77e4..16fe</td>
+                    <td>09/16 14:31:56</td>
+                    <td class="text"><div class="account-symbol"><strong>GET /quote/AAPL</strong><span class="account-subvalue">quotes.example.net</span></div></td>
+                    <td>$0.001000<span class="account-subvalue mono">im_cc3f74a85f72</span></td>
+                    <td class="text"><div class="account-symbol"><strong>跟进研究</strong><span class="account-subvalue mono">s_2f8a91c0</span></div></td>
                     <td class="text"><span class="ch-badge" data-status="settled">settled</span></td>
-                    <td>09/16 17:29:39</td>
-                    <td class="text mono">0xab8e12a9..fe74</td>
+                    <td class="text mono"><a class="tx-link" aria-disabled="true" title="在产品里指向所结算网络的区块浏览器；本地测试链没有">0x3ecce516…dfcf</a></td>
+                  </tr>
+                  <tr>
+                    <td>09/16 14:31:20</td>
+                    <td class="text"><div class="account-symbol"><strong>POST /analyze</strong><span class="account-subvalue">text.example.net</span></div></td>
+                    <td>$0.010000<span class="account-subvalue mono">im_58d0c3a4e19f</span></td>
+                    <td class="text"><div class="account-symbol"><strong>跟进研究</strong><span class="account-subvalue mono">s_9c07e3d2 · 父 s_2f8a91c0</span></div></td>
+                    <td class="text"><span class="ch-badge" data-status="unknown">unknown</span><span class="account-subvalue wrap">facilitator 3 s 内未答复 · 等待对账</span></td>
+                    <td class="text">—</td>
                   </tr>
                   <tr>
                     <td>09/16 14:20:12</td>
                     <td class="text"><div class="account-symbol"><strong>POST /analyze</strong><span class="account-subvalue">text.example.net</span></div></td>
-                    <td>$0.010000</td>
-                    <td class="text mono">0x5c0e19b3..7a41</td>
-                    <td class="text"><span class="ch-badge" data-status="rejected">rejected</span><span class="account-subvalue">402 settlement_unavailable: insufficient_balance</span></td>
-                    <td>—</td>
+                    <td>$0.010000<span class="account-subvalue mono">im_1f3218efc2a7</span></td>
+                    <td class="text"><div class="account-symbol"><strong>跟进研究</strong><span class="account-subvalue mono">s_2f8a91c0</span></div></td>
+                    <td class="text"><span class="ch-badge" data-status="settled">settled</span></td>
+                    <td class="text mono"><a class="tx-link" aria-disabled="true" title="在产品里指向所结算网络的区块浏览器；本地测试链没有">0xab8e12a9…fe74</a></td>
+                  </tr>
+                  <tr>
+                    <td>09/16 14:05:30</td>
+                    <td class="text"><div class="account-symbol"><strong>POST /analyze</strong><span class="account-subvalue">text.example.net</span></div></td>
+                    <td>$0.010000<span class="account-subvalue mono">im_1f3218efc2a7</span></td>
+                    <td class="text"><div class="account-symbol"><strong>跟进研究</strong><span class="account-subvalue mono">s_2f8a91c0</span></div></td>
+                    <td class="text"><span class="ch-badge" data-status="settled">settled</span></td>
+                    <td class="text mono"><a class="tx-link" aria-disabled="true" title="在产品里指向所结算网络的区块浏览器；本地测试链没有">0x5c0e19b3…7a41</a></td>
+                  </tr>
+                  <tr>
+                    <td>09/16 11:40:22</td>
+                    <td class="text"><div class="account-symbol"><strong>GET /dataset/breadth</strong><span class="account-subvalue">data.example.net</span></div></td>
+                    <td>$0.250000<span class="account-subvalue mono">im_a91c5e0d27b4</span></td>
+                    <td class="text"><div class="account-symbol"><strong>—</strong><span class="account-subvalue">无 context · CLI</span></div></td>
+                    <td class="text"><span class="ch-badge" data-status="expired-unused">expired-unused</span><span class="account-subvalue wrap">过了 validBefore 仍未上链 · 对账时标记，预算退回</span></td>
+                    <td class="text">—</td>
+                  </tr>
+                  <tr>
+                    <td>09/16 09:12:47</td>
+                    <td class="text"><div class="account-symbol"><strong>POST /analyze</strong><span class="account-subvalue">text.example.net</span></div></td>
+                    <td>$0.010000<span class="account-subvalue mono">im_1f3218efc2a7</span></td>
+                    <td class="text"><div class="account-symbol"><strong>跟进研究</strong><span class="account-subvalue mono">s_2f8a91c0</span></div></td>
+                    <td class="text"><span class="ch-badge" data-status="rejected">rejected</span><span class="account-subvalue wrap">402 · invalid_exact_evm_insufficient_balance · 测试 USDC 到账之前</span></td>
                     <td class="text">—</td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <div class="account-table-footer" role="status">最近 6 / 25 条 · 来自本地 ledger.jsonl · 上次对账 09/16 14:30:12</div>
+            <div class="account-table-footer" role="status">最近 8 / 27 条 · 来自本地 ledger.jsonl · 上次对账 09/16 14:30:12：settled 1 · expired-unused 1 · still pending 0；此后新增 1 条 unknown，下次打开本页会再对账一次</div>
           </div>
         </section>
 
-        <section class="account-records" aria-label="策略拒绝">
-          <div class="account-toolbar">
-            <div class="account-tabs">
-              <span class="account-tab active static">策略拒绝<span class="account-tab-count">2</span></span>
+        <div class="wallet-spend">
+          <section class="account-records" aria-label="按策略">
+            <div class="account-toolbar">
+              <div class="account-tabs">
+                <span class="account-tab active static">按策略<span class="account-tab-count">3</span></span>
+              </div>
             </div>
-          </div>
-          <div class="account-records-panel">
-            <div class="account-table-scroll" tabindex="0" aria-label="策略拒绝明细">
-              <table class="account-table">
-                <caption class="account-sr-only">在签名之前被钱包策略拒绝的付费；这些不进账本。</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">时间</th>
-                    <th scope="col" class="text">原因</th>
-                    <th scope="col" class="text">资源</th>
-                    <th scope="col" class="text">预算</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>09/16 14:31:59</td>
-                    <td class="text mono">mandate_insufficient_budget</td>
-                    <td class="text">GET /quote/ETH-USD</td>
-                    <td class="text mono">im_cc3f74a85f72</td>
-                  </tr>
-                  <tr>
-                    <td>09/16 14:20:12</td>
-                    <td class="text mono">host_not_allowed</td>
-                    <td class="text">GET /news/search</td>
-                    <td class="text mono">im_1f3218efc2a7</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div class="account-records-panel">
+              <div class="account-table-scroll" tabindex="0" aria-label="按策略的支出">
+                <table class="account-table">
+                  <caption class="account-sr-only">按频道（策略）分组的支出：已结算与 unknown 的记录之和；没有 context 的记录归入未归属。</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">策略</th>
+                      <th scope="col">USDC</th>
+                      <th scope="col">笔数</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><div class="account-symbol"><strong>市场情绪</strong><span class="account-subvalue mono">market-sentiment · 已退役</span></div></td>
+                      <td>$12.400000</td>
+                      <td>12</td>
+                    </tr>
+                    <tr>
+                      <td><div class="account-symbol"><strong>跟进研究</strong><span class="account-subvalue mono">follow-up-research</span></div></td>
+                      <td>$0.033000<span class="account-subvalue">含 unknown $0.010000</span></td>
+                      <td>6</td>
+                    </tr>
+                    <tr>
+                      <td><div class="account-symbol"><strong>未归属</strong><span class="account-subvalue">无 context · CLI 直接花的</span></div></td>
+                      <td>$0.000000</td>
+                      <td>0</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="account-table-footer" role="status">已结算 $12.423000 · 待对账 $0.010000 · 合计按根预算算，子预算不重复计</div>
             </div>
-            <div class="account-table-footer" role="status">2 次 · 没有签名，所以不进账本；记在钱包报告里</div>
-          </div>
-        </section>
+          </section>
+
+          <section class="account-records" aria-label="按会话">
+            <div class="account-toolbar">
+              <div class="account-tabs">
+                <span class="account-tab active static">按会话<span class="account-tab-count">3</span></span>
+              </div>
+            </div>
+            <div class="account-records-panel">
+              <div class="account-table-scroll" tabindex="0" aria-label="按会话的支出">
+                <table class="account-table">
+                  <caption class="account-sr-only">按会话分组的支出：已结算与 unknown 的记录之和。</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">会话</th>
+                      <th scope="col">USDC</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><div class="account-symbol"><strong class="mono">s_b41d77e5</strong><span class="account-subvalue">市场情绪 · 已归档</span></div></td>
+                      <td>$12.400000</td>
+                    </tr>
+                    <tr>
+                      <td><div class="account-symbol"><strong class="mono">s_2f8a91c0</strong><span class="account-subvalue">跟进研究 · 反向假设复核</span></div></td>
+                      <td>$0.023000</td>
+                    </tr>
+                    <tr>
+                      <td><div class="account-symbol"><strong class="mono">s_9c07e3d2</strong><span class="account-subvalue">子任务 · 父 s_2f8a91c0</span></div></td>
+                      <td>$0.010000<span class="account-subvalue">unknown</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="account-table-footer" role="status">会话与策略都是 face 从会话头里读出来的，不是模型填的</div>
+            </div>
+          </section>
+        </div>
 
         <details class="account-details" open>
           <summary>
-            <span>结算处理器（SP）</span>
-            <span class="account-details-hint">承诺 · 队列 · 最近一次批量结算</span>
+            <span>钱包主目录与网络</span>
+            <span class="account-details-hint">钥匙 · 锁 · facilitator · 已注册工具</span>
           </summary>
           <div class="account-details-content">
             <dl class="account-info">
               <div>
-                <dt>SP 地址</dt>
-                <dd class="mono">0x90F79bf6..b906</dd>
+                <dt>网络</dt>
+                <dd>本地测试链 · eip155:31337</dd>
               </div>
               <div>
-                <dt>结算窗口</dt>
-                <dd>10800 s（3 小时）</dd>
+                <dt>USDC 合约</dt>
+                <dd class="mono">0x5FbDB231…0aa3</dd>
               </div>
               <div>
-                <dt>提现延迟</dt>
-                <dd>10800 s（3 小时）</dd>
+                <dt>facilitator</dt>
+                <dd>本地演示栈 127.0.0.1:4022 · 代付 gas</dd>
               </div>
               <div>
-                <dt>合约</dt>
-                <dd class="mono">AEP2DebitWallet 0xe7f1725e..0512</dd>
+                <dt>钱包主目录</dt>
+                <dd class="mono">$DSH_HOME/face/agentpay</dd>
               </div>
               <div>
-                <dt>队列</dt>
-                <dd>pending 0 · settling 0 · settled 25 · failed 0 · expired 0</dd>
+                <dt>钥匙</dt>
+                <dd>config.json（0600）· 由操作者写入</dd>
               </div>
               <div>
-                <dt>最近批量</dt>
-                <dd class="mono">settleBatch(1) 0x27cc9500..1120 · 14:32:03</dd>
+                <dt>锁</dt>
+                <dd class="mono">wallet.lock · pid 48213</dd>
               </div>
               <div>
-                <dt>上一批</dt>
-                <dd class="mono">settleBatch(24) 0xab8e12a9..fe74 · 14:30:05 · ≈43k gas / 笔</dd>
+                <dt>已注册工具</dt>
+                <dd>8 个 · wallet_offer … wallet_reconcile</dd>
               </div>
               <div>
-                <dt>每批上限</dt>
-                <dd>50 笔 · 5 s 一轮</dd>
+                <dt>预算签名校验</dt>
+                <dd>4 / 4 恢复到付款方地址</dd>
               </div>
             </dl>
-            <p class="account-detail-note">以上字段对应 SP 的 /supported 与 /health 两个只读接口；本页不会去请求它们。</p>
+            <p class="account-detail-note">以上字段与整页数据对应 face 的 /data/wallet.json；本页不会去请求它。钥匙本身永远不会出现在这个载荷里。</p>
           </div>
         </details>
 
         <div class="note">
-          <span class="note-i">先授权、后结算</span>
-          每次付费 Kairos 只签一张一次性 mandate 交给数据源，数据源立刻返回结果；钱要等结算处理器把很多张 mandate 打成一笔链上交易时才真正扣。所以上面 24 笔已结算共用同一个 tx，而付款当时链上余额一动不动。
+          <span class="note-i">一次授权，一笔链上交易</span>
+          Kairos 的 USDC 就在它自己的账户里，不用先交给谁、不用 approve、没有任何合约替它保管。每次 wallet_pay，钱包用付款方的钥匙签一张一次性授权（金额、收款方、有效期、nonce），交给数据源；数据源转给 facilitator，facilitator 校验后把它提交上链并代付 gas，USDC 直接从付款方转到数据源。所以支付记录里每一行 settled 都有自己的 tx，余额在结算那一刻就变；链上余额就是能花的全部。
         </div>
         <div class="note">
-          <span class="note-i">支付记录里那一行 enqueued</span>
-          这一页显示的是钱包自己的账本，不是 SP 的队列。SP 那边这笔已经结算（见下方 SP 的最近批量），账本还写 enqueued，因为对账上一次跑在它之前。页面不替账本补状态，「对账」按钮才是补状态的地方。
+          <span class="note-i">状态列只有四个词</span>
+          settled：链上已确认。rejected：数据源或 facilitator 以 402 拒收，没有钱移动，原因照写。unknown：授权已经签出去，答复没有在时限内回来——钱可能已经动了，也可能没有，页面不猜。expired-unused：授权过了自己的有效期仍没有被提交，预留的预算退回。签名之前被拒的付费不在这张表里：没有签名就没有条目，它只出现在对话流的 refused 卡片和钱包报告里。
         </div>
         <div class="note">
-          <span class="note-i">预算是在签字之前查的</span>
-          额度、host、有效期、单笔上限都在签任何东西之前核对，不通过就不会有签名出门。策略拒绝表里那两行就是这样的拒绝：没有花钱，也没有拿到数据。被拒的付费不写进账本（没有签名就没有条目），但记在钱包报告里，并原样出现在这里和对话流的思考轨迹中。
+          <span class="note-i">「对账」按钮做的事</span>
+          拿账本里 unknown 的行去链上核对：nonce 已经用掉 → 记成 settled 并补上 tx；过了有效期还没用 → 记成 expired-unused；都不是就继续等。打开这一页时如果有未决的行，会自动跑一次（一分钟内不重复），除此之外没有任何定时任务——没有人看的时候什么也不跑。页脚写的是上一次对账的结果。
         </div>
         <div class="note">
-          <span class="note-i">一张 mandate 只买一次交付</span>
-          同一张 mandate 再送一次，数据源回 409，不再送数据也不再记账。反过来的保证并不存在：数据源是先把 mandate 交给 SP 排队、再执行请求的，「没拿到数据就不扣钱」不是协议给的承诺。
+          <span class="note-i">预算是一张你批过的卡</span>
+          Kairos 调 wallet_budget_request，对话流里出现一张 approval 卡；你点 Approve，那一行才成为这张表里一条 signed 的预算，卡片和你的决定一起留在会话日志里；你点 Deny，工具把错误交给模型，这里什么也不会出现。起草人不能自己批，这张表上也没有「等待批准」的行——等你的东西在对话里，不在这里。有效期到了、或者 Kairos 调 wallet_budget_disable，预算就停。
         </div>
         <div class="note">
-          <span class="note-i">状态列写 draft 的那一行</span>
-          Kairos 或它的 bot 可以起草一个预算，但只能停在这里等你批准；起草人自己不能批准、启用或加额，拒绝提示里的补救建议也只是「去问用户」。这和侧栏里 waiting 的意思相同：有一件事在等你。
+          <span class="note-i">持有人一列</span>
+          没有持有人的预算只有 Kairos 本人能花。写着 children:&lt;会话&gt; 的是 Kairos 用 wallet_budget_delegate 从一个根预算里划给自己子任务的子预算：不弹卡（父预算已经批过，子预算的额度、host、有效期、单笔上限都超不过它），子任务花的钱同时记在子预算和它的每一级父预算上，兄弟子任务共用父预算的剩余；「剩余」列写的是整条链上最小的那个数。收回子预算就是 disable，不需要退回什么。bot 没有任何钱包工具，这一列永远不会出现 bot。
         </div>
         <div class="note">
-          <span class="note-i">SP 承诺结算时限这一列</span>
-          那是 SP 签过名的承诺，不是结算本身。到期没送上链，对账会把这笔标成 SP 违约并把预算退回来，但链上没有任何东西强制 SP 履约。
-        </div>
-        <div class="note">
-          <span class="note-i">提现待解锁与可扣余额</span>
-          提现要等一段不短于结算窗口的延迟，期间已排队的 mandate 仍从全部余额里结算；SP 只按「余额减去待提现」这个可扣余额接收新的 mandate。这一格是 0 时新付费会被拒收，旧的仍会被扣。
+          <span class="note-i">告警块与导航栏上的那个点</span>
+          预算用完或剩不到 10%、余额低于所有根预算剩余之和、有 unknown 的行、24 小时内到期的预算、签名恢复不到付款方的预算，以及「余额比账本少」：自上次查看以来余额下降得比账本结算的多，说明有账本之外的支出——钥匙文件任何一个 shell 回合都读得到，CLI 直接花的钱账本不知道，这条告警是让它至少被看见。任何一条告警成立时，导航栏的 wallet 一站带一个点。
         </div>
         <div class="note">
           <span class="note-i">哪些在链上，哪些不在；哪些是样例</span>
-          链上只有余额、你授权的 SP、用过的 nonce 和提现计时，结算是一笔 settleBatch；预算、账本、SP 收据与队列都在链下，预算的签名也没有任何合约去校验。地址、mandate 摘要、两笔 tx 与前两个预算 id 来自演示；余额、待提现金额、时间戳、draft 与 disabled 两行、那行 rejected、每笔 gas 都是为这张页面选的样例。
+          链上只有余额、每笔结算的转账和用过的 nonce。预算、持有人、账本、告警都在钱包主目录下的文件里，预算上的签名没有任何合约去校验——约束在工具面上（第三道闸、持有人规则、host 预检），不在链上；能动全部余额的是拿到钥匙的人，所以放在这里的钱只是一笔小额测试浮存。地址、预算 id、会话 id、交易哈希、余额、时间戳、告警里的数字都是为这张页面选的样例。
         </div>
       </div>
     </section>
@@ -2284,31 +2412,31 @@ Ask the user to approve a larger or additional intent mandate.</div>
           <div class="account-details-content">
             <dl class="account-info">
               <div>
-                <dt>链上可扣余额</dt>
-                <dd>$7.976000 USDC</dd>
+                <dt>链上余额</dt>
+                <dd>$9.965000 USDC</dd>
               </div>
               <div>
-                <dt>队列中</dt>
-                <dd>1 笔 · $0.001000</dd>
+                <dt>网络</dt>
+                <dd>本地测试链 · eip155:31337</dd>
               </div>
               <div>
-                <dt>有效预算</dt>
-                <dd>2 个 · 剩余合计 $4.978000</dd>
+                <dt>有效根预算</dt>
+                <dd>2 个 · 剩余合计 $4.970000</dd>
               </div>
               <div>
-                <dt>待你批准</dt>
-                <dd>1 个（draft）</dd>
-              </div>
-              <div>
-                <dt>已授权 SP</dt>
-                <dd class="mono">0x90F79bf6..b906</dd>
+                <dt>待对账</dt>
+                <dd>1 笔 · $0.010000</dd>
               </div>
               <div>
                 <dt>累计已结算</dt>
-                <dd>24 笔 · $0.024000</dd>
+                <dd>26 笔 · $12.423000</dd>
+              </div>
+              <div>
+                <dt>告警</dt>
+                <dd>4 条 · 见 wallet 一站</dd>
               </div>
             </dl>
-            <p class="account-detail-note">总资产是 Alpaca 模拟盘里的美元，这里是 Kairos 付数据费的 USDC；两笔钱互不相通，也不合计。完整记录在导航栏的 wallet 一站。</p>
+            <p class="account-detail-note">总资产是 Alpaca 模拟盘里的美元，这里是 Kairos 付数据费的 USDC，在它自己的链上账户里；两笔钱互不相通，也不合计。完整记录在导航栏的 wallet 一站。</p>
           </div>
         </details>
 
