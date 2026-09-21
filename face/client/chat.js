@@ -3524,7 +3524,7 @@ function openMcpServer(server) {
   });
 }
 
-/** The wallet tools' page: the eight in-process tools by name and
+/** The wallet tools' page: the nine in-process tools by name and
  * description, like an MCP server's roster, plus where their records live.
  * @param {Record<string, any>[]} tools - plugins.json `walletTools`. */
 function openWalletTools(tools) {

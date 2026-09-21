@@ -234,6 +234,13 @@ function paymentsBlock(data) {
       ["资源", (row) => pair(row.resource, row.host), true],
       ["金额", (row) => row.amount],
       ["来源", (row) => pair(row.context.primary, row.context.secondary), true],
+      // The bought file's path (the ledger row's label), relative to the strategy's vendor/.
+      ["文件", (row) => {
+        if (row.file === null) return EM;
+        const cell = el("span", "mono", row.file);
+        cell.title = `strategies/<name>/vendor/${row.file}`;
+        return cell;
+      }, true],
       ["mandate", (row) => {
         const cell = el("span", "mono", shortHex(row.mandate, 10, 4));
         cell.title = row.mandate;

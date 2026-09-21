@@ -1,4 +1,4 @@
-/** The agent wallet on the face: the eight `wallet_*` tools, `/data/wallet.json`,
+/** The agent wallet on the face: the nine `wallet_*` tools, `/data/wallet.json`,
  * and the two seams the channel and plugin panels read spend and tool names
  * through (spec `docs/superpowers/specs/2026-09-20-agent-wallet-design.md` §4.2).
  *
@@ -24,6 +24,17 @@
  *   `requireMandateHost` refuses every host no held mandate names.
  * - ONE process on the home. The wallet takes `wallet.lock` (decision 10); a
  *   home another live pid holds is reported, not fought over.
+ * - WHERE a bought file may land. `wallet_pay`'s `save_to` is relative to a
+ *   root only the host can name (`ToolCallMeta.saveRoot`): the calling
+ *   session's channel directory, `<channel>/vendor` — so a file lands where
+ *   its spend is attributed. A root session (no channel) is the
+ *   unattributed bucket and is given NO root: agentpay answers `save_to`
+ *   with its usage envelope and the payment itself still works. Containment
+ *   note (R5 class, bought-data spec): the face process writes the payee's
+ *   bytes at the path Kairos named, under the channel it read off the
+ *   session header; agentpay's `resolveSavePath` bounds it to
+ *   `<channel>/vendor` (no absolute path, no `..`, no symlink escape) and
+ *   never overwrites unless the call says so. The face authors nothing.
  *
  * Nothing here awaits before the tools are registered: `installWallet` is
  * synchronous through registration so the tools are in the tree before any
@@ -87,8 +98,12 @@ export interface WalletDeps {
   ctx: WalletContextLike;
   /** The harness home; the wallet home is `<home>/face/agentpay` unless `FACE_AGENTPAY_HOME` says otherwise. */
   home: string;
-  /** Which channel a session's directory belongs to (panels.ts `channelFor`). */
-  channelFor(cwd: string | undefined): Promise<{ workspaceId: string; name: string } | null>;
+  /** Which channel a session's directory belongs to (panels.ts `channelFor`);
+   * `dir` is the channel's directory, the parent of the save root. */
+  channelFor(cwd: string | undefined): Promise<{ workspaceId: string; name: string; dir: string } | null>;
+  /** The x402 catalogue `wallet_discover` queries; default the CDP Bazaar
+   * (`bazaarUrlOf`: `FACE_AGENTPAY_BAZAAR_URL`, else agentpay's default). */
+  bazaarUrl?: string;
   log?: (line: string) => void;
   /** Injectable clock (unix milliseconds), for the tests. */
   now?: () => number;
@@ -117,6 +132,17 @@ export interface WalletInstall {
 export function walletHomeOf(dshHome: string, env: NodeJS.ProcessEnv = process.env): string {
   return env.FACE_AGENTPAY_HOME || join(dshHome, "face", "agentpay");
 }
+
+/** The catalogue URL override, `FACE_AGENTPAY_BAZAAR_URL` (`||`: empty is
+ * the default), else `undefined` — agentpay's `resolveConfig` then falls to
+ * config.json or its own default. Face-prefixed on purpose: the shell's
+ * `AGENTPAY_*` never reach the face's wallet (see `installWallet`). */
+export function bazaarUrlOf(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.FACE_AGENTPAY_BAZAAR_URL || undefined;
+}
+
+/** Where a channel session's `save_to` files land: `<channel dir>/vendor`. */
+export const VENDOR_DIR = "vendor";
 
 /* ---------- the private-host refusal (decision 9) ---------- */
 
@@ -275,11 +301,22 @@ export function callTitle(tool: Pick<WalletTool, "name" | "kind">, args: unknown
   if (tool.name === "wallet_budget_request" && typeof a.purpose === "string") return `${tool.name} "${a.purpose.slice(0, 60)}"`;
   if (tool.name === "wallet_budget_delegate" && typeof a.limit_usd === "string") return `${tool.name} $${a.limit_usd}`;
   if (tool.name === "wallet_budget_disable" && typeof a.id === "string") return `${tool.name} ${a.id}`;
+  if (tool.name === "wallet_discover" && typeof a.query === "string") return `${tool.name} "${a.query.slice(0, 60)}"`;
   return tool.name;
 }
 
+/** `23.1 KB` / `512 B`: a byte count for a title (the client has its own). */
+function sizeOf(bytes: unknown): string {
+  const n = typeof bytes === "number" && Number.isFinite(bytes) ? bytes : Number.NaN;
+  if (Number.isNaN(n)) return "?";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /** The completed card's title, from the envelope: `$0.001 · settled` for a
- * payment, `refused · <reason>` for any `ok:false`, the id for a new budget.
+ * payment (`· saved 23.1 KB` when the body went to a file), `refused ·
+ * <reason>` for any `ok:false`, the id for a new budget.
  * `undefined` keeps the pending title (the tool errored, or the value is not
  * an envelope). */
 export function resultTitle(tool: Pick<WalletTool, "name">, value: unknown): string | undefined {
@@ -287,10 +324,17 @@ export function resultTitle(tool: Pick<WalletTool, "name">, value: unknown): str
   if (v.ok === false) return `refused · ${typeof v.error === "string" ? v.error : "?"}`;
   if (v.ok !== true) return undefined;
   switch (tool.name) {
-    case "wallet_pay":
+    case "wallet_pay": {
+      const saved = argsOf(v.saved);
+      const suffix = typeof saved.sha256 === "string" ? ` · saved ${sizeOf(saved.bytes)}` : "";
       return v.paid === true
-        ? `$${String(v.amount_usd)} · ${String(v.ledger_status)}${typeof v.host === "string" ? ` · ${v.host}` : ""}`
-        : `${String(v.status)} · unpaid${typeof v.host === "string" ? ` · ${v.host}` : ""}`;
+        ? `$${String(v.amount_usd)} · ${String(v.ledger_status)}${typeof v.host === "string" ? ` · ${v.host}` : ""}${suffix}`
+        : `${String(v.status)} · unpaid${typeof v.host === "string" ? ` · ${v.host}` : ""}${suffix}`;
+    }
+    case "wallet_discover": {
+      const n = Array.isArray(v.resources) ? v.resources.length : 0;
+      return `${n} resource${n === 1 ? "" : "s"}`;
+    }
     case "wallet_offer": {
       const offer = Array.isArray(v.offer) ? v.offer[0] as { amount_usd?: unknown } | undefined : undefined;
       return v.status === 402 ? `402 · $${String(offer?.amount_usd ?? "?")}` : `${String(v.status)} · not a paid resource`;
@@ -351,7 +395,8 @@ export function installWallet(deps: WalletDeps): WalletInstall {
     /* An EMPTY env: the shell's `AGENTPAY_*` (a CLI session's key, RPC or
      * home) must never redirect the face's wallet — the face's home is the
      * config.json in it, and nothing else. */
-    const config = resolveConfig({ home }, {});
+    const bazaar = deps.bazaarUrl ?? bazaarUrlOf();
+    const config = resolveConfig({ home, ...(bazaar !== undefined ? { bazaar } : {}) }, {});
     const holder = lockedBy(dirname(config.mandatesPath));
     /* Any LIVE holder, this process included: a second install on one home
      * (two faces, or one face installing twice) is the clobbering decision 10
@@ -577,7 +622,18 @@ export function walletToolDefinition(tool: WalletTool, wiring: ToolWiring): Wall
             return privateHostRefusal(tool.name, url);
           }
         }
-        const result: CliResult = await wiring.handle(tool.name, args, { context, caller, requesterSession: agent.id });
+        /* The save root, for `wallet_pay` only: the channel's `vendor/`
+         * directory, so a bought file lands where its spend is attributed
+         * (the row's `channel`). A session outside every channel — the
+         * unattributed bucket — gets none; agentpay then refuses `save_to`
+         * with its usage envelope ("save_to needs a save directory …") and
+         * pays without one as before. The path stays inside the root by
+         * agentpay's `resolveSavePath` (no `..`, no absolute, no symlink out,
+         * no overwrite unless asked): the face never widens it. */
+        const saveRoot = tool.name === "wallet_pay" && channel !== null ? join(channel.dir, VENDOR_DIR) : undefined;
+        const result: CliResult = await wiring.handle(tool.name, args, {
+          context, caller, requesterSession: agent.id, ...(saveRoot !== undefined ? { saveRoot } : {}),
+        });
         return result.output;
       } catch (err) {
         return failure(err).output;

@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  balanceView, groupAlerts, hasAlerts, holderLabel, mandateRows, mandateStatus, payFields, payLine,
-  paymentContext, paymentRows, payStatus, remainingPct, setupCommand, shortHex, shortSession, spendRows,
+  balanceView, fileSize, groupAlerts, hasAlerts, holderLabel, mandateRows, mandateStatus, payFields, payLine,
+  paymentContext, paymentRows, payStatus, remainingPct, savedFile, setupCommand, shortHex, shortSession, spendRows,
   txLink, usd, usdCompact, usdNumber,
 } from "../client/wallet-model.js";
-import { EMPTY, FULL, NOT_CONFIGURED, NOW, PAY_402, PAY_OK, PAY_REFUSED } from "./wallet-fixture.ts";
+import { EMPTY, FULL, NOT_CONFIGURED, NOW, PAY_402, PAY_OK, PAY_REFUSED, PAY_SAVED } from "./wallet-fixture.ts";
 
 /* Amounts are USD strings by contract (§4.4). A missing one is an em-dash,
  * never a zero: the page must not print a balance the server did not give. */
@@ -235,3 +235,42 @@ test("the pay line and its fields, for a settled call, a pre-signing refusal and
   assert.deepEqual(payFields({ ok: true, paid: true, amount_usd: "0.5", body_truncated: true }), [["amount", "$0.500000"], ["ledger", "unknown"], ["body", "truncated to 8 KB — raw has what was kept"]]);
   assert.equal(payLine({ ok: false }), "refused before signing · refused");
 });
+
+/* A bought file (bought-data spec): the line says it was kept and how big,
+ * the fields name the path, the size, the sha256 receipt (short) and the
+ * preview; the body is absent by contract, so no `body` row appears. A
+ * `saved.error` (paid for, over the cap) is named as not saved. */
+test("a saved pay envelope: the line's size, the file fields, the preview; a failed save is named", () => {
+  assert.equal(fileSize(0), "0 B");
+  assert.equal(fileSize(512), "512 B");
+  assert.equal(fileSize(23621), "23.1 KB");
+  assert.equal(fileSize(1024 * 1024 * 1.25), "1.3 MB");
+  assert.equal(fileSize("23621"), "—");
+  assert.equal(fileSize(-1), "—");
+  assert.deepEqual(savedFile(PAY_SAVED), {
+    path: "massive/AAPL/2016-01-01_2016-12-31.json", bytes: 23621, size: "23.1 KB",
+    sha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", contentType: "application/json",
+  });
+  assert.equal(savedFile(PAY_OK), null);
+  assert.equal(savedFile({ saved: { error: "body_too_large", path: "x", bytes: 1 } }), null, "no sha256, no file");
+  assert.equal(payLine(PAY_SAVED), "$0.01 · GET api.massive.example/v2/aggs/ticker/AAPL/range/1/day/2016-01-01/2016-12-31 · settled · tx 0xe833…9c9d · saved 23.1 KB");
+  const fields = payFields(PAY_SAVED);
+  assert.deepEqual(fields.slice(-5), [
+    ["file", "massive/AAPL/2016-01-01_2016-12-31.json"], ["size", "23.1 KB"], ["sha256", "9f86d081…f00a08"], ["type", "application/json"],
+    ["preview", `${PAY_SAVED.preview}…`],
+  ]);
+  assert.ok(!fields.some(([k]) => k === "body"));
+  const tooBig = payFields({ ok: true, paid: true, amount_usd: "0.01", saved: { error: "body_too_large", path: "big.json", bytes: 40_000_000, limit: 33_554_432 } });
+  assert.deepEqual(tooBig.at(-1), ["file", "not saved · body_too_large · big.json"]);
+  assert.equal(payLine({ ok: true, paid: true, amount_usd: "0.01", saved: { error: "body_too_large" } }), "$0.01 · — · unknown");
+  /* The /wallet table: the row's label becomes its file column; a row with none has null. */
+  const rows = paymentRows([PAY_SAVED_ROW, FULL.payments[0]], "eip155:84532");
+  assert.equal(rows[0].file, "massive/AAPL/2016-01-01_2016-12-31.json");
+  assert.equal(rows[1].file, null);
+});
+
+/** The page's row for the PAY_SAVED payment (spec §4.4 `paymentView`): the label rides in `context`. */
+const PAY_SAVED_ROW = {
+  nonce: "0xaa11", at: "2026-09-20T11:59:00.000Z", url: PAY_SAVED.url, host: PAY_SAVED.host, resource: PAY_SAVED.resource,
+  amount_usd: "0.010000", mandate: "im_1f3218efc2a7", status: "settled", tx: PAY_SAVED.tx, http_status: 200, context: PAY_SAVED.context,
+};

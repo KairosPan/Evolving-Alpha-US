@@ -81,7 +81,7 @@ let dispose: (() => Promise<void>) | undefined;
  * deadline that outlives the process's stop can still cancel a member. */
 let disposeRoom: (() => void) | undefined;
 let disposeData: (() => void) | undefined;
-/** The wallet's unwind: the eight tools and `wallet.lock` (a lock left behind
+/** The wallet's unwind: the nine tools and `wallet.lock` (a lock left behind
  * would make the CLI refuse the home until the pid was seen dead). */
 let disposeWallet: (() => void) | undefined;
 
@@ -169,11 +169,11 @@ const agentPresets = booted.ctx.get("agentPresets") as { list(): Promise<{ id: s
  * overview needs the wallet's `spendFor` - and the overview handler cannot be
  * extended after registration (wallet spec §9). */
 const deps = panelDeps(booted.ctx, process.cwd());
-/* The agent wallet: registered BEFORE the first `await` below, so the eight
+/* The agent wallet: registered BEFORE the first `await` below, so the nine
  * `wallet_*` tools are in the tree before any session exists (wallet spec
  * §4.2). Not configured (no `config.json` in the wallet home, or another live
  * pid holding its lock) is a state the face runs in: the tools are absent,
- * `/data/wallet.json` says why, and the wallet's own line (`wallet: 8 tools
+ * `/data/wallet.json` says why, and the wallet's own line (`wallet: 9 tools
  * registered, home …` / `wallet: not configured (…)`) says so on stdout. */
 const wallet = installWallet({
   ctx: booted.ctx as unknown as WalletContextLike,

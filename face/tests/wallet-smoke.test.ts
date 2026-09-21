@@ -18,6 +18,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -99,7 +100,7 @@ test("wallet smoke: installed on a booted tree, a gateway session pays through d
       wallet.registerRoutes(ctx.webServer);
       assert.equal(wallet.configured, true, wallet.reason);
       assert.equal(wallet.home, walletHome);
-      assert.match(lines[0], /^wallet: 8 tools registered, home /);
+      assert.match(lines[0], /^wallet: 9 tools registered, home /);
       assert.ok(existsSync(join(walletHome, "wallet.lock")));
 
       const base = `http://127.0.0.1:${ctx.webServer.port}`;
@@ -124,7 +125,7 @@ test("wallet smoke: installed on a booted tree, a gateway session pays through d
 
       /* THE PRINCIPAL: a gateway-created session in the channel (the default
        * preset - what `classifyRequester` calls the principal). Its roster
-       * carries the eight tools; nothing in this test masked them. */
+       * carries the nine tools; nothing in this test masked them. */
       const created = await rpc("session.create", { workspaceId: ws.id });
       const sessionId = String(created.sessionId);
       assert.equal(created.agentPreset, "kairos");
@@ -193,6 +194,26 @@ test("wallet smoke: installed on a booted tree, a gateway session pays through d
       assert.match(JSON.stringify(refused.out), /grabby.*no wallet/);
       assert.equal(payee.served, 1, "nothing was paid");
       assert.equal(readFileSync(join(walletHome, "ledger.jsonl"), "utf8").trim().split("\n").length, 1);
+
+      /* SAVE_TO through the real registry (bought-data spec): the root the
+       * face hands agentpay is the channel the REAL workspace registry
+       * resolved for the gateway session's cwd, plus `vendor/` - so the
+       * payee's bytes land under strategies/wallet-test/vendor, the envelope
+       * carries the receipt and no body, and the row's label is the path. */
+      const bought = await run("wallet_pay", { url: `${payee.url}/predict`, save_to: "massive/AAPL/2016.json" }, agent, "smoke-save-1");
+      assert.equal(bought.isError, false, JSON.stringify(bought.out));
+      assert.equal(bought.out.ok, true, JSON.stringify(bought.out));
+      const file = join(channelDir, "vendor", "massive", "AAPL", "2016.json");
+      assert.ok(existsSync(file), `the file is under the channel's vendor/: ${file}`);
+      const bytes = readFileSync(file);
+      assert.deepEqual(JSON.parse(bytes.toString("utf8")), { ok: true, resource: "GET /predict", served: 2 });
+      assert.deepEqual(bought.out.saved, { path: "massive/AAPL/2016.json", bytes: bytes.byteLength, sha256: createHash("sha256").update(bytes).digest("hex"), content_type: bought.out.saved.content_type });
+      assert.equal(bought.out.body, undefined);
+      assert.deepEqual(bought.out.context, { channel: ws.id, channelName: "wallet-test", session: sessionId, callId: "smoke-save-1", label: "massive/AAPL/2016.json" });
+      const ledger = readFileSync(join(walletHome, "ledger.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as Out);
+      assert.equal(ledger.length, 2);
+      assert.equal(ledger[1].context.label, "massive/AAPL/2016.json");
+      assert.equal(payee.served, 2);
     } finally {
       disposeWallet?.();
       await dispose();

@@ -69,6 +69,18 @@ export function shortHex(value, head = 8, tail = 4) {
   return `${value.slice(0, head)}…${value.slice(-tail)}`;
 }
 
+/** A byte count as the operator reads one: `512 B`, `23.1 KB`, `1.2 MB`.
+ * Binary units (1024) at one decimal — the size a directory listing shows,
+ * not a figure to audit; the exact count stays in the raw envelope. Anything
+ * that is not a finite non-negative number renders as an em-dash.
+ * @param {unknown} bytes @returns {string} */
+export function fileSize(bytes) {
+  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) return EM;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /** A dsh session id (`session-<uuid>`) as its first hex block, which is how
  * the chat's own tooltips and the room strip abbreviate one; anything else is
  * cut to eight characters.
@@ -217,9 +229,12 @@ export function paymentContext(context) {
  * tx link is resolved here so the view only decides between `<a>` and text.
  * @param {unknown} payments - `data.payments`.
  * @param {unknown} network - `data.network`.
+ * `file` is the row's `context.label` — agentpay writes the `save_to` path
+ * there by default, so a bought file names its row (bought-data spec); a
+ * row without one (a body read in the context) has `null`.
  * @returns {Array<{nonce: string, at: string | null, resource: string, host: string, amount: string,
  *   mandate: string, status: string, error: string | null, http: string, tx: string | null,
- *   txShort: string, txHref: string | null, context: {primary: string, secondary: string}}>}
+ *   txShort: string, txHref: string | null, context: {primary: string, secondary: string}, file: string | null}>}
  */
 export function paymentRows(payments, network) {
   const rows = [];
@@ -240,6 +255,7 @@ export function paymentRows(payments, network) {
       txShort: tx === null ? EM : shortHex(tx),
       txHref: txLink(network, tx),
       context: paymentContext(p.context),
+      file: p.context && typeof p.context === "object" && typeof p.context.label === "string" && p.context.label !== "" ? p.context.label : null,
     });
   }
   return rows;
@@ -301,8 +317,26 @@ export function payStatus(payload) {
   return payload.paid === true ? "unknown" : "free";
 }
 
+/** The `saved` receipt of a pay envelope, or `null` when the body came back
+ * in the envelope (no `save_to`) or the save failed (`saved.error`: paid for,
+ * not kept — the fields block names the error instead).
+ * @param {Record<string, any>} payload
+ * @returns {{path: string, bytes: number | null, size: string, sha256: string | null, contentType: string | null} | null} */
+export function savedFile(payload) {
+  const s = payload.saved;
+  if (!s || typeof s !== "object" || typeof s.path !== "string" || typeof s.sha256 !== "string") return null;
+  return {
+    path: s.path,
+    bytes: typeof s.bytes === "number" ? s.bytes : null,
+    size: fileSize(s.bytes),
+    sha256: s.sha256,
+    contentType: typeof s.content_type === "string" && s.content_type !== "" ? s.content_type : null,
+  };
+}
+
 /** A pay envelope's one line, spec §2: `$0.001 · GET api.example.com/predict
- * · settled · tx 0xe833…c9d`; a refusal `refused before signing ·
+ * · settled · tx 0xe833…c9d`, `· saved 23.1 KB` when the body went to a
+ * file (the operator's glance: it was paid for AND kept); a refusal `refused before signing ·
  * mandate_insufficient_budget`, or `402 · invalid_exact_evm_insufficient_balance`
  * when the payee answered. The distinction is `status`: a refusal with no
  * HTTP status never left the face.
@@ -317,6 +351,8 @@ export function payLine(payload) {
     const where = [method, `${host}${pathParts.join(" ")}`].filter((x) => x !== "").join(" ");
     const bits = [payload.paid === true ? usdCompact(payload.amount_usd) : "free", where || EM, payStatus(payload)];
     if (typeof payload.tx === "string" && payload.tx !== "") bits.push(`tx ${shortHex(payload.tx, 6, 4)}`);
+    const saved = savedFile(payload);
+    if (saved !== null) bits.push(`saved ${saved.size}`);
     return bits.join(" · ");
   }
   const error = typeof payload.error === "string" && payload.error !== "" ? payload.error : "refused";
@@ -344,6 +380,22 @@ export function payFields(payload) {
     add("remaining", payload.remaining_usd === undefined ? undefined : usd(payload.remaining_usd));
     add("tx", payload.tx);
     if (payload.body_truncated === true) add("body", "truncated to 8 KB — raw has what was kept");
+    /* A bought file: where it landed (relative to the channel's vendor/),
+     * how big, and the sha256 that is the receipt (the ledger row keeps the
+     * path, the card is the one place the hash shows). The preview is the
+     * first KB of the body as text, cut short when the file is longer. */
+    const saved = savedFile(payload);
+    if (saved !== null) {
+      add("file", saved.path);
+      add("size", saved.size);
+      add("sha256", shortHex(saved.sha256, 8, 6));
+      add("type", saved.contentType);
+      if (typeof payload.preview === "string" && payload.preview !== "") {
+        add("preview", payload.preview_truncated === true ? `${payload.preview}…` : payload.preview);
+      }
+    } else if (payload.saved && typeof payload.saved === "object" && typeof payload.saved.error === "string") {
+      add("file", `not saved · ${payload.saved.error}${typeof payload.saved.path === "string" ? ` · ${payload.saved.path}` : ""}`);
+    }
     return out;
   }
   add("error", payload.error);

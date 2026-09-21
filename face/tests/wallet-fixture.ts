@@ -154,3 +154,23 @@ export const PAY_402 = {
   payment_model_context: { protocol: "x402", reason: "invalid_exact_evm_insufficient_balance", summary: "The payer holds less USDC than the price.", remediation: [] },
   url: "https://api.example.com/analyze", host: "api.example.com",
 };
+
+/** `wallet_pay` with `save_to` (bought-data spec): the body went to a file
+ *  under the channel's `vendor/`, so the envelope carries `saved` (the path
+ *  relative to that root, the byte count, the sha256 receipt, the content
+ *  type) and a 1 KB `preview` cut short, and NO `body`; the ledger row's
+ *  label is the path. 23 621 bytes is what one year of Massive-shaped daily
+ *  bars weighs (`23.1 KB` on the card). */
+export const PAY_SAVED = {
+  ok: true, status: 200, paid: true, amount_usd: "0.010000", mandate: "im_1f3218efc2a7",
+  remaining_usd: "0.040000", tx: "0xe833f1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c9c9d",
+  ledger_status: "settled", url: "https://api.massive.example/v2/aggs/ticker/AAPL/range/1/day/2016-01-01/2016-12-31?adjusted=false",
+  resource: "GET /v2/aggs/ticker/AAPL/range/1/day/2016-01-01/2016-12-31", host: "api.massive.example",
+  network: "eip155:84532",
+  context: { channel: "5b0b3c2a-1111-4222-8333-444455556666", channelName: "aapl-momentum",
+    session: "session-0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", callId: "call_7", label: "massive/AAPL/2016-01-01_2016-12-31.json" },
+  saved: { path: "massive/AAPL/2016-01-01_2016-12-31.json", bytes: 23621,
+    sha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", content_type: "application/json" },
+  preview: '{"ticker":"AAPL","adjusted":false,"status":"OK","results":[{"t":1451970000000,"o":102.61,"h":105.37',
+  preview_truncated: true,
+};

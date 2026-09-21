@@ -21,7 +21,7 @@
  * color never carries the direction alone.
  * @module
  */
-import { balanceView, mandateRows, payFields, payLine, payStatus, txLink, usd } from "./wallet-model.js";
+import { balanceView, mandateRows, payFields, payLine, payStatus, shortHex, txLink, usd } from "./wallet-model.js";
 
 const EM = "—";
 const SVG = "http://www.w3.org/2000/svg";
@@ -470,6 +470,25 @@ function offerView(payload) {
   return flatObject(payload);
 }
 
+/** `wallet_discover`: the catalogue's payable rows as a table — resource ·
+ * price · network · pay_to (short) · payers · calls — ranked as the tool
+ * ranks them (distinct payers first); the meta line counts them against
+ * what the catalogue matched. The example input and tags stay in raw. */
+function discoverView(payload) {
+  const resources = Array.isArray(payload.resources) ? payload.resources : [];
+  if (!resources.length) return el("div", "viz viz-meta", `0 resources · ${payload.matched ?? 0} matched, none this wallet can pay`);
+  const rows = resources.map((r) => ({
+    resource: fmtCell(r?.resource), price_usd: usd(r?.price_usd), network: fmtCell(r?.network),
+    pay_to: shortHex(r?.pay_to), payers_30d: r?.payers_30d ?? 0, calls_30d: r?.calls_30d ?? 0,
+  }));
+  const node = genericTable({ rows });
+  if (node) {
+    const meta = node.querySelector(".viz-meta");
+    if (meta) meta.textContent = `${rows.length} resource${rows.length === 1 ? "" : "s"} · ${fmtCell(payload.network)}${typeof payload.matched === "number" ? ` · ${payload.matched} matched` : ""}${payload.partial ? " · partial" : ""}`;
+  }
+  return node;
+}
+
 /**
  * Every `wallet_*` value, `ok` either way. A refusal (`ok:false`) from ANY
  * wallet tool renders as the refused pay card — same shape, same danger
@@ -496,6 +515,7 @@ function walletResult(name, payload, partial) {
     return payload.mandate && typeof payload.mandate === "object" ? mandateTable([payload.mandate]) : null;
   }
   if (name === "wallet_offer") return offerView(payload);
+  if (name === "wallet_discover") return discoverView(payload);
   if (name === "wallet_budget_disable" || name === "wallet_reconcile") return flatObject(payload);
   return null;
 }

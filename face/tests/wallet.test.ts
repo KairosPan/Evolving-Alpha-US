@@ -15,7 +15,8 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,7 +28,7 @@ import { PolicyViolation } from "../../payment/packages/core/src/index.ts";
 import { accounts } from "../../payment/packages/payee/test/helpers.ts";
 import { KEYS, startStubPayee, type StubPayee } from "../../payment/packages/wallet/test/stub-payee.ts";
 import {
-  BALANCE_TTL_MS, callTitle, installWallet, isPrivateHost, noRedirectFetch, resultTitle, walletHomeOf,
+  BALANCE_TTL_MS, bazaarUrlOf, callTitle, installWallet, isPrivateHost, noRedirectFetch, resultTitle, walletHomeOf,
   type WalletInstall, type WalletToolDefinition, type WalletToolExec,
 } from "../src/wallet.ts";
 import { alertsOf, buildWalletPayload, channelSpend, nextFaceState, spendOf, usd } from "../src/wallet-payload.ts";
@@ -41,8 +42,16 @@ const facilitatorAddress = accounts.facilitator.address;
 const CLOSED_RPC = "http://127.0.0.1:1";
 
 const WS = "5b0b3c2a-1111-4222-8333-444455556666";
-const CHANNEL_DIR = "/repo/strategies/alpha";
-const channelFor = async (cwd: string | undefined) => (cwd === CHANNEL_DIR ? { workspaceId: WS, name: "alpha" } : null);
+/* A REAL channel directory (a temp `strategies/alpha`): `save_to` writes
+ * under `<dir>/vendor`, so the lookup must hand back a directory that
+ * exists, the way panels.ts's `channelFor` hands back the workspace's path. */
+const STRATEGIES = mkdtempSync(join(tmpdir(), "face-wallet-strategies-"));
+const CHANNEL_DIR = join(STRATEGIES, "alpha");
+mkdirSync(CHANNEL_DIR);
+const channelFor = async (cwd: string | undefined) => (cwd === CHANNEL_DIR ? { workspaceId: WS, name: "alpha", dir: CHANNEL_DIR } : null);
+/** Base Sepolia's USDC and the catalogue fixture's terms (`payment/packages/cli/test/discover.test.ts`). */
+const SEPOLIA_USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+const BAZAAR_FIXTURE = join(import.meta.dirname, "..", "..", "payment", "packages", "cli", "test", "fixtures", "bazaar-search.json");
 
 type Out = Record<string, any>;
 
@@ -99,6 +108,11 @@ test("wallet home: FACE_AGENTPAY_HOME, else <dshHome>/face/agentpay; an empty ex
   assert.equal(walletHomeOf("/h", {}), join("/h", "face", "agentpay"));
   assert.equal(walletHomeOf("/h", { FACE_AGENTPAY_HOME: "" }), join("/h", "face", "agentpay"));
   assert.equal(walletHomeOf("/h", { FACE_AGENTPAY_HOME: "/elsewhere" }), "/elsewhere");
+  /* The catalogue: the face's own variable, never the shell's AGENTPAY_BAZAAR_URL. */
+  assert.equal(bazaarUrlOf({}), undefined);
+  assert.equal(bazaarUrlOf({ FACE_AGENTPAY_BAZAAR_URL: "" }), undefined);
+  assert.equal(bazaarUrlOf({ AGENTPAY_BAZAAR_URL: "http://127.0.0.1:9/" }), undefined);
+  assert.equal(bazaarUrlOf({ FACE_AGENTPAY_BAZAAR_URL: "http://127.0.0.1:9/" }), "http://127.0.0.1:9/");
 });
 
 test("private hosts: loopback, link-local, RFC 1918, unique-local, .local; public hosts pass; unparsable fails closed", () => {
@@ -117,6 +131,18 @@ test("titles: the pending card names the tool and its target; the result card re
   assert.equal(callTitle({ name: "wallet_pay", kind: "fetch" }, { url: "https://api.example.com/analyze", body: "{}" }), "wallet_pay POST api.example.com/analyze");
   assert.equal(callTitle({ name: "wallet_budgets", kind: "read" }, {}), "wallet_budgets");
   assert.equal(callTitle({ name: "wallet_budget_request", kind: "other" }, { purpose: "quotes" }), 'wallet_budget_request "quotes"');
+  assert.equal(callTitle({ name: "wallet_discover", kind: "read" }, { query: "daily bars", max_usd: "0.05" }), 'wallet_discover "daily bars"');
+  assert.equal(callTitle({ name: "wallet_discover", kind: "read" }, {}), "wallet_discover");
+  assert.equal(resultTitle({ name: "wallet_discover" }, { ok: true, resources: [{}, {}] }), "2 resources");
+  assert.equal(resultTitle({ name: "wallet_discover" }, { ok: true, resources: [{}] }), "1 resource");
+  assert.equal(resultTitle({ name: "wallet_discover" }, { ok: true }), "0 resources");
+  assert.equal(resultTitle({ name: "wallet_discover" }, { ok: false, error: "discovery_unavailable" }), "refused · discovery_unavailable");
+  /* A saved body: the title says so, with the size the operator reads. */
+  assert.equal(
+    resultTitle({ name: "wallet_pay" }, { ok: true, paid: true, amount_usd: "0.010000", ledger_status: "settled", host: "h", saved: { path: "x.json", bytes: 23621, sha256: "ab" } }),
+    "$0.010000 · settled · h · saved 23.1 KB",
+  );
+  assert.equal(resultTitle({ name: "wallet_pay" }, { ok: true, paid: true, amount_usd: "0.01", ledger_status: "settled", saved: { error: "body_too_large", bytes: 1 } }), "$0.01 · settled", "not saved, not claimed");
   assert.equal(resultTitle({ name: "wallet_pay" }, { ok: true, paid: true, amount_usd: "0.001000", ledger_status: "settled", host: "api.example.com" }), "$0.001000 · settled · api.example.com");
   assert.equal(resultTitle({ name: "wallet_pay" }, { ok: false, error: "mandate_insufficient_budget" }), "refused · mandate_insufficient_budget");
   assert.equal(resultTitle({ name: "wallet_budgets" }, { ok: false, error: "usage" }), "refused · usage");
@@ -229,7 +255,7 @@ test("installWallet: a config.json resolveConfig refuses is not configured, with
   }
 });
 
-test("installWallet on a stub payee: eight tools, the caller rule, context from the header, holders, the page, spendFor, the lock", async () => {
+test("installWallet on a stub payee: nine tools, the caller rule, context from the header, holders, the page, spendFor, the lock", async () => {
   const dshHome = mkdtempSync(join(tmpdir(), "face-wallet-"));
   const home = join(dshHome, "face", "agentpay");
   const payee: StubPayee = await startStubPayee({ payTo: payeeAddress, token: TOKEN, assetDomain: { ...MOCK_USDC_DOMAIN }, network: "eip155:31337", price: "$0.001", facilitatorAddress });
@@ -246,15 +272,15 @@ test("installWallet on a stub payee: eight tools, the caller rule, context from 
     assert.equal(wallet.configured, true, wallet.reason);
     assert.equal(wallet.home, home);
     assert.ok(existsSync(join(home, "wallet.lock")), "the lock is taken at install");
-    assert.match(lines[0], /^wallet: 8 tools registered, home /);
+    assert.match(lines[0], /^wallet: 9 tools registered, home /);
     assert.deepEqual([...tools.keys()], [
-      "wallet_offer", "wallet_pay", "wallet_budget_request", "wallet_budget_delegate",
+      "wallet_offer", "wallet_pay", "wallet_discover", "wallet_budget_request", "wallet_budget_delegate",
       "wallet_budget_disable", "wallet_budgets", "wallet_report", "wallet_reconcile",
     ]);
     assert.deepEqual(wallet.walletTools.map((t) => t.name), [...tools.keys()]);
     const kinds = Object.fromEntries([...tools.values()].map((d) => [d.name, d.presentCall({ url: "https://x/y" }).kind]));
     assert.deepEqual(kinds, {
-      wallet_offer: "fetch", wallet_pay: "fetch", wallet_budget_request: "other", wallet_budget_delegate: "other",
+      wallet_offer: "fetch", wallet_pay: "fetch", wallet_discover: "read", wallet_budget_request: "other", wallet_budget_delegate: "other",
       wallet_budget_disable: "other", wallet_budgets: "read", wallet_report: "read", wallet_reconcile: "other",
     });
     for (const d of tools.values()) {
@@ -404,6 +430,202 @@ test("installWallet on a stub payee: eight tools, the caller rule, context from 
   assert.deepEqual(unhandled, []);
 });
 
+/* save_to (bought-data spec, plan H): the file lands under the CHANNEL's
+ * `vendor/` — the directory of the session the spend is attributed to — and
+ * nowhere else. A session outside every channel (the unattributed bucket)
+ * is given no root, so agentpay refuses the save in its usage envelope
+ * before any payment; a path that leaves the root, and a path that already
+ * exists, are refused the same way and cost nothing. A body past the 8 KB a
+ * tool result carries is written whole and comes back as a bounded preview. */
+test("wallet_pay save_to: under <channel>/vendor with the receipt on the envelope and the label on the row; no channel, an escape and an overwrite are refused; a big body lands whole", async () => {
+  const dshHome = mkdtempSync(join(tmpdir(), "face-wallet-save-"));
+  const home = join(dshHome, "face", "agentpay");
+  const payee: StubPayee = await startStubPayee({ payTo: payeeAddress, token: TOKEN, assetDomain: { ...MOCK_USDC_DOMAIN }, network: "eip155:31337", price: "$0.001", facilitatorAddress });
+  const stubHost = new URL(payee.url).host;
+  configure(home, "eip155:31337");
+  const { ctx, tools } = fakeCtx();
+  const wallet = installWallet({ ctx, home: dshHome, channelFor, log: () => {} });
+  const vendor = join(CHANNEL_DIR, "vendor");
+  const sha256 = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
+  try {
+    assert.equal(wallet.configured, true, wallet.reason);
+    const call = (name: string, args: unknown, who: WalletToolExec): Promise<Out> => tools.get(name)!.execute(args, who) as Promise<Out>;
+    const made = await call("wallet_budget_request", { purpose: "bars", limit_usd: "0.01", hosts: [stubHost] }, exec("kairos-1"));
+    assert.equal(made.ok, true, JSON.stringify(made));
+
+    /* From the channel session: the file, the receipt, the label. */
+    const saved = await call("wallet_pay", { url: `${payee.url}/predict`, save_to: "massive/x.json" }, exec("kairos-1", {}, "call-save-1"));
+    assert.equal(saved.ok, true, JSON.stringify(saved));
+    assert.equal(saved.paid, true);
+    assert.equal(saved.ledger_status, "settled");
+    const file = join(vendor, "massive", "x.json");
+    assert.ok(existsSync(file), `the file is at ${file}`);
+    const bytes = readFileSync(file);
+    assert.deepEqual(JSON.parse(bytes.toString("utf8")), { ok: true, resource: "GET /predict", served: 1 }, "the payee's bytes, verbatim");
+    assert.equal(saved.saved.path, "massive/x.json");
+    assert.equal(saved.saved.bytes, statSync(file).size);
+    assert.equal(saved.saved.sha256, sha256(bytes));
+    assert.match(String(saved.saved.content_type), /^application\/json/);
+    assert.equal(saved.body, undefined, "no body: the point of save_to");
+    assert.equal(saved.preview, bytes.toString("utf8"));
+    assert.equal(saved.preview_truncated, false);
+    assert.deepEqual(saved.context, { channel: WS, channelName: "alpha", session: "kairos-1", callId: "call-save-1", label: "massive/x.json" });
+    const title = tools.get("wallet_pay")!.presentResult({}, { isError: false, content: [{ type: "text", text: JSON.stringify(saved) }] });
+    assert.equal(title?.title, `$0.001000 · settled · ${stubHost} · saved ${bytes.byteLength} B`);
+    /* The ledger row (the page reads it back) carries the path as its label. */
+    const body = await page(wallet);
+    assert.equal(body.payments[0].context.label, "massive/x.json");
+    assert.equal(payee.served, 1);
+
+    /* No channel: no root, the usage envelope, no payment, no file. */
+    const rootSession = exec("kairos-2", { cwd: join(STRATEGIES, "nowhere") });
+    assert.equal(await channelFor(join(STRATEGIES, "nowhere")), null);
+    const unrooted = await call("wallet_pay", { url: `${payee.url}/predict`, save_to: "massive/y.json" }, rootSession);
+    assert.equal(unrooted.ok, false, JSON.stringify(unrooted));
+    assert.equal(unrooted.error, "config");
+    assert.match(unrooted.message, /save_to needs a save directory/);
+    assert.equal(unrooted.host, stubHost);
+    assert.equal(payee.served, 1, "nothing was paid");
+    assert.ok(!existsSync(join(vendor, "massive", "y.json")));
+    assert.ok(!existsSync(join(STRATEGIES, "nowhere")));
+    /* …and the same session pays fine without save_to: the refusal is the save's, not the payment's. */
+    const plain = await call("wallet_pay", { url: `${payee.url}/predict` }, rootSession);
+    assert.equal(plain.ok, true, JSON.stringify(plain));
+    assert.equal(plain.context.channel, undefined);
+    assert.equal(plain.context.label, undefined);
+    assert.equal(payee.served, 2);
+
+    /* An escape: refused before the payment, nothing outside vendor/. */
+    const escape = await call("wallet_pay", { url: `${payee.url}/predict`, save_to: "../../escape" }, exec("kairos-1"));
+    assert.equal(escape.ok, false);
+    assert.equal(escape.error, "config");
+    assert.match(escape.message, /"\.\." segment/);
+    assert.ok(!existsSync(join(STRATEGIES, "escape")) && !existsSync(join(CHANNEL_DIR, "escape")));
+    assert.equal(payee.served, 2);
+
+    /* The same path again: never overwritten, never paid for twice. */
+    const again = await call("wallet_pay", { url: `${payee.url}/predict`, save_to: "massive/x.json" }, exec("kairos-1"));
+    assert.equal(again.ok, false);
+    assert.equal(again.error, "config");
+    assert.match(again.message, /the file exists/);
+    assert.equal(payee.served, 2);
+    assert.equal(sha256(readFileSync(file)), saved.saved.sha256, "the first file is untouched");
+
+    /* A 100 KB body: on disk whole, in the envelope as a 1 KB preview. */
+    const big = await call("wallet_pay", { url: `${payee.url}/big`, save_to: "big.json" }, exec("kairos-1", {}, "call-big"));
+    assert.equal(big.ok, true, JSON.stringify(big));
+    const bigFile = join(vendor, "big.json");
+    assert.equal(statSync(bigFile).size, 100_000);
+    assert.equal(big.saved.bytes, 100_000);
+    assert.equal(big.saved.sha256, sha256(readFileSync(bigFile)));
+    assert.equal(big.body, undefined);
+    assert.equal(big.body_truncated, undefined);
+    assert.equal(big.preview.length, 1024);
+    assert.equal(big.preview_truncated, true);
+    assert.ok(JSON.stringify(big).length < 8 * 1024, "the envelope stays small");
+    assert.equal(big.context.label, "big.json");
+
+    /* The charter's bound (plan H): the model never learns where the root
+     * is. Every envelope, ok or refused, every title and the page name the
+     * file by its relative path only; the temp strategies directory (and its
+     * realpath: macOS's /var is a link) appears in none of them. */
+    const roots = [STRATEGIES, realpathSync(STRATEGIES)];
+    const seen: Array<[string, string]> = [
+      ["saved", JSON.stringify(saved)], ["unrooted", JSON.stringify(unrooted)], ["escape", JSON.stringify(escape)],
+      ["again", JSON.stringify(again)], ["big", JSON.stringify(big)], ["title", title?.title ?? ""], ["page", JSON.stringify(await page(wallet))],
+    ];
+    for (const [what, text] of seen) for (const root of roots) assert.ok(!text.includes(root), `${what} names the root: ${text}`);
+
+    /* A symlink out of vendor/ (the channel's own bash may plant one, R-W8):
+     * refused before the payment, nothing lands beyond it, and the refusal
+     * names the rule, not the target. */
+    const outside = join(STRATEGIES, "outside");
+    mkdirSync(outside);
+    symlinkSync(outside, join(vendor, "link"));
+    const viaLink = await call("wallet_pay", { url: `${payee.url}/predict`, save_to: "link/z.json" }, exec("kairos-1"));
+    assert.equal(viaLink.ok, false, JSON.stringify(viaLink));
+    assert.equal(viaLink.error, "config");
+    assert.match(viaLink.message, /symlink/);
+    assert.ok(!existsSync(join(outside, "z.json")));
+    assert.equal(payee.served, 3, "nothing was paid");
+    for (const root of roots) assert.ok(!JSON.stringify(viaLink).includes(root), "the refusal names no root");
+  } finally {
+    wallet.dispose();
+    await payee.close();
+  }
+  rmSync(dshHome, { recursive: true, force: true });
+  rmSync(vendor, { recursive: true, force: true });
+  assert.deepEqual(unhandled, []);
+});
+
+/* wallet_discover: free, no budget, a child may call it (kind `read`, not
+ * principal-only); the catalogue is a stub answering the CDP shape from the
+ * CLI's own fixture, reached through FACE_AGENTPAY_BAZAAR_URL's seam
+ * (`bazaarUrl`), and the rows are filtered to this wallet's network and token. */
+test("wallet_discover: a stub catalogue in the CDP shape, filtered to what this wallet can pay, callable by a child", async () => {
+  const dshHome = mkdtempSync(join(tmpdir(), "face-wallet-discover-"));
+  const home = join(dshHome, "face", "agentpay");
+  writeStoredConfig(home, { key: KEYS.payer, token: SEPOLIA_USDC, tokenDomain: { name: "USDC", version: "2" }, network: "eip155:84532", rpcUrl: CLOSED_RPC });
+  const fixture = readFileSync(BAZAAR_FIXTURE, "utf8");
+  const searches: URL[] = [];
+  const bazaar = createServer((req, res) => {
+    const url = new URL(req.url ?? "/", "http://stub");
+    if (req.method !== "GET" || url.pathname !== "/discovery/search") {
+      res.writeHead(404, { "content-type": "application/json" });
+      return res.end("{}");
+    }
+    searches.push(url);
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(fixture);
+  });
+  await new Promise<void>((resolve) => bazaar.listen(0, "127.0.0.1", resolve));
+  const address = bazaar.address();
+  const bazaarUrl = `http://127.0.0.1:${typeof address === "object" && address !== null ? address.port : 0}`;
+  const { ctx, tools } = fakeCtx();
+  const wallet = installWallet({ ctx, home: dshHome, channelFor, bazaarUrl, log: () => {} });
+  try {
+    assert.equal(wallet.configured, true, wallet.reason);
+    const call = (name: string, args: unknown, who: WalletToolExec): Promise<Out> => tools.get(name)!.execute(args, who) as Promise<Out>;
+    const kid = exec("kid-1", { origin: "subagent", parentSession: "kairos-1" });
+    const found = await call("wallet_discover", { query: "daily bars", max_usd: "0.05", limit: 5 }, kid);
+    assert.equal(found.ok, true, JSON.stringify(found));
+    assert.equal(found.query, "daily bars");
+    assert.equal(found.network, "eip155:84532");
+    assert.equal(found.bazaar, bazaarUrl);
+    assert.equal(found.matched, 5);
+    assert.equal(found.payable, 2, "the mainnet-only and upto rows are not this wallet's");
+    assert.equal(found.resources.length, 2);
+    for (const r of found.resources) {
+      assert.equal(r.network, "eip155:84532");
+      assert.match(r.resource, /^https:\/\//);
+      assert.match(r.price_usd, /^\d+\.\d{6}$/);
+      assert.match(r.pay_to, /^0x[0-9a-fA-F]{40}$/);
+      assert.equal(typeof r.payers_30d, "number");
+      assert.equal(typeof r.calls_30d, "number");
+    }
+    assert.ok(found.resources[0].payers_30d >= found.resources[1].payers_30d, "ranked by distinct payers");
+    assert.equal(typeof found.note, "string");
+    assert.equal(searches.length, 1);
+    assert.equal(searches[0].searchParams.get("query"), "daily bars");
+    assert.equal(searches[0].searchParams.get("network"), "eip155:84532");
+    assert.equal(searches[0].searchParams.get("maxUsdPrice"), "0.05");
+    const title = tools.get("wallet_discover")!.presentResult({}, { isError: false, content: [{ type: "text", text: JSON.stringify(found) }] });
+    assert.equal(title?.title, "2 resources");
+    assert.equal(tools.get("wallet_discover")!.presentCall({ query: "daily bars" }).kind, "read");
+    /* A bot: still refused (the caller rule is before any tool). A bad argument: the usage envelope. */
+    await assert.rejects(call("wallet_discover", { query: "x" }, exec("bot-1", { agentPreset: "drill-bull" })), /no wallet/);
+    const bad = await call("wallet_discover", { query: "x", limit: 0 }, kid);
+    assert.equal(bad.ok, false);
+    assert.equal(bad.error, "config");
+    assert.equal(searches.length, 1, "no query left for either");
+  } finally {
+    wallet.dispose();
+    await new Promise<void>((resolve) => bazaar.close(() => resolve()));
+  }
+  rmSync(dshHome, { recursive: true, force: true });
+  assert.deepEqual(unhandled, []);
+});
+
 test("installWallet on eip155:84532: a loopback payee is refused before any request, with the hint; a public host reaches agentpay's own gate", async () => {
   const dshHome = mkdtempSync(join(tmpdir(), "face-wallet-sepolia-"));
   const home = join(dshHome, "face", "agentpay");
@@ -502,4 +724,5 @@ test("the wallet's fetch never follows a redirect: a 3xx is a host_not_allowed r
 
 test.after(() => {
   process.off("unhandledRejection", onUnhandled);
+  rmSync(STRATEGIES, { recursive: true, force: true });
 });
