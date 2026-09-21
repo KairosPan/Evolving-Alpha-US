@@ -1,0 +1,91 @@
+/* The wallet page is the account page's kit (account.css) plus what a ledger
+   needs and a brokerage snapshot never did: left-aligned text columns (a host,
+   a holder, a status is not a figure), the alerts block, a copyable address,
+   explorer links, and the setup command. Status badge colours live in chat.css
+   (`.ch-badge[data-status=…]`) because the pay card in the chat wears the same
+   ones — one vocabulary for `settled` wherever it appears. Every colour and
+   radius is a chat.css token. */
+
+/* a static tab is a label, not a control (the wallet's groups are single tables) */
+.account-tab.static { cursor: default; }
+
+/* text columns: account.css right-aligns every column past the first */
+.account-table th.text, .account-table td.text { text-align: left; }
+.account-table .mono { font-family: var(--mono); font-size: 11px; }
+.account-table .account-symbol .mono { font-size: 12px; }
+.account-table .account-subvalue { white-space: normal; max-width: 260px; }
+.account-table .account-subvalue.neg { color: var(--red); }
+.account-table .ch-badge { vertical-align: middle; }
+
+/* a balance the RPC did not answer for is a word, not a figure */
+.account-balance.is-unavailable { font-size: 28px; color: var(--dim); }
+
+/* the payment address: full, monospaced, selectable in one drag */
+.wallet-address { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin: 0 0 22px; }
+.wallet-address-label { color: var(--dim); font-size: 11px; }
+.wallet-address-value {
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--inset);
+  font: 12px/1.5 var(--mono);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+/* explorer links: the chat's link ink; no explorer → plain mono text */
+.wallet-tx { color: var(--accent); text-decoration: underline dotted; text-underline-offset: 2px; }
+.wallet-tx:hover { text-decoration-style: solid; }
+
+/* alerts: one box above the balance, amber for warnings, quiet for notes */
+.wallet-alerts {
+  margin: 0 0 16px;
+  padding: 14px 18px;
+  border: 1px solid #e9d8c0;
+  border-radius: 12px;
+  background: #fffaf2;
+}
+.wallet-alerts-title { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: #80602f; }
+.wallet-alert-list { margin: 0; padding: 0; list-style: none; }
+.wallet-alert { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 4px 0; font-size: 12px; line-height: 1.6; }
+.wallet-alert + .wallet-alert { border-top: 1px solid #f0e6d6; }
+.wallet-alert-kind {
+  flex: none;
+  font: 600 9.5px/1.6 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #80602f;
+}
+.wallet-alert.info .wallet-alert-kind { color: var(--dim); }
+.wallet-alert.info { color: var(--dim); }
+.wallet-alert-mandate { color: var(--dim); font-size: 10px; }
+
+/* spend by strategy and by session: two records cards side by side */
+.wallet-spend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.wallet-spend .account-records { margin-top: 24px; }
+.wallet-spend .account-records-panel { min-height: 120px; }
+.wallet-spend-empty { padding: 22px 26px; }
+
+/* not configured: the guide card carries the one command to run */
+.wallet-setup { padding-bottom: 8px; }
+.wallet-setup .account-connect-guide { padding: 0 26px 22px; }
+.wallet-command {
+  margin: 12px 0 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--inset);
+  font: 11.5px/1.7 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+@media (max-width: 900px) {
+  .wallet-spend { grid-template-columns: 1fr; gap: 0; }
+}
+@media (max-width: 640px) {
+  .wallet-alerts { padding: 12px 14px; }
+  .wallet-address { margin-bottom: 18px; }
+  .wallet-setup .account-connect-guide { padding: 0 18px 18px; }
+}

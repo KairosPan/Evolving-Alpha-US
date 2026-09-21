@@ -1,11 +1,11 @@
-/** The face's static UI mount: four routes on the host webserver, no framework.
+/** The face's static UI mount: five routes on the host webserver, no framework.
  *
  * dsh-host-webserver "knows no harness concepts and serves no files" (its own
  * header) — the composing app owns dist serving. dsh-web-app does that through
  * the webserver's single `registerFallback` seat; the face deliberately does
  * NOT, and takes NAMED routes instead: `exact /` for the chat page, `exact
- * /market` and `exact /account` for the two instrument pages, and
- * `prefix /client` for their assets. The seat is left empty on purpose. It is a
+ * /market`, `exact /account` and `exact /wallet` for the three instrument
+ * pages, and `prefix /client` for their assets. The seat is left empty on purpose. It is a
  * one-owner seat that throws on a second claim, and everything it would catch
  * here is a 404 anyway; leaving it free keeps it available to a later row (a
  * frontend bundle, a dev proxy) without the face having to give it up first.
@@ -91,6 +91,7 @@ const PAGES: ReadonlyArray<readonly [path: string, file: string]> = [
   ["/", "index.html"],
   ["/market", "market.html"],
   ["/account", "account.html"],
+  ["/wallet", "wallet.html"],
 ];
 
 /**
