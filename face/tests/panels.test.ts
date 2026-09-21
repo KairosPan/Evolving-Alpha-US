@@ -352,10 +352,30 @@ test("pluginListing: rows projected, groups and root dropped, MCP paired with it
   assert.deepEqual(listing.mcp[0]!.tools.map((tool) => tool.name),
     ["mcp__alpaca-kit__screen", "mcp__alpaca-kit__breadth"]);
   assert.deepEqual(listing.agentTools.map((tool) => tool.name), ["agent_claude"]);
+  /* No wallet seam: the panel says so with an empty list, not a missing key
+   * (the client reads `walletTools` as an array either way). */
+  assert.deepEqual(listing.walletTools, []);
 
   /* The MCP row's config holds the operator's keys; nothing but serverName
    * may survive into the payload. */
   assert.doesNotMatch(JSON.stringify(listing), /SECRET-KEY-VALUE|APCA_API_KEY_ID/);
+});
+
+test("pluginListing: walletTools is what the FACE registered (the seam), by name and description, not a prefix scan", () => {
+  const deps: PanelDeps = {
+    ...fakeDeps(),
+    toolSchemas: () => [...fakeDeps().toolSchemas(), { name: "wallet_pay", description: "a stranger's wallet_ tool" }],
+    walletTools: () => [
+      { name: "wallet_budgets", description: "list budgets" },
+      { name: "wallet_pay", description: "pay", extra: "dropped" } as { name: string; description: string },
+    ],
+  };
+  const listing = pluginListing(deps);
+  assert.deepEqual(listing.walletTools, [
+    { name: "wallet_budgets", description: "list budgets" },
+    { name: "wallet_pay", description: "pay" },
+  ]);
+  assert.deepEqual(listing.agentTools.map((tool) => tool.name), ["agent_claude"], "wallet tools are not agent tools");
 });
 
 /* ====================================================================== */

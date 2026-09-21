@@ -272,6 +272,12 @@ export interface PanelDeps {
   /** Spawn one agent's CLI with a recipe's argv, the prompt on stdin, inside
    * `cwd` with a scrubbed env; see {@link defaultAgentRunner}. */
   runAgent(bin: string, argv: string[], opts: RunOptions): Promise<RunOutcome>;
+  /** The wallet tools the face registered (`wallet.ts`), by name, so the
+   * plugin panel shows that money-moving tools exist (charter Rule 5; wallet
+   * spec §2). Absent or empty when no wallet is configured. A seam rather
+   * than a `wallet_` prefix scan of `toolSchemas()`: the panel should list
+   * what the FACE registered, not whatever else happens to share the prefix. */
+  walletTools?(): { name: string; description: string }[];
 }
 
 /** The real prober: `execFile` (no shell) of the bare bin name — resolved on
@@ -523,6 +529,7 @@ export interface PluginRow {
 export function pluginListing(deps: PanelDeps): {
   mcp: { server: string; phase: string | null; tools: { name: string; description: string }[] }[];
   agentTools: { name: string; description: string }[];
+  walletTools: { name: string; description: string }[];
   rows: PluginRow[];
 } {
   const rows: PluginRow[] = [];
@@ -561,7 +568,8 @@ export function pluginListing(deps: PanelDeps): {
   const agentTools = schemas
     .filter((tool) => tool.name.startsWith("agent_"))
     .map((tool) => ({ name: tool.name, description: tool.description }));
-  return { mcp, agentTools, rows };
+  const walletTools = (deps.walletTools?.() ?? []).map((tool) => ({ name: tool.name, description: tool.description }));
+  return { mcp, agentTools, walletTools, rows };
 }
 
 /* ---------- the routes ---------- */

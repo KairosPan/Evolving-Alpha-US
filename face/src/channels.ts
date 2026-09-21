@@ -497,6 +497,12 @@ export interface ChannelRouteDeps {
   connectedBins(): Promise<string[]>;
   /** Every bot directory with dsh's view merged in (`listBots` in bots.ts, narrowed). */
   listBots(): Promise<{ id: string; name: string; broken?: string; listed: boolean }[]>;
+  /** USDC settled in one channel, for the landing page's tile (wallet spec
+   * §2, §4.4): `null` when the channel has no payments, absent when no wallet
+   * is configured. A seam rather than a later route extension because the
+   * overview handler cannot be extended after registration (spec §9), which
+   * is why main.ts builds the wallet BEFORE these routes. */
+  spendFor?(channel: ChannelRow): Promise<{ settled_usd: string; count: number } | null>;
 }
 
 /** Mount the four channel routes. Same trust posture as data.ts: the fence
@@ -561,6 +567,10 @@ export function registerChannelRoutes(webServer: RouteRegistrar, deps: ChannelRo
         const { channels } = await reconcile();
         const channel = channels.find((c) => c.workspaceId === workspaceId);
         if (channel === undefined) return send(res, 404, { ok: false, error: "no such channel" });
+        /* `spend` only when there is one: the client shows a tile for the
+         * field's presence, and a wallet-less face or a channel that never
+         * paid has no tile to show. */
+        const spend = deps.spendFor === undefined ? null : await deps.spendFor(channel);
         return send(res, 200, {
           ok: true, channel,
           status: await readChannelStatus(channel.dir),
@@ -568,6 +578,7 @@ export function registerChannelRoutes(webServer: RouteRegistrar, deps: ChannelRo
           agents: await rosterFor(deps.home, channel.workspaceId) ?? [],
           bots: await botsFor(deps.home, channel.workspaceId) ?? [],
           allBots: await deps.listBots(),
+          ...(spend === null ? {} : { spend }),
         });
       } catch (err) {
         if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });

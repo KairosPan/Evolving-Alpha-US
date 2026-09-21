@@ -678,3 +678,40 @@ test("the overview carries the bot roster and every preset the roster reports; P
   await routes.get("/data/channels/bots")!.handler(postReq(JSON.stringify({ workspaceId: "ws-none", bots: [] })), nowhere.res);
   assert.equal(nowhere.out.status, 404);
 });
+
+test("the overview carries `spend` only when the wallet seam answers for the channel (the tile's presence is the field's)", async () => {
+  const root = await makeRoot();
+  const home = await mkdtemp(join(tmpdir(), "face-home-spend-"));
+  const { registry } = fakeRegistry();
+  const asked: string[] = [];
+  const built: WebRoute[] = [];
+  registerChannelRoutes({ register: (route) => built.push(route) }, {
+    registry, root, home,
+    listSessions: async () => [], connectedBins: async () => [], listBots: async () => [],
+    /* The seam is called with the reconciled ROW (workspace id and all), and
+     * answers per channel: a total for alpha, nothing for anyone else. */
+    spendFor: async (channel) => { asked.push(channel.name); return channel.name === "alpha" ? { settled_usd: "0.003000", count: 3 } : null; },
+  });
+  const routes = new Map(built.map((r) => [r.path, r]));
+  const alpha = await channelNamed(routes, "alpha");
+  const bench = await channelNamed(routes, "workbench");
+
+  const withSpend = fakeRes();
+  await routes.get("/data/channels/overview")!.handler(postReq(JSON.stringify({ workspaceId: alpha.workspaceId })), withSpend.res);
+  assert.equal(withSpend.out.status, 200);
+  assert.deepEqual((JSON.parse(withSpend.out.body) as { spend?: unknown }).spend, { settled_usd: "0.003000", count: 3 });
+
+  const without = fakeRes();
+  await routes.get("/data/channels/overview")!.handler(postReq(JSON.stringify({ workspaceId: bench.workspaceId })), without.res);
+  assert.equal(without.out.status, 200);
+  assert.equal("spend" in (JSON.parse(without.out.body) as object), false, "null from the seam → no field");
+  assert.deepEqual(asked, ["alpha", "workbench"]);
+
+  /* No seam at all (no wallet configured): no field, and the route is unchanged. */
+  const plain = await routesFor(root, await mkdtemp(join(tmpdir(), "face-home-nospend-")));
+  const plainAlpha = await channelNamed(plain, "alpha");
+  const none = fakeRes();
+  await plain.get("/data/channels/overview")!.handler(postReq(JSON.stringify({ workspaceId: plainAlpha.workspaceId })), none.res);
+  assert.equal(none.out.status, 200);
+  assert.equal("spend" in (JSON.parse(none.out.body) as object), false);
+});
