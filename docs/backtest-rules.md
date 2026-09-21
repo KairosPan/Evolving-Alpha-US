@@ -13,6 +13,7 @@ bug class once.
    |---|---|---|---|---|
    | `data/pit/2yr` | 2024-06-03 .. 2026-07-09 | 526 | 2025-03-20 | 2025-06-04 |
    | `data/pit/broad` | 2025-11-17 .. 2026-03-27 | 90 | never | never |
+   | a bought `massive` bed (`data/pit/massive-<from>-<to>`, captured from `strategies/<name>/vendor/` per the `bought-data` skill) | the bought dates, exactly (the calendar is the union of bought bar dates, not an exchange calendar) | = the bought window | 200 bars after the window start — no warmup unless you bought it | 252 bars after the window start — no warmup unless you bought it. NO corp actions: `corp_actions` answers `artifact missing`, never "clean" (rule 4) |
 
    Stay inside the stated window: the beds do NOT fail uniformly outside it. A snapshot read
    out of window raises `SnapshotMissingError`, but `daily_bars` and `corporate_actions`

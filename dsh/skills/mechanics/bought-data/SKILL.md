@@ -11,15 +11,24 @@ reads those files (backtest-rules rule 1); they go through `capture_window` into
 replayed like any other bed. Six steps, in order.
 
 1. **Discover.** `wallet_discover({query: "daily bars", max_usd: "0.05"})`. Read `price_usd`
-   and `payers_30d`; `resource` is a URL template. Catalogue prices can be stale, so never budget
-   from them — step 2 prices the concrete URL. `discovery_unavailable` means the catalogue is down,
-   not the wallet: a URL you already know still works.
-2. **Price × universe.** `wallet_offer` the concrete aggregates URL ONCE (free). Budget =
-   tickers × windows × price + $1 headroom. Pay sequentially only (R-W4: the hosted facilitator
-   fails most concurrent settlements — 3 of 5 measured); never fan the buys out to child tasks.
-3. **ONE budget.** `wallet_budget_request({purpose: "<vendor> bars <tickers> <from>-<to>",
-   limit_usd, per_call_usd: "<price>", hosts: ["<vendor host>"], valid_for_hours: 24})`, then
-   STOP until the card is answered. A denial is a tool error you read, not a reason to re-ask wider.
+   and `payers_30d`; `resource` is a URL template. The catalogue price (or the vendor's documented
+   price — vendor-sim is $0.01 per call) sizes the budget in step 2; step 3 confirms it on the
+   concrete URL before any money moves. `discovery_unavailable` means the catalogue is down, not
+   the wallet: a URL you already know still works. On the local chain the real catalogue answers
+   `ok` with 0 payable resources (nothing on `eip155:31337` is listed) — that is honest, not a
+   failure; go on with the vendor's documented price.
+2. **ONE budget, sized from the catalogue price.** Budget = tickers × windows × price + headroom;
+   `per_call_usd` = that price. `wallet_budget_request({purpose: "<vendor> bars <tickers>
+   <from>-<to>", limit_usd, per_call_usd: "<price>", hosts: ["<vendor host>"],
+   valid_for_hours: 24})`, then STOP until the card is answered. A denial is a tool error you
+   read, not a reason to re-ask wider. The budget comes FIRST: in the face every wallet tool that
+   touches a host — `wallet_offer` included — is pre-flighted against a held mandate naming that
+   host, and without one it is refused `mandate_required` before signing (drilled 2026-09-21).
+3. **Confirm the price.** `wallet_offer` the concrete aggregates URL ONCE (free, no card). The
+   quoted `amount_usd` must not exceed the budget's `per_call_usd`; if it does, stop and request
+   a new budget sized to the quote — never pay into a price you did not budget for. Pay
+   sequentially only (R-W4: the hosted facilitator fails most concurrent settlements — 3 of 5
+   measured); never fan the buys out to child tasks.
 4. **Buy.** One `wallet_pay` per ticker per window, in sequence:
    `wallet_pay({url: "https://<host>/v2/aggs/ticker/<T>/range/1/day/<from>/<to>?adjusted=false&sort=asc&limit=50000",
    save_to: "massive/<TICKER>/<from>_<to>.json"})`. `adjusted=false` is not optional: the

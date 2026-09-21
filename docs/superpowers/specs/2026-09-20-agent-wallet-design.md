@@ -334,6 +334,8 @@ payTo, maxTimeoutSeconds }], resource?, description? }` or `{ ok: true, status, 
 - No writing to `status.yaml`; no new session-event types; no timer.
 - No mainnet record, no funding flow, no facilitator failover (items C of the gap list).
 - No change to Gate 1 / Gate 2, to bots' allow lists, or to `bots/*` files.
+- Built after this arc, 2026-09-21: the first real payee shape, `wallet_discover`, `wallet_pay
+  {save_to}` and the bought-bed path — `2026-09-21-bought-data-design.md`.
 
 ## 5. Charter conformance and amendments
 

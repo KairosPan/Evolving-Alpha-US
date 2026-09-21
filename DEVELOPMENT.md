@@ -1,8 +1,8 @@
 # Kairos Workbench — Development Reference
 
 **Status:** living, as-built · **Owner:** the operator · **Last full pass:** 2026-09-21 on
-`feat/agent-wallet` (388 pytest; 541 face tests, 529 pass + 12 skipped without `FACE_SMOKE`;
-541 under `FACE_SMOKE=1`; typecheck clean; agentpay 196). The 2026-09-09 pass on `feat/rooms` @
+`feat/bought-data` @ `0a24acf` (402 pytest; 544 face tests, 532 offline + 12 under `FACE_SMOKE=1`;
+typecheck clean; agentpay 262 at `2177984`). The 2026-09-09 pass on `feat/rooms` @
 `ce07925` (313 face tests) is the one most sections below were last read against.
 
 **Authority.** `Kairos-Design.md` (the charter) outranks this document on intent. This document
@@ -48,7 +48,7 @@ external services on five hostnames.
  │  ├─ face routes: `/` `/market` `/account` `/wallet` `/client/*` `/data/*`              │
  │  ├─ Gates 2 and 3: registered by `bootFace` on `tools/pre-execute` + `tools.guard`;    │
  │  │   the rules live in `src/orders.ts` and `src/budgets.ts`                            │
- │  ├─ the agent wallet: eight `wallet_*` tools (`src/wallet.ts` over `payment/`),        │
+ │  ├─ the agent wallet: nine `wallet_*` tools (`src/wallet.ts` over `payment/`),         │
  │  │   an HTTP client to x402 payees inside the face process (§3.6)                      │
  │  └─ children:                                                                          │
  │       ├─ alpaca-kit MCP server  (`python -m alpaca_kit.mcp`, stdio, operator-mounted)  │
@@ -155,7 +155,22 @@ MCP layer's guard wrapping.
 `"alpaca"`; unknown name raises `ValueError`. **It returns a RAW source**; wrapping it in
 `GuardedSource(src, AsOfGuard(day))` is the caller's job (`replay_days` and the MCP tools do it
 for you). Registered names: `alpaca`, `snapshot` (needs `pit_root` or `ALPHA_PIT_ROOT`),
-`composite`, `edgar`, `finra`, `edgar_offerings`, `float_feed`.
+`composite`, `edgar`, `finra`, `edgar_offerings`, `float_feed`, `massive_files` (needs
+`ALPHA_MASSIVE_ROOT`).
+
+`massive_files`: `MassiveFilesSource(root)` (`feeds/massive_files.py`) reads BOUGHT daily-bar
+files — the bytes a Massive/Polygon-shaped aggregates endpoint returned to `wallet_pay({url,
+save_to})` — laid out as `<root>/<TICKER>/*.json` under a strategy's `vendor/` (the `bought-data`
+skill; spec `2026-09-21-bought-data-design.md`). It is a capture-side reader with the `bars` and
+`calendar` groups only: `daily_snapshot`, corp actions and the P5 feeds raise `NotImplementedError`
+and their `*_available()` answer False. Nothing in a file name is parsed; the body's `ticker` must
+match its directory; refused, naming the file: `adjusted` not literally `false` (missing counts —
+rule 4 wants RAW and the vendor's default is adjusted), `status` not `"OK"`, a row missing any of
+`t/o/h/l/c/v`, two files disagreeing on one date's OHLCV. `t` (ms) is read as an
+`America/New_York` date; `vw`/`n` are dropped; files for one ticker merge and dedupe.
+`trading_calendar()` is the union of every ticker's bar dates unless a calendar is passed, so a
+bed captured from it has the bought window as its calendar (§2.4). Composable through
+`ALPHA_DATA_COMPOSITE` (`earnings=edgar`).
 
 `composite`: `ALPHA_DATA_COMPOSITE_BASE` (default alpaca) plus `ALPHA_DATA_COMPOSITE` as
 comma-separated `capability=source` pairs (`corp_actions=snapshot`, `earnings=edgar`).
@@ -196,6 +211,7 @@ recapture):
 |---|---|---|---|---|
 | `data/pit/2yr` | 2024-06-03 .. 2026-07-09 | 526 | 800 | `CHECKSUMS` present |
 | `data/pit/broad` | 2025-11-17 .. 2026-03-27 | 90 | 800 (liquidity-ranked, `_universe.txt`) | pre-manifest: no `CHECKSUMS` |
+| `data/pit/massive-<from>-<to>` (a bought bed, captured by the operator from `strategies/<name>/vendor/massive` with `ALPHA_DATA_SOURCE=massive_files`) | = the bought window, exactly; no warmup unless bought | one derived per day | the bought tickers | **no `corp_actions.parquet`** (the source cannot check; `corp_actions_available()` False on the bed, the MCP tool answers `artifact missing`); calendar = the union of bought bar dates, not an exchange calendar; `CHECKSUMS` present. The drill bed (2016-01-01..2017-12-31, AAPL + MSFT, 521 days) is torn down, not shipped |
 
 Neither carries feed parquets, and neither carries warmup: bars start *at* the window start.
 Both calendars overhang the snapshots on both sides — back to 2016-01-04, and forward past the
@@ -218,8 +234,10 @@ Use `corporate_actions_known` for anything PIT-sensitive.
 
 `capture_window(source, store, start, end, symbols)` writes calendar, per-symbol bars, a derived
 per-day snapshot (OHLCV plus previous close, `name := symbol`), corp actions known at `end`
-scoped to the symbols, the optional feeds gated on the source's probes, then `write_checksums`
-last. `verify_checksums(root, fail_closed=…)` is meant for a script's `main`, never `PITStore`
+scoped to the symbols — **only when the source's `corp_actions_available()` answers True** (a
+source lacking the probe defaults True, as `GuardedSource` does; since 2026-09-21 — before that
+the file was always written, and a bars-only source's empty frame replayed as "checked, clean") —
+the optional feeds gated on the source's probes, then `write_checksums` last. `verify_checksums(root, fail_closed=…)` is meant for a script's `main`, never `PITStore`
 construction — but nothing in this tree calls it today (only `tests/data/test_checksums.py` and
 `test_capture_feeds.py`; the producers its docstring names were retired with the old product), so
 a bed's manifest is written once and checked only by hand:
@@ -238,6 +256,7 @@ An empty list is clean; a missing manifest (`broad`) is a warning and an empty p
 | `EdgarOfferingsSource` | live (submissions) | S-1/F-1/424B1–B5/424B7 → `offering` (other 424B forms are ignored); S-3(ASR)/F-3(ASR)/S-11 → `shelf` (+ a scheduled `expired` 3 y after the shelf's earliest `EFFECT` date, falling back to its filing date when no EFFECT is on file); RW/AW → `withdrawn`; EFFECT → `effective`; grouped by file number |
 | `FinraSource` | stub — URL/OAuth "finalized at live time" | `publication_date` = per-record dissemination field else settlement + 16 calendar days |
 | `FloatSource` | stub — placeholder vendor URL | rows without a disclosure date dropped |
+| `MassiveFilesSource` | files — bought bytes under `strategies/<name>/vendor/massive/<TICKER>/*.json` (`ALPHA_MASSIVE_ROOT`) | `daily_bars`: the six RAW columns from `o/h/l/c/v` + `t` (ET date); `trading_calendar`: the union of bar dates; everything else `NotImplementedError` / `*_available() False`; refuses adjusted, non-OK, ticker-mismatched, short-row and conflicting files by name (§2.3) |
 | `feeds/corp_actions.py` | pure helpers | `has_reverse_split_pending` = announced ≤ as_of AND ex_date > as_of; `has_dilution_filing` = any announced `atm/shelf/offering`, fail-closed default when the offerings feed is absent |
 
 Unit trap: `FloatFact.free_float` is raw shares; `StockSnapshot.free_float` is millions.
@@ -444,7 +463,7 @@ operator- or face-specific. The frozen row list is
 | `todo`, `goal`, `workflow`, plan mode | `tool-todo`, `tool-goal`, `tool-workflow`, `plan-mode` | |
 | `skill` | `tool-skill` + `skill-filesystem` | loads one `SKILL.md` by catalog name; the catalog (name + description) is what the model chooses from |
 | `web_search` | `tool-web` (`fetch: false`) over `web-search-deepseek` | outbound to `https://api.deepseek.com/anthropic/v1` with `DEEPSEEK_API_KEY`; no page fetch |
-| `wallet_offer`, `wallet_pay`, `wallet_budget_request`, `wallet_budget_delegate`, `wallet_budget_disable`, `wallet_budgets`, `wallet_report`, `wallet_reconcile` | face `wallet.ts` (in-process, registered after `bootFace` and only when the wallet home is configured) | the one HTTP client Kairos has, and it is not a fetch tool: before any request leaves the face the URL's host must be one a mandate the caller can spend names (agentpay's `requireMandateHost` pre-flight refuses `host_not_allowed` first); loopback, link-local, RFC 1918, unique-local, `.local` and unparsable hosts are refused outright (`isPrivateHost`; lifted only on the local chain `eip155:31337`, `LOCAL_NETWORK`); the wallet's fetch never follows a redirect (`noRedirectFetch`: a 3xx is a `host_not_allowed` refusal, since the landing host was never checked); `wallet_offer` sends no model-supplied body or headers. Absent from every bot (the allow-list mask), refused for a bot by the caller rule anyway; `wallet_budget_request` is Gate 3 (§4.7) |
+| `wallet_discover`, `wallet_offer`, `wallet_pay`, `wallet_budget_request`, `wallet_budget_delegate`, `wallet_budget_disable`, `wallet_budgets`, `wallet_report`, `wallet_reconcile` (nine) | face `wallet.ts` (in-process, registered after `bootFace` and only when the wallet home is configured) | `wallet_discover` reads the public x402 catalogue (CDP Bazaar; `FACE_AGENTPAY_BAZAAR_URL` overrides) filtered to what this wallet can pay — not a payee, no pre-flight; `wallet_pay {save_to}` writes a 2xx body under the calling channel's `vendor/` (`saveRoot` named by the face from the session header; a session in no channel is refused before paying) and returns a `saved {path, bytes, sha256}` receipt with a ≤ 1 KB preview instead of the body. The rest: the one HTTP client Kairos has, and it is not a fetch tool: before any request leaves the face the URL's host must be one a mandate the caller can spend names (agentpay's `requireMandateHost` pre-flight refuses `host_not_allowed` first); loopback, link-local, RFC 1918, unique-local, `.local` and unparsable hosts are refused outright (`isPrivateHost`; lifted only on the local chain `eip155:31337`, `LOCAL_NETWORK`); the wallet's fetch never follows a redirect (`noRedirectFetch`: a 3xx is a `host_not_allowed` refusal, since the landing host was never checked); `wallet_offer` sends no model-supplied body or headers. Absent from every bot (the allow-list mask), refused for a bot by the caller rule anyway; `wallet_budget_request` is Gate 3 (§4.7) |
 | `ask_user_question` | `tool-ask-user` (face overlay) | §4.3; the answer is model-visible, so not a gate |
 | `mcp__alpaca-kit__*` | the operator's MCP row | §2.7 registration matrix |
 | `mcp__akshare__*` | project `mcp-akshare` row | public A-share/other market queries, unguarded; check source errors and truncation |
@@ -563,7 +582,7 @@ files.
 | `akshare.ts` | project AKShare MCP defaults, composed below operator profile/home patches |
 | `orders.ts` | Gate 2 decision logic, pure: `isOrderTool`, `effectiveApprovalPolicy`, `orderApprovalDecision`, `describeOrder`, `hasApprovalGrant`, `isGatedTool`, `orderGuardReason`, `auditOrderTools`, `OPERATOR_GATED_MARKER` — depends on nothing (structural types only) |
 | `budgets.ts` | Gate 3 decision logic, pure, built to Gate 2's shape: `isBudgetTool` (`BUDGET_RAW_NAME`, exact — the face registers the tool itself, so no server prefix), `requesterOf` (total: the live preset from the last `agent-preset/selected` event else the header, `origin`, `parentSession`), `classifyRequester` (the one ordered rule: `origin === 'subagent'` → child; no preset or the default → principal; else bot), `describeBudgetRequest` (purpose ≤ `PURPOSE_CHARS`, limit, per-call cap, validity, every host in full), `budgetRequestRefusal` (more than `MAX_BUDGET_HOSTS`, `*`, `*.<tld>`, malformed hosts — refused before any card), `budgetApprovalDecision` (bot or child denied in the face's words before the `never` and `ask` branches), `budgetGuardReason` (via `hasApprovalGrant`) |
-| `wallet.ts` | the agent wallet: `installWallet` (synchronous through registration; `walletHomeOf`; not configured when `config.json` is absent, `resolveConfig` refuses — with an EMPTY env, the shell's `AGENTPAY_*` never consulted — or `lockedBy` names a live pid; else one `CommandContext` with `lock: true` and `requireMandateHost: true`, the eight `WALLET_TOOLS` registered through `walletToolDefinition`, `verifyMandates` once after registration disabling and naming what does not recover to the payer), `callerOf` (the caller rule over `requesterOf`/`classifyRequester`; throws for a bot, and for a child on a `principalOnly` tool), `isPrivateHost` + `LOCAL_NETWORK` + `privateHostRefusal`, `noRedirectFetch`, `callTitle`/`resultTitle` (the pending and completed card titles), the single-flight balance cache (`BALANCE_TTL_MS`, `BALANCE_TIMEOUT_MS`), reconcile-on-load (`RECONCILE_MIN_INTERVAL_MS`), `face-state.json`, `GET /data/wallet.json`, `spendFor` and `walletTools` seams; `WalletInstall.dispose` unregisters and releases the lock |
+| `wallet.ts` | the agent wallet: `installWallet` (synchronous through registration; `walletHomeOf`; not configured when `config.json` is absent, `resolveConfig` refuses — with an EMPTY env, the shell's `AGENTPAY_*` never consulted — or `lockedBy` names a live pid; else one `CommandContext` with `lock: true` and `requireMandateHost: true`, the nine `WALLET_TOOLS` registered through `walletToolDefinition` (`wallet_discover` included; `bazaarUrlOf` for `FACE_AGENTPAY_BAZAAR_URL`; `saveRoot = <channel dir>/vendor` passed for `wallet_pay` from a channel session only), `verifyMandates` once after registration disabling and naming what does not recover to the payer), `callerOf` (the caller rule over `requesterOf`/`classifyRequester`; throws for a bot, and for a child on a `principalOnly` tool), `isPrivateHost` + `LOCAL_NETWORK` + `privateHostRefusal`, `noRedirectFetch`, `callTitle`/`resultTitle` (the pending and completed card titles), the single-flight balance cache (`BALANCE_TTL_MS`, `BALANCE_TIMEOUT_MS`), reconcile-on-load (`RECONCILE_MIN_INTERVAL_MS`), `face-state.json`, `GET /data/wallet.json`, `spendFor` and `walletTools` seams; `WalletInstall.dispose` unregisters and releases the lock |
 | `wallet-payload.ts` | `/data/wallet.json`'s body as pure functions: `usd` (atomic → six-decimal string), `mandateView`, `paymentView`, `spendOf` (by workspace id and by session; `unattributed_usd` for rows with no channel), `channelSpend` (the landing tile), `alertsOf` (every alert kind from the same inputs; `unexplained_outflow` compares the balance's fall with the ledger's settlement since the last look), `buildWalletPayload`, `nextFaceState`; `MAX_PAYMENTS` |
 | `setup.ts` | one-shot `$DSH_HOME/profiles/<name>` creation; refuses to overwrite |
 | `http.ts` | `HttpError`, `readBody` (4,096 B cap → 413), the fixed `FORBIDDEN` body |
@@ -656,6 +675,7 @@ in §9.
 | `$DSH_HOME/face/agentpay/face-state.json` | `wallet.ts` | `{last_balance, ledger_settled_at_that_time}` after any `/data/wallet.json` look that read the balance; the outflow alert's anchor |
 | `$DSH_HOME/sessions/<slug>/<id>/` | `deleteSession` | removed, cwd-fenced |
 | `strategies/<name>/` | `createChannel` | copied from `_template`, never overwritten |
+| `strategies/<name>/vendor/<save_to>` | `wallet.ts` through agentpay's `writeSaved`, on Kairos's `wallet_pay {save_to}` | the payee's bytes, at the path Kairos named, under the channel the payment is attributed to (`saveRoot = <channel dir>/vendor`); bounded by `resolveSavePath` (no absolute path, no `..`, no symlink escape, never over an existing file unless `overwrite`), refused for a session in no channel; temp + rename; sha256 on the envelope and the path as the ledger row's `label`; gitignored (`strategies/*/vendor/`). Charter §4 row and D17; §9 R-W8 |
 | `bots/<id>/` | `createBot`, `updateSoul` | copied from `_template`; `preset.yml`, `SOUL.md` and the composition's persona row rewritten together; never overwritten by create |
 | `bots/<id>/journal/` | a bot's HOME session | workspace-write, cwd = the journal; the only directory a bot writes (the write to `../SOUL.md` is refused, proven in `room-smoke`) |
 | `dsh/profile/persona.md` | the operator | not written by the face — read by `composeFace` into the `system-prompt` row, and a malformed template refuses the boot |
@@ -680,6 +700,7 @@ by the face's `WorkspaceLike`). Recorded, not fixed.
 | `ALPACA_KIT_ENABLE_ORDERS` | the MCP child only | unset | Gate 1; the face cannot read it and consults the tool registry instead |
 | `FACE_SMOKE` | tests | unset | `=1` enables the real-boot tests |
 | `FACE_AGENTPAY_HOME` | `wallet.ts` (`walletHomeOf`) | `$DSH_HOME/face/agentpay` | the wallet home; `""` means default. The shell's `AGENTPAY_*` variables are NOT read by the face — its wallet is the `config.json` in the home and nothing else |
+| `FACE_AGENTPAY_BAZAAR_URL` | `wallet.ts` (`bazaarUrlOf`) | agentpay's default, the CDP Bazaar | the x402 catalogue `wallet_discover` queries; `""` means default; a stub catalogue in tests |
 | `DEEPSEEK_API_KEY`, `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY` | dsh's credential seam; the producer; the MCP row | — | not auto-loaded from the repo's `.env.*` files |
 
 Every child the face spawns for a local agent run or probe has these scrubbed — an enumerated
@@ -969,7 +990,7 @@ bot's voice as it lands and the strip from the projection plus the members' own 
 
 **6.9 A budget and a payment.** Operator runs `agentpay init --home $DSH_HOME/face/agentpay
 --from-deployment <name> --key …` → the face boots, `installWallet` finds `config.json`, takes
-`wallet.lock`, registers the eight tools before the first `await` and logs `wallet: 8 tools
+`wallet.lock`, registers the nine tools before the first `await` and logs `wallet: 9 tools
 registered, home …` → Kairos, in a channel session, calls `wallet_budgets` (nothing held) → calls
 `wallet_budget_request {purpose, limit_usd, hosts}` → the prepended Gate 3 listener classifies the
 requester as principal, finds the hosts readable, returns `ask` with the `BUDGET - …` line →
@@ -1059,7 +1080,7 @@ tool's `allowed-once`), `wallet` (offline, over a fake context on a temp home wi
 package's stub payee: `walletHomeOf`, `isPrivateHost` over every range and the fail-closed
 parse, the card titles, the payload builders and every alert kind, `installWallet` not
 configured with no `config.json` or a refusing config and the shell's `AGENTPAY_*` ignored,
-then on a stub payee: eight tools registered, the caller rule for a bot and for a child on a
+then on a stub payee: nine tools registered, the caller rule for a bot and for a child on a
 principal-only tool, `context` from the header, holder routing, the page, `spendFor`, the lock
 refusing a second install; on `eip155:84532` a loopback payee refused before any request and a
 public host reaching agentpay's own pre-flight; a 3xx refused as `host_not_allowed`),
@@ -1135,7 +1156,10 @@ tool content (D12) and never woke Kairos; a home session writes its journal and 
 | **Room** — automated (`room-smoke`) | a real round on a stub model: dispatch → three members (answered / passed / failed) → answers on the log before one wake → synthesis in one turn; members parented, preset-joined, `read-only` first, `AGENTS.md` chain, no `dispatch`; the projection on the row and in the cache; the `@` route with a member's write refused in content; a home refused on `../SOUL.md` | that a human can read the strip; a real model's behaviour on the four standing rules | passes as of 2026-09-09 |
 | **Room** — manual (`face/README.md`, eight parts) | check-in → dispatch line → attributed bubbles and the strip → the fold → `@` → an inline member question with the needs-you mark → a member's write refused → `left` and re-check → a restart keeps states and titles | per-message attribution across a mux reconnect; convergence of four voices on one model (spec §12, R3); the peer-`@` continuation, which the operator's next `@` superseded before it ran (by design) — that path stands on the engine tests | **Drilled and PASSED 2026-09-09** on the operator's own face (`feat/rooms` @ `31b2e68`, two fresh template bots, DeepSeek as the model); one client finding (F1, the strip missing on a session's first round) fixed the same day and re-verified |
 | **Budget card** — automated (`budget-gate`, `wallet-smoke`, `wallet-approve-smoke`) | Gate 3 is registered on a real tree and asks the principal with a decidable line; a bot and an agentless call are denied; the guard refuses without a grant; a real session's payment through dsh's registry lands on the ledger attributed to it; the approve path once `wallet-approve-smoke` lands | that a human can read the card; a real 402 payee over the network; containment (R-W1, R-W2, R-W6) | `budget-gate` and `wallet-smoke` pass as of 2026-09-21; `wallet-approve-smoke` in progress |
-| **Budget card** — manual (`face/README.md`, in a scratch harness home on `payment/`'s local demo stack) | the card names purpose, limit and hosts; Deny leaves nothing on `/wallet`; Approve puts the mandate there; a paid fetch renders a pay card with a tx and `/wallet` shows the payment | | **not yet run** — the operator records the PASS line |
+| **Budget card** — manual (`face/README.md`, in a scratch harness home on `payment/`'s local demo stack) | the card names purpose, limit and hosts; Deny leaves nothing on `/wallet`; Approve puts the mandate there; a paid fetch renders a pay card with a tx and `/wallet` shows the payment | | **Drilled and PASSED 2026-09-21** on `feat/agent-wallet` (`11c6d18`, submodule `73fe702`), the turn driven by the test `StubAdapter`; record in `face/README.md` |
+| **Bought bed** — automated (`wallet.test.ts` `save_to` / `wallet_discover` cases, `wallet-smoke`'s `save_to`; pytest `test_massive_files`, `test_registry`, `test_capture`) | a file lands under `<channel>/vendor` with matching bytes and sha256 and the path on the ledger row; no channel, `../`, an overwrite refused; a big body whole with a ≤ 1 KB preview; discover filtered to payable rows; the reader's refusals; capture writes no corp file for a source that cannot check; capture → replay with the guard refusing a forward read | that a human sees the card and the file column; a catalogue with anything payable on the local chain | pass as of 2026-09-21 |
+| **Bought bed** — manual (`face/README.md`, "The bought-bed drill": the demo stack + `npm run vendor-sim` on 4022, the `bought-data` skill's steps) | discover → ONE budget → offer → four sequential pays landing as files → capture without `corp_actions.parquet` → a bounded replay with the guard holding | a real vendor over the network; the interop row below | **Drilled and PASSED 2026-09-21** on `feat/bought-data` @ `0a24acf` (submodule `2177984`), scripted by the test `StubAdapter` in the `room-drill` channel: discover `ok` / 0 payable on `eip155:31337`; `wallet_offer` before any budget refused `mandate_required` (the skill's order fixed from it); the card `BUDGET - "vendor-sim bars AAPL,MSFT 2016-2017" · limit $0.05 · per call $0.01 · valid 24h · hosts 127.0.0.1:4022` → Approve → `im_4cdc5cd64363`; four pay cards `$0.010000 · settled · 127.0.0.1:4022 · saved 28.0 KB`; files at `strategies/room-drill/vendor/massive/{AAPL,MSFT}/…`; `/data/wallet.json` `0.010000` remaining, four rows with `file` and `channelName room-drill`, alerts `[expiring]`; `capture_window` → bars/snapshot/calendar/CHECKSUMS, no corp file; `replay_days` 10 days, the forward read refused, calendar 521 days. Torn down |
+| **Testnet interop** (Sepolia; PayAI's echo and omniterminal) | a stranger's 402 offered, paid and settled through a facilitator the wallet does not run; a stranger's bytes saved whole; `reconcile` closing the rows | | run from agentpay's CLI 2026-09-21 (`payment/docs/interop/testnet-interop-2026-09-21.json`): PayAI echo **settled in 857 ms** through x402.org's signer, 467 bytes saved; omniterminal offered on both networks and answered **503** after the signature (`rejected`, reserved until reconcile); **from the face: not yet run** |
 | **Ask-user** — `ask_user_question` offered, called, answered, cancelled | the seam | that it is a gate (the answer is model-visible); the instruction half (README step 6 — on a thin brief that does not name the tool, Kairos asks before it builds, per `AGENTS.md`), left to the operator and not run | passed 2026-09-03 with a real model, 26 tools offered; re-run 2026-09-08 on `main`, passed (34 tools offered; answered, then Stop → `closed · cancelled`) |
 
 ---
@@ -1309,6 +1333,13 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   `tool-web`'s fetch on purpose; what keeps `wallet_offer`/`wallet_pay` from being that fetch tool
   is the mandate-host pre-flight, the private-range refusal (lifted on the local chain only) and
   the no-redirect rule (§3.6) — rules in the face and in agentpay, not a network boundary.
+- **R-W8 — The face process writes bought bytes outside the sandbox.** R5's class (D10, the MCP
+  server's writes): on `wallet_pay {save_to}` the face writes the payee's body under
+  `strategies/<name>/vendor/` — a directory the channel session's own shell could write anyway, so
+  nothing is widened; bounded by agentpay's `resolveSavePath` to `<channel>/vendor` (no absolute
+  path, no `..`, no symlink escape, no overwrite unless asked), refused for a session in no
+  channel, the path Kairos's argument and the root read off the session header (charter D17). Not
+  held for a `tools/execute` wrapper that renames the call (R-W6's class).
 
 ---
 
@@ -1348,18 +1379,22 @@ In order; each with what "done" is and which charter row it reopens.
 10. **A2A voices** — the charter's §7.1 admits an agent reached over A2A as a voice; no spec,
    nothing built; the day anything outside this machine can call in, the last row of the
    charter's §8 revisit table fires ("A second human, or any hosted deployment").
-11. **The agent wallet** — built 2026-09-20/21 (the eight tools, Gate 3, `/wallet`); the
-   automated half of its drill passes, the manual half is not yet run (§7.4). What the payment
-   gap list leaves open, in order: **(B) a first real payee** — every payment so far has gone to
-   `payment/`'s own demo payee or the wallet package's stub; a paid resource Kairos actually
-   wants (a data API behind x402) is what turns the wallet from a drill into a tool, and
-   `wallet_offer` against it is the first step; **(B) `upto` and batching** — the wallet signs
-   `exact` only, one authorization per call; a metered resource or several children paying at
-   once (R-W4) want the `upto` scheme and a send queue, and the hosted facilitator's concurrency
-   failure stands until one of them lands; **(C) mainnet, funding and custody** — no mainnet
-   record, no funding flow beyond "send test USDC here", no facilitator failover, and the key is
-   a raw EOA readable by every shell turn (D16, R-W2); a mainnet key placed in the wallet home
-   fires the charter's §8 trigger and reopens D16 and §4 before anything else.
+11. **The agent wallet** — built 2026-09-20/21 (Gate 3, `/wallet`, the tools) and extended
+   2026-09-21 by the bought-data arc (spec `2026-09-21-bought-data-design.md`): built —
+   `wallet_discover` (the public x402 catalogue, filtered to what this wallet can pay),
+   `wallet_pay {save_to}` (a bought body under the channel's `vendor/`, sha256 receipt, 1 KB
+   preview), agentpay's vendor simulator (`npm run vendor-sim`, Massive-shaped, on the local
+   chain) and payee settle lock, the `massive_files` source, capture's corp-actions gate, the
+   `bought-data` skill, and the bought-bed path drilled end to end (§7.4). Both manual drills of
+   the wallet have now passed; the interop drill from the face has not run. Remaining, in order:
+   **(C) real Massive on mainnet** — the first real purchase is a mainnet float, a mainnet key in
+   the wallet home (the charter's §8 trigger; D16 and §4 reopen first), the vendor's real URL and
+   `eip155:8453` in the skill's budget, nothing else in the path changes; **(B) `upto`** —
+   recorded in `payment/docs/upto-design.md`, not built: every US-equities seller found is `exact`,
+   and the metered scheme waits for a seller that needs it; **(B) batching and the send queue** —
+   pays are sequential by rule (R-W4); the hosted facilitator's concurrency failure stands;
+   **funding and custody** — no funding flow beyond "send test USDC here", no facilitator
+   failover, the key a raw EOA readable by every shell turn (R-W2).
 
 ---
 
@@ -1369,10 +1404,11 @@ In order; each with what "done" is and which charter row it reopens.
 |---|---|---|
 | `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY` | alpaca_kit, producer, MCP row | Alpaca paper credentials |
 | `APCA_API_BASE_URL` | `account.py` | trading host override; anything but the paper hostname fails `_require_paper` |
-| `ALPHA_DATA_SOURCE` | `registry.py` | `alpaca` \| `snapshot` \| `composite` \| feed names |
+| `ALPHA_DATA_SOURCE` | `registry.py` | `alpaca` \| `snapshot` \| `composite` \| `massive_files` \| feed names |
 | `ALPHA_PIT_ROOT` | registry, MCP, producer, template scripts | the bed; CWD-relative |
 | `ALPHA_DATA_FEED` | `alpaca.py` | bars feed, default `iex` |
 | `ALPHA_DATA_COMPOSITE`, `ALPHA_DATA_COMPOSITE_BASE` | `registry.py` | composite routing |
+| `ALPHA_MASSIVE_ROOT` | `registry.py` (`massive_files`) | the bought-files root, `strategies/<name>/vendor/massive`; required by that source; CWD-relative |
 | `ALPHA_UNIVERSE_SCREEN` | `universe.py` | `gainer` \| `trend_template` |
 | `ALPHA_EDGAR_USER_AGENT`, `ALPHA_FINRA_USER_AGENT`, `ALPHA_FLOAT_USER_AGENT` | feeds | outbound UA strings |
 | `ALPACA_KIT_ENABLE_ORDERS` | MCP child (operator's row only) | Gate 1 |
@@ -1382,5 +1418,6 @@ In order; each with what "done" is and which charter row it reopens.
 | `DSH_TELEMETRY_DISABLED` | face boot | any non-empty value disables telemetry |
 | `FACE_PORT`, `FACE_PROFILE`, `FACE_PYTHON` | face | port, profile name, producer interpreter |
 | `FACE_AGENTPAY_HOME` | face `wallet.ts` | the wallet home, default `$DSH_HOME/face/agentpay`; the shell's `AGENTPAY_*` are never read by the face |
+| `FACE_AGENTPAY_BAZAAR_URL` | face `wallet.ts` | the x402 catalogue `wallet_discover` queries; default agentpay's (the CDP Bazaar) |
 | `FACE_SMOKE` | face tests | enables the real boots |
 | `FASTMCP_LOG_LEVEL` | MCP row | `WARNING` silences FastMCP's INFO noise; never edit `server.py` for it |
