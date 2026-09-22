@@ -168,16 +168,19 @@ when it works: `wallet: 9 tools registered, home … (eip155:84532, 0x…)`.
 
 **The nine tools**, all Kairos's; a bot never sees one (its allow-list mask
 excludes them without naming them, and the caller rule refuses a bot preset
-anyway); a child task (origin `subagent`) gets the first three and `wallet_budgets`:
+anyway); a child task (origin `subagent`) is refused exactly the three tools
+agentpay marks `principalOnly` — `wallet_budget_request`, `wallet_report`,
+`wallet_reconcile` — and gets the other six, the two budget ones bounded by what
+it holds rather than by its caller class:
 
 | Tool | Who | What |
 |---|---|---|
 | `wallet_discover {query, max_usd?, limit?}` | principal, child | the public x402 catalogue (the CDP Bazaar; `FACE_AGENTPAY_BAZAAR_URL` overrides), searched for this wallet's network and filtered to offers it can actually pay (`exact`, its asset, a timeout inside its authorization validity); at most 20 rows — resource template, price, payTo, 30-day payers — never the catalogue's examples or schemas; `discovery_unavailable` when the catalogue does not answer. Not a payee: no host pre-flight. Catalogue prices can be stale; `wallet_offer` the concrete URL is the price |
-| `wallet_offer {url, method?}` | principal, child | one probe, no body, no model headers; the 402 terms without paying. Pre-flighted like a payment: refused `mandate_required` until a budget the caller holds names the host — so budget first, offer second |
+| `wallet_offer {url, method?}` | principal, child | one probe, no body, no model headers; the 402 terms without paying. Pre-flighted like a payment: refused before the probe unless a budget the caller holds names the host — `mandate_required` when the principal's wallet holds no budget at all, `no_held_mandate` when the caller holds none of the ones it has, `host_not_allowed` when one is held but names another host — so budget first, offer second |
 | `wallet_pay {url, method?, body?, headers?, mandate_id?, save_to?, overwrite?}` | principal; a child with a held sub-budget | the paid fetch; the envelope (`paid`, `amount_usd`, `tx`, `ledger_status`, body ≤ 8 KB) is the tool value whether `ok` is true or false — a refusal carries `payment_model_context` the model needs. With `save_to` (a relative path) a 2xx body is written under the calling channel's `vendor/` — `strategies/<name>/vendor/<save_to>`, the root named by the face from the session header, never by the model — and the envelope carries `saved {path, bytes, sha256, content_type}` plus a `preview` of at most 1 KB instead of the body. A session in no channel has no root and is refused before paying; `../`, an absolute path, a symlink escape and an existing file (without `overwrite`) are refused before paying too; a body over 32 MiB or a failed write is `saved.error` — paid for, not kept |
 | `wallet_budget_request {purpose, limit_usd, hosts[], valid_for_hours?, per_call_usd?, category?}` | principal only | **Gate 3**: the budget card; on Approve a root mandate exists, on Deny an error the model reads |
-| `wallet_budget_delegate {parent_id, limit_usd, for: {children:true} \| {session}, …}` | principal only | a sub-budget for this session's own child tasks, signed at once (narrower than the parent, its spend counted up the chain); no card |
-| `wallet_budget_disable {id}` | principal only | reclaim: `isEnabled=false` |
+| `wallet_budget_delegate {parent_id, limit_usd, for: {children:true} \| {session}, …}` | principal, or a child out of a budget it holds | a sub-budget for the calling session's own child tasks, signed at once (narrower than the parent, its spend counted up the chain); no card. The bound is the holder set, not the caller class: the parent must be one the caller holds, so a child can carve a grandchild budget out of what was delegated to it but never out of the principal's |
+| `wallet_budget_disable {id}` | principal, or a child for a budget it holds or delegated | reclaim: `isEnabled=false` |
 | `wallet_budgets {}` | principal, child | what the caller may spend now, with effective remaining, plus address, balance and the standing alerts |
 | `wallet_report {}` | principal only | totals, by strategy / session / host / resource, denials |
 | `wallet_reconcile {}` | principal only | settle `unknown` rows against the chain |
@@ -1742,7 +1745,7 @@ harness home on `payment/`'s local demo stack, never your real home:
    **Approve** → `budget im_… · $0.050000`.
 5. *Offer, then four sequential pays* with `adjusted=false&sort=asc&limit=50000`
    and `save_to: "massive/<TICKER>/<from>_<to>.json"`. PASS, part four: four
-   pay cards `$0.010000 · settled · 127.0.0.1:4022 · saved ~28 KB`, each kv
+   pay cards `$0.01 · GET 127.0.0.1:4022/v2/aggs/… · settled · tx 0x… · saved ~28 KB`, each kv
    block with the path and a sha256; the files under
    `strategies/room-drill/vendor/massive/{AAPL,MSFT}/` (gitignored), each
    body `adjusted: false`, `status: "OK"`, ~261 bars a year; `/wallet` shows
@@ -1785,8 +1788,9 @@ refused `refused before signing · mandate_required` (the finding that put the
 budget before the offer in the skill); the card `BUDGET - "vendor-sim bars
 AAPL,MSFT 2016-2017" · limit $0.05 · per call $0.01 · valid 24h · hosts
 127.0.0.1:4022 · from no channel by principal` → **Approve** → `budget
-im_4cdc5cd64363 · $0.050000`; four sequential `wallet_pay` cards `$0.010000 ·
-settled · 127.0.0.1:4022 · saved 28.0 KB` (28.0 / 27.9 / 28.0 / 28.9 KB); the
+im_4cdc5cd64363 · $0.050000`; four sequential `wallet_pay` cards `$0.01 · GET
+127.0.0.1:4022/v2/aggs/ticker/<T>/range/1/day/<from>/<to> · settled · tx 0x… ·
+saved 28.0 KB` (28.0 / 27.9 / 28.0 / 28.9 KB); the
 files at `strategies/room-drill/vendor/massive/{AAPL,MSFT}/{2016,2017}-01-01_..-12-31.json`
 (28 649 bytes for AAPL 2016, 261 bars, `adjusted: false`), gitignored;
 `/data/wallet.json` with the mandate at `0.010000` remaining of `0.050000`, four
@@ -1819,8 +1823,9 @@ the report is `payment/docs/interop/testnet-interop-2026-09-21.json`, payer
 `0x2455…6501`): `discover 'market snapshot BTC'` matched 4, payable 4
 (omniterminal first, 3 payers in 30 days); one mandate for `x402.payai.network,
 omniterminal.app, 127.0.0.1`, $0.01 a call, 30 minutes; **PayAI's echo offered
-in 116 ms and settled in 857 ms** — the settlement tx's `from` is x402.org's
-signer (`0xc669…cb63`), the settlement's payer is this wallet, 467 bytes saved
+in 116 ms and settled in 857 ms** — the settlement tx's `from` is that seller's
+own settler (`0xc669…cb63`, settling through Multicall3), not x402.org's signer
+(`0xd407…f1bf`); the settlement's payer is this wallet, 467 bytes saved
 whole through `--save` with their sha256; **omniterminal offered on both
 networks and answered 503 `service_unavailable`** after the authorization was
 signed (`rejected`; the budget stays reserved until reconcile sees the nonce

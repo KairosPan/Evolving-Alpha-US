@@ -98,11 +98,15 @@ Decisions, in the order taken:
 
 ## 2. What the operator sees
 
-- **The pay card** for a `wallet_pay` with `save_to` reads `$0.010000 · settled · 127.0.0.1:4022 ·
-  saved 28.0 KB`: paid for AND kept, at a glance. The kv block below it carries the path, the
-  bytes, the short sha256 and the 1 KB preview. A body that was paid for but could not be saved
-  (over 32 MiB, or a write failure) shows `saved.error` in the danger colour: the money moved, the
-  file did not.
+- **The pay card** for a `wallet_pay` with `save_to` reads `$0.01 · GET
+  127.0.0.1:4022/v2/aggs/ticker/AAPL/range/1/day/2016-01-01/2016-12-31 · settled · tx 0x… · saved
+  28.0 KB` — `payLine`'s order is amount · target · status · tx · saved, the amount compact and the
+  target `method host+path`: paid for AND kept, at a glance. The kv block below it carries the
+  path, the bytes, the short sha256 and the 1 KB preview. A body that was paid for but could not be
+  saved (over 32 MiB, or a write failure) drops the `saved` segment and the kv block reads `file:
+  not saved · <error> · <path>`; the card still renders `settled`, not danger (nothing but a
+  refusal or a tool error colours a card), which is exactly the case to read closely: the money
+  moved, the file did not.
 - **`/wallet`'s payments table** gains a *file* column, the ledger row's `context.label` — the
   `save_to` path by default — so a bought file names its row.
 - **A discover table** inside the answer trace for every `wallet_discover`: resource · price ·
@@ -263,12 +267,14 @@ window. It names what the reader refuses, the drill targets, and what bought new
   was refused `refused before signing · mandate_required` — the finding that fixed the skill's
   order (decision 11); the card `BUDGET - "vendor-sim bars AAPL,MSFT 2016-2017" · limit $0.05 · per
   call $0.01 · valid 24h · hosts 127.0.0.1:4022 · from no channel by principal` → **Approve** →
-  `budget im_4cdc5cd64363 · $0.050000`; four sequential `wallet_pay` cards `$0.010000 · settled ·
-  127.0.0.1:4022 · saved 28.0 KB` (28.0 / 27.9 / 28.0 / 28.9 KB); the files at
+  `budget im_4cdc5cd64363 · $0.050000`; four sequential `wallet_pay` cards `$0.01 · GET
+  127.0.0.1:4022/v2/aggs/ticker/<T>/range/1/day/<from>/<to> · settled · tx 0x… · saved 28.0 KB`
+  (28.0 / 27.9 / 28.0 / 28.9 KB); the files at
   `strategies/room-drill/vendor/massive/{AAPL,MSFT}/{2016,2017}-01-01_..-12-31.json` (28 649 bytes
   for AAPL 2016, 261 bars, `adjusted: false`), gitignored; `/data/wallet.json` with the mandate at
-  `0.010000` remaining of `0.050000`, four settled payments each with `file` = the save path and
-  `channelName` `room-drill`, spend `by_channel` `room-drill` `0.040000`, alerts `[expiring]` (the
+  `0.010000` remaining of `0.050000`, four settled payments each carrying the save path as
+  `context.label` (the *file* column on `/wallet` renders from it — `paymentView` projects no
+  `file` field) and `context.channelName` `room-drill`, spend `by_channel` `room-drill` `0.040000`, alerts `[expiring]` (the
   nuisance of §6). Then `ALPHA_DATA_SOURCE=massive_files ALPHA_MASSIVE_ROOT=strategies/room-drill/vendor/massive
   python3 scripts/capture_window.py 2016-01-01 2017-12-31 data/pit/massive-2016-2017 AAPL MSFT`
   wrote `bars/{AAPL,MSFT}.parquet`, `snapshot/`, `calendar.parquet`, `CHECKSUMS` and **no**
@@ -279,7 +285,8 @@ window. It names what the reader refuses, the drill targets, and what bought new
 - **The testnet interop drill** — run from agentpay's CLI on 2026-09-21 (`pay:docs/interop/testnet-interop-2026-09-21.json`,
   Base Sepolia, payer `0x2455…6501`): discover `market snapshot BTC` matched 4, payable 4
   (omniterminal first, 3 payers in 30 days); PayAI's echo (`x402.payai.network`, $0.01) offered in
-  116 ms and **settled in 857 ms** — the tx's `from` is x402.org's signer, the settlement's payer
+  116 ms and **settled in 857 ms** — the tx's `from` is that seller's own settler `0xc669…cb63`,
+  through Multicall3, not x402.org's signer `0xd407…f1bf`; the settlement's payer
   is this wallet, 467 bytes saved through `--save`; omniterminal (`$0.005`) offered on both
   networks and refused the pay with **503 `service_unavailable`** after the authorization was
   signed (`rejected`, reserved until reconcile sees the nonce unused), the same on three concurrent

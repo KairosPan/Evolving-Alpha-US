@@ -1,7 +1,7 @@
 # Agent Wallet — Design
 
-**Status:** built 2026-09-21 (face `feat/agent-wallet`; agentpay `agent-surface` @ `73fe702`,
-the submodule pin). Designed 2026-09-20 and revised the same day after a three-lens adversarial
+**Status:** built 2026-09-21 (face `feat/agent-wallet`; agentpay `agent-surface` — the tool table
+landed in `73fe702`, and the branch pins the submodule at `a4598ed`, one docs commit later). Designed 2026-09-20 and revised the same day after a three-lens adversarial
 pass (charter/security, wallet accounting, face feasibility; the record is in §9). The as-built
 truth is consolidated in `DEVELOPMENT.md` (§1 homes, §3.6, §4.2, §4.4–4.7, §6.9, §7.3–7.4, §9
 R-W1..R-W7, §10 item 11); one built mechanism differs from §8's note, recorded there. Extends the
@@ -63,8 +63,9 @@ Decisions, in the order taken:
    session. The face writes nothing into `strategies/<name>/status.yaml` (charter §4: Kairos writes
    strategies, git is the ledger); per-strategy spend reaches the channel landing page through the
    overview payload instead.
-5. **Sub-mandates are pass-through, held, and delegated by the principal only — to its own child
-   tasks, not to bots.** A sub-mandate is a mandate with a `parentId` and a `holder`; its spend
+5. **Sub-mandates are pass-through and held, and a holder delegates out of what it holds — the
+   principal out of its own budgets, a child in turn out of one delegated to it — to child tasks or
+   one named session, never to bots.** A sub-mandate is a mandate with a `parentId` and a `holder`; its spend
    counts against itself and every ancestor (a cap on the child, not a reservation from the parent —
    siblings compete for the parent's remaining budget, and the delegate tool says so). Its terms are
    bounded by the parent's at creation (limit ≤ parent's effective remaining, validity ≤ parent's
@@ -145,8 +146,8 @@ Eight tools, all registered by the face (names ≤ 64 chars, `[A-Za-z0-9_]`):
 | `wallet_offer {url, method?}` | principal, child | Probes once (no body, no model headers) and returns the 402 terms (price, asset, network, payTo, timeout) without paying; a non-402 returns its status only. Refused when no spendable mandate names the host. |
 | `wallet_pay {url, method?, body?, headers?, mandate_id?}` | principal; a child with a held sub-mandate | Paid fetch through `MandateWallet.fetch` with the caller's context and holder set; returns `{status, paid, amount_usd, mandate, remaining_usd, tx, ledger_status, body (≤ 8 KB, `body_truncated`)}`; refusals return the `{ok:false, error, payment_model_context}` envelope. |
 | `wallet_budget_request {purpose, limit_usd, hosts[], valid_for_hours?, per_call_usd?, category?}` | principal only | Raises the budget card (Gate 3); on approval creates a mandate held by nobody. Denied → error. A child (policy `never`) or a bot preset is refused before any card, in the face's own words. |
-| `wallet_budget_delegate {parent_id, limit_usd, for: {children: true} \| {session}, valid_for_hours?, hosts?, per_call_usd?, label?}` | principal only | Creates a sub-mandate within the parent's terms, held for this session's direct children or for one session. No card. |
-| `wallet_budget_disable {id}` | principal only | Reclaims a mandate (a root or a sub-mandate). |
+| `wallet_budget_delegate {parent_id, limit_usd, for: {children: true} \| {session}, valid_for_hours?, hosts?, per_call_usd?, label?}` | principal, or a child out of a budget it holds | Creates a sub-mandate within the parent's terms, held for the calling session's direct children or for one session. No card. The bound is the holder set, not the caller class: the parent must be one the caller holds, so a child can carve a grandchild budget out of what it was given and never out of the principal's. |
+| `wallet_budget_disable {id}` | principal, or a child for a budget it holds or delegated | Reclaims a mandate (a root or a sub-mandate) the caller holds — including one it delegated under a budget of its own. |
 | `wallet_budgets {}` | principal, child | The mandates the caller may spend (principal: unheld; child: `children:<parent>` + `session:<self>`), each with effective remaining and validity; plus address, balance when known, and the standing alerts. |
 | `wallet_report {}` | principal only | The spend report: totals (over root mandates = the ledger), by strategy / session / host / resource, policy denials. |
 | `wallet_reconcile {}` | principal only | Runs `reconcile()` against the chain (needs an RPC); returns what settled, expired or is still pending. |
