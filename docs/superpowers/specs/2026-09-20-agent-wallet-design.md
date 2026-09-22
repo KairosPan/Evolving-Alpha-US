@@ -345,8 +345,8 @@ payTo, maxTimeoutSeconds }], resource?, description? }` or `{ ok: true, status, 
   to the strategy and session that made them; bots have no wallet."
 - **§3 diagram** OPERATOR row gains "payer key (`$DSH_HOME/face/agentpay`)"; FACE row gains "the
   budget card (Gate 3) · /wallet"; KAIROS row gains "pays for resources inside approved budgets".
-- **§4 write map** gains the row: `budgets (mandates) | the face, on Kairos's card-gated request
-  (roots) or its ungated delegate/disable (sub-budgets for its own child tasks) | approval/asked +
+- **§4 write map** gains the row: `budgets (mandates) | the face, on a card-gated request (roots)
+  or an ungated delegate/disable by whoever holds the parent (sub-budgets) | approval/asked +
   approval/decided pair in the session log; the ledger; /wallet` — and a fourth honesty note: "Gate
   3 and the holder rule hold the tool surface; the key file is readable from any shell turn; the
   float is the bound."

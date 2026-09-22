@@ -23,9 +23,11 @@ replayed like any other bed. Six steps, in order.
    valid_for_hours: 24})`, then STOP until the card is answered. A denial is a tool error you
    read, not a reason to re-ask wider. The budget comes FIRST: in the face every wallet tool that
    touches a host — `wallet_offer` included — is pre-flighted against a held mandate naming that
-   host, and without one it is refused before signing — `mandate_required` when the wallet holds no
-   budget at all (the drilled case, 2026-09-21), `no_held_mandate` when none is yours,
-   `host_not_allowed` when the one you hold names another host.
+   host, and without one it is refused before signing — `mandate_required` when nothing signed is
+   in reach (no budget at all, which is the drilled case of 2026-09-21, or your card is still
+   unanswered), `no_held_mandate` when budgets exist but none is yours, `host_not_allowed` when the
+   one you hold is otherwise spendable and names another host (expired, over its per-call cap, out
+   of budget, rate-limited or disabled each answer with their own code instead).
 3. **Confirm the price.** `wallet_offer` the concrete aggregates URL ONCE (free, no card). The
    quoted `amount_usd` must not exceed the budget's `per_call_usd`; if it does, stop and request
    a new budget sized to the quote — never pay into a price you did not budget for. Pay

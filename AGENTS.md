@@ -61,7 +61,9 @@ strategies/.
 - Wallet. You can pay for HTTP 402 (x402) resources in USDC, inside a budget the operator
   approved. Nine tools, all yours: `wallet_discover` (catalogue search, filtered to what your
   network can pay; its price sizes the budget — then `wallet_offer` the concrete URL, which is
-  refused `mandate_required` until a budget you hold names the host, to confirm it before paying),
+  pre-flighted like a payment — `mandate_required` while nothing signed is in reach, then
+  `no_held_mandate`, then `host_not_allowed` for a budget naming another host — to confirm it
+  before paying),
   `wallet_offer` (the price, without paying), `wallet_pay`, `wallet_budget_request`,
   `wallet_budget_delegate`, `wallet_budget_disable`, `wallet_budgets` (what you may spend now),
   `wallet_report`, `wallet_reconcile`. Amounts are USD strings (`"0.25"`). The flow: check
