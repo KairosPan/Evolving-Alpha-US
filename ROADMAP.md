@@ -1,8 +1,11 @@
 # ROADMAP.md
 
 Part I — forward: (1) first real strategy directory through a full research cycle;
-(2) daily-run cadence via dsh schedule (deferred); (3) paper forward-testing behind the
-order gate (deferred); (4) FINRA/float live endpoints; (5) second data vendor.
+(2) daily-run cadence via dsh schedule (deferred); (3) paper forward-testing — the paper book is
+built (2026-09-22: a per-strategy book outside the workspace, filled at the next open from the
+strategy's `signal.py`, a hash-chained ledger, the landing page card; operator-run, nothing
+scheduled); the Alpaca paper mirror behind the order gate, and the cadence in (2), remain;
+(4) FINRA/float live endpoints; (5) second data vendor — the bought-data path (discover → budget → pay → file → PIT bed → replay) is built on a simulated Massive-shaped payee on testnet; a real vendor waits on a mainnet float.
 
 Part II — built log: 2026-08-29 skeleton reset
-(spec `docs/superpowers/specs/2026-08-29-market-strategy-account-skeleton-design.md`); 2026-09-07..09 bots and rooms (spec `docs/superpowers/specs/2026-09-07-bots-and-rooms-design.md`, plans 1–4): bots as dsh presets with a home, rooms with `dispatch`, member sessions, the strip, the live drill; charter §7.1 amended.
+(spec `docs/superpowers/specs/2026-08-29-market-strategy-account-skeleton-design.md`); 2026-09-07..09 bots and rooms (spec `docs/superpowers/specs/2026-09-07-bots-and-rooms-design.md`, plans 1–4): bots as dsh presets with a home, rooms with `dispatch`, member sessions, the strip, the live drill; charter §7.1 amended; 2026-09-20..21 the agent wallet (spec `docs/superpowers/specs/2026-09-20-agent-wallet-design.md`): the `payment/` submodule wired into the face as eight in-process `wallet_*` tools, Gate 3 (the budget card), sub-budgets for child tasks, per-strategy and per-session attribution, `/wallet` and the pay card, the intro page redrawn; charter §1, §4, §5 (D16), §7.1 and §8 amended; 2026-09-21 bought data (spec `docs/superpowers/specs/2026-09-21-bought-data-design.md`): `wallet_discover`, `wallet_pay {save_to}` under the channel's `vendor/`, the `massive_files` source, capture's corp-actions gate, the `bought-data` skill, the vendor simulator; the bought-bed drill passed; charter §4 and §5 (D17) amended; 2026-09-22 the paper book (spec `docs/superpowers/specs/2026-09-22-paper-book-design.md`): `alpaca_kit/paper` (`PaperBook`, the intent contract, the home), `scripts/paper_book.py`, `strategies/_template/signal.py`, the `paper-drill` fixture, the landing page's paper-book card; the bed drill passed (64 days on the bought bed, `verify` clean); charter amendments proposed in the spec's §5, not yet accepted.

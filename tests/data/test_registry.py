@@ -92,6 +92,34 @@ def test_composite_routes_p5b_feeds(apca, monkeypatch):
     assert comp.short_interest_available() is True and comp.offerings_available() is True   # live backends
 
 
+def test_massive_files_is_registered_and_needs_its_root(monkeypatch, tmp_path):
+    from alpaca_kit.feeds.massive_files import MassiveFilesSource
+    monkeypatch.setenv("ALPHA_DATA_SOURCE", "massive_files")
+    monkeypatch.delenv("ALPHA_MASSIVE_ROOT", raising=False)
+    assert "massive_files" in _SOURCES
+    with pytest.raises(ValueError, match="ALPHA_MASSIVE_ROOT"):
+        make_source()
+    monkeypatch.setenv("ALPHA_MASSIVE_ROOT", str(tmp_path))
+    src = make_source()
+    assert isinstance(src, MassiveFilesSource) and src.root == tmp_path
+    assert src.corp_actions_available() is False                      # a bars-only source: honestly MISSING
+
+
+def test_composite_massive_files_base_with_edgar_earnings(monkeypatch, tmp_path):
+    # The bought-bed composition: bars/calendar from the bought files, earnings live from EDGAR.
+    from alpaca_kit.composite import CompositeSource
+    from alpaca_kit.feeds.edgar import EdgarSource
+    from alpaca_kit.feeds.massive_files import MassiveFilesSource
+    monkeypatch.setenv("ALPHA_MASSIVE_ROOT", str(tmp_path))
+    monkeypatch.setenv("ALPHA_DATA_COMPOSITE_BASE", "massive_files")
+    monkeypatch.setenv("ALPHA_DATA_COMPOSITE", "earnings=edgar")
+    comp = make_source("composite")
+    assert isinstance(comp, CompositeSource)
+    assert isinstance(comp._route("bars"), MassiveFilesSource)
+    assert isinstance(comp._route("earnings"), EdgarSource)
+    assert comp.corp_actions_available() is False and comp.earnings_available() is True
+
+
 @pytest.mark.parametrize("name", sorted(_SOURCES))
 def test_every_registered_source_implements_corp_actions_available(name, apca, monkeypatch, tmp_path):
     """P3 conformance: corp_actions_available is the MarketDataSource Protocol's ONLY fail-open method —
@@ -100,4 +128,5 @@ def test_every_registered_source_implements_corp_actions_available(name, apca, m
     empty-on-missing). Every REGISTERED source must expose it (structural test doubles keep the
     spec-adjudicated GuardedSource default-True)."""
     monkeypatch.setenv("ALPHA_PIT_ROOT", str(tmp_path))
+    monkeypatch.setenv("ALPHA_MASSIVE_ROOT", str(tmp_path))
     assert callable(getattr(make_source(name), "corp_actions_available", None))

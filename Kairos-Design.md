@@ -2,7 +2,7 @@
 
 **Status:** living charter, written 2026-08-30; revised through 2026-09-09 for bots and rooms;
 revised 2026-09-11 for bot settings, discussion evidence, journal context and temporary
-subagents · **Owner:** the operator ·
+subagents; revised 2026-09-21 for the agent wallet · **Owner:** the operator ·
 **Authority:** this charter carries intent and principles; mechanism lives in `DEVELOPMENT.md`,
 `face/README.md` (the current face contracts and drills), and code. On a question of intent, the charter
 wins; on a question of mechanism, the code is the fact and the documents follow it. The pointer
@@ -35,7 +35,10 @@ delegated work (§7.2). One principal agent does not mean only one execution con
   (As of 2026-09-04 only the template is committed; the three live strategies are untracked, so
   their ledger is not yet written — `DEVELOPMENT.md` §3.4.)
 - **ACCOUNT** — an Alpaca paper account, read-only by default. Order capability exists in code
-  behind two gates (§4); it has never been armed in the operator's real harness home.
+  behind two gates (§4); it has never been armed in the operator's real harness home — and an
+  agent wallet (USDC, x402) behind a third gate: Kairos requests a budget, the operator approves
+  it on a card, payments run inside it and are attributed to the strategy and session that made
+  them; bots have no wallet.
 
 **What a working day looks like.** The operator opens the face at `127.0.0.1:3090`, picks a
 channel, and talks to Kairos. Kairos screens, backtests and reads the market through the
@@ -90,17 +93,20 @@ the design economizes it but never designs it away.
 ┌──────────────────────────────────────────────────────────────────┐
 │ OPERATOR   teaches via skills · reviews via git · reads the two  │  outside the
 │            instruments · owns ~/.dsh (profile patch, gate flag,  │  agent's reach
-│            LLM key); broker keys sit at the repo root (D8)       │  (except the keys)
+│            LLM key, payer key ($DSH_HOME/face/agentpay));        │  (except the keys)
+│            broker keys sit at the repo root (D8)                 │
 ├──────────────────────────────────────────────────────────────────┤
 │ FACE       kairos-face, one Node process at 127.0.0.1:3090:      │  the operator's
 │            hosts dsh in-process · chat per channel · /market ·   │  surface; also
-│            /account · the per-order approval card (Gate 2)       │  where Gate 2 lives
-│            bot settings · room comparisons · child task history │
+│            /account · the per-order approval card (Gate 2) ·     │  where Gates 2
+│            the budget card (Gate 3) · /wallet · bot settings ·   │  and 3 live
+│            room comparisons · child task history                 │
 ├──────────────────────────────────────────────────────────────────┤
 │ KAIROS     dsh runtime · skills (mechanics + style) ·            │  the agent
 │            works strategies/ · queries via MCP tools ·           │
 │            consults room bots · delegates bounded child tasks ·  │
-│            may call rostered local CLIs as tools                 │
+│            may call rostered local CLIs as tools ·               │
+│            pays for resources inside approved budgets            │
 ├──────────────────────────────────────────────────────────────────┤
 │ alpaca_kit one Python package, two faces: importable lib         │  the workbench
 │            (backtests) + MCP server (interactive queries) ·      │  (this repo)
@@ -133,9 +139,11 @@ Who may change what. This table is the charter's core; everything else supports 
 | Bot definitions: `preset.yml`, `SOUL.md`, composition and skills under `bots/` | operator, through the face's supported settings or file edits; Kairos and temporary subagents may propose changes, never author them | git and review; settings saves check revisions, and inspection distinguishes saved settings from mounted configuration (D13) |
 | `bots/<id>/journal/notes.md` | operator; the bot in its own home session, subject to that session's permissions | home work is scoped to its own `journal/`; room sessions start read-only (D12). Context loading only reads notes and records the consumed snapshot; it never writes them |
 | `data/pit/` beds | nobody — read-only captured artifacts | a `CHECKSUMS` manifest on the 2yr bed (the broad bed predates the manifest and carries none), checked by hand; recapture is the only legitimate write |
+| budgets (mandates) | the face, on a card-gated `wallet_budget_request` (roots) or an ungated delegate/disable by whoever holds the parent — Kairos for its own budgets, a child task for one delegated to it (sub-budgets) | `approval/asked` + `approval/decided` pair in the session log; the ledger; `/wallet` |
+| `strategies/<name>/vendor/` (bought bytes) | Kairos, through `wallet_pay {save_to}`: the face process writes the payee's bytes at the path Kairos named, under the channel the payment is attributed to — never outside it, never over an existing file; the face authors nothing | the ledger row (the sha256 on the pay card, the path as the row's label); `/wallet`'s file column; gitignored, so git carries the receipt and not the bytes (D17) |
 | paper orders | nobody today | **Gate 1** (registration; enforced, test-pinned): the order tools exist in a session only when the operator's flag AND broker keys are both present. **Gate 2** (per-order approval; built 2026-09-04, in the face): every call to an order tool stops for a card the operator must answer (under a `never` policy, or with no session to ask in, it is denied outright rather than asked), and a guard admits the call only on a logged one-shot approval for that exact call and tool. Its automated drill passed and is mutation-proven for the refusing half (the card is raised, the read-only listing is not gated, an unapproved order does not dispatch); the admitting half — a real logged grant letting an approved order through the live pipeline — is unit-tested only; its human half — a person reading the card against armed tools in a scratch home — has not been run (D3). It binds only when dsh runs inside the face (D8) |
 
-Three honesty notes the table depends on. First, both order gates hold the MCP tool *surface*,
+Four honesty notes the table depends on. First, both order gates hold the MCP tool *surface*,
 not the account: the library's order function carries no flag, the broker key file is readable
 from the workspace, and a shell turn could import the client directly — the paper-hostname pin
 bounds what that can do, and D8 carries the rest. Second, Gate 2 is a gate, not containment: it
@@ -145,7 +153,9 @@ carries no token — leaving a genuine one-shot approval in the log, so the guar
 grant was recorded, not who recorded it (D10; Rule 2 applied honestly). Third, the workspace
 boundary protects the runtime,
 not the repo: `alpaca_kit`, the face, the mechanics skills and Gate 2's own code are inside the
-workspace and are protected by review and tests, not by placement.
+workspace and are protected by review and tests, not by placement. Fourth, Gate 3 and the
+holder rule hold the tool surface; the key file is readable from any shell turn; the float is the
+bound.
 
 ## 5. Debts, carried openly
 
@@ -158,7 +168,7 @@ solved would be worse than carrying them.
 | D2 | Agent commits and operator commits are indistinguishable in git | single operator, low volume | cheap fix (distinct commit identity for Kairos) on first confusion |
 | D3 | Gate 2's human half is undrilled: no person has yet read the order card against armed tools | orders are unregistered by default; the automated half is drilled | before `ALPACA_KIT_ENABLE_ORDERS` ever flips in the real harness home |
 | D4 | Mechanics skills are prose-protected only | single user; every edit reviewed | if skills ever get a second writer, including Kairos |
-| D5 | Per-session LLM usage is visible, but there is no combined accounting across Kairos, room members and temporary descendants, nor complete LLM + data API spend accounting | operator reviews usage and provider bills | first surprise bill, or any scheduled autonomous runs |
+| D5 | Tool-path on-chain spend is accounted per strategy and session (the wallet's ledger, `/wallet`); LLM + data-API spend, and CLI/raw-key spend, are not — per-session LLM usage is visible, with no combined accounting across Kairos, room members and temporary descendants | operator reviews usage and provider bills; the wallet's outflow alert shows spend the ledger did not see | first surprise bill, or any scheduled autonomous runs |
 | D6 | The mechanics red-lines have no drill; no test reads the content of the skill packs | single user; every edit reviewed | carried rule: a new guard ships with its drill in the same change |
 | D7 | No instrument for net-negative drift: nothing compares "now" against "never-evolved" | strategies are few; the operator still reads everything | when an independent evaluator exists (see D1) |
 | D8 | Both order gates are prose against a shell: they hold the tool surface, the key file sits at the repo root, and Gate 2 exists only inside the face | paper account; hostname pin; the flag has never been armed | real-money intent, or any host other than the face running the profile with the flag set |
@@ -169,6 +179,8 @@ solved would be worse than carrying them.
 | D13 | Kairos's sessions and delegated tasks can work at the repository root, which includes `bots/`; their prohibition on editing bot files, including journals, is carried by `AGENTS.md` and review, not by the sandbox | single operator; every edit reviewed; git is the ledger; a bot's own home-journal writes follow §4 | the first unauthorized edit under `bots/` |
 | D14 | Structured room evidence and child-task results have no independent verification or result-acceptance mechanism; passing runtime drills does not establish better research | originals, request snapshots and task histories remain reviewable; Kairos checks results and the operator judges them | before claiming a research-quality gain or reducing review on the strength of these features |
 | D15 | Bot journal context is a bounded read of historical notes; freshness, conflicts and note selection still depend on manual maintenance | each request records what it consumed and exposes missing or truncated notes | when stale, conflicting or omitted notes materially affect a conclusion |
+| D16 | The payer key in `$DSH_HOME/face/agentpay/config.json` is readable by every shell turn (Kairos, any bot, any child) because the sandbox denies writes only; unlike D8 there is no paper-hostname analogue, so what bounds the wallet is the float the operator keeps there | the float is small and testnet; Gate 3 and the holder rule hold the tool surface; the `/wallet` outflow alert makes raw-key spend visible | when a mainnet key is placed there |
+| D17 | Bought bytes are written by the face process, outside the sandbox (D10's class), on Kairos's `wallet_pay {save_to}` — bounded to one sub-directory, `<channel>/vendor`, of the channel that paid; refused for a session in no channel (R-W8) | the channel session's own shell could write the same directory, so nothing is widened; the content is the payee's, not the face's; the path is Kairos's argument and the root is read off the session header | if `save_to` ever resolves against anything but `<channel>/vendor`, or the face starts authoring content there |
 
 ## 6. Rules carried forward
 
@@ -225,7 +237,8 @@ another; an empty disagreement list does not establish consensus. Kairos disting
 interpretive and risk-preference disagreements before concluding and naming the next check.
 
 Dispatch grants no permissions; room members start read-only and account tools meet the same
-tree-wide gate. The operator's `@` reaches rostered voices directly. A bot's view is evidence
+tree-wide gate. A payment meets a mandate, not a card; that is why no bot has a wallet tool.
+The operator's `@` reaches rostered voices directly. A bot's view is evidence
 to weigh, with no adjudicative authority. Shared models can still converge, and runtime drills
 do not establish the quality of the resulting research (D14).
 
@@ -285,7 +298,8 @@ Few and concrete. Each names the section it reopens.
 | Kairos begins authoring reusable skills | Rule 7 → lifecycle machinery · D4 |
 | An independent evaluator is introduced | D1 · D7 (the measurement plane) |
 | dsh leaves developer preview or ships a breaking change | the two pins · profile and skills format · the drills |
-| A bot's composition is given the account tools, a bot room session is created other than read-only, or a bot home session's cwd widens past its `journal/` | §7.1 · D8 · D12 · run the order drill under that bot's preset |
+| A bot's composition is given the account tools (the wallet tools included), a bot room session is created other than read-only, or a bot home session's cwd widens past its `journal/` | §7.1 · D8 · D12 · run the order drill under that bot's preset |
+| A mainnet payer key placed in the wallet home | D16 · §4 · the funding and custody items of the payment gap list |
 | Claiming better research or reducing review because rooms or delegation are available | D1 · D14 · real-task comparison and explicit result acceptance |
 | Stale, conflicting or truncated journal notes affect a conclusion | §7.1 · D15 · maintenance and retrieval requirements before choosing a new memory store |
 | Expanding the interface migration in §9 | §3 (the FACE row) · §7.3 "No bespoke harness" and "No hosted face" · the two pins · the row and RPC inventory against the CLI's |

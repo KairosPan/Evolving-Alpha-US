@@ -58,7 +58,7 @@ function recorder(): { rec: Recorded; res: ServerResponse } {
   return { rec, res: res as unknown as ServerResponse };
 }
 
-/** A client dir with the three pages and one asset, plus a secret OUTSIDE it. */
+/** A client dir with the four pages and one asset, plus a secret OUTSIDE it. */
 function fixture(): { clientDir: string; routes: WebRoute[] } {
   const root = mkdtempSync(join(tmpdir(), "face-client-"));
   const clientDir = join(root, "client");
@@ -67,6 +67,7 @@ function fixture(): { clientDir: string; routes: WebRoute[] } {
   writeFileSync(join(clientDir, "index.html"), "<p>page</p>");
   writeFileSync(join(clientDir, "market.html"), "<p>market</p>");
   writeFileSync(join(clientDir, "account.html"), "<p>account</p>");
+  writeFileSync(join(clientDir, "wallet.html"), "<p>wallet</p>");
   writeFileSync(join(clientDir, "chat.css"), "body{}");
   const routes: WebRoute[] = [];
   registerStatic({ register: (route) => routes.push(route) }, clientDir);
@@ -82,7 +83,7 @@ async function call(routes: WebRoute[], kind: WebRoute["kind"], path: string, ur
   return rec;
 }
 
-/* The route SHAPE is the contract with the host webserver: three named pages
+/* The route SHAPE is the contract with the host webserver: four named pages
  * and `prefix /client` for everything else the face owns. Asserting it here is
  * what catches a mount that registered, say, `prefix /` - which would
  * typecheck, boot, serve index.html for every asset request, and look fine
@@ -91,7 +92,7 @@ test("registerStatic mounts exactly the routes it claims", () => {
   const { routes } = fixture();
   assert.deepEqual(
     routes.map((r) => `${r.kind} ${r.path}`).sort(),
-    ["exact /", "exact /account", "exact /market", "prefix /client"],
+    ["exact /", "exact /account", "exact /market", "exact /wallet", "prefix /client"],
   );
 });
 
@@ -108,7 +109,7 @@ test("the / route serves index.html as html", async () => {
  * operator the market when they asked for the account. */
 test("the instrument routes serve their own page file", async () => {
   const { routes } = fixture();
-  for (const [path, body] of [["/market", "<p>market</p>"], ["/account", "<p>account</p>"]] as const) {
+  for (const [path, body] of [["/market", "<p>market</p>"], ["/account", "<p>account</p>"], ["/wallet", "<p>wallet</p>"]] as const) {
     const rec = await call(routes, "exact", path, path);
     assert.equal(rec.status, 200);
     assert.equal(rec.headers["content-type"], "text/html; charset=utf-8");

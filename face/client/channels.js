@@ -7,6 +7,7 @@
  * @module
  */
 import { renderMarkdown } from "./markdown.js";
+import { usd } from "./wallet-model.js";
 
 /** @param {string} tag @param {string|null} [cls] @param {string} [text] */
 const el = (tag, cls, text) => {
@@ -18,6 +19,12 @@ const el = (tag, cls, text) => {
 
 /** Bytes as the file list shows them. @param {number} n */
 const size = (n) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`);
+
+/** A fraction as a signed percentage, two decimals: `+11.47%`, `-5.15%`. @param {unknown} x */
+const pct = (x) => (typeof x === "number" && Number.isFinite(x) ? `${x >= 0 ? "+" : "-"}${(Math.abs(x) * 100).toFixed(2)}%` : "—");
+
+/** A book value in whole dollars with separators: `$111,466`. @param {unknown} x */
+const dollars = (x) => (typeof x === "number" && Number.isFinite(x) ? `${x < 0 ? "-" : ""}$${Math.abs(x).toLocaleString("en-US", { maximumFractionDigits: 0 })}` : "—");
 
 /**
  * A JSON value flattened to dotted paths, so a nested backtest result shows
@@ -123,20 +130,65 @@ export function renderChannelPage(inner, payload, actions) {
   head.append(bchips);
   inner.append(head);
 
-  /* 2 - headline */
-  if (status.one_line || status.next || status.numbers) {
+  /* 2 - headline. `spend` (wallet spec §2/§4.4: USDC settled in this channel,
+   * present only when the wallet is configured AND the channel has paid for
+   * something) is one more figure tile beside status.yaml's numbers — the
+   * server summed it from the ledger by workspace id; nothing is added up here. */
+  const spend = payload.spend && typeof payload.spend === "object" ? payload.spend : null;
+  if (status.one_line || status.next || status.numbers || spend) {
     const card = el("div", "ch-card");
     if (status.one_line) card.append(el("p", "ch-oneline", status.one_line));
     if (status.next) card.append(el("p", "ch-next", `next: ${status.next}`));
-    if (status.numbers) {
+    if (status.numbers || spend) {
       const row = el("div", "ch-numbers");
-      for (const [k, v] of Object.entries(status.numbers)) {
+      for (const [k, v] of Object.entries(status.numbers ?? {})) {
         const fig = el("div", "ch-fig");
         fig.append(el("div", "ch-fig-v", v), el("div", "ch-fig-k", k));
         row.append(fig);
       }
+      if (spend) {
+        const fig = el("div", "ch-fig ch-fig-spend");
+        fig.append(el("div", "ch-fig-v", usd(spend.settled_usd)), el("div", "ch-fig-k", "USDC spent"));
+        fig.title = typeof spend.count === "number" ? `${spend.count} settled payment${spend.count === 1 ? "" : "s"} · details on /wallet` : "details on /wallet";
+        row.append(fig);
+      }
       card.append(row);
     }
+    inner.append(card);
+  }
+
+  /* 2b - the paper book (paper spec §2): the engine's own summary.json under
+   * the paper home, present only when a book exists for this channel. The
+   * numbers are the engine's; this block formats and never derives. */
+  const paper = payload.paper && typeof payload.paper === "object" ? payload.paper : null;
+  if (paper) {
+    const card = el("div", "ch-card ch-paper");
+    const steps = typeof paper.steps === "number" ? paper.steps : 0;
+    card.append(el("p", "ch-oneline",
+      `paper book · ${steps} day${steps === 1 ? "" : "s"} stepped${paper.last_day ? ` · last ${paper.last_day}` : ""}`));
+    const row = el("div", "ch-numbers");
+    for (const [v, k] of [
+      [dollars(paper.nav), "NAV"],
+      [pct(paper.return), "return"],
+      [pct(paper.max_drawdown), "max drawdown"],
+      [String(paper.n_positions ?? "—"), "positions"],
+    ]) {
+      const fig = el("div", "ch-fig");
+      fig.append(el("div", "ch-fig-v", v), el("div", "ch-fig-k", k));
+      row.append(fig);
+    }
+    card.append(row);
+    if (paper.pending && typeof paper.pending === "object") {
+      const n = paper.pending.n_targets;
+      card.append(el("p", "ch-next", `intent of ${paper.pending.as_of} pending: ${n} name${n === 1 ? "" : "s"}, fills at the next open`));
+    }
+    /* Rule 5: what the engine counted rather than filled is shown, not hidden. */
+    const counts = paper.counts && typeof paper.counts === "object" ? paper.counts : {};
+    const flagged = ["discarded", "small_skipped", "cash_short", "signal_errors", "intents_rejected",
+      "delisted", "presumed_delisted", "days_corp_unchecked"]
+      .filter((k) => typeof counts[k] === "number" && counts[k] > 0)
+      .map((k) => `${k.replaceAll("_", " ")} ${counts[k]}`);
+    if (flagged.length > 0) card.append(el("p", "ch-next", `counted: ${flagged.join(" · ")}`));
     inner.append(card);
   }
 

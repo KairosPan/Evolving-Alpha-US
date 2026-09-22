@@ -13,6 +13,7 @@ bug class once.
    |---|---|---|---|---|
    | `data/pit/2yr` | 2024-06-03 .. 2026-07-09 | 526 | 2025-03-20 | 2025-06-04 |
    | `data/pit/broad` | 2025-11-17 .. 2026-03-27 | 90 | never | never |
+   | a bought `massive` bed (`data/pit/massive-<from>-<to>`, captured from `strategies/<name>/vendor/` per the `bought-data` skill) | the bought dates, exactly (the calendar is the union of bought bar dates, not an exchange calendar) | = the bought window | 200 bars after the window start — no warmup unless you bought it | 252 bars after the window start — no warmup unless you bought it. NO corp actions: `corp_actions` answers `artifact missing`, never "clean" (rule 4) |
 
    Stay inside the stated window: the beds do NOT fail uniformly outside it. A snapshot read
    out of window raises `SnapshotMissingError`, but `daily_bars` and `corporate_actions`
@@ -46,3 +47,13 @@ bug class once.
 
 Results land in `backtests/YYYY-MM-DD-<label>.json` and record: window, parameters,
 sample size, hit rate, mean/median return, worst case, and the count of discarded days.
+
+**The paper book** (`alpaca_kit/paper`, spec `docs/superpowers/specs/2026-09-22-paper-book-design.md`)
+applies the same five to a book instead of a backtest, in code: every read goes through the
+guard `walk` builds per day from `replay_days`, bounded like a backtest (1); a `delist` row, or
+a held name with no bar for `presume_delisted_after` consecutive days, is written to zero as a
+realized loss and counted (2); `fees_bps` defaults to 0 and is a declared parameter of the book
+when not (3); an intent decided at day t's close fills at the next trading day's open, never at
+t (4); a leg with no bar on its fill day is skipped and counted, a held name with no bar keeps
+its last mark and counts a stale day, nothing is interpolated (5). What the book counted instead
+of filling is on its `summary.json` and the landing page's card, never dropped.

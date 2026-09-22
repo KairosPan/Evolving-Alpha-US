@@ -6,7 +6,7 @@
 # in GuardedSource at the eval/loop layer.
 #
 # Add a new vendor:
-#   1. Implement the MarketDataSource Protocol in alpaca_kit/<vendor>.py.
+#   1. Implement the MarketDataSource Protocol in alpaca_kit/feeds/<vendor>.py.
 #   2. Add a _build_<vendor>(*, pit_root=None) -> MarketDataSource here.
 #   3. Register one line in _SOURCES.
 #   4. Select it with ALPHA_DATA_SOURCE=<vendor>.
@@ -20,6 +20,7 @@ from alpaca_kit.composite import CompositeSource
 from alpaca_kit.feeds.edgar import EdgarOfferingsSource, EdgarSource
 from alpaca_kit.feeds.finra import FinraSource
 from alpaca_kit.feeds.float_feed import FloatSource
+from alpaca_kit.feeds.massive_files import MassiveFilesSource
 from alpaca_kit.pit.pit_store import PITStore
 from alpaca_kit.pit.snapshot_source import SnapshotSource
 from alpaca_kit.source import MarketDataSource
@@ -51,6 +52,17 @@ def _build_float_feed(*, pit_root: str | None = None) -> MarketDataSource:
     # Free-float-only backend (P5b) — composed for the `float` capability via
     # `ALPHA_DATA_COMPOSITE=float=float_feed`; reads ALPHA_FLOAT_USER_AGENT from env itself.
     return FloatSource()
+
+
+def _build_massive_files(*, pit_root: str | None = None) -> MarketDataSource:
+    # Bought Massive/Polygon-shaped daily-bar files (bars + calendar only) under ALPHA_MASSIVE_ROOT,
+    # laid out `<root>/<TICKER>/*.json` by `wallet_pay({save_to})`; the capture-side reader for a bought
+    # bed (`ALPHA_DATA_SOURCE=massive_files python scripts/capture_window.py ...`). Composable with
+    # `ALPHA_DATA_COMPOSITE=earnings=edgar` via ALPHA_DATA_COMPOSITE_BASE=massive_files.
+    root = os.environ.get("ALPHA_MASSIVE_ROOT")
+    if not root:
+        raise ValueError("massive_files source requires ALPHA_MASSIVE_ROOT")
+    return MassiveFilesSource(Path(root))
 
 
 def _build_snapshot(*, pit_root: str | None = None) -> MarketDataSource:
@@ -99,7 +111,7 @@ def _build_composite(*, pit_root: str | None = None) -> MarketDataSource:
 
 _SOURCES = {"alpaca": _build_alpaca, "snapshot": _build_snapshot, "composite": _build_composite,
             "edgar": _build_edgar, "finra": _build_finra, "edgar_offerings": _build_edgar_offerings,
-            "float_feed": _build_float_feed}
+            "float_feed": _build_float_feed, "massive_files": _build_massive_files}
 
 
 def make_source(name: str | None = None, *, pit_root: str | None = None) -> MarketDataSource:

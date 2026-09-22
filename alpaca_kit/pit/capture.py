@@ -25,6 +25,13 @@ def _available(source, name: str) -> bool:
     return bool(probe()) if callable(probe) else False
 
 
+def _corp_available(source) -> bool:
+    """corp_actions_available probe with GuardedSource's DEFAULT-TRUE posture (unlike the P5 feeds, corp
+    predates the capability, so a source without the method is a legacy checkable one, not MISSING)."""
+    probe = getattr(source, "corp_actions_available", None)
+    return bool(probe()) if callable(probe) else True
+
+
 def _capture_feeds(source, store: PITStore, symbols: list[str], end: Date) -> None:
     """P5 consume-path activation: persist the OPTIONAL feeds KNOWABLE BY the window end, scoped to the
     captured symbols, so a captured window replays earnings / short-interest / offerings / float offline
@@ -53,7 +60,7 @@ def _capture_feeds(source, store: PITStore, symbols: list[str], end: Date) -> No
 
 def capture_window(source, store: PITStore, start: Date, end: Date, symbols: list[str]) -> None:
     """Idempotent prefetch: bars per symbol + a derived daily snapshot cross-section + calendar + the
-    announce-keyed corporate actions for the captured symbols.
+    announce-keyed corporate actions for the captured symbols (only when the source can check them).
 
     The snapshot for each day is derived from the captured raw bars (close/open/volume) plus the
     prior trading day's close, so the offline universe builder has a cross-section to screen. Corp
@@ -86,11 +93,15 @@ def capture_window(source, store: PITStore, start: Date, end: Date, symbols: lis
             store.put_snapshot(day, pd.DataFrame(rows))
     # announce-keyed corp actions as of the window end (includes pending future-ex splits), scoped to
     # the captured symbols so the offline store stays consistent with the bars/snapshots it holds.
-    corp = source.corporate_actions_known(end)
-    if corp is None:
-        corp = pd.DataFrame(columns=_CORP_COLS)
-    elif not corp.empty:
-        corp = corp[corp["symbol"].isin(symbols)].reset_index(drop=True)
-    store.put_corp_actions(corp)
+    # Gated on corp_actions_available() (a source lacking the probe defaults True, as GuardedSource does):
+    # a source that CANNOT check (a bars-only bought bed) writes NO corp_actions.parquet, so the replay's
+    # SnapshotSource reports MISSING — writing an empty frame would read back as "checked, clean".
+    if _corp_available(source):
+        corp = source.corporate_actions_known(end)
+        if corp is None:
+            corp = pd.DataFrame(columns=_CORP_COLS)
+        elif not corp.empty:
+            corp = corp[corp["symbol"].isin(symbols)].reset_index(drop=True)
+        store.put_corp_actions(corp)
     _capture_feeds(source, store, symbols, end)   # P5: earnings/short-interest/offerings/float (default-off)
     write_checksums(store.root)   # D6: manifest last, so it covers everything the window just wrote

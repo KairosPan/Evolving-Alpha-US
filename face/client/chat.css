@@ -1429,6 +1429,10 @@ body {
   color: var(--dim);
   margin-top: 2px;
 }
+/* the paper book card: the engine's summary.json read from the paper home,
+   marked off from status.yaml's self-reported headline by the accent rule */
+.ch-card.ch-paper { border-left: 3px solid var(--accent); }
+.ch-card.ch-paper .ch-next { margin-top: 8px; }
 
 /* every remaining block: thesis, evidence, journal, files, sessions */
 .ch-sec { margin: 24px 0 0; }
@@ -1638,3 +1642,47 @@ body {
 .strip-chip[data-state="answered"] .strip-state { color: var(--green); }
 .strip-chip[data-state="failed"] .strip-state, .strip-chip[data-state="timed-out"] .strip-state { color: var(--red); }
 .strip-chip[data-state="left"], .strip-chip.broken { opacity: 0.6; }
+
+/* ---------- 2026-09-20: the agent wallet — pay card, status badges, rail dot
+   (spec docs/superpowers/specs/2026-09-20-agent-wallet-design.md §2). The pay
+   card is a collapsible tool row like dispatch: no visible left border, so
+   the colour lives in the kind label — green for a payment that went through,
+   the danger ink when it was refused (`.danger`, toggled by chat.js on
+   `isError` OR the pretty node's `data-status="refused"`). The badge palette
+   is the one the operator already saw on the intro page, in the face's own
+   tokens; `settled` reads the same on the card and on /wallet. */
+
+.card.pay .kind { color: var(--green); }
+.card.pay .sum { color: var(--text); }
+.card.pay.danger .kind { color: var(--danger); }
+.card.pay.danger .sum { color: var(--danger); }
+.pay-card .pay-line { color: var(--text); font-weight: 600; }
+.pay-card[data-status="refused"] .pay-line { color: var(--danger); }
+.pay-card[data-status="rejected"] .pay-line { color: var(--red); }
+.pay-card .viz-kv { margin-top: 2px; }
+.pay-card .viz-kv dd { min-width: 0; overflow-wrap: anywhere; } /* a 66-char tx hash must wrap, not push the grid */
+.viz-link { color: var(--accent); text-decoration: underline dotted; text-underline-offset: 2px; }
+.viz-link:hover { text-decoration-style: solid; }
+
+/* payment statuses (settled / rejected / unknown / expired-unused) and
+   mandate statuses (draft / signed / disabled / unverified / refused) */
+.ch-badge[data-status="settled"] { color: var(--green); border-color: currentColor; }
+.ch-badge[data-status="signed"] { color: var(--accent); border-color: currentColor; }
+.ch-badge[data-status="unknown"] { color: var(--danger); border-color: currentColor; }
+.ch-badge[data-status="rejected"], .ch-badge[data-status="expired-unused"], .ch-badge[data-status="refused"] { color: var(--red); border-color: currentColor; }
+.ch-badge[data-status="draft"] { color: var(--danger); border-color: currentColor; border-style: dashed; }
+.ch-badge[data-status="unverified"] { color: var(--red); border-color: currentColor; border-style: dashed; }
+.ch-badge[data-status="disabled"] { opacity: 0.5; text-decoration: line-through; }
+
+/* the rail's wallet item carries a dot while an alert stands */
+.rail-btn { position: relative; }
+.rail-btn.has-alert::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+}
