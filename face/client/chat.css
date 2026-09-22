@@ -1429,6 +1429,10 @@ body {
   color: var(--dim);
   margin-top: 2px;
 }
+/* the paper book card: the engine's summary.json read from the paper home,
+   marked off from status.yaml's self-reported headline by the accent rule */
+.ch-card.ch-paper { border-left: 3px solid var(--accent); }
+.ch-card.ch-paper .ch-next { margin-top: 8px; }
 
 /* every remaining block: thesis, evidence, journal, files, sessions */
 .ch-sec { margin: 24px 0 0; }

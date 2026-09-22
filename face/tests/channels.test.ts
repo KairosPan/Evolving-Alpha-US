@@ -7,8 +7,8 @@ import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import {
-  createChannel, listChannelDirs, listSessionHeads, mergeSessionHeads, readChannelStatus,
-  readChannelBody, reconcileChannels, registerChannelRoutes, WORKBENCH,
+  createChannel, listChannelDirs, listSessionHeads, mergeSessionHeads, paperHomeOf, readChannelStatus,
+  readChannelBody, readPaperSummary, reconcileChannels, registerChannelRoutes, WORKBENCH,
 } from "../src/channels.ts";
 import { rosterFor, setRoster } from "../src/roster.ts";
 import { HttpError } from "../src/http.ts";
@@ -157,6 +157,59 @@ test("readChannelBody: the file list skips __pycache__ and directories", async (
   await writeFile(join(dir, "screen.py"), "print(1)\n");
   const body = await readChannelBody(dir);
   assert.deepEqual(body.files.map((f) => f.name), ["screen.py"]);
+});
+
+/** What `alpaca_kit.paper` writes as summary.json, with the keys the tile
+ * does not show (positions, params, chain…) present to be dropped. */
+const SUMMARY = {
+  ok: true, strategy: "alpha", created: "2026-09-22T12:00:01Z", initial_cash: 100000, params: { fees_bps: 0 },
+  last_day: "2016-03-31", steps: 64, nav: 111465.5402, cash: 2373.1, invested: 109092.44, return: 0.114655,
+  peak_nav: 112000, drawdown: -0.0048, max_drawdown: -0.0515, realized_pnl: 1234.5, n_positions: 2,
+  positions: [{ symbol: "AAPL", qty: 271, weight: 0.477 }],
+  pending: { as_of: "2016-03-31", n_targets: 2, gross: 0.98, received_at: "2026-09-22T12:01:00Z" },
+  counts: { steps: 64, fills: 109, discarded: 0, days_corp_unchecked: 64, note: "not a number" },
+  chain: { seq: 301, head: "1de4" }, updated_at: "2026-09-22T12:01:00Z",
+};
+
+async function paperHomeWith(name: string, body: string): Promise<string> {
+  const home = await mkdtemp(join(tmpdir(), "face-paper-"));
+  await mkdir(join(home, name), { recursive: true });
+  await writeFile(join(home, name, "summary.json"), body);
+  return home;
+}
+
+test("readPaperSummary: the engine's summary is narrowed to the tile, numbers only", async () => {
+  const home = await paperHomeWith("alpha", JSON.stringify(SUMMARY));
+  assert.deepEqual(await readPaperSummary(home, "alpha"), {
+    last_day: "2016-03-31", steps: 64, initial_cash: 100000, nav: 111465.5402, return: 0.114655,
+    max_drawdown: -0.0515, n_positions: 2, pending: { as_of: "2016-03-31", n_targets: 2 },
+    counts: { steps: 64, fills: 109, discarded: 0, days_corp_unchecked: 64 }, updated_at: "2026-09-22T12:01:00Z",
+  });
+});
+
+test("readPaperSummary: no book, a broken file, a non-object, or a missing figure is null - never a made-up tile", async () => {
+  const home = await paperHomeWith("alpha", JSON.stringify(SUMMARY));
+  assert.equal(await readPaperSummary(home, "beta"), null);
+  assert.equal(await readPaperSummary(await paperHomeWith("alpha", "{not json"), "alpha"), null);
+  assert.equal(await readPaperSummary(await paperHomeWith("alpha", "[1,2]"), "alpha"), null);
+  assert.equal(await readPaperSummary(await paperHomeWith("alpha", JSON.stringify({ ...SUMMARY, nav: "111465" })), "alpha"), null);
+  assert.equal(await readPaperSummary(await paperHomeWith("alpha", JSON.stringify({ ...SUMMARY, return: Number.NaN })), "alpha"), null);
+  /* a fresh book: no day stepped, nothing pending, and that is a tile */
+  const fresh = await readPaperSummary(await paperHomeWith("alpha", JSON.stringify({ ...SUMMARY, last_day: null, steps: 0, pending: null })), "alpha");
+  assert.deepEqual({ last_day: fresh?.last_day, steps: fresh?.steps, pending: fresh?.pending }, { last_day: null, steps: 0, pending: null });
+});
+
+test("readPaperSummary: a name outside the channel grammar never reaches the filesystem", async () => {
+  const home = await paperHomeWith("alpha", JSON.stringify(SUMMARY));
+  for (const name of ["../alpha", "_template", ".hidden", "__pycache__", "has space", "", WORKBENCH]) {
+    assert.equal(await readPaperSummary(home, name), null, name);
+  }
+});
+
+test("paperHomeOf: FACE_PAPER_HOME wins, an empty value means the default under the harness home", () => {
+  assert.equal(paperHomeOf("/dsh", { FACE_PAPER_HOME: "/books" } as NodeJS.ProcessEnv), "/books");
+  assert.equal(paperHomeOf("/dsh", { FACE_PAPER_HOME: "" } as NodeJS.ProcessEnv), join("/dsh", "face", "paper"));
+  assert.equal(paperHomeOf("/dsh", {} as NodeJS.ProcessEnv), join("/dsh", "face", "paper"));
 });
 
 /** A registry standing in for ctx.workspaceRegistry: the same path
@@ -456,11 +509,12 @@ function postReq(body: string, host = "127.0.0.1:3090"): IncomingMessage {
   return req;
 }
 
-async function routesFor(root: string, home: string): Promise<Map<string, WebRoute>> {
+async function routesFor(root: string, home: string, paperHome?: string): Promise<Map<string, WebRoute>> {
   const { registry } = fakeRegistry();
   const routes: WebRoute[] = [];
   registerChannelRoutes({ register: (route) => routes.push(route) }, {
     registry, root, home,
+    ...(paperHome === undefined ? {} : { paperHome }),
     listSessions: async () => [],
     connectedBins: async () => ["codex"],
     listBots: async () => [],
@@ -530,6 +584,30 @@ test("routes: overview answers by workspace id, and a body value never becomes a
     await routes.get("/data/channels/overview")!.handler(postReq(JSON.stringify(bad)), out.res);
     assert.equal(out.out.status, 404, JSON.stringify(bad));
   }
+});
+
+test("routes: the overview carries `paper` only for a channel with a book in the paper home, never for the root", async () => {
+  const paperHome = await paperHomeWith("alpha", JSON.stringify(SUMMARY));
+  await mkdir(join(paperHome, "workbench"), { recursive: true });
+  await writeFile(join(paperHome, "workbench", "summary.json"), JSON.stringify(SUMMARY));
+  const routes = await routesFor(await makeRoot(), await mkdtemp(join(tmpdir(), "face-rt-paper-")), paperHome);
+  const overview = async (name: string): Promise<Record<string, unknown>> => {
+    const { workspaceId } = await channelNamed(routes, name);
+    const out = fakeRes();
+    await routes.get("/data/channels/overview")!.handler(postReq(JSON.stringify({ workspaceId })), out.res);
+    assert.equal(out.out.status, 200);
+    return JSON.parse(out.out.body) as Record<string, unknown>;
+  };
+  const alpha = await overview("alpha");
+  assert.equal((alpha.paper as { nav: number }).nav, 111465.5402);
+  assert.equal("paper" in await overview("市场情绪"), false, "no book, no key");
+  assert.equal("paper" in await overview("workbench"), false, "the root never has a book");
+
+  const without = await routesFor(await makeRoot(), await mkdtemp(join(tmpdir(), "face-rt-nopaper-")));
+  const { workspaceId } = await channelNamed(without, "alpha");
+  const out = fakeRes();
+  await without.get("/data/channels/overview")!.handler(postReq(JSON.stringify({ workspaceId })), out.res);
+  assert.equal("paper" in (JSON.parse(out.out.body) as Record<string, unknown>), false, "no paper home, no key");
 });
 
 test("routes: the roster write replaces the set and refuses an unknown channel", async () => {

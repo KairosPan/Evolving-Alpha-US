@@ -20,6 +20,12 @@ const el = (tag, cls, text) => {
 /** Bytes as the file list shows them. @param {number} n */
 const size = (n) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`);
 
+/** A fraction as a signed percentage, two decimals: `+11.47%`, `-5.15%`. @param {unknown} x */
+const pct = (x) => (typeof x === "number" && Number.isFinite(x) ? `${x >= 0 ? "+" : "-"}${(Math.abs(x) * 100).toFixed(2)}%` : "—");
+
+/** A book value in whole dollars with separators: `$111,466`. @param {unknown} x */
+const dollars = (x) => (typeof x === "number" && Number.isFinite(x) ? `${x < 0 ? "-" : ""}$${Math.abs(x).toLocaleString("en-US", { maximumFractionDigits: 0 })}` : "—");
+
 /**
  * A JSON value flattened to dotted paths, so a nested backtest result shows
  * its `discarded` and `score_stats` blocks instead of dropping them. Arrays
@@ -148,6 +154,41 @@ export function renderChannelPage(inner, payload, actions) {
       }
       card.append(row);
     }
+    inner.append(card);
+  }
+
+  /* 2b - the paper book (paper spec §2): the engine's own summary.json under
+   * the paper home, present only when a book exists for this channel. The
+   * numbers are the engine's; this block formats and never derives. */
+  const paper = payload.paper && typeof payload.paper === "object" ? payload.paper : null;
+  if (paper) {
+    const card = el("div", "ch-card ch-paper");
+    const steps = typeof paper.steps === "number" ? paper.steps : 0;
+    card.append(el("p", "ch-oneline",
+      `paper book · ${steps} day${steps === 1 ? "" : "s"} stepped${paper.last_day ? ` · last ${paper.last_day}` : ""}`));
+    const row = el("div", "ch-numbers");
+    for (const [v, k] of [
+      [dollars(paper.nav), "NAV"],
+      [pct(paper.return), "return"],
+      [pct(paper.max_drawdown), "max drawdown"],
+      [String(paper.n_positions ?? "—"), "positions"],
+    ]) {
+      const fig = el("div", "ch-fig");
+      fig.append(el("div", "ch-fig-v", v), el("div", "ch-fig-k", k));
+      row.append(fig);
+    }
+    card.append(row);
+    if (paper.pending && typeof paper.pending === "object") {
+      const n = paper.pending.n_targets;
+      card.append(el("p", "ch-next", `intent of ${paper.pending.as_of} pending: ${n} name${n === 1 ? "" : "s"}, fills at the next open`));
+    }
+    /* Rule 5: what the engine counted rather than filled is shown, not hidden. */
+    const counts = paper.counts && typeof paper.counts === "object" ? paper.counts : {};
+    const flagged = ["discarded", "small_skipped", "cash_short", "signal_errors", "intents_rejected",
+      "delisted", "presumed_delisted", "days_corp_unchecked"]
+      .filter((k) => typeof counts[k] === "number" && counts[k] > 0)
+      .map((k) => `${k.replaceAll("_", " ")} ${counts[k]}`);
+    if (flagged.length > 0) card.append(el("p", "ch-next", `counted: ${flagged.join(" · ")}`));
     inner.append(card);
   }
 

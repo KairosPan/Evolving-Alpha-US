@@ -21,7 +21,7 @@ import { BOTS_ROOT } from "./overlay.ts";
 import { registerDataRoutes } from "./data.ts";
 import { registerStatic } from "./static.ts";
 import { registerSessionRoutes } from "./sessions.ts";
-import { listSessionHeads, registerChannelRoutes, type RegistryLike } from "./channels.ts";
+import { listSessionHeads, paperHomeOf, registerChannelRoutes, type RegistryLike } from "./channels.ts";
 import { hasExec, panelDeps, readAgentsMeta, registerPanelRoutes } from "./panels.ts";
 import { installRoom, registerRoomRoutes, type RoomContextLike } from "./room.ts";
 import { installWallet, type WalletContextLike } from "./wallet.ts";
@@ -183,10 +183,16 @@ const wallet = installWallet({
 });
 disposeWallet = wallet.dispose;
 wallet.registerRoutes(booted.ctx.webServer);
+/* The paper books: read-only for the face, written by the operator's
+ * `scripts/paper_book.py` into the paper home (outside the workspace, like the
+ * wallet home). The channel overview shows a tile for a book that exists. */
+const paperHome = paperHomeOf(dshHome);
+console.log(`${BIN}: paper books read from ${paperHome}`);
 registerChannelRoutes(booted.ctx.webServer, {
   registry: workspaceRegistry,
   root: process.cwd(),
   home: dshHome,
+  paperHome,
   ...(wallet.spendFor === undefined ? {} : { spendFor: wallet.spendFor }),
   listSessions: () => listSessionHeads(
     async () => (await sessionPersistence.list()).map((h) => ({ sessionId: String(h.id), cwd: h.cwd })),

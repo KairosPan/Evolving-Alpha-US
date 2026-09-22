@@ -483,6 +483,86 @@ export async function createChannel(root: string, rawName: unknown): Promise<Cha
   return { name, dir: target, isRoot: false };
 }
 
+/** The paper book's headline for one channel, as the engine's own
+ * `summary.json` carries it (`alpaca_kit/paper/book.py`, `summary`), narrowed
+ * to what the landing page shows. The face computes nothing here: the numbers
+ * are the engine's, read from the paper HOME - outside the workspace, where
+ * Kairos cannot write them (paper spec §2). */
+export interface PaperTile {
+  /** The last day stepped, or null for a book that has not stepped. */
+  last_day: string | null;
+  steps: number;
+  initial_cash: number;
+  nav: number;
+  /** nav / initial_cash - 1. */
+  return: number;
+  max_drawdown: number;
+  n_positions: number;
+  /** The intent decided on the last day, filling at the next open; null when none is pending. */
+  pending: { as_of: string; n_targets: number } | null;
+  /** The engine's counters: fills, discarded, signal_errors, … - numbers only. */
+  counts: Record<string, number>;
+  updated_at?: string;
+}
+
+const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+
+/** The paper home: `FACE_PAPER_HOME` (`||`, the face's convention: an empty
+ * value means default) else `<dshHome>/face/paper` - the same default the
+ * engine's `alpaca_kit.paper.home` resolves for `$DSH_HOME`. */
+export function paperHomeOf(dshHome: string, env: NodeJS.ProcessEnv = process.env): string {
+  return env.FACE_PAPER_HOME || join(dshHome, "face", "paper");
+}
+
+/**
+ * Read `<paperHome>/<name>/summary.json`. Absent (no book for this channel),
+ * unreadable, malformed, or missing any headline number is `null`: the page
+ * shows a tile only for a book the engine wrote, and a broken file is a
+ * missing tile rather than a made-up figure. A name outside the channel
+ * grammar (the repo root among them) never reaches the filesystem.
+ */
+export async function readPaperSummary(paperHome: string, name: string): Promise<PaperTile | null> {
+  if (!NAME_RE.test(name) || name === TEMPLATE) return null;
+  let text: string;
+  try {
+    text = await readFile(join(paperHome, name, "summary.json"), "utf8");
+  } catch {
+    return null;
+  }
+  let doc: unknown;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return null;
+  const raw = doc as Record<string, unknown>;
+  const nav = num(raw.nav), initial = num(raw.initial_cash), steps = num(raw.steps);
+  const ret = num(raw.return), mdd = num(raw.max_drawdown), n = num(raw.n_positions);
+  if (nav === undefined || initial === undefined || steps === undefined
+    || ret === undefined || mdd === undefined || n === undefined) return null;
+  const counts: Record<string, number> = {};
+  if (raw.counts !== null && typeof raw.counts === "object" && !Array.isArray(raw.counts)) {
+    for (const [k, v] of Object.entries(raw.counts as Record<string, unknown>)) {
+      const c = num(v);
+      if (c !== undefined) counts[k] = c;
+    }
+  }
+  let pending: PaperTile["pending"] = null;
+  if (raw.pending !== null && typeof raw.pending === "object" && !Array.isArray(raw.pending)) {
+    const p = raw.pending as Record<string, unknown>;
+    const asOf = str(p.as_of), nTargets = num(p.n_targets);
+    if (asOf !== undefined && nTargets !== undefined) pending = { as_of: asOf, n_targets: nTargets };
+  }
+  const tile: PaperTile = {
+    last_day: str(raw.last_day) ?? null, steps, initial_cash: initial, nav, return: ret,
+    max_drawdown: mdd, n_positions: n, pending, counts,
+  };
+  const updated = str(raw.updated_at);
+  if (updated !== undefined) tile.updated_at = updated;
+  return tile;
+}
+
 /** What the routes need of the booted tree. Injected so the tests drive them
  * without a harness. */
 export interface ChannelRouteDeps {
@@ -503,6 +583,10 @@ export interface ChannelRouteDeps {
    * overview handler cannot be extended after registration (spec §9), which
    * is why main.ts builds the wallet BEFORE these routes. */
   spendFor?(channel: ChannelRow): Promise<{ settled_usd: string; count: number } | null>;
+  /** Where the engine keeps paper books (`paperHomeOf`); absent when the face
+   * shows no paper tile at all. The overview reads `<paperHome>/<name>/summary.json`
+   * through {@link readPaperSummary} for every channel but the repo root. */
+  paperHome?: string;
 }
 
 /** Mount the four channel routes. Same trust posture as data.ts: the fence
@@ -571,6 +655,10 @@ export function registerChannelRoutes(webServer: RouteRegistrar, deps: ChannelRo
          * field's presence, and a wallet-less face or a channel that never
          * paid has no tile to show. */
         const spend = deps.spendFor === undefined ? null : await deps.spendFor(channel);
+        /* `paper` likewise only when a book exists: the engine's summary under
+         * the paper home, never anything derived here (paper spec §2). */
+        const paper = deps.paperHome === undefined || channel.isRoot
+          ? null : await readPaperSummary(deps.paperHome, channel.name);
         return send(res, 200, {
           ok: true, channel,
           status: await readChannelStatus(channel.dir),
@@ -579,6 +667,7 @@ export function registerChannelRoutes(webServer: RouteRegistrar, deps: ChannelRo
           bots: await botsFor(deps.home, channel.workspaceId) ?? [],
           allBots: await deps.listBots(),
           ...(spend === null ? {} : { spend }),
+          ...(paper === null ? {} : { paper }),
         });
       } catch (err) {
         if (err instanceof HttpError) return send(res, err.status, { ok: false, error: err.message });
