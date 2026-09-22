@@ -485,11 +485,14 @@ treating that fence as authentication:
 | `POST /data/channels` | create — `{name}`, copies `strategies/_template`, then reconciles |
 
 **The landing page** (`client/channels.js`) opens on clicking a channel's
-title in the sidebar's group header — the chevron still only folds it. Seven
+title in the sidebar's group header — the chevron still only folds it. Eight
 blocks, every one quietly skipped when its source is absent: header (title,
 inline-rename, status badge, a `missing-dir` warning, the roster's agent
 chips, the directory path); the optional `status.yaml` headline (`one_line`,
-`next`, `numbers` — see `AGENTS.md`); the thesis (`THESIS.md`, with an
+`next`, `numbers` — see `AGENTS.md`); the paper-book card (the engine's own
+`summary.json` under `FACE_PAPER_HOME`, present only for a channel with a
+book, marked off from the self-reported headline by an accent rule — "The
+paper-book drill" below); the thesis (`THESIS.md`, with an
 untouched `_template` copy detected byte-exact and shown as "no thesis yet"
 rather than presented as content); latest evidence (the newest
 `backtests/*.json`, flattened to a summary table, with the FULL json always
@@ -1850,3 +1853,49 @@ and `saved 467 B`, the stranger's bytes whole under
 either way: `settled` with a body, or a refusal card in the danger colour with
 the payee's own error; then `wallet_reconcile` after the authorizations
 expire — PASS: no `unknown` row left on `/wallet`. Record the PASS line here.
+
+## The paper-book drill (run after any face or alpaca_kit change)
+
+The paper book (`alpaca_kit/paper`, spec
+`docs/superpowers/specs/2026-09-22-paper-book-design.md`) is written by the
+operator's `scripts/paper_book.py` into the paper home — outside the workspace,
+`$DSH_HOME/face/paper/<strategy>/` — and the channel landing page reads its
+`summary.json` into a card. The face computes nothing: the card's numbers are
+the engine's, and a channel with no book has no card. The face's boot line says
+where it reads from: `kairos-face: paper books read from <home>`.
+
+**Automated half:** `python -m pytest tests/paper` (the accounting under the
+five rules on `FakeSource`, the chain, `verify`, the CLI, the order-path fence)
+and `npm test`'s `channels.test.ts` (`readPaperSummary`'s narrowing and every
+null case; the overview carrying `paper` only for a channel with a book, never
+the root). Both pass as of 2026-09-22.
+
+**The bed half** (run and PASSED 2026-09-22 on `feat/paper-book`, on the bought
+bed the bought-bed drill left behind — `data/pit/massive-2016-2017`, AAPL and
+MSFT, no corp file). From the repo root, with a scratch home:
+
+    export ALPHA_PAPER_HOME=$TMPDIR/paper-home
+    python scripts/paper_book.py open paper-drill
+    python scripts/paper_book.py walk paper-drill --source snapshot \
+        --pit-root data/pit/massive-2016-2017 --start 2016-01-04 --end 2016-03-31
+    python scripts/paper_book.py verify paper-drill
+    python scripts/paper_book.py step paper-drill --source snapshot \
+        --pit-root data/pit/massive-2016-2017 --day 2016-04-01
+
+PASS line: `walk` stepped 64 days in 0.8 s, NAV 100,000 → 111,465.54 (+11.47%),
+max drawdown −5.15%, 2 positions, 109 fills, `days_corp_unchecked 64` (the bed
+cannot check, and every mark row says so); `verify` `ok` over 301 chained rows;
+`step` extended the book by one day (NAV 109,649.36) and a second `step` on the
+same day is refused (`not after the book's last day`). With
+`open … --min-trade-weight 0.005` the same window fills 64 times and skips 47
+small drifts, `verify` `ok` over 256 rows.
+
+**The card half — not yet run.** The steps when it is: boot the face with
+`FACE_PAPER_HOME` set to the scratch home above (the engine wrote it under
+`ALPHA_PAPER_HOME`; the two must name one directory); open the `paper-drill`
+channel — PASS: under the status headline, a card with the accent rule reading
+`paper book · 65 days stepped · last 2016-04-01`, four figures (NAV, return,
+max drawdown, positions), the line `intent of 2016-04-01 pending: 2 names,
+fills at the next open`, and `counted: days corp unchecked 65`; open
+`room-drill` — PASS: no card; the boot line names the home. Record the PASS
+line here.

@@ -29,6 +29,16 @@ strategies/.
   replaced by y in $PWD) — usually an error, but where the substituted path exists it lands you in the
   wrong directory with exit 0 (`cd aaa/bbb/ccc; cd bbb xxx` ends in `aaa/xxx/ccc`).
   Commit your own iterations; git log is the audit trail.
+  A strategy may also carry signal.py — its intent rule: `signal(source, day)` returns
+  {"targets": [{"symbol", "weight"}, ...], "note"?}, what the book should hold at that day's
+  close (weights are fractions of the book, each in [0, 1], summing to at most 1; an empty
+  list is flat). The template ships one that refuses until written. The paper book
+  (alpaca_kit.paper) is run by the operator, never by you: it hands your rule the day's
+  GuardedSource, fills the answer at the NEXT trading day's open (rule 4), marks at the close,
+  and keeps a chained ledger at $DSH_HOME/face/paper/<name>/ — outside the workspace, so you can
+  read it (summary.json, nav.jsonl, ledger.jsonl, intents/) and cannot write it. A rule that
+  raises stops the book's day loudly; a name with no bar on its fill day is skipped and counted;
+  the landing page shows the book. `status: paper` stays a badge you set; it schedules nothing.
   A new strategy starts with one batched ask_user_question, not with code: the thesis
   and the falsification terms that would retire it, which bed and which window (warmup
   moves the honest start), and what the operator wants measured. A brief that already
