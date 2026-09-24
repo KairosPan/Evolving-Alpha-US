@@ -12,6 +12,9 @@ const publicFiles = [
   "favicon.svg",
   "social-card.svg",
   "social-card.png",
+  "demo-research.webp",
+  "demo-market.webp",
+  "demo-account.webp",
 ];
 
 // Publish only these landing-page files. The local workbench and its runtime

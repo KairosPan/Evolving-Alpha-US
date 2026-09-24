@@ -14,17 +14,31 @@ Project: `kairospans-projects/evo-alpha`.
 
 The public site is Gravit's English product introduction page for investors
 and partners, built from `face/landing/`. Its
-product previews use illustrative sample content, not live account or market
-data. The local workbench in `face/client/` still runs with `npm start`.
+product gallery contains three screenshots of the existing client, staged with
+illustrative public data and English presentation labels. Images can be enlarged
+or opened at full resolution; they are not live account or market views. The
+local workbench in `face/client/` still runs with `npm start`.
 
 Use `face/` as the Vercel project root. `vercel.json` runs the dependency-free
 `node scripts/build-static.mjs` build and publishes `dist/`; locally, run
-`npm run build`. The build and `.vercelignore` explicitly allow only the six
+`npm run build`. The build and `.vercelignore` explicitly allow only the nine
 public landing files: `index.html`, `styles.css`, `main.js`, `favicon.svg`,
 `social-card.svg` (editable sharing artwork) and `social-card.png` (social
-preview). No API keys, backend, workbench files or runtime data are
+preview), plus `demo-research.webp`, `demo-market.webp` and `demo-account.webp`.
+No API keys, backend, workbench files or runtime data are
 published. The previous public `/market` and `/account` URLs permanently
 redirect to the landing page's `/#product` section.
+
+Screenshot fixtures are isolated from the local host. Run
+`node scripts/serve-research-demo.mjs` to serve the real channel renderer with
+a fictional English research record at `http://127.0.0.1:4182` (1440 × 1080).
+Capture that preview separately at 1440 × 1080 into `landing/demo-research.webp`.
+From `face/`, run `node scripts/capture-demo-assets.mjs --capture` to regenerate
+the Market and Account images at the same size. It serves the actual clients
+with in-memory fictional responses on port 4181, uses an installed Playwright
+CLI from the npm cache (or `PLAYWRIGHT_CLI_PATH`), then closes the fixture.
+Omit `--capture` to inspect the preview manually. These capture helpers are
+not included in the Vercel upload or public build.
 
 To deploy again after signing in with `vercel login`:
 

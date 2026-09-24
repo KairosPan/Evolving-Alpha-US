@@ -1,41 +1,77 @@
-const tabs = [...document.querySelectorAll('[role="tab"]')];
-const captions = {
-  strategy:
-    "Keep the hypothesis, evidence and next step in one research context.",
-  agents:
-    "Compare perspectives, then turn disagreements into questions to test.",
-  market:
-    "Follow assets together, with source, currency and coverage kept in view.",
-  account: "Keep cash and positions in context with a read-only account view.",
+const screenshotButtons = [...document.querySelectorAll("[data-screenshot]")];
+const screenshotDialog = document.getElementById("screenshot-dialog");
+const dialogImage = document.getElementById("screenshot-dialog-image");
+const dialogTitle = document.getElementById("screenshot-dialog-title");
+const dialogCount = document.getElementById("screenshot-dialog-count");
+const fullResolutionLink = document.getElementById(
+  "screenshot-full-resolution",
+);
+const screenshotTitles = {
+  research: "Research workspace",
+  market: "Market observation",
+  account: "Account perspective",
 };
+let screenshotIndex = 0;
+let screenshotTrigger;
 
-function selectTab(tab, moveFocus = false) {
-  for (const candidate of tabs) {
-    const selected = candidate === tab;
-    candidate.setAttribute("aria-selected", String(selected));
-    candidate.tabIndex = selected ? 0 : -1;
-    document.getElementById(candidate.getAttribute("aria-controls")).hidden =
-      !selected;
-  }
-  for (const item of document.querySelectorAll("[data-sidebar]")) {
-    item.classList.toggle("active", item.dataset.sidebar === tab.dataset.view);
-  }
-  document.getElementById("demo-caption").textContent =
-    captions[tab.dataset.view];
-  if (moveFocus) tab.focus();
+function showScreenshot(index) {
+  screenshotIndex =
+    (index + screenshotButtons.length) % screenshotButtons.length;
+  const button = screenshotButtons[screenshotIndex];
+  const source = button.querySelector("img");
+  dialogImage.src = source.src;
+  dialogImage.alt = source.alt;
+  dialogImage.width = Number(source.getAttribute("width"));
+  dialogImage.height = Number(source.getAttribute("height"));
+  dialogTitle.textContent = screenshotTitles[button.dataset.screenshot];
+  dialogCount.textContent = `${String(screenshotIndex + 1).padStart(2, "0")} / ${String(screenshotButtons.length).padStart(2, "0")}`;
+  fullResolutionLink.href = source.src;
 }
 
-for (const [index, tab] of tabs.entries()) {
-  tab.addEventListener("click", () => selectTab(tab));
-  tab.addEventListener("keydown", (event) => {
-    let next;
-    if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
-    if (event.key === "ArrowLeft")
-      next = (index - 1 + tabs.length) % tabs.length;
-    if (event.key === "Home") next = 0;
-    if (event.key === "End") next = tabs.length - 1;
-    if (next === undefined) return;
-    event.preventDefault();
-    selectTab(tabs[next], true);
+for (const [index, button] of screenshotButtons.entries()) {
+  button.addEventListener("click", () => {
+    screenshotTrigger = button;
+    showScreenshot(index);
+    screenshotDialog.showModal();
+    document.documentElement.classList.add("screenshot-open");
   });
 }
+
+screenshotDialog
+  .querySelector(".screenshot-dialog-close")
+  .addEventListener("click", () => {
+    screenshotDialog.close();
+  });
+screenshotDialog
+  .querySelector("[data-gallery-previous]")
+  .addEventListener("click", () => {
+    showScreenshot(screenshotIndex - 1);
+  });
+screenshotDialog
+  .querySelector("[data-gallery-next]")
+  .addEventListener("click", () => {
+    showScreenshot(screenshotIndex + 1);
+  });
+screenshotDialog.addEventListener("keydown", (event) => {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    event.preventDefault();
+    showScreenshot(screenshotIndex + (event.key === "ArrowRight" ? 1 : -1));
+  }
+});
+screenshotDialog.addEventListener("click", (event) => {
+  if (event.target !== screenshotDialog) return;
+  const bounds = screenshotDialog.getBoundingClientRect();
+  if (
+    event.clientX < bounds.left ||
+    event.clientX > bounds.right ||
+    event.clientY < bounds.top ||
+    event.clientY > bounds.bottom
+  ) {
+    screenshotDialog.close();
+  }
+});
+screenshotDialog.addEventListener("close", () => {
+  document.documentElement.classList.remove("screenshot-open");
+  screenshotTrigger?.focus({ preventScroll: true });
+});
