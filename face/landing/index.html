@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f6f2" />
+    <title>Evolving Alpha — 让投资研究，持续进化</title>
+    <meta
+      name="description"
+      content="连接市场观察、策略研究与账户查看的 AI 研究工作台。与多个研究视角一起整理证据、检验假设，让每一次判断都有迹可循。"
+    />
+    <link rel="canonical" href="https://evolving-alpha.vercel.app/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:title" content="Evolving Alpha — 让投资研究，持续进化" />
+    <meta
+      property="og:description"
+      content="从一个想法，到一份经得起追问的研究。探索你的 AI 投资研究工作台。"
+    />
+    <meta property="og:url" content="https://evolving-alpha.vercel.app/" />
+    <meta
+      property="og:image"
+      content="https://evolving-alpha.vercel.app/social-card.png"
+    />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Evolving Alpha — 让投资研究，持续进化"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/main.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳转到内容</a>
+    <header class="site-header">
+      <div class="header-inner wrap">
+        <a class="brand" href="#" aria-label="Evolving Alpha 首页"
+          ><img src="/favicon.svg" width="30" height="30" alt="" /><span
+            >evolving<span class="brand-alpha">alpha</span
+            ><span class="brand-period">.</span></span
+          ></a
+        >
+        <nav class="desktop-nav" aria-label="主导航">
+          <a href="#product">产品一览</a><a href="#approach">产品逻辑</a
+          ><a href="#progress">当前进展</a>
+        </nav>
+        <a class="header-cta" href="mailto:kairoszhe@gmail.com"
+          >交流合作 <span aria-hidden="true">↗</span></a
+        >
+      </div>
+    </header>
+    <main id="main">
+      <section class="hero wrap" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <div class="eyebrow">
+            <span class="status-dot"></span> AI-NATIVE INVESTMENT RESEARCH
+          </div>
+          <h1 id="hero-title">让投资研究，<br /><span>持续进化。</span></h1>
+          <p class="hero-description">
+            连接市场、策略与多智能体协作的 AI 投研工作台。<br />
+            让研究过程可追溯，<br class="desktop-break" />
+            让判断随证据持续迭代。
+          </p>
+          <div class="hero-actions">
+            <a class="button button-dark" href="#product"
+              >查看产品演示 <span aria-hidden="true">↗</span></a
+            ><a class="text-link" href="#progress"
+              >了解当前进展 <span aria-hidden="true">↓</span></a
+            >
+          </div>
+          <div class="hero-footnote">
+            <span class="small-rule"></span> 可运行的本地原型 · 持续迭代中
+          </div>
+        </div>
+        <div
+          class="research-orbit"
+          role="img"
+          aria-label="研究从假设出发，连接市场、证据与不同视角，形成可以持续迭代的判断。"
+        >
+          <div class="orbit-coordinates orbit-coordinates-top">
+            FIG. 01 &nbsp; / &nbsp; THE RESEARCH LOOP
+          </div>
+          <svg
+            class="orbit-lines"
+            viewBox="0 0 540 490"
+            fill="none"
+            aria-hidden="true"
+          >
+            <defs>
+              <radialGradient id="orbit-glow">
+                <stop stop-color="#eeb89e" stop-opacity=".4" />
+                <stop offset="1" stop-color="#f7f6f2" stop-opacity="0" />
+              </radialGradient>
+              <pattern
+                id="dots"
+                width="18"
+                height="18"
+                patternUnits="userSpaceOnUse"
+              >
+                <circle cx="1" cy="1" r=".7" fill="#d8d6cd" />
+              </pattern>
+            </defs>
+            <rect x="25" y="35" width="490" height="420" fill="url(#dots)" />
+            <circle cx="274" cy="248" r="205" fill="url(#orbit-glow)" />
+            <circle cx="274" cy="248" r="184" stroke="#dedad0" />
+            <circle
+              cx="274"
+              cy="248"
+              r="135"
+              stroke="#ddd6ca"
+              stroke-dasharray="3 6"
+            />
+            <ellipse
+              cx="274"
+              cy="248"
+              rx="217"
+              ry="77"
+              transform="rotate(-34 274 248)"
+              stroke="#d3c6b8"
+            />
+            <path
+              d="M87 110 274 248 435 150M274 248 376 393M274 248 111 342"
+              stroke="#c7baab"
+              stroke-dasharray="4 5"
+            />
+            <circle cx="433" cy="341" r="5" fill="#e86b43" />
+            <circle cx="228" cy="70" r="4" fill="#555d4f" />
+            <path d="M463 359h12m-6-6v12M56 233h10m-5-5v10" stroke="#aba595" />
+          </svg>
+          <div class="orbit-center">
+            <span class="alpha-symbol">α</span><span>EVOLVING ALPHA</span>
+          </div>
+          <div class="orbit-node node-hypothesis">
+            <span class="node-icon">✳</span>
+            <div><b>从好问题出发</b><small>HYPOTHESIS</small></div>
+          </div>
+          <div class="orbit-node node-market">
+            <span class="node-icon">⌁</span>
+            <div><b>观察市场</b><small>MARKET</small></div>
+          </div>
+          <div class="orbit-node node-evidence">
+            <span class="node-icon">▤</span>
+            <div><b>让证据说话</b><small>EVIDENCE</small></div>
+          </div>
+          <div class="orbit-node node-perspective">
+            <span class="node-icon">◎</span>
+            <div><b>保留不同视角</b><small>PERSPECTIVES</small></div>
+          </div>
+          <div class="orbit-coordinates orbit-coordinates-bottom">
+            <span class="tiny-dot"></span> OBSERVE. QUESTION. EVOLVE.
+          </div>
+        </div>
+      </section>
+      <div class="principle-strip wrap">
+        <span>思考有深度，研究有章法。</span>
+        <div>
+          <span>市场有出处</span><i></i><span>观点有交锋</span><i></i
+          ><span>过程有记录</span>
+        </div>
+        <span class="mono strip-label">BUILT FOR THE PROCESS</span>
+      </div>
+
+      <section
+        class="product-section wrap section-space"
+        id="product"
+        aria-labelledby="product-title"
+      >
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">01 / INSIDE THE WORKBENCH</div>
+            <h2 id="product-title">一个工作台，<br />连接研究的每一步。</h2>
+          </div>
+          <p>
+            观察市场，提出假设，比较观点。<br />让分散的信息，成为可以接着做的研究。
+          </p>
+        </div>
+        <div class="product-tabs" role="tablist" aria-label="产品演示">
+          <button
+            id="tab-strategy"
+            role="tab"
+            aria-selected="true"
+            aria-controls="panel-strategy"
+            data-view="strategy"
+          >
+            <span>01</span> 策略研究
+          </button>
+          <button
+            id="tab-agents"
+            role="tab"
+            aria-selected="false"
+            aria-controls="panel-agents"
+            tabindex="-1"
+            data-view="agents"
+          >
+            <span>02</span> 多视角讨论
+          </button>
+          <button
+            id="tab-market"
+            role="tab"
+            aria-selected="false"
+            aria-controls="panel-market"
+            tabindex="-1"
+            data-view="market"
+          >
+            <span>03</span> 市场观察
+          </button>
+          <button
+            id="tab-account"
+            role="tab"
+            aria-selected="false"
+            aria-controls="panel-account"
+            tabindex="-1"
+            data-view="account"
+          >
+            <span>04</span> 账户查看
+          </button>
+        </div>
+        <div class="workbench">
+          <div class="window-bar">
+            <div class="window-dots" aria-hidden="true">
+              <i></i><i></i><i></i>
+            </div>
+            <span>evolving alpha / research workspace</span
+            ><span class="sample-badge">交互导览 · 示例内容</span>
+          </div>
+          <div class="workbench-body">
+            <aside class="demo-sidebar" aria-label="演示工作台侧栏">
+              <div class="demo-brand">
+                <img
+                  src="/favicon.svg"
+                  width="24"
+                  height="24"
+                  alt=""
+                />研究工作台
+              </div>
+              <div class="sidebar-section">WORKSPACE</div>
+              <div class="sidebar-item active" data-sidebar="strategy">
+                <span>◈</span> 策略研究 <span class="sidebar-count">03</span>
+              </div>
+              <div class="sidebar-item" data-sidebar="agents">
+                <span>◎</span> 研究讨论
+              </div>
+              <div class="sidebar-item" data-sidebar="market">
+                <span>⌁</span> 市场观察
+              </div>
+              <div class="sidebar-item" data-sidebar="account">
+                <span>▣</span> 账户总览
+              </div>
+              <div class="sidebar-section channels-heading">
+                RESEARCH CHANNELS
+              </div>
+              <div class="channel-item">
+                <span class="channel-dot orange"></span>市场情绪与趋势
+              </div>
+              <div class="channel-item">
+                <span class="channel-dot sage"></span>行业周期观察
+              </div>
+              <div class="channel-item">
+                <span class="channel-dot"></span>新的研究想法
+              </div>
+              <div class="sidebar-bottom">
+                <span class="avatar">K</span>
+                <div>Kairos<small>你的 AI 研究伙伴</small></div>
+                <span class="online-dot"></span>
+              </div>
+            </aside>
+            <div class="demo-main">
+              <section
+                class="demo-panel"
+                id="panel-strategy"
+                role="tabpanel"
+                aria-labelledby="tab-strategy"
+                tabindex="0"
+              >
+                <div class="demo-breadcrumb">
+                  策略研究 <span>/</span> 市场情绪与趋势
+                </div>
+                <div class="demo-title-row">
+                  <h3>把直觉，变成一个好问题。</h3>
+                  <span class="pill pill-orange">研究中</span>
+                </div>
+                <p class="demo-subtitle">市场情绪与趋势延续 · 示例研究频道</p>
+                <div class="hypothesis-card">
+                  <div class="mini-label"><span>◈</span> RESEARCH THESIS</div>
+                  <h4>市场情绪的变化，能否帮助理解趋势的延续？</h4>
+                  <p>
+                    先写下你认为会发生什么，以及什么样的结果会让你改变看法。
+                  </p>
+                  <div class="hypothesis-meta">
+                    <span>研究假设已记录</span><span>证伪条件已定义</span>
+                  </div>
+                </div>
+                <div class="demo-columns">
+                  <div class="research-checklist">
+                    <h4>这一轮，我们要回答</h4>
+                    <div>
+                      <span class="check">✓</span
+                      ><span
+                        >研究问题是否足够具体？<small
+                          >明确观察对象与比较基准</small
+                        ></span
+                      >
+                    </div>
+                    <div>
+                      <span class="check">✓</span
+                      ><span
+                        >什么证据会推翻这个假设？<small
+                          >在验证之前，写下判断标准</small
+                        ></span
+                      >
+                    </div>
+                    <div>
+                      <span class="check pending">·</span
+                      ><span
+                        >结果能否在其他区间成立？<small
+                          >下一步 · 检查样本外表现</small
+                        ></span
+                      >
+                    </div>
+                  </div>
+                  <div class="research-note">
+                    <div class="mini-label">RESEARCH NOTE <span>↗</span></div>
+                    <p>
+                      值得保留的，<br />不仅是结论，<br />还有改变判断的理由。
+                    </p>
+                    <span class="note-line"></span
+                    ><small>想法 · 证据 · 结论 · 下一步</small>
+                  </div>
+                </div>
+              </section>
+              <section
+                class="demo-panel"
+                id="panel-agents"
+                role="tabpanel"
+                aria-labelledby="tab-agents"
+                tabindex="0"
+                hidden
+              >
+                <div class="demo-breadcrumb">
+                  研究讨论 <span>/</span> Round 01
+                </div>
+                <div class="demo-title-row">
+                  <h3>让观点交锋，让分歧留下。</h3>
+                  <span class="pill pill-sage">讨论示例</span>
+                </div>
+                <p class="demo-subtitle">同一个问题，交给不同的研究视角。</p>
+                <div class="discussion-question">
+                  <span class="avatar">你</span>
+                  <p>情绪升温是否意味着趋势会持续？我们可能忽略了什么？</p>
+                </div>
+                <div class="voices">
+                  <article>
+                    <div>
+                      <span class="voice-symbol orange-ink">■</span>
+                      <h4>趋势视角</h4>
+                      <span class="voice-state">已回答</span>
+                    </div>
+                    <p>
+                      可以先检查情绪变化与后续趋势的关系，再观察不同市场阶段是否一致。
+                    </p>
+                    <small>关注：现象能否重复</small>
+                  </article>
+                  <article>
+                    <div>
+                      <span class="voice-symbol sage-ink">▲</span>
+                      <h4>数据核查</h4>
+                      <span class="voice-state">已回答</span>
+                    </div>
+                    <p>
+                      需要核对数据在当时是否可见，并把样本内观察与样本外验证分开。
+                    </p>
+                    <small>关注：证据是否可信</small>
+                  </article>
+                  <article>
+                    <div>
+                      <span class="voice-symbol">○</span>
+                      <h4>反向视角</h4>
+                      <span class="voice-state">已回答</span>
+                    </div>
+                    <p>
+                      情绪也可能是趋势的结果。需要比较其他解释，避免把相关性当成因果。
+                    </p>
+                    <small>关注：还有什么解释</small>
+                  </article>
+                </div>
+                <div class="discussion-summary">
+                  <b><span>↳</span> Kairos · 整理下一步</b>
+                  <p>保留因果方向上的分歧，先核对数据，再分别检验两种解释。</p>
+                </div>
+                <p class="panel-note">
+                  示例对话。不同角色可能使用同一底层模型，多数意见不等于验证结果。
+                </p>
+              </section>
+              <section
+                class="demo-panel"
+                id="panel-market"
+                role="tabpanel"
+                aria-labelledby="tab-market"
+                tabindex="0"
+                hidden
+              >
+                <div class="demo-breadcrumb">
+                  市场观察 <span>/</span> 自选列表
+                </div>
+                <div class="demo-title-row">
+                  <h3>从市场信号，找到研究线索。</h3>
+                  <span class="pill pill-sage">多市场视角</span>
+                </div>
+                <p class="demo-subtitle">
+                  把关心的美股、A 股与加密资产放在一起观察。
+                </p>
+                <div class="market-summary">
+                  <span>自选观察 <b>05</b></span
+                  ><small>以下均为虚构样例行情</small>
+                </div>
+                <div class="table-scroll">
+                  <table class="market-table">
+                    <thead>
+                      <tr>
+                        <th>资产 / 代码</th>
+                        <th>市场</th>
+                        <th>示例价格</th>
+                        <th>示例涨跌幅</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><b>Apple</b><small>AAPL</small></td>
+                        <td>美股</td>
+                        <td>$210.50</td>
+                        <td><span class="quote up">+1.24%</span></td>
+                      </tr>
+                      <tr>
+                        <td><b>S&amp;P 500 ETF</b><small>SPY</small></td>
+                        <td>美股</td>
+                        <td>$560.20</td>
+                        <td><span class="quote up">+0.68%</span></td>
+                      </tr>
+                      <tr>
+                        <td><b>贵州茅台</b><small>600519</small></td>
+                        <td>A 股</td>
+                        <td>¥1,420.00</td>
+                        <td><span class="quote down">−0.42%</span></td>
+                      </tr>
+                      <tr>
+                        <td><b>Bitcoin</b><small>BTC / USD</small></td>
+                        <td>加密资产</td>
+                        <td>$85,200.00</td>
+                        <td><span class="quote up">+2.16%</span></td>
+                      </tr>
+                      <tr>
+                        <td><b>Ethereum</b><small>ETH / USD</small></td>
+                        <td>加密资产</td>
+                        <td>—</td>
+                        <td><span class="quote neutral">暂无报价</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p class="panel-note">
+                  价格保留币种，缺失保持可见。实际行情可用性与更新频率取决于接入的数据源。
+                </p>
+              </section>
+              <section
+                class="demo-panel"
+                id="panel-account"
+                role="tabpanel"
+                aria-labelledby="tab-account"
+                tabindex="0"
+                hidden
+              >
+                <div class="demo-breadcrumb">
+                  账户总览 <span>/</span> Paper account
+                </div>
+                <div class="demo-title-row">
+                  <h3>看清账户，让研究回到全局。</h3>
+                  <span class="pill pill-sage">模拟账户示例</span>
+                </div>
+                <p class="demo-subtitle">
+                  用只读视图了解资金与持仓，保持研究上下文。
+                </p>
+                <div class="account-equity">
+                  <div class="mini-label">账户净值 · 虚构样例</div>
+                  <div class="equity-number">
+                    <span>$</span>100,000<span>.00</span>
+                  </div>
+                  <div class="account-metrics">
+                    <div><span>现金</span><b>$60,000.00</b></div>
+                    <div><span>持仓市值</span><b>$40,000.00</b></div>
+                    <div>
+                      <span>未实现盈亏</span><b class="sage-ink">+$400.00</b>
+                    </div>
+                  </div>
+                </div>
+                <div class="account-detail">
+                  <div><span>账户环境</span><b>Paper · 模拟</b></div>
+                  <div><span>页面功能</span><b>账户查看</b></div>
+                  <div><span>订单记录</span><b>暂无订单</b></div>
+                </div>
+                <p class="panel-note">
+                  此处为虚构样例，未连接任何真实账户。账户页面用于查看，不执行交易。
+                </p>
+              </section>
+            </div>
+          </div>
+        </div>
+        <div class="demo-caption">
+          <p id="demo-caption" aria-live="polite">
+            从研究假设到下一步行动，让每个想法都有清晰的上下文。
+          </p>
+          <span><span class="tiny-dot"></span> 演示内容，非实时数据</span>
+        </div>
+      </section>
+
+      <section
+        class="progress-section wrap"
+        id="progress"
+        aria-labelledby="progress-title"
+      >
+        <div class="progress-heading">
+          <div class="eyebrow">02 / WHERE WE ARE</div>
+          <h2 id="progress-title">从研究理念，<br />走到可运行的原型。</h2>
+          <span class="progress-status"
+            ><span class="tiny-dot"></span> 当前阶段 · 产品原型</span
+          >
+        </div>
+        <div class="progress-list">
+          <article>
+            <span class="mono">01</span>
+            <div>
+              <h3>本地工作台已运行</h3>
+              <p>
+                市场观察、策略研究、多视角讨论与只读账户查看，已经在同一环境中运行。
+              </p>
+            </div>
+            <span class="progress-label">已实现</span>
+          </article>
+          <article>
+            <span class="mono">02</span>
+            <div>
+              <h3>真实研究过程已留存</h3>
+              <p>
+                已有研究依据预先设定的证伪条件结束并归档，保留验证过程与停止研究的理由。
+              </p>
+            </div>
+            <span class="progress-label">有记录</span>
+          </article>
+          <article>
+            <span class="mono">03</span>
+            <div>
+              <h3>公开展示产品工作方式</h3>
+              <p>
+                本页提供交互导览与示例内容。完整工作台目前在本地运行，尚未开放在线使用。
+              </p>
+            </div>
+            <span class="progress-label">可了解</span>
+          </article>
+        </div>
+      </section>
+
+      <section
+        class="approach-section wrap section-space"
+        id="approach"
+        aria-labelledby="approach-title"
+      >
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">03 / DESIGNED FOR RESEARCH</div>
+            <h2 id="approach-title">
+              让 AI 的研究能力，<br />成为可持续的工作流。
+            </h2>
+          </div>
+          <p>
+            以研究问题为中心，组织证据、分歧与结论。<br />让每一轮工作，都能成为下一轮的起点。
+          </p>
+        </div>
+        <div class="principles-grid">
+          <article>
+            <div class="principle-icon" aria-hidden="true">↗</div>
+            <span class="mono feature-number">01 / START WITH A QUESTION</span>
+            <h3>让问题可检验。</h3>
+            <p>
+              从假设、研究范围和证伪条件开始。先知道自己在验证什么，再决定应该看什么。
+            </p>
+            <div class="feature-footer">好的问题，是研究的起点。</div>
+          </article>
+          <article>
+            <div class="principle-icon" aria-hidden="true">◎</div>
+            <span class="mono feature-number">02 / MAKE ROOM FOR DISSENT</span>
+            <h3>让观点可比较。</h3>
+            <p>
+              让不同研究视角分别作答，再比较证据与分歧。追问一个判断，也看见它的边界。
+            </p>
+            <div class="feature-footer">分歧，也是一条研究线索。</div>
+          </article>
+          <article>
+            <div class="principle-icon" aria-hidden="true">▤</div>
+            <span class="mono feature-number">03 / KEEP THE CONTEXT</span>
+            <h3>让研究可回看。</h3>
+            <p>
+              把讨论、验证结果与阶段结论留在研究频道。回到一个问题时，知道上次走到了哪里。
+            </p>
+            <div class="feature-footer">每次迭代，都有来处。</div>
+          </article>
+        </div>
+      </section>
+
+      <section class="workflow-section" aria-labelledby="workflow-title">
+        <div class="wrap">
+          <div class="workflow-top">
+            <div>
+              <div class="eyebrow">04 / THE RESEARCH LOOP</div>
+              <h2 id="workflow-title">
+                让研究积累，<br />让判断进化<span>。</span>
+              </h2>
+            </div>
+            <p>一个研究周期的价值，<br />也包括知道什么时候该放下一个想法。</p>
+          </div>
+          <ol class="workflow-steps">
+            <li>
+              <span class="step-number">01</span>
+              <h3>提出假设</h3>
+              <p>说清问题，也写下<br />什么会让你改变看法。</p>
+              <span class="step-tag">IDEA</span>
+            </li>
+            <li>
+              <span class="step-number">02</span>
+              <h3>展开研究</h3>
+              <p>收集证据，比较观点，<br />把分歧变成可验证的问题。</p>
+              <span class="step-tag">RESEARCH</span>
+            </li>
+            <li>
+              <span class="step-number">03</span>
+              <h3>检验判断</h3>
+              <p>按照事先的标准评估，<br />让结果回应最初的假设。</p>
+              <span class="step-tag">VALIDATE</span>
+            </li>
+            <li>
+              <span class="step-number">04</span>
+              <h3>记录与迭代</h3>
+              <p>保留结论与理由，<br />继续推进，或坦然归档。</p>
+              <span class="step-tag">EVOLVE</span>
+            </li>
+          </ol>
+          <div class="workflow-bottom">
+            <span class="orange-ink">↳</span>
+            研究可以没有正向结果，但应该留下清晰的答案。<span class="mono"
+              >THE PROCESS IS THE PRODUCT.</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="faq-section wrap section-space"
+        id="questions"
+        aria-labelledby="faq-title"
+      >
+        <div>
+          <div class="eyebrow">05 / A FEW THINGS TO KNOW</div>
+          <h2 id="faq-title">开始了解之前，<br />你可能想问。</h2>
+          <p class="faq-intro">关于产品，也关于它现在的边界。</p>
+        </div>
+        <div class="faq-list">
+          <details open>
+            <summary>
+              这是什么样的产品？<span aria-hidden="true">+</span>
+            </summary>
+            <p>
+              Evolving Alpha 是面向个人投资研究的 AI
+              工作台。它把市场观察、策略研究、多视角讨论和账户查看放在同一个研究环境里，帮助你整理信息、检验想法，并保留研究过程。
+            </p>
+          </details>
+          <details>
+            <summary>
+              它会替我做投资决策或执行交易吗？<span aria-hidden="true">+</span>
+            </summary>
+            <p>
+              最终判断由你作出。Kairos
+              协助整理证据、比较观点和推进研究；这里展示的账户功能为只读查看，不执行交易。
+            </p>
+          </details>
+          <details>
+            <summary>
+              页面里的行情、讨论和账户是真实的吗？<span aria-hidden="true"
+                >+</span
+              >
+            </summary>
+            <p>
+              本页使用为产品介绍制作的示例内容，行情数字和账户余额均为虚构，讨论也为示例。你可以切换四个视图了解工作方式，但它们没有连接实时数据或真实账户。
+            </p>
+          </details>
+          <details>
+            <summary>
+              现在可以直接在线使用工作台吗？<span aria-hidden="true">+</span>
+            </summary>
+            <p>
+              这个网站目前是产品介绍与交互导览。完整工作台在本地运行，需要配置模型与相应数据源；在线注册和托管工作台尚未开放。
+            </p>
+          </details>
+        </div>
+      </section>
+
+      <section class="closing-section wrap">
+        <div class="eyebrow">LET’S EXPLORE WHAT’S NEXT.</div>
+        <h2>一起探索，<br />AI 投研的下一步。</h2>
+        <p class="closing-description">
+          产品交流、研究场景与合作探索，欢迎联系。
+        </p>
+        <div class="closing-actions">
+          <a class="button button-dark" href="mailto:kairoszhe@gmail.com"
+            >交流合作 <span aria-hidden="true">↗</span></a
+          ><a class="contact-email" href="mailto:kairoszhe@gmail.com"
+            >kairoszhe@gmail.com</a
+          >
+        </div>
+        <div class="closing-mark" aria-hidden="true">α</div>
+      </section>
+    </main>
+    <footer class="site-footer wrap">
+      <a class="brand" href="#" aria-label="回到顶部"
+        ><img src="/favicon.svg" width="26" height="26" alt="" /><span
+          >evolving<span class="brand-alpha">alpha</span
+          ><span class="brand-period">.</span></span
+        ></a
+      ><span>独立思考，持续进化。</span
+      ><a href="#product">探索产品 <span aria-hidden="true">↗</span></a
+      ><small>© 2026 Evolving Alpha</small>
+    </footer>
+  </body>
+</html>

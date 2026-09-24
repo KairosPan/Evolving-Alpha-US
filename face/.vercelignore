@@ -1,10 +1,13 @@
-# Upload only the dependency-free static build and browser source files.
+# Upload only the dependency-free build and explicit public landing assets.
 *
 !package.json
 !vercel.json
 !scripts
 !scripts/build-static.mjs
-!client
-!client/*.html
-!client/*.css
-!client/*.js
+!landing
+!landing/index.html
+!landing/styles.css
+!landing/main.js
+!landing/favicon.svg
+!landing/social-card.svg
+!landing/social-card.png

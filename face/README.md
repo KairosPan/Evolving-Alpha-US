@@ -7,24 +7,23 @@ at http://127.0.0.1:3090/. No build step — `tsx` runs the TypeScript directly.
 Specs: `../docs/superpowers/specs/2026-08-30-face-chat-light-design.md` and
 `../docs/superpowers/specs/2026-08-31-face-instruments-design.md`.
 
-## Deploy the frontend to Vercel
+## Deploy the product landing page to Vercel
 
 Production: [evolving-alpha.vercel.app](https://evolving-alpha.vercel.app).
 Project: `kairospans-projects/evo-alpha`.
 
+The public site is a product introduction page from `face/landing/`. Its
+product previews use illustrative sample content, not live account or market
+data. The local workbench in `face/client/` still runs with `npm start`.
+
 Use `face/` as the Vercel project root. `vercel.json` runs the dependency-free
 `node scripts/build-static.mjs` build and publishes `dist/`; locally, run
-`npm run build`. The output contains the three pages (`/`, `/market`, `/account`)
-and `/client/` assets only. `.vercelignore` limits CLI uploads to the browser
-sources and build configuration, excluding the local host and its runtime data.
-
-This deployment displays a notice that the backend is disconnected. Chat,
-market and account data require the local host's `/api/*`, `/data/*` and
-WebSocket endpoints, which are not part of the static deployment. Connecting
-them requires a separately hosted backend with authentication. The build adds
-the notice only to generated HTML; `npm start` and local client sources retain
-their existing behavior. No API keys or backend environment variables are
-needed for this frontend build.
+`npm run build`. The build and `.vercelignore` explicitly allow only the six
+public landing files: `index.html`, `styles.css`, `main.js`, `favicon.svg` and
+`social-card.svg` (editable sharing artwork) and `social-card.png` (social
+preview). No API keys, backend, workbench files or runtime data are
+published. The previous public `/market` and `/account` URLs permanently
+redirect to the landing page's `/#product` section.
 
 To deploy again after signing in with `vercel login`:
 

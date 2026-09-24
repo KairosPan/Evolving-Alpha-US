@@ -1,56 +1,40 @@
-import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { dirname, extname, join, relative } from "node:path";
+import { copyFile, lstat, mkdir, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const faceDir = fileURLToPath(new URL("../", import.meta.url));
-const clientDir = join(faceDir, "client");
+const landingDir = join(faceDir, "landing");
 const outputDir = join(faceDir, "dist");
-const allowedExtensions = new Set([".html", ".css", ".js"]);
-const pages = ["index.html", "market.html", "account.html"];
-const notice = "前端已上线，后端尚未连接。聊天、行情和账户数据暂不可用。";
-const noticeStyle = `<style>
-.deployment-notice { flex: none; margin: 16px 20px; padding: 12px 16px; border: 1px solid #d8cba9; border-radius: 8px; background: #fff8e8; color: #57431d; font: 14px/1.6 system-ui, sans-serif; }
-</style>`;
+const publicFiles = [
+  "index.html",
+  "styles.css",
+  "main.js",
+  "favicon.svg",
+  "social-card.svg",
+  "social-card.png",
+];
 
-function hostedHtml(html) {
-  if (!html.includes("</head>") || !/<main\b/.test(html)) {
-    throw new Error("Each hosted page must have a head and main landmark");
-  }
-  return html
-    .replace("</head>", `${noticeStyle}\n</head>`)
-    .replace(/(<main\b[^>]*>)/, `$1\n<aside class="deployment-notice" role="status" lang="zh-CN">${notice}</aside>`)
-    .replace("live · loopback only", "frontend · backend disconnected");
+// Publish only these landing-page files. The local workbench and its runtime
+// data never enter the public output; symlinks are not accepted as sources.
+if (!(await lstat(landingDir)).isDirectory()) {
+  throw new Error("The landing source must be a directory, not a symlink");
 }
-
-// Copy browser assets only. Symlinks, server code, runtime files and other
-// extensions never enter the public output, even if added beside the client.
-async function copyClient(directory) {
-  let count = 0;
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const source = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      count += await copyClient(source);
-      continue;
+await Promise.all(
+  publicFiles.map(async (file) => {
+    if (!(await lstat(join(landingDir, file))).isFile()) {
+      throw new Error(`The landing asset must be a regular file: ${file}`);
     }
-    if (!entry.isFile() || !allowedExtensions.has(extname(entry.name))) continue;
-    const target = join(outputDir, "client", relative(clientDir, source));
-    await mkdir(dirname(target), { recursive: true });
-    if (extname(entry.name) === ".html") {
-      await writeFile(target, hostedHtml(await readFile(source, "utf8")));
-    } else {
-      await copyFile(source, target);
-    }
-    count += 1;
-  }
-  return count;
-}
+  }),
+);
 
-// Validate required pages before replacing the previous output.
-const pageContents = await Promise.all(pages.map(async (page) => [
-  page, hostedHtml(await readFile(join(clientDir, page), "utf8")),
-]));
+// Check the complete allowlist before replacing the previous output.
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(outputDir, { recursive: true });
-const assetCount = await copyClient(clientDir);
-for (const [page, html] of pageContents) await writeFile(join(outputDir, page), html);
-console.log(`Built ${pages.length} pages and ${assetCount} browser assets in ${outputDir}`);
+await Promise.all(
+  publicFiles.map((file) =>
+    copyFile(join(landingDir, file), join(outputDir, file)),
+  ),
+);
+console.log(
+  `Built the product landing page (${publicFiles.length} files) in ${outputDir}`,
+);
