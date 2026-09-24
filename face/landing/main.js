@@ -1,9 +1,12 @@
 const tabs = [...document.querySelectorAll('[role="tab"]')];
 const captions = {
-  strategy: "从研究假设到下一步行动，让每个想法都有清晰的上下文。",
-  agents: "先让不同视角展开，再把分歧整理成值得继续验证的问题。",
-  market: "把关心的资产放在一起，保留来源、币种与数据可用性的边界。",
-  account: "用只读的账户视图了解资金与持仓，让研究保持全局视角。",
+  strategy:
+    "Keep the hypothesis, evidence and next step in one research context.",
+  agents:
+    "Compare perspectives, then turn disagreements into questions to test.",
+  market:
+    "Follow assets together, with source, currency and coverage kept in view.",
+  account: "Keep cash and positions in context with a read-only account view.",
 };
 
 function selectTab(tab, moveFocus = false) {

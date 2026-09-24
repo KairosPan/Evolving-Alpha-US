@@ -12,14 +12,15 @@ Specs: `../docs/superpowers/specs/2026-08-30-face-chat-light-design.md` and
 Production: [evolving-alpha.vercel.app](https://evolving-alpha.vercel.app).
 Project: `kairospans-projects/evo-alpha`.
 
-The public site is a product introduction page from `face/landing/`. Its
+The public site is Gravit's English product introduction page for investors
+and partners, built from `face/landing/`. Its
 product previews use illustrative sample content, not live account or market
 data. The local workbench in `face/client/` still runs with `npm start`.
 
 Use `face/` as the Vercel project root. `vercel.json` runs the dependency-free
 `node scripts/build-static.mjs` build and publishes `dist/`; locally, run
 `npm run build`. The build and `.vercelignore` explicitly allow only the six
-public landing files: `index.html`, `styles.css`, `main.js`, `favicon.svg` and
+public landing files: `index.html`, `styles.css`, `main.js`, `favicon.svg`,
 `social-card.svg` (editable sharing artwork) and `social-card.png` (social
 preview). No API keys, backend, workbench files or runtime data are
 published. The previous public `/market` and `/account` URLs permanently

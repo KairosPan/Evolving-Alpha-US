@@ -124,10 +124,6 @@ button[hidden],
   font-weight: 500;
   white-space: nowrap;
 }
-.brand-alpha {
-  font-weight: 750;
-  margin-left: 4px;
-}
 .brand-period {
   color: var(--orange);
 }
@@ -311,7 +307,7 @@ button[hidden],
   flex-direction: column;
   border-radius: 50%;
 }
-.alpha-symbol {
+.brand-symbol {
   font-family: Georgia, serif;
   font-size: 85px;
   font-style: italic;
@@ -1333,7 +1329,7 @@ button[hidden],
     width: 103px;
     height: 103px;
   }
-  .alpha-symbol {
+  .brand-symbol {
     font-size: 72px;
   }
   .node-hypothesis {
@@ -1470,7 +1466,7 @@ button[hidden],
     width: 75px;
     height: 75px;
   }
-  .alpha-symbol {
+  .brand-symbol {
     font-size: 53px;
   }
   .orbit-center > span:last-child {
@@ -1801,7 +1797,7 @@ button[hidden],
     height: 95px;
     top: 50%;
   }
-  .alpha-symbol {
+  .brand-symbol {
     font-size: 68px;
   }
   .orbit-center > span:last-child {
@@ -2530,6 +2526,225 @@ button[hidden],
   }
   .market-table td small,
   .quote.neutral {
+    font-size: 9px;
+  }
+}
+/* English typography keeps longer labels readable at every preview size. */
+.brand {
+  font-weight: 650;
+  letter-spacing: -0.9px;
+}
+.hero-copy,
+.progress-list article > div {
+  min-width: 0;
+}
+.hero h1 {
+  font-size: clamp(42px, 4.2vw, 61px);
+  line-height: 1.16;
+  letter-spacing: -2.7px;
+}
+.hero-description {
+  max-width: 470px;
+  line-height: 1.8;
+}
+.section-heading > p {
+  max-width: 350px;
+}
+.brand-symbol {
+  font-size: 78px;
+  transform: translateY(-10px);
+}
+.orbit-center > span:last-child {
+  letter-spacing: 2px;
+  font-size: 7px;
+  margin-top: 4px;
+}
+.demo-title-row h3 {
+  line-height: 1.4;
+}
+.demo-subtitle,
+.research-checklist > div {
+  line-height: 1.7;
+}
+.hypothesis-meta {
+  flex-wrap: wrap;
+  gap: 10px 20px;
+}
+.progress-list h3 {
+  line-height: 1.5;
+}
+.closing-mark {
+  top: 5px;
+}
+@media (max-width: 1100px) {
+  .hero h1 {
+    font-size: 49px;
+    letter-spacing: -2px;
+  }
+  .hero-description {
+    font-size: 14px;
+  }
+  .section-heading h2 {
+    font-size: 32px;
+  }
+  .section-heading > p {
+    max-width: 280px;
+  }
+  .brand-symbol {
+    font-size: 68px;
+  }
+}
+@media (max-width: 800px) {
+  .hero h1 {
+    font-size: 39px;
+    letter-spacing: -1.6px;
+  }
+  .hero-description {
+    font-size: 13px;
+  }
+  .hero .desktop-break {
+    display: none;
+  }
+  .section-heading h2 {
+    font-size: 29px;
+  }
+  .section-heading > p {
+    max-width: 230px;
+  }
+  .brand-symbol {
+    font-size: 49px;
+    transform: translateY(-5px);
+  }
+  .orbit-center > span:last-child {
+    font-size: 5px;
+    letter-spacing: 1px;
+  }
+  .hypothesis-meta {
+    gap: 8px 12px;
+  }
+}
+@media (max-width: 600px) {
+  .hero h1 {
+    font-size: 44px;
+    line-height: 1.17;
+    letter-spacing: -1.9px;
+  }
+  .hero-description {
+    font-size: 14px;
+  }
+  .hero-actions {
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+  .hero-footnote {
+    line-height: 1.7;
+  }
+  .brand-symbol {
+    font-size: 65px;
+    transform: translateY(-8px);
+  }
+  .orbit-center > span:last-child {
+    font-size: 6px;
+    letter-spacing: 1.4px;
+  }
+  .principle-strip {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-block: 17px;
+  }
+  .principle-strip > span:first-child {
+    max-width: none;
+    font-size: 10px;
+  }
+  .principle-strip > div {
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 9px;
+  }
+  .section-heading h2 {
+    font-size: 31px;
+  }
+  .section-heading > p {
+    max-width: none;
+  }
+  .product-tabs button {
+    font-size: 10px;
+  }
+  .demo-title-row h3 {
+    font-size: 18px;
+  }
+  .demo-panel {
+    padding-inline: 16px;
+  }
+  .voices article > div {
+    flex-wrap: wrap;
+  }
+  .demo-caption > span {
+    white-space: normal;
+  }
+  .market-summary {
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .market-summary small {
+    max-width: 125px;
+    text-align: right;
+    line-height: 1.5;
+  }
+  .market-table th {
+    font-size: 8px;
+  }
+  .market-table td {
+    font-size: 9px;
+    padding-right: 4px;
+  }
+  .market-table td:last-child {
+    padding-right: 0;
+  }
+  .account-metrics span {
+    min-height: 28px;
+    line-height: 1.5;
+  }
+  .progress-list article {
+    flex-wrap: wrap;
+  }
+  .progress-list article > div {
+    flex: 1;
+  }
+  .progress-label {
+    margin-left: 22px;
+  }
+  .workflow-top > p {
+    line-height: 1.8;
+  }
+  .workflow-steps h3 {
+    font-size: 16px;
+  }
+  .workflow-steps p {
+    line-height: 1.8;
+  }
+  .closing-mark {
+    top: 52px;
+  }
+}
+@media (max-width: 360px) {
+  .hero h1 {
+    font-size: 39px;
+  }
+  .desktop-nav {
+    font-size: 10px;
+  }
+  .orbit-node {
+    padding-inline: 9px;
+  }
+  .orbit-node b {
+    font-size: 9px;
+  }
+  .product-tabs button {
+    font-size: 9px;
+  }
+  .quote {
+    min-width: 50px;
     font-size: 9px;
   }
 }
