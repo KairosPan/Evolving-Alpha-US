@@ -14,11 +14,14 @@
  * behind it — no keys, no broker, no order. This is a better drill than the
  * real tool, not a weaker one.
  *
- * WHAT THIS DOES NOT PROVE: that the approval CARD renders. That needs a human
- * looking at a browser, and an ask with no connected client blocks rather than
- * denying (`dsh-host-apiproxy` stores the pending entry and pushes to an empty
- * mux set), so it cannot be automated here. That half is the operator drill in
- * `face/README.md`.
+ * WHAT THIS DOES NOT PROVE: that the approval CARD renders, or that an
+ * APPROVED order dispatches. The card needs a human looking at a browser: with
+ * `dsh-api-remotes` mounted and no `$events` client connected, an ask blocks
+ * rather than denying (the gateway keeps the event pending and replays it to
+ * the next client, NEW `packages/api/gateway/src/index.ts:512-516, 599-602`),
+ * so it cannot be automated here - that half is the operator drill in
+ * `face/README.md`. The approved path (a stand-in answerer returning
+ * `allowed-once`, the body RUNS) is `order-gate-smoke.test.ts`.
  *
  * Gated behind `FACE_SMOKE=1` and in its own FILE for the reason `smoke.test.ts`
  * states: `bootFace` sets `process.env.DSH_HOME` permanently, so one boot per
@@ -32,29 +35,51 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setupFaceProfile } from "../src/setup.ts";
 import { bootFace } from "../src/boot.ts";
-import type { PreToolDecision } from "../src/orders.ts";
+import {
+  orderGuardReasonForSession, unreadableSessionLogReason, type PreToolDecision,
+} from "../src/orders.ts";
 
 const gated = process.env.FACE_SMOKE !== "1";
 
-/** One pending call, shaped as `tools/pre-execute` receives it.
- *
- * The session is a bare `{events: []}` on purpose, and it is enough: the real
- * `ApprovalService.overrideOf` reads exactly `session.events`
- * (`dsh-user-approval/lib/index.js:176-178`), so passing one makes the gate call
- * the REAL service's public surface - `overrideOf` and `config.policy` - rather
- * than the hand-made literals the unit tests use. That is what turns
- * `orders.ts`'s claim about the private `effectivePolicy` from prose the author
- * read into an assertion this tree makes. */
+/** An empty session exactly as the REAL `ApprovalService.overrideOf` reads
+ * one at dsh 0.2.0: it walks `session.seq - 1` down to 0 through
+ * `session.eventAt(seq)` (NEW `packages/interaction/user-approval/src/index.ts:252-259`).
+ * The 0.1.1 stub was `{events: []}`; against 0.2.0 that still "passed" only
+ * because `undefined - 1` is NaN and the loop never ran - the stated reason
+ * ("overrideOf reads exactly session.events") had silently become false. This
+ * stub is the shape the service really reads, so the gate calls the REAL
+ * service's public surface - `overrideOf` and `config.policy` - rather than the
+ * hand-made literals the unit tests use. That is what turns `orders.ts`'s claim
+ * about the private `effectivePolicy` from prose the author read into an
+ * assertion this tree makes. It deliberately has NO `snapshotEvents`: the
+ * listener never reads the log, only the guard does (see the guard case below). */
+const emptySession = () => ({ seq: 0, eventAt: (): undefined => undefined });
+
+/** One pending call, shaped as `tools/pre-execute` receives it. */
 const pending = (name: string, args?: unknown) => ({
   name,
   callId: `drill-${name}`,
   arguments: args,
-  agent: { session: { events: [] as unknown[] } },
+  agent: { session: emptySession() },
   signal: new AbortController().signal,
 });
 
 /** The same call with nobody to ask - the other branch of the listener. */
 const agentless = (name: string) => ({ name, signal: new AbortController().signal });
+
+/* The guard's session-level decision, offline (no FACE_SMOKE): the unit half of
+ * "an unreadable log is not a missing grant". boot.ts's `tools.guard` hands
+ * `exec.agent?.session` to this function (PLAN S7 item 1); the real-tree half
+ * is the guard case at the end of the smoke below. */
+test("guard: a session without snapshotEvents is denied with the distinct reason", () => {
+  const reason = orderGuardReasonForSession("mcp__drill__place_order", undefined, emptySession(), "drill-guard");
+  assert.equal(reason, unreadableSessionLogReason("mcp__drill__place_order"));
+  assert.doesNotMatch(reason ?? "", /without a logged allowed-once/, "unreadable must never read as 'no grant'");
+  // The same session WITH the log read passes the ordinary check.
+  const readable = { ...emptySession(), snapshotEvents: () => [] };
+  assert.match(orderGuardReasonForSession("mcp__drill__place_order", undefined, readable, "drill-guard") ?? "",
+    /without a logged allowed-once/);
+});
 
 test("order gate: registered on a real tree, asks for orders, leaves everything else alone", {
   skip: gated && "set FACE_SMOKE=1",
@@ -68,7 +93,7 @@ test("order gate: registered on a real tree, asks for orders, leaves everything 
   const { ctx, dispose } = await bootFace({ profileName: "face", port: 0, dshHome: home });
   try {
     /* The registry's own terminal: whatever no listener claims is ALLOWED
-     * (`dsh-tools/lib/index.js:3105`). Passing the same terminal here means a
+     * (NEW `packages/core/tools/src/index.ts:1505-1507`). Passing the same terminal here means a
      * decision below can only have come from a registered listener - the gate -
      * and an `allow` can only mean nothing claimed the call. */
     const fire = (exec: object): Promise<PreToolDecision> =>
@@ -121,7 +146,8 @@ test("order gate: registered on a real tree, asks for orders, leaves everything 
      * false, so a server whose first connection failed still activates and
      * registers its tools later. The name does not match, so the listener does
      * not claim it and the waterfall falls through to its terminal ALLOW - the
-     * denial below can therefore only have come from the guard. */
+     * denial below can therefore only have come from the guard (it runs on
+     * every allow, NEW `packages/core/tools/src/index.ts:1519`). */
     const registry = ctx.get("tools") as {
       register(definition: unknown): () => void;
       execute(exec: object): Promise<{ isError: boolean; content?: { text?: string }[] }>;
@@ -147,6 +173,22 @@ test("order gate: registered on a real tree, asks for orders, leaves everything 
       assert.equal(result.isError, true, "a marked tool the gate cannot name must not dispatch");
       assert.equal(bodyRan, false, "the tool body must never run");
       assert.match(result.content?.[0]?.text ?? "", /ORDER_RAW_NAMES/);
+
+      /* The same gated tool, called by an agent whose session cannot hand
+       * over its log (no `snapshotEvents` - the dsh 0.2.0 drift shape). The
+       * real guard must fail closed AND say why: "cannot read this session's
+       * log", never the "no grant" or "rename" sentence that hid the
+       * regression. Integration half of the offline test above. */
+      const unreadable = await registry.execute({
+        callId: "drill-guard-unreadable",
+        name: "mcp__drill__submit_order",
+        arguments: {},
+        agent: { session: emptySession() },
+        signal: new AbortController().signal,
+      });
+      assert.equal(unreadable.isError, true);
+      assert.equal(bodyRan, false, "the tool body must never run");
+      assert.match(unreadable.content?.[0]?.text ?? "", /cannot read this session's log/);
     } finally {
       unregister();
     }

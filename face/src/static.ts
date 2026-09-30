@@ -9,6 +9,26 @@
  * one-owner seat that throws on a second claim, and everything it would catch
  * here is a 404 anyway; leaving it free keeps it available to a later row (a
  * frontend bundle, a dev proxy) without the face having to give it up first.
+ *
+ * `/` IS THE SIGN-IN, and it must stay behind {@link IndexAuth}. Since dsh
+ * 0.2.0 every `/api` request and every `/api/remote.mux` upgrade passes
+ * Connection's admission: the Host/Origin fence (403), then a signed,
+ * authority-bound `dsh-auth-<hash>` browser cookie (401) (NEW
+ * packages/client/connection/src/rpc-host.ts:104-123; packages/api/gateway/
+ * src/index.ts:253-257; commits 3e24087bfa, 8ce7c27671). That cookie is minted
+ * in exactly one place: `ctx.connection.authorizeIndex(req, res)` on
+ * `GET /?token=<process launch token>`, which answers `303 ./` with
+ * `Set-Cookie` (NEW packages/client/connection/src/browser-auth.ts:238-280).
+ * A page served past it would load and then 401 on every call it makes.
+ * `authorizeIndex` also OWNS the refusal: when it returns false it has already
+ * written the 303 or the 401, so the handler must not touch the response.
+ *
+ * `/market`, `/account` and `/client/*` stay unauthenticated: the 0.1.1 posture
+ * for everything that is not `/api` (PLAN D8 keeps `/data` fence-only too), and
+ * upstream's own dist server keeps non-index assets public the same way (NEW
+ * packages/host/frontend-static/src/index.ts:6-9, 88-90, 136). Their `/data`
+ * reads do not need the cookie; their `/api` reads would, and the cookie is
+ * `Path=/` for the whole authority once `/` minted it.
  * @module
  */
 import { readFile } from "node:fs/promises";
@@ -83,14 +103,25 @@ export interface RouteRegistrar {
   register(route: WebRoute): unknown;
 }
 
-/** The pages, as (route path → file name). Each is an EXACT route: a page is
- * one address, not a subtree, and nothing under it is served by accident. The
- * instrument pages are plain documents against the `/data/*.json` routes — no
- * server-side rendering, so a page is a file like the chat's. */
-const PAGES: ReadonlyArray<readonly [path: string, file: string]> = [
-  ["/", "index.html"],
-  ["/market", "market.html"],
-  ["/account", "account.html"],
+/** The index gate: `ctx.connection` in the booted face, a fake in the tests.
+ * The subset of Connection's `HostConnectionHandle.authorizeIndex` (installed
+ * `@deepseek-ai/dsh-client-connection/lib/types/rpc.d.ts:176-182`) the `/`
+ * route calls: `true` means "serve index.html"; `false` means it has already
+ * answered — `303 ./` with `Set-Cookie` for a valid `?token=`, a bare `303` for
+ * a signed-in token revisit, or `401` for everything else. */
+export interface IndexAuth {
+  authorizeIndex(req: IncomingMessage, res: ServerResponse): boolean;
+}
+
+/** The pages, as (route path → file name, behind the sign-in?). Each is an
+ * EXACT route: a page is one address, not a subtree, and nothing under it is
+ * served by accident. The instrument pages are plain documents against the
+ * `/data/*.json` routes — no server-side rendering, so a page is a file like
+ * the chat's. Only `/` is gated, because only `/` can mint the cookie. */
+const PAGES: ReadonlyArray<readonly [path: string, file: string, gated: boolean]> = [
+  ["/", "index.html", true],
+  ["/market", "market.html", false],
+  ["/account", "account.html", false],
 ];
 
 /**
@@ -98,15 +129,21 @@ const PAGES: ReadonlyArray<readonly [path: string, file: string]> = [
  * `prefix /client` → files under `clientDir`, traversal-refused.
  * @param webServer - the host webserver service (`ctx.webServer`).
  * @param clientDir - absolute path of the directory holding the page files.
+ * @param auth - the index gate for `/` (`ctx.connection`). Required, not
+ * optional: a `/` served without it hands the browser a page whose every
+ * `/api` call 401s, and nothing on the server side would say so.
  * @throws when any (kind, path) is already registered — a duplicate route
  * is a composition error the webserver refuses on purpose.
  */
-export function registerStatic(webServer: RouteRegistrar, clientDir: string): void {
-  for (const [path, file] of PAGES) {
+export function registerStatic(webServer: RouteRegistrar, clientDir: string, auth: IndexAuth): void {
+  for (const [path, file, gated] of PAGES) {
+    const page = join(clientDir, file);
     webServer.register({
       kind: "exact",
       path,
-      handler: (_req: IncomingMessage, res: ServerResponse) => serveFile(res, join(clientDir, file)),
+      handler: gated
+        ? (req: IncomingMessage, res: ServerResponse) => (auth.authorizeIndex(req, res) ? serveFile(res, page) : undefined)
+        : (_req: IncomingMessage, res: ServerResponse) => serveFile(res, page),
     });
   }
   webServer.register({

@@ -4,26 +4,38 @@
  * decoding of the harness wire format is testable without a browser and the
  * renderer stays a dumb consumer of `kind`.
  *
- * WHAT ARRIVES. The mux WebSocket delivers a `ServerRequest` full form whose
- * `payload` is one `MuxFrame` and whose `method` repeats that frame's own type
- * (`dsh-client-connection/lib/index.js` `serverRequest()`, the WebSocket twin of
- * `dsh-host-apiproxy/lib/types/fetch/handler.js` `fullFrame()`). The envelope is
- * not decoration: for the two ANSWERABLE frames (approval/question requested)
- * its `rpcId` IS the id `/api/respond` must echo — the payload carries no wire
- * id of its own (approvals.d.ts:1-6, questions.d.ts:1-6). `mapFrame` therefore
- * lifts `rpcId` into `view.id`.
+ * WHAT ARRIVES (dsh 0.2.0-rc.2). There is no all-session envelope any more:
+ * `client/api.js` carries three logical streams on `/api/remote.mux`, and each
+ * item reaches this module in one of these shapes:
+ *   `{type:"session/event", sessionId, event}`      one durable session event: a
+ *       `session/follow` item or snapshot record, which arrive as `{type:"event",
+ *       event}` and name no session, re-addressed by the caller that opened the
+ *       follow (NEW packages/api/session-controller/src/types.ts:425-429, 552-563).
+ *       The raw `{type:"event", event}` record, `sessionId` added or not, maps the
+ *       same - the one mapping that keeps a backfilled transcript identical to a
+ *       streamed one.
+ *   `{type:"assistant-stream", sessionId, frame}`   a live, NOT durable model frame
+ *       from a follow opened with `assistantStream: true` (types.ts:513-543).
+ *   `{type:"waterfall", event, eventId, agentId, request}` / `{type:"cancel", eventId}`
+ *       an operator gate and its withdrawal, from `$events`
+ *       (NEW packages/api/gateway/src/stream-protocol.ts:52-64).
+ *   `{type:"projection", sessionId, key, value, seq}`   a `session/control`
+ *       projection update (session-controller/src/types.ts:566-581, control.ts:22-30).
+ * Everything else maps to `ignore`: the control `baseline` and the follow
+ * `snapshot` (the caller seeds from them), `$events` `ready`/`emit` (api.js
+ * routes them), mux `item`/`end`/`error` frames - and every 0.1.1 shape, the
+ * `server-request` envelope first, so a stale host renders nothing rather than
+ * something half-right.
  *
- * A bare `MuxFrame` (no envelope) is accepted too, and so is a `session.history`
- * entry `{ event, view? }` with a `sessionId` added — history has no envelope and
- * no frame type (sessions.d.ts:61-68), and one mapping for both paths is what
- * keeps a backfilled transcript identical to a streamed one.
- *
- * Shapes are pinned to `@deepseek-ai/dsh-host-apiproxy@0.1.1-rc.2`:
- *   frame union      lib/types/api/events.d.ts:66-145 (MuxFrame)
- *   envelope         lib/types/api/rpc.d.ts:236-242 (ServerRequest)
- *   session event    @deepseek-ai/dsh-session/lib/types/types.d.ts:223-457
- *   message/content  @deepseek-ai/dsh-llm/lib/types/{message,types}.d.ts
- *   tool render view @deepseek-ai/dsh-tools/lib/types/presentation.d.ts
+ * Shapes are pinned to `@deepseek-ai/dsh-*@0.2.0-rc.2`:
+ *   gate frames       dsh-api-gateway     lib/types/stream-protocol.d.ts (RemoteEvent*Frame)
+ *   follow/control    dsh-api-session-controller lib/types/types.d.ts (SessionFollowFrame, SessionControlFrame)
+ *   session event     dsh-session         src/types.ts:281-523 (SessionEventMap, SurfaceOp)
+ *   message/content   dsh-llm             src/message.ts, src/types.ts (ToolResultMessage, StreamChunk)
+ *   approval request  dsh-user-approval   src/types.ts:63-76 (ApprovalRequestEvent)
+ *   question request  dsh-user-questions  src/types.ts:129-146 (AskUserQuestionRequestEvent)
+ * Stored 0.1.1 logs reach this module already migrated to format v4 on read
+ * (NEW packages/session/session-format-v3-to-v4), so it never meets a v3 shape.
  * On a pin bump, re-read those and correct this file AND tests/fixtures/events.jsonl.
  * @module
  */
@@ -41,10 +53,11 @@
  * @property {string} [callId] - pairs the two phases; absent only on a malformed event.
  * @property {string} [name] - the tool's name. Present on `call` ONLY: `tool/result`
  *   carries the message, not the name, so a renderer titles a result from the call it remembers.
- * @property {string} [title] - the host's render intent for this phase, when a presenter produced one.
- * @property {string} [text] - result text, model-facing blocks joined (`result` phase).
+ * @property {string} [title] - `call` only: a one-line account derived from the call
+ *   itself - a `bash` call's command, else the tool name. Host presenters no longer
+ *   reach the client (NEW packages/client/ui-tool/README.md:52), so there is no host title.
+ * @property {string} [text] - result text, model-facing text blocks joined (`result` phase).
  * @property {boolean} [isError] - whether the tool reported failure.
- * @property {unknown} [view] - the raw ToolCallView/ToolResultView, for a renderer that grows card kinds.
  */
 
 /**
@@ -53,28 +66,34 @@
  * @typedef {object} FrameView
  * @property {"bubble"|"card"|"approval"|"question"|"gate-resolved"|"pulse"|"projection"|"room-line"|"subagent-message"|"turn"|"ignore"} kind
  * @property {number} [seq] - the session event's seq; the renderer's dedupe key across backfill and stream.
- * @property {string} [sessionId] - which session this belongs to (absent on a history entry that carries none).
+ * @property {string} [sessionId] - which session this belongs to (absent when the frame names none).
+ *   Gates: the waterfall's `agentId`, which IS the session id (NEW packages/core/agent/src/index.ts:258-270).
  * @property {SurfaceOpView} [surfaceOp] - on every rendered session event: `append`, or a
  *   replace instruction the renderer MUST honour by dropping the shadowed range.
  * @property {"operator"|"kairos"|"bot"} [role] - bubble side; `bot` is a room member speaking in its own voice.
  * @property {string} [text] - bubble text.
  * @property {boolean} [interrupted] - bubbles: the turn was cancelled mid-stream and this is
  *   only the prefix that had arrived. Never render a partial answer as a complete one.
- * @property {string} [source] - who produced the message: `user`, `plugin`, `model`, `tool`, `room`,
+ * @property {string} [source] - who produced the message: `user`, `model`, `tool`, `room`,
+ *   a first-party producer kind (`compact-checkpoint`, `runtime-context`,
+ *   `agent-instructions`, …), a migrated `plugin:<name>`, `agent-message` or
  *   `subagent-report` (child-authored), or `subagent-settled` (runtime-authored).
  * @property {string} [thinking] - kairos bubbles: the message's reasoning blocks, joined.
  *   Thinking is never chat text; a renderer shows it apart from the bubble or not at all.
  * @property {string} [mode] - pulses: which block kind just opened live — `reasoning`, `text`, `tool-call`.
  * @property {ToolCardView} [card] - the card body.
- * @property {string} [id] - answerable frames: the rpcId `/api/respond` echoes.
- * @property {string} [approvalId] - approvals: the host's audit id (NOT the wire id).
+ * @property {string} [id] - gates and gate-resolved: the `$events` `eventId`, the one id
+ *   `mux.answer` names. The same across reconnects, so a replayed gate dedupes by it.
  * @property {string} [toolName] - approvals: the tool awaiting permission.
- * @property {string} [callId] - approvals: the call awaiting permission.
+ * @property {string} [callId] - approvals: the call awaiting permission. There is no
+ *   audit `approvalId` on the wire any more; the log correlates by this callId.
  * @property {string} [reason] - approvals: why permission is being asked, when the host said;
- *   turn views: the TurnEndReason's `kind` (`completed`, `aborted`, …), when the frame carries one.
+ *   turn views: the TurnEndReason's `kind` (`completed`, `aborted`, `interrupted`, …), when the frame carries one.
+ * @property {string} [displayReason] - approvals: the host's English presentation text,
+ *   when it sent one (sandbox escalations always do; never persisted: user-approval/src/types.ts:72-73).
  * @property {unknown[]} [questions] - questions: the AskUserQuestionItem batch (one ask, many questions, ONE answer).
- * @property {string} [outcome] - gate-resolved: how the host settled it — `answered`
- *   or `cancelled` for a question, an ApprovalOutcome for an approval; room-line: the round's `RoundOutcome`.
+ * @property {string} [outcome] - room-line: the round's `RoundOutcome`. A gate-resolved view
+ *   carries none: a `cancel` frame says only that the gate is over.
  * @property {string} [key] - projections: which unit changed — `tokenUsage`,
  *   `contextPressure`, `title`, … The renderer stores whole values per key,
  *   higher `seq` winning; the frame is a state broadcast, not a delta.
@@ -94,7 +113,7 @@
  * @property {string} [childSessionId] - subagent-message: the source's explicit senderSessionId,
  *   never inferred from text or replaced by this parent session's id.
  * @property {string} [summary] - subagent-message: the runtime's settlement summary, if recorded.
- *   The pinned wire source does not carry a structured outcome or result; do not infer one from prose.
+ *   The wire source does not carry a structured outcome or result; do not infer one from prose.
  * @property {number} [round] - room-line: the round number that ended.
  * @property {unknown[]} [turns] - room-line: every member's `RoomTurnRecord` for the round.
  * @property {"start"|"end"} [phase] - turn: which boundary this is.
@@ -106,6 +125,11 @@ function isObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** @param {unknown} value @returns {boolean} true for a string with at least one character. */
+function isId(value) {
+  return typeof value === "string" && value !== "";
+}
+
 /** A view that renders nothing. Built fresh each call so no caller can alias it. @returns {FrameView} */
 function ignore() {
   return { kind: "ignore" };
@@ -114,7 +138,7 @@ function ignore() {
 /**
  * Join the visible text of a content-block list. `reasoning` blocks are
  * deliberately excluded — thinking is not chat — and so is everything with no
- * text of its own (images, tool calls).
+ * text of its own (images, files, tool calls).
  * @param {unknown} blocks - a ContentBlock[], or anything else.
  * @returns {string} the joined text, possibly empty.
  */
@@ -128,7 +152,7 @@ function blocksText(blocks) {
 }
 
 /** The message's reasoning blocks, joined — the model's thinking, never chat
- * text (message.d.ts reasoning block: same `text` field, its own type).
+ * text (NEW packages/llm/llm/src/types.ts:67-71: same `text` field, its own type).
  * @param {unknown} blocks @returns {string} */
 function blocksReasoning(blocks) {
   if (!Array.isArray(blocks)) return "";
@@ -142,23 +166,28 @@ function blocksReasoning(blocks) {
 /**
  * Where a surface event sits in the transcript.
  *
- * `surfaceOp` lives on the session EVENT, not on the mux frame, and only on the
- * three surface types (`SessionEvent`'s conditional member,
- * dsh-session types.d.ts:425-457; the op union at :393-397). Absent means
- * `append` — which is also what every log-only event and every `tool/call` is,
- * since surface metadata is forbidden on them (types.d.ts:398-411).
+ * `surfaceOp` lives on the session EVENT, and only on the surface types
+ * (NEW packages/core/session/src/types.ts:432-464; wire type
+ * session-controller/src/types.ts:445-448). Absent means `append` — which is
+ * also what every log-only event and every `tool/call` is, since surface
+ * metadata is forbidden on them (session types.ts:493-516).
  *
- * A `replace` is not cosmetic: compaction (mounted in this tree) writes its
- * checkpoint as a `user/message` carrying `{op:'replace', start, end}`
- * (dsh-compaction-basic/lib/index.js:604-616), and a renderer that ignores it
- * shows the summary AND everything it summarized.
+ * The range is `startSeq`..`endSeq`, inclusive; 0.1.1's `start`/`end` spelling
+ * is gone, and v4 rewrites stored references on read, so a replace that still
+ * spells them is malformed and reads as `append`. Downstream the view keeps its
+ * `{op:'replace', start, end}` shape, which the renderer consumes.
+ *
+ * A `replace` is not cosmetic: compaction writes its checkpoint as a
+ * `user/message` whose op replaces the range it summarized (source kind
+ * `compact-checkpoint`, NEW packages/compaction/compaction/src/checkpoint.ts:19-42),
+ * and a renderer that ignores it shows the summary AND everything it summarized.
  * @param {Record<string, unknown>} event - the session event.
  * @returns {SurfaceOpView} the normalized op; malformed input reads as `append`.
  */
 function surfaceOpOf(event) {
   const op = event.surfaceOp;
-  if (isObject(op) && op.op === "replace" && typeof op.start === "number" && typeof op.end === "number") {
-    return { op: "replace", start: op.start, end: op.end };
+  if (isObject(op) && op.op === "replace" && typeof op.startSeq === "number" && typeof op.endSeq === "number") {
+    return { op: "replace", start: op.startSeq, end: op.endSeq };
   }
   return "append";
 }
@@ -166,7 +195,7 @@ function surfaceOpOf(event) {
 /**
  * One message as a bubble, or nothing when it has no text. A textless message
  * is real and normal — an assistant message that exists only to host usage or
- * tool calls (session types.d.ts:269-285) — and an empty bubble would be a lie
+ * tool calls (session types.ts:333-353) — and an empty bubble would be a lie
  * about what was said. v1 limitations that share this drop: an image-only
  * message (the face has no attachment path yet), and — only in theory, since
  * every producer of one frames a summary — a textless REPLACE node, whose
@@ -183,19 +212,25 @@ function bubble(role, message, base, interrupted) {
   const src = isObject(message) && isObject(message.source) ? message.source : {};
   const kind = typeof src.kind === "string" ? src.kind : undefined;
   const form = typeof src.form === "string" ? src.form : undefined;
-  /* Continuable children report through ordinary user/message events, but
-   * neither report is an operator prompt. Keep child-authored reports apart
-   * from the runtime's settlement notice: continuation.d.ts/js record only
-   * senderSessionId, form, and (for settlement) summary. In particular, these
-   * messages carry no structured outcome/result to guess from their prose.
+  /* A continuable child reports through an ordinary user/message, but no report
+   * is an operator prompt. 0.2.0 writes the child's report as an adjacent-agent
+   * RELAY, `{kind:'agent-message', form:'relay', senderSessionId}`, while a log
+   * migrated from 0.1.1 keeps `subagent-report` by name
+   * (NEW packages/subagent/subagent/src/continuation-messages.ts:15-21, 46-52;
+   * session-format-v3-to-v4/src/sources.ts:48-56). Both are the report `line`;
+   * an `agent-message` in any other form is not a report and stays a context row.
+   * The runtime's settlement notice stays apart from both: it records only
+   * senderSessionId, form and a summary (continuation-messages.ts:24-38), and
+   * none of these carries a structured outcome/result to guess from prose.
    * Recognized kinds with older/malformed metadata still retain their own
    * attribution and full text; only an explicitly recorded id becomes a link. */
-  if (role === "operator" && (kind === "subagent-report" || kind === "subagent-settled")) {
+  const report = kind === "subagent-report" || (kind === "agent-message" && form === "relay");
+  if (role === "operator" && (report || kind === "subagent-settled")) {
     const summary = kind === "subagent-settled" && typeof src.summary === "string" && src.summary.trim() !== ""
       ? src.summary : undefined;
     if (text === "" && summary === undefined) return ignore();
     return {
-      ...base, kind: "subagent-message", line: kind === "subagent-report" ? "report" : "settled",
+      ...base, kind: "subagent-message", line: report ? "report" : "settled",
       source: kind, form, text,
       ...(typeof src.senderSessionId === "string" && src.senderSessionId.trim() !== ""
         ? { childSessionId: src.senderSessionId } : {}),
@@ -206,7 +241,9 @@ function bubble(role, message, base, interrupted) {
   /* A room-sourced user message is one of three things (plan 2, deviation 1):
    * a member's ANSWER (a bubble in the bot's own voice), the ROUND END (a
    * line), or - in a member's own session - the DELTA it was prompted with
-   * (an injected context row, like every other plugin-sourced message). */
+   * (an injected context row, like every other producer-sourced message). v4
+   * keeps the face's direct `room` kind as written
+   * (session-format-v3-to-v4/src/sources.ts:92-106). */
   if (role === "operator" && kind === "room") {
     if (form === "answer" && typeof src.bot === "string") {
       return {
@@ -241,20 +278,32 @@ function bubble(role, message, base, interrupted) {
 }
 
 /**
- * The host's render intent for one phase of a tool call, when the frame carries
- * one for THAT phase (`for` names the vocabulary — events.d.ts:19-33).
- * @param {unknown} toolEventView - the frame's `view` slot.
- * @param {"call"|"result"} phase - the phase being rendered.
- * @returns {Record<string, unknown>|undefined} the phase's view, or undefined.
+ * The one-line account of a tool call, from the call alone. The host renders
+ * tool cards through presenters that never reach this client
+ * (NEW packages/client/ui-tool/README.md:52), so the title is derived here: a
+ * `bash` call's `command` argument (NEW packages/shell/tool-bash/src/index.ts:374-377),
+ * else the tool's name. `arguments` is the model's raw JSON string, unparsed and
+ * possibly malformed (session types.ts:356-361), so a parse failure falls back
+ * to the name rather than guessing.
+ * @param {string|undefined} name - the tool name.
+ * @param {unknown} args - the raw arguments string.
+ * @returns {string|undefined}
  */
-function renderIntent(toolEventView, phase) {
-  if (!isObject(toolEventView) || toolEventView.for !== phase) return undefined;
-  return isObject(toolEventView.view) ? toolEventView.view : undefined;
+function callTitle(name, args) {
+  if (name === "bash" && typeof args === "string") {
+    try {
+      const parsed = JSON.parse(args);
+      if (isObject(parsed) && typeof parsed.command === "string" && parsed.command.trim() !== "") return parsed.command.trim();
+    } catch {
+      // not JSON: the model's own malformed arguments; the name says enough
+    }
+  }
+  return name;
 }
 
 /**
- * Map one `session/event` frame (streamed or backfilled) to its view.
- * @param {Record<string, unknown>} frame - a session/event MuxFrame or a history entry.
+ * Map one session event (streamed or backfilled) to its view.
+ * @param {Record<string, unknown>} frame - `{sessionId?, event}`.
  * @returns {FrameView}
  */
 function mapSessionEvent(frame) {
@@ -276,45 +325,35 @@ function mapSessionEvent(frame) {
       return bubble("operator", data, base, false);
     case "assistant/message":
       // interrupted marks a turn cancelled mid-stream: what follows is the
-      // delivered PREFIX, not the answer (session types.d.ts:269-285).
+      // delivered PREFIX, not the answer (session types.ts:333-353). The
+      // embedded `stream` record list is the model's raw timing; not rendered.
       return bubble("kairos", data.message, base, data.interrupted === true);
     case "tool/call": {
-      const view = renderIntent(frame.view, "call");
+      const name = typeof data.name === "string" ? data.name : undefined;
       return { ...base, kind: "card", card: {
         phase: "call",
         callId: typeof data.callId === "string" ? data.callId : undefined,
-        name: typeof data.name === "string" ? data.name : undefined,
-        title: typeof view?.title === "string" ? view.title : undefined,
-        view,
+        name,
+        title: callTitle(name, data.arguments),
       } };
     }
     case "tool/result": {
-      const view = renderIntent(frame.view, "result");
+      // A first-class tool-role message: its own toolCallId and isError, the
+      // result blocks inline (NEW packages/llm/llm/src/message.ts:172-180,
+      // 299-306); 0.1.1's single wrapped tool-result block is gone. The
+      // source's callId is the same id by construction, kept as the fallback.
       const message = isObject(data.message) ? data.message : {};
-      // ToolResultMessage.content is exactly one ToolResultBlock (message.d.ts:140-144);
-      // the source's callId is the same id by construction, kept as the fallback.
-      const block = Array.isArray(message.content) && isObject(message.content[0]) ? message.content[0] : {};
       const sourceCallId = isObject(message.source) ? message.source.callId : undefined;
-      const callId = typeof block.toolCallId === "string" ? block.toolCallId
-        : typeof sourceCallId === "string" ? sourceCallId : undefined;
+      const callId = isId(message.toolCallId) ? message.toolCallId
+        : isId(sourceCallId) ? sourceCallId : undefined;
       return { ...base, kind: "card", card: {
         phase: "result",
         callId,
-        title: typeof view?.title === "string" ? view.title : undefined,
-        text: blocksText(block.content),
-        // Either channel means failure: the block's own flag, or an internal
-        // failure identity on the event (session types.d.ts:309-318).
-        isError: block.isError === true || isObject(data.error),
-        view,
+        text: blocksText(message.content),
+        // Either channel means failure: the message's own flag, or an internal
+        // failure identity on the event (session types.ts:362-389).
+        isError: message.isError === true || isObject(data.error),
       } };
-    }
-    case "assistant/chunk": {
-      // The stream itself stays log-only, but a block OPENING is the one live
-      // signal worth surfacing: it says what Kairos is doing right now
-      // (reasoning / text / tool-call) while nothing settled has landed yet.
-      const chunk = isObject(data.chunk) ? data.chunk : {};
-      if (chunk.type !== "block-start" || typeof chunk.blockType !== "string") return ignore();
-      return { ...base, kind: "pulse", mode: chunk.blockType };
     }
     case "turn/start":
     case "turn/end": {
@@ -323,87 +362,115 @@ function mapSessionEvent(frame) {
     }
     default:
       // Every other session event type is log-only for v1: step boundaries,
-      // raw chunks, todo/write, request headers, compaction.
+      // request headers, approval audit, permission pins, compaction markers,
+      // model selection, and 0.1.1's `assistant/chunk`, which 0.2.0 no longer
+      // logs at all (live chunks ride the follow's assistant stream instead).
       return ignore();
   }
 }
 
 /**
+ * A live model frame: pulse when a content block OPENS, the one live signal
+ * worth surfacing - it says what the model is doing right now (reasoning /
+ * text / tool-call) while nothing settled has landed yet. Every other frame
+ * (`start`, the deltas, `end`) is ignored (session-controller/src/types.ts:513-543;
+ * chunk grammar NEW packages/llm/llm/src/types.ts:452-460).
+ * @param {Record<string, unknown>} item - `{sessionId?, frame}`.
+ * @returns {FrameView}
+ */
+function mapAssistantStream(item) {
+  const frame = item.frame;
+  if (!isObject(frame) || frame.type !== "chunk" || !isObject(frame.chunk)) return ignore();
+  const chunk = frame.chunk;
+  if (chunk.type !== "block-start" || typeof chunk.blockType !== "string") return ignore();
+  return {
+    kind: "pulse",
+    mode: chunk.blockType,
+    sessionId: typeof item.sessionId === "string" ? item.sessionId : undefined,
+  };
+}
+
+/**
+ * An `$events` waterfall the operator answers. `id` is the `eventId` that
+ * `mux.answer` must name; `sessionId` is the waterfall's `agentId`; the request
+ * is the host's own request object minus `agent` and `signal`
+ * (stream-protocol.ts:146-173). Any other waterfall event is not a gate here
+ * (api.js hands it back with `next`).
+ * @param {Record<string, unknown>} frame
+ * @returns {FrameView}
+ */
+function mapGate(frame) {
+  if (!isId(frame.eventId) || !isObject(frame.request)) return ignore();
+  const request = frame.request;
+  const sessionId = typeof frame.agentId === "string" ? frame.agentId : undefined;
+  if (frame.event === "approval/request") {
+    // ApprovalRequestEvent {toolName, callId?, reason?, displayReason?{en,…}}
+    // (NEW packages/interaction/user-approval/src/types.ts:63-76).
+    const display = isObject(request.displayReason) ? request.displayReason.en : undefined;
+    return {
+      kind: "approval",
+      id: frame.eventId,
+      sessionId,
+      toolName: typeof request.toolName === "string" ? request.toolName : undefined,
+      callId: typeof request.callId === "string" ? request.callId : undefined,
+      reason: typeof request.reason === "string" ? request.reason : undefined,
+      displayReason: typeof display === "string" && display !== "" ? display : undefined,
+    };
+  }
+  if (frame.event === "user-questions/request") {
+    // AskUserQuestionRequestEvent {questions, wait?} (user-questions/src/types.ts:129-146).
+    return {
+      kind: "question",
+      id: frame.eventId,
+      sessionId,
+      questions: Array.isArray(request.questions) ? request.questions : [],
+    };
+  }
+  return ignore();
+}
+
+/**
  * Map one wire frame to its view model.
- * @param {unknown} frame - a mux ServerRequest envelope, a bare MuxFrame, or a
- *   `session.history` entry carrying `{ sessionId, event, view? }`.
+ * @param {unknown} frame - a session event, assistant-stream, gate, cancel or
+ *   projection item, as the module comment lists them.
  * @returns {FrameView} always a view; unrecognized input maps to `ignore`.
  */
 export function mapFrame(frame) {
   if (!isObject(frame)) return ignore();
-  const enveloped = frame.type === "server-request";
-  const rpcId = enveloped && typeof frame.rpcId === "string" ? frame.rpcId : undefined;
-  const mux = enveloped ? frame.payload : frame;
-  if (!isObject(mux)) return ignore();
-
-  switch (mux.type) {
-    case "approval/requested":
-      return {
-        kind: "approval",
-        id: rpcId,
-        sessionId: typeof mux.sessionId === "string" ? mux.sessionId : undefined,
-        approvalId: typeof mux.approvalId === "string" ? mux.approvalId : undefined,
-        toolName: typeof mux.toolName === "string" ? mux.toolName : undefined,
-        callId: typeof mux.callId === "string" ? mux.callId : undefined,
-        reason: typeof mux.reason === "string" ? mux.reason : undefined,
-      };
-    case "question/requested":
-      return {
-        kind: "question",
-        id: rpcId,
-        sessionId: typeof mux.sessionId === "string" ? mux.sessionId : undefined,
-        questions: Array.isArray(mux.questions) ? mux.questions : [],
-      };
-    /* The settlements, and the reason they are not ignorable: a gate the host
-     * closed by itself — the turn cancelled, the session disposed, another
-     * answerer first — pushes ONLY this frame. A renderer that drops it keeps
-     * the dead card answerable forever and re-draws it on every reconnect.
-     * The two carry different ids: a question names the wire rpcId that
-     * `/api/respond` echoes, an approval names only its audit id, so the
-     * renderer finds that gate by the `approvalId` it was drawn with. */
-    case "question/resolved":
-      return {
-        kind: "gate-resolved",
-        id: typeof mux.questionRpcId === "string" ? mux.questionRpcId : undefined,
-        sessionId: typeof mux.sessionId === "string" ? mux.sessionId : undefined,
-        outcome: typeof mux.outcome === "string" ? mux.outcome : undefined,
-      };
-    case "approval/resolved":
-      return {
-        kind: "gate-resolved",
-        approvalId: typeof mux.approvalId === "string" ? mux.approvalId : undefined,
-        sessionId: typeof mux.sessionId === "string" ? mux.sessionId : undefined,
-        outcome: typeof mux.outcome === "string" ? mux.outcome : undefined,
-      };
+  switch (frame.type) {
     case "session/event":
-      return mapSessionEvent(mux);
-    case "session/projection": {
-      // A projection unit's whole new value (events.d.ts session/projection):
+    case "event":
+      return mapSessionEvent(frame);
+    case "assistant-stream":
+      return mapAssistantStream(frame);
+    case "waterfall":
+      return mapGate(frame);
+    /* The withdrawal, and the reason it is not ignorable: a gate the host
+     * settled without this tab - another tab answered, the turn stopped, the
+     * session went away - pushes ONLY this frame (gateway/src/index.ts:646-668).
+     * A renderer that drops it keeps the dead card answerable forever. It names
+     * the gate by the same eventId the waterfall carried, and it carries no
+     * outcome and no session. */
+    case "cancel":
+      return isId(frame.eventId) ? { kind: "gate-resolved", id: frame.eventId } : ignore();
+    case "projection": {
+      // A projection unit's whole new value (session/control, control.ts:22-30):
       // the agent panel's live feed for tokenUsage/contextPressure. seq is the
       // committed event that produced it — the store's higher-wins key.
-      if (typeof mux.sessionId !== "string" || typeof mux.key !== "string") return ignore();
+      if (typeof frame.sessionId !== "string" || typeof frame.key !== "string") return ignore();
       return {
         kind: "projection",
-        sessionId: mux.sessionId,
-        key: mux.key,
-        value: mux.value,
-        seq: typeof mux.seq === "number" ? mux.seq : undefined,
+        sessionId: frame.sessionId,
+        key: frame.key,
+        value: frame.value,
+        seq: typeof frame.seq === "number" ? frame.seq : undefined,
       };
     }
-    case undefined:
-      // No frame type: a session.history entry, which carries only { event, view? }.
-      return isObject(mux.event) ? mapSessionEvent(mux) : ignore();
     default:
-      // session/subscribed · session/queue · session/jobs · stream/error. All
-      // carried, none rendered in v1: the face is a single loopback client with
-      // no queue dock and no job list. stream/error is the one with a real cost
-      // — an internal stream failure stays silent — and is the first candidate
-      // when this vocabulary next grows.
+      // snapshot · baseline · ready · emit · item/end/error, and every 0.1.1
+      // frame (server-request envelopes, session/projection, approval/requested,
+      // question/*, session/subscribed, stream/error, untyped history entries).
+      // Carried or dead, none of them renders.
       return ignore();
   }
 }

@@ -1,14 +1,15 @@
 /** Bot home model defaults and an operator view of the mounted configuration.
  * Saved files are not runtime evidence. Own-journal context is captured afresh
- * as a standard system-prompt plugin snapshot on each assembly.
+ * as a runtime-context snapshot on each assembly (dsh 0.2.0 logs assembled
+ * contexts as `{kind:'runtime-context', form:'snapshot', sections}`, NEW
+ * `packages/core/agent-loop/src/runtime-context.ts:14-19, 161`).
  * Inspections never resume a cold agent
  * or assemble concurrently with a turn; last-request facts come from its log.
  */
 import { resolve } from "node:path";
 import type { Context } from "@deepseek-ai/cordis";
 import { assembleContextFor, type Agent } from "@deepseek-ai/dsh-agent";
-import { resolveSessionPreset } from "@deepseek-ai/dsh-agent-presets";
-import type { PromptAssembly } from "@deepseek-ai/dsh-system-prompt";
+import { PERSONA_PREFIX_SECTION, type PromptAssembly } from "@deepseek-ai/dsh-system-prompt";
 import type { LlmCallConfig } from "@deepseek-ai/dsh-llm";
 import { isBotId, type BotRow } from "./bots.ts";
 import { formatBotJournal, type BotJournalSnapshot } from "./bot-journal.ts";
@@ -23,6 +24,37 @@ const routeName = (config: { provider?: string; model?: string } | undefined): s
   config?.provider && config.model ? `${config.provider}/${config.model}` : null;
 const toolNames = (tools: readonly { name: string }[]): string[] => tools.map((t) => t.name).sort();
 
+/** The slice of `ctx.sessionProjections` this module reads (NEW
+ * `packages/session/session-projection/src/index.ts:319`, `stateOf`). */
+interface ProjectionsLike {
+  stateOf(session: Agent["session"], key: "agentPreset"): string | null | undefined;
+}
+
+/** The preset a session RUNS, not the one it was created with. dsh 0.2.0
+ * dropped `resolveSessionPreset` (the `dsh-agent-presets` package is gone,
+ * PLAN S5); its replacement is the registry's `agentPreset` session
+ * projection - initialised from the frozen header and advanced by every
+ * logged `agent-preset/selected` (NEW
+ * `packages/preset/agent-preset-registry/src/session.ts:33-43`) - read exactly
+ * as the session controller does (`presetForSession`, NEW
+ * `packages/api/session-controller/src/agent.ts:360-362`). `null` (no preset)
+ * and `undefined` (unit unregistered) both mean "none", as upstream maps them.
+ * A MISSING projection service is not "none": the preset registry injects it
+ * (`agent-preset-registry/src/index.ts:52`) and boot asserts the registry, so
+ * its absence is a broken tree - throw rather than silently demoting every
+ * bot conversation to "not a bot" (no seeded model, no journal, no capture).
+ * @param ctx - the root context the runtime was installed on.
+ * @returns the reader, bound late so a reloaded projection service is followed. */
+export function sessionPresetReader(ctx: { get(name: string): unknown }): (session: Agent["session"]) => string | undefined {
+  return (session) => {
+    const projections = ctx.get("sessionProjections") as ProjectionsLike | undefined;
+    if (projections === undefined) {
+      throw new Error("kairos-face: sessionProjections service is absent - cannot tell which agent preset a session runs");
+    }
+    return projections.stateOf(session, "agentPreset") ?? undefined;
+  };
+}
+
 export function installBotRuntime(ctx: Context, listBots: () => Promise<BotRow[]>, options: {
   readJournal?: (botId: string) => Promise<BotJournalSnapshot>;
 } = {}) {
@@ -30,8 +62,9 @@ export function installBotRuntime(ctx: Context, listBots: () => Promise<BotRow[]
   const snapshots = new WeakMap<Agent, Snapshot>();
   const assembledRoutes = new WeakMap<Agent, LlmCallConfig>();
   const journals = new WeakMap<Agent, JournalInfo>();
+  const presetOf = sessionPresetReader(ctx as unknown as { get(name: string): unknown });
   const seedFor = (agent: Agent): Promise<Seed | undefined> => {
-    const id = resolveSessionPreset(agent.session);
+    const id = presetOf(agent.session);
     if (!isBotId(id)) return Promise.resolve(undefined);
     let pending = seeds.get(agent);
     if (pending === undefined) {
@@ -51,21 +84,34 @@ export function installBotRuntime(ctx: Context, listBots: () => Promise<BotRow[]
   };
   const capture = (agent: Agent, assembly: PromptAssembly): Snapshot => {
     const value = {
-      soul: assembly.sections.find((s) => s.name === "deployment:persona")?.text ?? null,
+      // The bot's SOUL is the scoped persona-PREFIX section plugins/bot.js
+      // registers; dsh 0.2.0 renamed `deployment:persona` to this constant
+      // (NEW packages/core/system-prompt/src/index.ts:179). Matching the old
+      // name would read `soul: null` for every bot, silently.
+      soul: assembly.sections.find((s) => s.name === PERSONA_PREFIX_SECTION)?.text ?? null,
       model: routeName(assembly.variables), tools: toolNames(assembly.tools),
     };
     snapshots.set(agent, value);
     return value;
   };
   const disposers = [
-    ctx.on("agent/created", ({ agent }) => { void seedFor(agent).catch(() => undefined); }),
+    // dsh 0.2.0: `agent/created` is a SERIAL, awaited dispatch with payload
+    // `{agent, source, signal?}` (NEW packages/core/agent/src/runtime-types.ts:261,
+    // dispatched at src/index.ts:550); a throw or rejection here fails the
+    // agent's creation. So stay synchronous and swallow the seed warm-up: it
+    // is a cache prime, re-derived on first assembly anyway (where a broken
+    // tree still fails loudly, see sessionPresetReader).
+    ctx.on("agent/created", ({ agent }) => {
+      try { void seedFor(agent).catch(() => undefined); } catch { /* re-derived at assembly */ }
+      return undefined;
+    }),
     // Prepend makes this the outer waterfall, after the gateway has supplied
     // its default. Only the first real request is seeded: the gateway then
     // inherits the logged model and still owns explicit later model switches.
     ctx.on("system-prompt/assemble", async (_assembly, context, next) => {
       const agent = (context as { agent?: Agent }).agent;
       if (!agent) return next();
-      if (!isBotId(resolveSessionPreset(agent.session))) {
+      if (!isBotId(presetOf(agent.session))) {
         assembledRoutes.delete(agent);
         snapshots.delete(agent);
         journals.delete(agent);
@@ -73,20 +119,21 @@ export function installBotRuntime(ctx: Context, listBots: () => Promise<BotRow[]
       }
       const seed = await seedFor(agent);
       let selected: LlmCallConfig | undefined;
-      if (seed && seed.id === resolveSessionPreset(agent.session) && seed.route && !agent.session.requestHeader()) {
+      if (seed && seed.id === presetOf(agent.session) && seed.route && !agent.session.requestHeader()) {
         try { selected = await ctx.llm.resolveCallConfig(seed.route, context.signal); }
         catch { throw new HttpError(409, `Bot model ${routeName(seed.route)} is unavailable. Update the saved route and start a new conversation.`); }
       }
       const assembly = await next();
       if (options.readJournal) {
-        const id = resolveSessionPreset(agent.session)!;
+        const id = presetOf(agent.session)!;
         let journal: BotJournalSnapshot;
         try { journal = await options.readJournal(id); }
         catch { journal = { status: "unavailable", text: "", revision: null, truncated: false, note: "The journal could not be read for this request." }; }
         const { text: _text, ...info } = journal;
         journals.set(agent, info);
-        // dsh records this as a user/message from system-prompt, form:snapshot,
-        // with named sections. It is data alongside the room delta, never SOUL.
+        // dsh records this as a runtime-context snapshot message with named
+        // sections (NEW packages/core/agent-loop/src/runtime-context.ts:14-19, 161).
+        // It is data alongside the room delta, never SOUL.
         assembly.contexts = [...assembly.contexts.filter((entry) => entry.name !== "bot-journal"),
           { name: "bot-journal", text: formatBotJournal(journal) }];
       }
@@ -101,7 +148,7 @@ export function installBotRuntime(ctx: Context, listBots: () => Promise<BotRow[]
       const config = await next();
       const selected = assembledRoutes.get(agent);
       if (!selected || agent.session.requestHeader()) return config;
-      const id = resolveSessionPreset(agent.session);
+      const id = presetOf(agent.session);
       if (!isBotId(id) || (await seedFor(agent))?.id !== id) return config;
       const { reasoningEffort: _effort, ...base } = config;
       return { ...base, provider: selected.provider, model: selected.model,
@@ -117,7 +164,7 @@ export function installBotRuntime(ctx: Context, listBots: () => Promise<BotRow[]
     const empty = { sessionId, attached: false, source: "unavailable", revisionAtStart: null,
       soul: null, soulMatchesSaved: null, model: null, tools: [], skills: [], lastRequest: null };
     if (!agent) return { ...empty, note: "This conversation is not attached. Open it and send a message before inspecting its mounted settings." };
-    if (resolveSessionPreset(agent.session) !== id) throw new HttpError(409, "this conversation belongs to a different agent");
+    if (presetOf(agent.session) !== id) throw new HttpError(409, "this conversation belongs to a different agent");
     const seed = await seedFor(agent);
     let snapshot = snapshots.get(agent);
     let source = "last-request";

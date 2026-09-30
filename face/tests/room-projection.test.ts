@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ROOM_PROJECTION_KEY, ROOM_STATE_VERSION, applyRoomEvent, initRoomState, registerRoomProjection, roomStateSchema, type RoomState } from "../src/room-projection.ts";
 import type { EventLike } from "../src/room-rules.ts";
+import { legacyToolResultMessage, toolResultMessage } from "./room-fake.ts";
 
 let seq = 0;
 const ev = (type: string, data: unknown): EventLike => ({ type, seq: seq++, data });
@@ -9,9 +10,13 @@ const user = (id: string, text: string, source: Record<string, unknown>): EventL
   ev("user/message", { id, role: "user", content: [{ type: "text", text }], source });
 const dispatchCall = (to: string[], mode: string, callId = "c1"): EventLike =>
   ev("tool/call", { turn: 1, step: 1, callId, name: "dispatch", arguments: JSON.stringify({ to, mode, brief: "b", reason: "r" }) });
-/** dsh's own tool-result shape (dsh-llm `createToolResultMessage`). */
+/** dsh 0.2's own tool-result shape (dsh-llm `createToolResultMessage`, NEW packages/llm/llm/src/message.ts:299-306):
+ * a `role:'tool'` message with `toolCallId`/`isError` on the message itself. */
 const dispatchResult = (callId: string, isError: boolean): EventLike =>
-  ev("tool/result", { turn: 1, step: 1, message: { id: `r-${callId}`, role: "user", content: [{ type: "tool-result", toolCallId: callId, content: [], isError }], source: { kind: "tool", callId } } });
+  ev("tool/result", { turn: 1, step: 1, message: toolResultMessage(`r-${callId}`, callId, isError) });
+/** dsh 0.1.1's wrapper shape - a live 0.2 Session never carries it (the v3→v4 edge lifts it on load). */
+const legacyDispatchResult = (callId: string, isError: boolean): EventLike =>
+  ev("tool/result", { turn: 1, step: 1, message: legacyToolResultMessage(`r-${callId}`, callId, isError) });
 const answerMsg = (id: string, bot: string, sessionId: string, turn: number) => ({
   id, role: "user", content: [{ type: "text", text: "view" }], source: { kind: "room", form: "answer", bot, name: bot, sessionId, turn, round: 1 },
 });
@@ -84,6 +89,24 @@ test("a REFUSED dispatch leaves the state exactly as it was; an accepted one kee
   assert.deepEqual(accepted, { kind: "room", organizing: false, members: { buffett: { state: "called" } }, round: { n: 1, mode: "parallel", open: true } });
   const unrelated = applyRoomEvent(running, dispatchResult("some-other-call", true));
   assert.equal(unrelated, running, "another tool's result is not this unit's event");
+});
+
+test("dsh 0.1.1's wrapper result is no longer read: it neither settles nor rolls back the pending dispatch", () => {
+  /* Only the v4 tool-role message is this call's result; the fold must not
+   * match `content[0].toolCallId` by accident (a 0.1.1-shaped fold did). */
+  const pending = fold([dispatchCall(["macro"], "serial", "c7")]);
+  assert.equal(pending.pending?.callId, "c7");
+  const afterLegacy = applyRoomEvent(pending, legacyDispatchResult("c7", true));
+  assert.equal(afterLegacy, pending, "same reference: the wrapper is not this unit's event");
+  const afterNew = applyRoomEvent(afterLegacy, dispatchResult("c7", true));
+  assert.deepEqual(afterNew, { kind: "none" }, "the tool-role result is");
+});
+
+test("init ignores dsh 0.2's (header, inheritedEventCount) arguments", () => {
+  const seen: { init(header?: unknown, inherited?: number): unknown }[] = [];
+  registerRoomProjection({ register(definition) { seen.push(definition); return () => {}; } });
+  assert.deepEqual(seen[0].init({ version: 4, id: "s", createdAt: 1, isSeeded: true, agentPreset: "buffett" }, 7), { kind: "none" }, "a room is made by its events, never its header");
+  assert.equal(ROOM_STATE_VERSION, 2, "the fold's meaning did not change, so the persisted cache version stays");
 });
 
 test("an `@` folded while a round is open joins that round instead of wiping it", () => {

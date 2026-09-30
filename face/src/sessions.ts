@@ -1,10 +1,16 @@
 /** Session housekeeping the host does not fully provide at this pin: delete,
  * and a reversible archive.
  *
- * dsh 0.1.1-rc.2 exposes rename and fork over RPC but no session DELETE, so
- * that lands here. It DOES expose `workspace.archiveSession` — but the host's
- * archive is add-only, with no un-archive method, while the face's set is
- * reversible. That, not absence, is why `archived.json` stays.
+ * dsh 0.2.0-rc.2 exposes rename and fork over RPC but still no session DELETE
+ * (no delete/remove `@Remote` in `packages/api/session-controller/src` or
+ * `packages/session/session-persistence/src`), so that lands here. The host
+ * DOES own an archive — `workspaceRegistry.archiveSession` and, since 0.2.0,
+ * `unarchiveSession` (NEW `packages/workspace/workspace/src/index.ts:363-411`)
+ * — but a host archive is not presentation: an archived session "runs no model
+ * step until it is restored" (`ArchivedSessionGate`, NEW
+ * `packages/api/session-controller/src/index.ts:162-165`). The face's fold is
+ * pure presentation and reversible, which is why `archived.json` stays and the
+ * face never writes the host set (PLAN D14).
  *
  * - DELETE removes the session's persistence directory
  *   (`$DSH_HOME/sessions/<project-slug>/<session-id>/`) permanently — there
@@ -85,12 +91,17 @@ async function writeMeta(home: string, meta: SessionsMeta): Promise<void> {
 
 /** Add or remove one id from the archive set; returns the metadata after.
  * @param hostArchived - the host's own archive set
- * (`ctx.workspaceRegistry.archivedSessionIds`), if known. The host's archive
- * is add-only at this pin — `workspace.archiveSession` exists, an un-archive
- * does not — so an id already in it must refuse un-archiving here too:
- * silently accepting the click would show a session that every other surface
- * still folds away, and the face's set has no way to represent "the host
- * still considers this archived" other than refusing to diverge from it. */
+ * (`ctx.workspaceRegistry.archivedSessionIds`), if known. The face does not
+ * un-archive host archives (PLAN D14): the host can
+ * (`workspaceRegistry.unarchiveSession`, NEW
+ * `packages/workspace/workspace/src/index.ts:397-411`), but that is a change
+ * to what the session may RUN — a host-archived session runs no model step
+ * (`ArchivedSessionGate`, NEW `packages/api/session-controller/src/index.ts:162-165`)
+ * — not to what the sidebar shows. So an id already in the host set must
+ * refuse un-archiving here: silently accepting the click would show a session
+ * that every other surface still folds away and that still cannot run, and
+ * the face's set has no way to represent "the host still considers this
+ * archived" other than refusing to diverge from it. */
 export async function setArchived(
   home: string,
   sessionId: unknown,
@@ -99,7 +110,10 @@ export async function setArchived(
 ): Promise<SessionsMeta> {
   assertSessionId(sessionId);
   if (!archived && hostArchived.includes(sessionId)) {
-    throw new HttpError(409, "this session was archived by the host, which has no un-archive at this pin");
+    throw new HttpError(
+      409,
+      "this session was archived by the host: the face does not un-archive host archives, and a host-archived session runs no model step until the host restores it",
+    );
   }
   const meta = await readMeta(home);
   const set = new Set(meta.archived);
@@ -135,35 +149,99 @@ async function readPrefix(path: string): Promise<Buffer | undefined> {
   }
 }
 
+/** The canonical generation-log basename, with or without the Zstandard
+ * suffix: `session.jsonl[.zstd]` is format v0, `session.v<N>.jsonl[.zstd]`
+ * (N >= 1, no leading zero) is format vN. Mirrors NEW
+ * `packages/session/session-format/src/filename.ts:5` plus the compression
+ * suffix of `packages/session/session-persistence-jsonl/src/format.ts:58-77`.
+ * Everything else in a session directory — `session.lock` (the flock lease,
+ * `session-persistence-jsonl/src/lease.ts:1-40`), `session.migration.*.tmp`
+ * and `<final>.<hex>.tmp` staging files — fails this pattern by construction,
+ * so it is never mistaken for a log. */
+const GENERATION_LOG_RE = /^session(?:\.v([1-9]\d*))?\.jsonl(\.zstd)?$/;
+
+/** One committed generation log found in a session directory. */
+export interface GenerationLog {
+  /** Basename inside the session directory. */
+  name: string;
+  /** Session format version the filename claims (0 when there is no `.vN`). */
+  version: number;
+  /** True for the `.zstd` encoding (one independent Zstandard frame per record batch). */
+  zstd: boolean;
+}
+
+/** Pick the authoritative generation among a session directory's entries: the
+ * numerically highest canonical version, as the host's own resolver does
+ * (NEW `packages/session/session-persistence-jsonl/src/index.ts:1446-1483`,
+ * "Select the numerically highest canonical generation"). A migrated 0.1.1
+ * session holds BOTH `session.jsonl.zstd` (v0, byte-preserved) and
+ * `session.v4.jsonl.zstd` (published beside it on the first 0.2.0 write
+ * open); a session born under 0.2.0 holds only the v4 file. At an equal
+ * version the `.zstd` file wins — the host itself refuses a directory mixing
+ * both encodings (`index.ts:1462-1472`, `encodingMismatch`), so this tie-break
+ * only decides which of two unreadable-to-the-host candidates we read, and the
+ * compressed one is what dsh writes by default.
+ * @param names - basenames in one session directory.
+ * @returns the chosen log, or undefined when no canonical log is present. */
+export function pickGenerationLog(names: readonly string[]): GenerationLog | undefined {
+  let best: GenerationLog | undefined;
+  for (const name of names) {
+    const match = GENERATION_LOG_RE.exec(name);
+    if (match === null) continue;
+    const version = match[1] === undefined ? 0 : Number(match[1]);
+    if (!Number.isSafeInteger(version)) continue; // absurd digit run: not canonical (filename.ts:30-31)
+    const candidate = { name, version, zstd: match[2] !== undefined };
+    if (
+      best === undefined ||
+      candidate.version > best.version ||
+      (candidate.version === best.version && candidate.zstd && !best.zstd)
+    ) {
+      best = candidate;
+    }
+  }
+  return best;
+}
+
 /** Read the `cwd` a session directory's own persisted header claims — the
  * only place `deleteSession` can learn it, since the id alone does not carry
  * it and the on-disk log is authoritative regardless of whether the session
  * is currently live in host memory (see the module docstring's tombstone
- * note). dsh writes the header as one independently checksummed Zstandard
- * frame when compression is on (`session.jsonl.zstd`, the default) and as a
- * plain first line when it is off (`session.jsonl`) — either way it is the
- * artifact's very first record, so a single-shot zstd decode of a bounded
- * prefix is enough: it consumes exactly the first complete frame and ignores
- * whatever event data follows it in the buffer.
+ * note). The log read is the highest canonical generation
+ * ({@link pickGenerationLog}); without that, every session created under dsh
+ * 0.2.0 (only `session.v4.jsonl.zstd` on disk) would read as "no header" and
+ * be refused with a 404. Every generation "starts with a physical header whose
+ * version equals its filename" (NEW `session-persistence-jsonl/README.md:56`),
+ * and the header keeps `cwd` in v4 (`format.ts:83-98`). dsh writes that header
+ * as its own independently compressed Zstandard frame when compression is on
+ * — native v4 (`session-persistence-jsonl/src/index.ts:1290-1297`) and
+ * migrated v4 (`generation.ts:746-748`) alike, as v0 did — and as a plain first
+ * line when it is off, so a single-shot zstd decode of a bounded prefix is
+ * enough: it consumes exactly the first complete frame and ignores whatever
+ * event data follows it in the buffer.
  * @returns the header's cwd, or undefined when the header is missing,
  * unreadable, or carries no cwd. Callers MUST treat that as UNKNOWN, never as
  * "safe" — the whole point of this read is to tell "inside the repo" apart
  * from "can't tell", and only the former may authorize a delete.
  */
 async function readSessionCwd(dir: string): Promise<string | undefined> {
-  for (const [name, zstd] of [["session.jsonl.zstd", true], ["session.jsonl", false]] as const) {
-    const prefix = await readPrefix(join(dir, name));
-    if (prefix === undefined || prefix.length === 0) continue;
-    try {
-      const text = zstd ? (await zstdDecompressAsync(prefix)).toString("utf8") : prefix.toString("utf8");
-      const parsed: unknown = JSON.parse(text.split("\n", 1)[0]);
-      const cwd = parsed !== null && typeof parsed === "object" ? (parsed as { cwd?: unknown }).cwd : undefined;
-      return typeof cwd === "string" ? cwd : undefined;
-    } catch {
-      return undefined; // present but undecodable - unknown, not safe
-    }
+  let names: string[];
+  try {
+    names = await readdir(dir);
+  } catch {
+    return undefined; // unlistable directory - unknown, not safe
   }
-  return undefined;
+  const log = pickGenerationLog(names);
+  if (log === undefined) return undefined;
+  const prefix = await readPrefix(join(dir, log.name));
+  if (prefix === undefined || prefix.length === 0) return undefined;
+  try {
+    const text = log.zstd ? (await zstdDecompressAsync(prefix)).toString("utf8") : prefix.toString("utf8");
+    const parsed: unknown = JSON.parse(text.split("\n", 1)[0]);
+    const cwd = parsed !== null && typeof parsed === "object" ? (parsed as { cwd?: unknown }).cwd : undefined;
+    return typeof cwd === "string" ? cwd : undefined;
+  } catch {
+    return undefined; // present but undecodable - unknown, not safe
+  }
 }
 
 /** Permanently remove one session's persistence directory, drop its archive
@@ -222,10 +300,11 @@ export interface SessionRouteDeps {
   home?: string;
   /** The host's own session-archive set, narrowed from `ctx.workspaceRegistry`
    * the same way channels.ts's `RegistryLike` is. Read live on every
-   * un-archive attempt (never snapshotted at registration) because it is
-   * add-only while the face runs — a session the host archives after this
-   * call still must be refused. Omitted (e.g. no host registry available)
-   * behaves as "the host has archived nothing". */
+   * un-archive attempt (never snapshotted at registration) because it changes
+   * while the face runs — a session the host archives after this call still
+   * must be refused, and one the host restores (`unarchiveSession`, from the
+   * CLI or another client) must stop being refused. Omitted (e.g. no host
+   * registry available) behaves as "the host has archived nothing". */
   hostArchive?: { readonly archivedSessionIds: readonly string[] };
 }
 

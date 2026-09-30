@@ -1,101 +1,112 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { faceOverlay } from "../src/overlay.ts";
+import type { Config as AgentPresetConfig } from "@deepseek-ai/dsh-agent-preset";
+import { AGENT_PRESET_REGISTRY_ROW_ID, DEFAULT_PRESET, faceOverlay, presetRowId } from "../src/overlay.ts";
 
-const HOME = "/tmp/face-home";
-const BOTS = "/tmp/face-test-bots";
+/** The default preset a composition hands the overlay: `bots/kairos` as a definition. */
+const KAIROS: AgentPresetConfig = {
+  id: "kairos",
+  name: "Kairos",
+  description: "the principal agent",
+  plugins: [],
+};
 
-test("overlay inserts exactly the twelve rows with loopback config", () => {
-  const patches = faceOverlay(3090, HOME, BOTS);
-  assert.equal(patches.length, 1);
-  const rows = patches[0].insert!;
-  const byId = new Map(rows.map(r => [r.id, r]));
-  assert.deepEqual(
-    [...byId.keys()].sort(),
-    ["agent-presets", "api-gateway", "connection", "cordis-host-runner", "directory-picker",
-      "session-projection-cache", "storage", "storage-domain", "storage-json", "tool-ask-user", "webserver", "workspace"],
-  );
-  assert.deepEqual(byId.get("agent-presets")!.config, {
-    default: "kairos",
-    /* `system`, not `user`: the face authors by its own filesystem write, and
-     * `user` would arm the gateway's agentPreset copy/remove/openDocument RPCs
-     * over the repository's git-tracked `bots/`. */
-    roots: [{ path: BOTS, trust: "system" }],
-    includeUserRoot: false,
-  });
-  assert.equal(byId.get("webserver")!.name, "@deepseek-ai/dsh-host-webserver");
-  assert.deepEqual(byId.get("webserver")!.config, { host: "127.0.0.1", port: 3090 });
-  assert.equal(byId.get("api-gateway")!.name, "@deepseek-ai/dsh-host-apiproxy");
-  assert.equal(byId.get("connection")!.name, "@deepseek-ai/dsh-client-connection");
-  assert.deepEqual(byId.get("connection")!.config, { trustedHosts: [] });
-  assert.equal(byId.get("directory-picker")!.name, "@deepseek-ai/dsh-host-directory-picker-auto");
-  assert.equal(byId.get("cordis-host-runner")!.name, "@deepseek-ai/dsh-cordis-host-runner");
+/** The twelve host rows, in the order the overlay inserts them, with the
+ * package each must name (PLAN S2's table). The order is not load semantics -
+ * activation is service-driven - but it is the reviewable contract, and a
+ * silently re-ordered or re-named row is exactly the drift this pins. */
+const ROWS: ReadonlyArray<readonly [id: string, pkg: string]> = [
+  ["webserver", "@deepseek-ai/dsh-host-webserver"],
+  ["connection", "@deepseek-ai/dsh-client-connection"],
+  ["api-remotes", "@deepseek-ai/dsh-api-remotes"],
+  ["file-upload", "@deepseek-ai/dsh-client-file-upload"],
+  ["workspace", "@deepseek-ai/dsh-workspace"],
+  ["session-controller", "@deepseek-ai/dsh-api-session-controller"],
+  ["workspace-controller", "@deepseek-ai/dsh-api-workspace-controller"],
+  ["settings-controller", "@deepseek-ai/dsh-api-settings-controller"],
+  ["directory-picker", "@deepseek-ai/dsh-host-directory-picker-auto"],
+  ["tool-ask-user", "@deepseek-ai/dsh-tool-ask-user"],
+  ["agent-preset-registry", "@deepseek-ai/dsh-agent-preset-registry"],
+  ["preset-kairos", "@deepseek-ai/dsh-agent-preset"],
+];
+
+function rowsById() {
+  const patches = faceOverlay(3090, KAIROS);
+  assert.equal(patches.length, 1, "the overlay is ONE insert patch");
+  return new Map(patches[0]!.insert!.map((r) => [r.id, r]));
+}
+
+test("overlay inserts exactly the twelve host rows, in order, each naming its package", () => {
+  const rows = faceOverlay(3090, KAIROS)[0]!.insert!;
+  assert.deepEqual(rows.map((r) => [r.id, r.name]), ROWS.map(([id, pkg]) => [id, pkg]));
 });
 
-/* R13: a cold session listed with no `projections` column because dsh-base
- * composes `session-projection` and not the persisted cache. `session.list`
- * reads `sessionProjectionCache.cachedSnapshot(meta)` for every session not
- * attached in this boot, so without this row every restart resets the whole
- * sidebar to `untitled`. Both config keys are REQUIRED by the plugin (no
- * defaults); the values are dsh-web-app's own. */
-test("the persisted projection cache is mounted so cold sessions keep their titles", () => {
-  const byId = new Map(faceOverlay(3090, HOME, BOTS)[0].insert!.map(r => [r.id, r]));
-  assert.equal(byId.get("session-projection-cache")!.name, "@deepseek-ai/dsh-session-projection-cache");
-  assert.deepEqual(byId.get("session-projection-cache")!.config, { writeEveryEvents: 200, writeIntervalMs: 5000 });
-});
-
-/* The only AGENT-plane row here, and the only one that is not a host service:
- * dsh-base mounts the `user-questions` SERVICE and NO model-facing tool for it,
- * which is how the face shipped able to answer a question it could never ask.
- * The row lives in the overlay rather than the operator's patch layer for the
- * same reason `webserver` does - this layer composes last, so a patch aimed at
- * it is accepted, overridden and never reported, and an agent silently losing
- * its voice is precisely the failure being fixed. This test proves COMPOSITION
- * only: the row is in the stack, once, unconfigured. That the TOOL actually
- * registers is bootFace's own guard and the smoke test's claim, because an
- * unsatisfied inject leaves the fiber pending with this entry list unchanged. */
-test("the model-facing ask-user tool is mounted beside dsh-base's userQuestions service", () => {
-  const byId = new Map(faceOverlay(3090, HOME, BOTS)[0].insert!.map(r => [r.id, r]));
-  assert.equal(byId.get("tool-ask-user")!.name, "@deepseek-ai/dsh-tool-ask-user");
-});
-
-/* The api-gateway row injects `workspaceRegistry`; dsh-base mounts nothing that
- * provides it, so these four rows are what stands between the face and a boot
- * that fails the WHOLE tree with "pending (waiting for service: ...)". The
- * chain is asserted link by link because dropping any one of them reproduces
- * that failure, and only a live boot would otherwise say so. */
-test("the storage chain the api-gateway needs is mounted end to end", () => {
-  const byId = new Map(faceOverlay(3090, HOME, BOTS)[0].insert!.map(r => [r.id, r]));
-  assert.equal(byId.get("storage")!.name, "@deepseek-ai/dsh-storage");
-  assert.equal(byId.get("storage-json")!.name, "@deepseek-ai/dsh-storage-json");
-  assert.equal(byId.get("storage-domain")!.name, "@deepseek-ai/dsh-storage-domain");
-  assert.deepEqual(byId.get("storage-domain")!.config, { backend: "json" });
-  assert.equal(byId.get("workspace")!.name, "@deepseek-ai/dsh-workspace");
-});
-
-/* dsh-web-app writes this root as `!!js dshHomePath('storages')`, evaluated by
- * the tree. The face has no expression to evaluate, so the home is passed in —
- * and reading `$DSH_HOME` here instead would scatter a composition's unit files
- * into whichever home the ambient environment happened to name. */
-test("the json storage root is derived from the home it was handed", () => {
-  const byId = new Map(faceOverlay(3090, HOME, BOTS)[0].insert!.map(r => [r.id, r]));
-  assert.deepEqual(byId.get("storage-json")!.config, { root: join(HOME, "storages") });
+/* `compression` is optional upstream and defaults to 'none'; it is written so
+ * the choice is explicit. dsh-web-app runs gzip, which here would also wrap the
+ * face's own /data JSON - a change nobody asked for arriving through a mirror. */
+test("the webserver binds loopback on the requested port, uncompressed", () => {
+  assert.deepEqual(rowsById().get("webserver")!.config, { host: "127.0.0.1", port: 3090, compression: "none" });
 });
 
 // The absences are load-bearing, so they are asserted rather than assumed.
 // dsh-web-app's connection row carries `inject: [webRuntime]`, but webRuntime is
 // provided by the dsh-web-app row the face does NOT mount — inheriting that
 // inject would leave the row unresolved forever, and the face never binds
-// off-loopback anyway. The other rows take the plugins' own defaults;
-// an empty `config: {}` is not the same thing to a patch, which replaces the
-// targeted row's whole config.
-test("the overlay carries no inject and no config it does not own", () => {
-  const rows = faceOverlay(3090, HOME, BOTS)[0].insert!;
-  const byId = new Map(rows.map(r => [r.id, r]));
-  assert.ok(!("inject" in byId.get("connection")!), "connection row must not inject");
-  for (const id of ["directory-picker", "api-gateway", "cordis-host-runner", "storage", "workspace",
-    "tool-ask-user"]) {
+// off-loopback anyway.
+test("connection trusts no extra host and injects nothing", () => {
+  const connection = rowsById().get("connection")!;
+  assert.deepEqual(connection.config, { trustedHosts: [] });
+  assert.ok(!("inject" in connection), "connection row must not inject");
+});
+
+/* `default` is the registry's only required key, and the row id doubles as its
+ * settings namespace upstream - both pinned. The `roots`/`trust`/
+ * `includeUserRoot` keys of the retired dsh-agent-presets row must not come
+ * back: the registry scans nothing, and a stray key is a dead config. */
+test("the preset registry defaults to kairos and carries nothing else", () => {
+  const byId = rowsById();
+  assert.equal(AGENT_PRESET_REGISTRY_ROW_ID, "agent-preset-registry");
+  assert.equal(DEFAULT_PRESET, "kairos");
+  assert.deepEqual(byId.get(AGENT_PRESET_REGISTRY_ROW_ID)!.config, { default: "kairos" });
+});
+
+/* The default preset is declared statically so it exists before the first
+ * session/create, whose preset-less path resolves `defaultId`. The row carries
+ * the definition it was handed - a COPY, so the composed tree never aliases the
+ * caller's object - under `preset-<config.id>`. */
+test("preset-kairos declares exactly the definition it was handed", () => {
+  const row = rowsById().get(presetRowId("kairos"))!;
+  assert.equal(presetRowId("kairos"), "preset-kairos");
+  assert.deepEqual(row.config, KAIROS);
+  assert.notEqual(row.config, KAIROS, "the overlay must not alias the caller's definition");
+});
+
+/* These rows take the plugins' own defaults. An empty `config: {}` is not the
+ * same thing to a patch, which replaces the targeted row's whole config. For
+ * `tool-ask-user` configless means `mode: legacy`, the blocking
+ * `ask_user_question` bootFace asserts by name. */
+test("the controller, workspace, picker and ask-user rows carry no config", () => {
+  const byId = rowsById();
+  for (const id of ["api-remotes", "file-upload", "workspace", "session-controller", "workspace-controller",
+    "settings-controller", "directory-picker", "tool-ask-user"]) {
+    assert.ok(byId.has(id), `${id} must be inserted`);
     assert.equal(byId.get(id)!.config, undefined, `${id} must carry no config`);
+  }
+});
+
+/* Every one of these was a face row at 0.1.1-rc.2 and must NOT be one now:
+ * - storage, storage-json, storage-domain, session-projection-cache: dsh-base
+ *   mounts them itself at 0.2.0; a same-id insert silently REPLACES base's row
+ *   and swallows every operator patch aimed at it;
+ * - api-gateway (dsh-host-apiproxy) and agent-presets (dsh-agent-presets): the
+ *   packages were deleted upstream;
+ * - cordis-host-runner: no consumer, and it publishes Remotes on /api;
+ * - typert-gateway: dsh-base's; a second gateway throws on the second /api
+ *   interceptor. */
+test("the rows dsh-base owns now, and the retired ones, are not inserted", () => {
+  const byId = rowsById();
+  for (const id of ["storage", "storage-json", "storage-domain", "session-projection-cache", "api-gateway",
+    "cordis-host-runner", "agent-presets", "typert-gateway"]) {
+    assert.equal(byId.has(id), false, `${id} must not be a face row`);
   }
 });

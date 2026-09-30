@@ -4,7 +4,15 @@
  * `session.models`/`selectModel` and `resolveCallConfig` accept the route.
  * The script decides per request (it sees the session id and the messages);
  * a thrown script is dsh's "iteration failure" → `turn/end {kind:'error'}`. */
-import { CallId, LlmAdapter, type GenerateOptions, type LlmModelInfo, type LlmResolvedModelInfo, type StreamChunk } from "@deepseek-ai/dsh-llm";
+// dsh 0.2.0 renamed the tool-call brand `CallId` -> `ToolCallId` (NEW
+// packages/llm/llm/src/brand.ts:31-39, commit a789637db6); `StreamChunk`'s
+// `tool-call-delta.id` is typed with it (types.ts:452-465). Everything else
+// used here is unchanged against the installed dsh-llm .d.ts: only `stream` is
+// abstract (index.ts:208-287), `LlmModelInfo`/`LlmResolvedModelInfo` gained
+// optional fields only. Loop-built requests carry the system prompt as the
+// leading `role:'system'` message, not `options.system` (types.ts:511-527) -
+// scripts that inspect the prompt must read `options.messages`.
+import { LlmAdapter, ToolCallId, type GenerateOptions, type LlmModelInfo, type LlmResolvedModelInfo, type StreamChunk } from "@deepseek-ai/dsh-llm";
 
 export type StubReply =
   | { kind: "text"; text: string }
@@ -33,7 +41,7 @@ export class StubAdapter extends LlmAdapter {
       yield { type: "finish", reason: { kind: "stop" } };
       return;
     }
-    const id = CallId(`stub-call-${++calls}`);
+    const id = ToolCallId(`stub-call-${++calls}`);
     const args = JSON.stringify(reply.args);
     yield { type: "block-start", index: 0, blockType: "tool-call" };
     yield { type: "tool-call-delta", index: 0, id, name: reply.name, argumentsDelta: args };

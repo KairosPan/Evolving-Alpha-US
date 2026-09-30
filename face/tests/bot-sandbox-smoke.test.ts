@@ -10,8 +10,9 @@
  * MEASURED, and it is neither of the two the spec named: the tool call
  * SUCCEEDS (`isError: false`, no card) while the write is refused by the OS
  * under the sandbox and reported inside the tool's own content as
- * `[sandbox: file access denied under read-only mode]`
- * (`dsh-sandbox/lib/index.js:64`). So D12 must be worded off the CONTENT, not
+ * `[sandbox: file access denied under read-only mode]` (dsh 0.2.0 keeps the
+ * marker: NEW packages/sandbox/sandbox/README.md:150, pinned by its
+ * tests/escalation.spec.ts:48). So D12 must be worded off the CONTENT, not
  * off the result flag: a bot's write is denied loudly and visibly, but a caller
  * that reads only `isError` sees a success.
  *
@@ -26,9 +27,11 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SessionId } from "@deepseek-ai/dsh-session";
 import { setupFaceProfile } from "../src/setup.ts";
 import { bootFace } from "../src/boot.ts";
 import { makeBotsRoot } from "./bots-fixture.ts";
+import { mountClient, remote, signIn } from "./remote.ts";
 
 const gated = process.env.FACE_SMOKE !== "1";
 
@@ -43,35 +46,32 @@ test("S4: a read-only session's write never lands silently", { skip: gated && "s
   const { ctx, dispose } = await bootFace({ profileName: "face", port: 0, dshHome: home, botsRoot: bots });
   try {
     const base = `http://127.0.0.1:${ctx.webServer.port}`;
-    const res = await fetch(`${base}/api/session.create`, {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ type: "client-request", rpcId: "s4", method: "session.create", payload: { cwd: home } }),
-    });
-    const created = (await res.json() as { result: { value: { sessionId: string } } }).result.value;
-    const agents = ctx.get("agents") as { get(id: string): { session: { events: { type: string }[] } } | undefined };
-    const agent = agents.get(created.sessionId)!;
-    const permission = ctx.get("permissionPresets") as {
-      set(session: unknown, name: string): void;
-      current(events: readonly { type: string }[]): string;
-    };
+    mountClient(ctx);
+    const cookie = await signIn(ctx, base);
+    const created = await remote<{ sessionId: string }>(base, cookie, "session/create", { request: { cwd: home } });
+    const agent = ctx.agents.get(SessionId(created.sessionId));
+    assert.ok(agent, "the created session is live");
+    const permission = ctx.permissionPresets;
     permission.set(agent.session, "read-only");
     /* The EFFECTIVE preset, not merely that an event was appended: `set` writes
      * `permission/preset` only when the name differs from the current one, and
      * a sighting of that row says nothing about the sandbox knob the probe
-     * below depends on. `current(events)` folds the knobs and derives the
-     * preset (dsh-permission-presets), which is the fact this test needs. */
-    assert.equal(permission.current(agent.session.events), "read-only", "the session is actually read-only before the probe");
+     * below depends on. `current(session)` folds the knobs and derives the
+     * preset (NEW packages/interaction/permission-presets/src/index.ts:343-345;
+     * 0.1.1 took the event list instead), which is the fact this test needs. */
+    assert.equal(permission.current(agent.session), "read-only", "the session is actually read-only before the probe");
 
     const target = join(home, "s4-should-not-exist.txt");
     const tools = ctx.get("tools") as { execute(exec: object): Promise<{ isError: boolean; content?: { text?: string }[] }> };
     const outcome = await Promise.race([
       /* `description` is not decoration: dsh-tool-bash declares it required
-       * (lib/index.js:268-271) and rejects the call on its own schema before any
-       * sandbox runs - which reads as a denial while proving nothing. */
+       * (NEW packages/shell/tool-bash/src/index.ts:77-78, 378) and rejects the
+       * call on its own schema before any sandbox runs - which reads as a
+       * denial while proving nothing. */
       tools.execute({ callId: "s4-write", name: "bash", arguments: { command: `printf x > ${JSON.stringify(target)}`, description: "S4 probe: write one file" }, agent, signal: new AbortController().signal }),
       new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 8_000)),
     ]);
-    const asked = agent.session.events.some((e) => e.type === "approval/asked");
+    const asked = agent.session.snapshotEvents().some((e) => e.type === "approval/asked");
     /* EVERY block, not `content[0]`: the denial marker is appended after the
      * command's own stderr, so reading the first block alone can miss it. */
     const text = outcome === "timeout"

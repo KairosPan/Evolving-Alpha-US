@@ -8,11 +8,13 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import {
   agentsListing, authFromProbe, connectLocalAgent, defaultAgentProber, defaultAuthProber,
-  disconnectLocalAgent, hasExec, isAgentBin, memoryListing, parseClaudeRun, parseCodexRun, pluginListing,
+  disconnectLocalAgent, hasExec, hostInfo, isAgentBin, memoryListing, panelDeps, parseClaudeRun, parseCodexRun, pluginListing,
   readAgentsMeta, registerPanelRoutes, scrubbedEnv, skillDetail, skillGroup,
   syncAgentTools, toolNameFor,
   type AgentToolDefinition, type AgentToolRegistry, type PanelDeps, type SkillBody, type SkillRow,
 } from "../src/panels.ts";
+import { homedir } from "node:os";
+import type { Context } from "@deepseek-ai/cordis";
 import { DSH_PIN } from "../src/version.ts";
 
 const CWD = "/repo";
@@ -403,7 +405,7 @@ test("routes: register, boot-sync, fence, and the roster round-trip with its too
   const byPath = new Map(routes.map((r) => [r.path, r]));
   assert.deepEqual([...byPath.keys()].sort(), [
     "/data/agents.json", "/data/agents/connect", "/data/agents/disconnect", "/data/agents/rescan",
-    "/data/memory.json", "/data/memory/skill", "/data/plugins.json",
+    "/data/host.json", "/data/memory.json", "/data/memory/skill", "/data/plugins.json",
   ]);
   assert.deepEqual([...reg.defs.keys()], ["agent_codex"], "an agent already on the roster is callable from boot");
 
@@ -485,4 +487,46 @@ test("routes: register, boot-sync, fence, and the roster round-trip with its too
   const plugins = fakeRes();
   await byPath.get("/data/plugins.json")!.handler(getReq(), plugins.res);
   assert.equal((JSON.parse(plugins.out.body) as { mcp: { server: string }[] }).mcp[0]!.server, "alpaca-kit");
+});
+
+/* ====================================================================== */
+/* host facts: what 0.1.1's host.describe answered (no Remote at dsh 0.2)  */
+/* ====================================================================== */
+
+test("hostInfo: the host cwd, the OS home, the live-agent count and the pinned dsh version", () => {
+  assert.deepEqual(hostInfo({ cwd: CWD, attachedSessions: () => 3 }), {
+    cwd: CWD, home: homedir(), attachedSessions: 3, version: DSH_PIN,
+  });
+  // A tree that gives no count says so, rather than inventing a zero.
+  assert.equal(hostInfo({ cwd: CWD }).attachedSessions, null);
+});
+
+test("routes: GET /data/host.json is fenced like every /data read and answers the host facts", async () => {
+  const routes: WebRoute[] = [];
+  await registerPanelRoutes({ register: (route) => routes.push(route) }, { ...fakeDeps(), attachedSessions: () => 2 });
+  const host = routes.find((r) => r.path === "/data/host.json")!;
+  const forged = fakeRes();
+  await host.handler(getReq("evil.example.com"), forged.res);
+  assert.equal(forged.out.status, 403);
+  assert.doesNotMatch(forged.out.body, new RegExp(CWD));
+  const ok = fakeRes();
+  await host.handler(getReq(), ok.res);
+  assert.equal(ok.out.status, 200);
+  assert.deepEqual(JSON.parse(ok.out.body), { ok: true, cwd: CWD, home: homedir(), attachedSessions: 2, version: DSH_PIN });
+});
+
+test("panelDeps: the attached count is the live agent registry's, and a tree without one fails loud at boot", () => {
+  const services: Record<string, unknown> = {
+    skills: fakeDeps().skills,
+    tools: { schemas: () => [], register: () => () => {} },
+    loader: { entries: () => [] },
+    workspaceRegistry: { resolveByPath: async () => undefined },
+    agents: { list: () => [{}, {}, {}] },
+  };
+  const ctx = (present: Record<string, unknown>) => ({ get: (name: string) => present[name] }) as unknown as Context;
+  const deps = panelDeps(ctx(services), CWD, "/home-x");
+  assert.equal(deps.attachedSessions?.(), 3);
+  assert.equal(hostInfo(deps).attachedSessions, 3);
+  const { agents: _gone, ...withoutAgents } = services;
+  assert.throws(() => panelDeps(ctx(withoutAgents), CWD, "/home-x"), /panel services missing from the composed tree: agents/);
 });

@@ -11,7 +11,10 @@ import assert from "node:assert/strict";
 import { proposeBotId } from "../client/botId.js";
 import { isBotId } from "../src/bots.ts";
 
-test("proposeBotId folds a display name into dsh's grammar, or to nothing", () => {
+/* The grammar is the face's own since dsh 0.2.0, which requires only a
+ * non-blank preset id (NEW packages/preset/agent-preset-registry/src/index.ts:82):
+ * src/bots.ts BOT_ID_RE keeps the retired dsh-agent-presets grammar. */
+test("proposeBotId folds a display name into the bot-id grammar, or to nothing", () => {
   assert.equal(proposeBotId("Buffett Type"), "buffett-type");
   assert.equal(proposeBotId("  Speculator_2  "), "speculator-2");
   assert.equal(proposeBotId("Macro -- Bear!"), "macro-bear");

@@ -7,7 +7,8 @@
  * THE FOUR THINGS A DUMB APPENDER WOULD GET WRONG, and how this one does not:
  *
  *   1. `surfaceOp`. A compaction checkpoint arrives as an ordinary bubble
- *      carrying `{op:'replace', start, end}` — an instruction to STOP showing
+ *      carrying `{op:'replace', start, end}` (the wire's `startSeq`/`endSeq`,
+ *      normalized by mapper.js) — an instruction to STOP showing
  *      the inclusive seq range it summarizes. Rendered nodes are therefore
  *      indexed by seq (`bySeq`) so the shadowed range can be dropped before the
  *      summary lands. Ignore it and the page shows the summary AND everything
@@ -19,22 +20,35 @@
  *      inject file-change notices, skill content and cron wake-ups through the
  *      same event. Anything whose source is not `user` renders as a quiet
  *      centred note, never as an operator bubble.
- *   4. Ordering and duplication. History backfill and the live stream deliver
- *      the same events; frames that arrive mid-backfill are QUEUED and flushed
- *      after it, and `seen` (sessionId:seq) drops the overlap. Appending a live
- *      frame before the backfill it precedes would put the transcript out of
- *      order for the rest of the page's life.
+ *   4. Ordering and duplication. A live session on screen is FOLLOWED: its
+ *      `session/follow` stream opens with one snapshot (the tail window) and
+ *      then delivers every later event gap-free (NEW packages/api/
+ *      session-controller/src/history.ts:120-241); a COLD one is only paged,
+ *      because following it would activate it (see `activeView`). Frames from
+ *      the other streams that arrive before the opening window is drawn are
+ *      QUEUED and flushed after it, and `seen` (sessionId:seq) drops any
+ *      overlap. A later window - a resumed follow after a reconnect, or a
+ *      paged session that came alive - REPLACES the drawn one, as upstream's
+ *      journal stream does (gateway src/client/journal-stream.ts:289-304) and
+ *      as 0.1.1's "reopen and refetch history" did - never a second copy.
  *
- * THE RPC SURFACE IS CLOSED:
- * `session.list/create/history/prompt/cancel/rename/fork`,
- * `subagent.list/history/prompt/interrupt` for child sessions,
- * `host.pickDirectory` (the strategy picker's native folder dialog),
- * `host.describe` / `settings.describe` / `credentials.describe` (the agent
- * panel's three reads), `respond`, and `events.mux`. Answering a gate goes
- * through `respond`, never `rpc` — a different envelope entirely (see api.js).
+ * THE WIRE SURFACE IS CLOSED (dsh 0.2.0-rc.2 Typert Remote, through api.js):
+ * `session/list|create|prompt|cancel|rename|fork|modelCatalog|projections|page`,
+ * `commands/execute` (slash lines, which 0.1.1's prompt ran itself),
+ * `subagents/prompt|interruptByParent` for child sessions,
+ * `directoryPicker/pick` (the strategy picker's native folder dialog),
+ * `workspace/rename`, `credentials/describe`; the streams `session/control`
+ * (projections of every attached session) and `session/follow` (a LIVE session
+ * on screen, a subagent child, and the live members of the room on screen);
+ * and the mux's own
+ * `$events` (gates and host notifications). Answering a gate goes through
+ * `mux.answer`, never `call` - it is bound to the `$events` generation that
+ * delivered the gate (see api.js). The agent panel's host facts come from the
+ * face's own `/data/host.json`: 0.2 has no `host.describe`.
  * @module
  */
-import { rpc, respond, openMux } from "./api.js";
+import { call, openMux, randomUuid } from "./api.js";
+import { summaryOf } from "./summaries.js";
 import { panelFromHash, setNavigationActive } from "./navigation.js";
 import { mapFrame } from "./mapper.js";
 import { createAnswerTraces, createTraceDisclosure } from "./answer-traces.js";
@@ -47,7 +61,7 @@ import { proposeBotId } from "./botId.js";
 import { botModelChoices, botSettingsPayload, botToolLabel, draftBotSoul, normalizeBotModel } from "./botSettings.js";
 import { foldChannelName } from "./channelName.js";
 import { HOST_NAME, speakerFor } from "./speaker.js";
-import { isSubagentRow, normalizeSubagentCatalog, subagentAddress, subagentControls, subagentResult } from "./subagents.js";
+import { composeSubagentCatalog, isSubagentRow, normalizeSubagentCatalog, subagentAddress, subagentControls, subagentResult } from "./subagents.js";
 import { avatarGlyph, foldMembers, gateSpeaker, isMemberSession, isMentionText, normalizeRoomDiscussion, roomAnswerDisplay, roundEndLine, stripChips } from "./room.js";
 
 /** Rendered in place of a value the host did not give us. */
@@ -63,11 +77,64 @@ const LIST_REFRESH_MS = 1200;
  * back down mid-read is worse than a missed frame. */
 const STICK_PX = 120;
 
+/** How long a session follow the HOST ended waits before its read is re-decided
+ * (followed again if live, re-paged if not). An `end` is not a socket loss, so
+ * the mux does not re-open it by itself (api.js); without this the transcript
+ * on screen would silently stop moving. */
+const FOLLOW_RETRY_MS = 2000;
+
+/** How long after a reconnect's `ready` a still-pending gate has to be
+ * re-delivered before this page treats it as settled while it was away. The
+ * gateway queues every pending replay BEFORE it yields `ready`
+ * (NEW packages/api/gateway/src/index.ts:512-516), so on loopback they land
+ * within milliseconds; a gate nobody re-delivered was answered by another tab,
+ * withdrawn, or cancelled while this socket was down - and the `cancel` for it
+ * went only to the clients that held it then (index.ts:646-668). */
+const GATE_REPLAY_GRACE_MS = 4000;
+
+/** How many messages the one-shot "latest output" read of a child asks for -
+ * the same window 0.1.1's `subagent.history` call used. */
+const SUBAGENT_OUTPUT_MESSAGES = 12;
+
 /* ---------- state ---------- */
+
+/** The mux (api.js `openMux`), set once at the bottom of this module; every
+ * stream and every gate answer goes through it. `null` only while the module
+ * is still evaluating. @type {ReturnType<typeof openMux>|null} */
+let mux = null;
 
 /** @type {string|null} The session on screen; `null` is an unsaved new one — no
  * session exists until the first prompt, so the "+ new" button litters nothing. */
 let activeSession = null;
+/**
+ * How the session on screen is being read, and the open that owns the read.
+ *
+ *   `follow` - a LIVE ordinary session, and every subagent child: its
+ *              `session/follow` stream (`handle`), snapshot then live tail.
+ *   `page`   - a COLD ordinary session: one non-activating tail read
+ *              (`session/projections` + `session/page`), no stream at all.
+ *
+ * WHY TWO. Following a cold ordinary session promotes it (NEW session-controller
+ * src/history.ts:204-212): the Agent resumes, and a resume write-opens the log,
+ * which publishes `session.v4.jsonl.zstd` and takes `session.lock` before any
+ * append (session-persistence-jsonl src/index.ts:377-390) - irreversibly, for a
+ * session the operator only LOOKED at. 0.1.1's history read was read-only, and
+ * the upgrade's remediation (SC-F2, overriding plan D16) keeps it that way: a
+ * cold session is paged, and is followed only once it is live - after this
+ * tab prompts it, or when the host reports it came alive
+ * ({@link reconcileActiveView}). A subagent address is never promoted
+ * (history.ts:204 promotes `kind: 'session'` only), so children always follow.
+ * `stale` marks a follow suspended by a socket drop or ended by the host, to be
+ * resumed by the same rule; `failed` marks a read the host refused, which is
+ * reported once and never retried behind the operator's back. Cancelled
+ * whenever the screen moves on.
+ * @type {{id: string, token: number, address: Record<string, any>, mode: "follow"|"page", handle: {cancel: () => void}|null, stale?: boolean, failed?: boolean}|null}
+ */
+let activeView = null;
+/** memberSessionId → its follow: one per LIVE member of the room on screen,
+ * opened for its pulses and turn boundaries only (see {@link syncMemberFollows}).
+ * @type {Map<string, {cancel: () => void}>} */
+const memberFollows = new Map();
 /** Dedupe key set, `sessionId:seq`, across backfill and stream. @type {Set<string>} */
 const seen = new Set();
 /** seq → its rendered nodes (an answer and its thinking share a seq).
@@ -78,39 +145,45 @@ const answerTraces = createAnswerTraces(() => flow());
  * opening a nameless second one (the result event carries no tool name).
  * @type {Map<string, HTMLElement>} */
 const toolCards = new Map();
-/** rpcId → the still-unanswered approval/question view, for EVERY session. The
- * mux replays pending gates on reconnect but history never does, so this is
- * what survives a session switch. @type {Map<string, Record<string, any>>} */
+/** eventId → the still-unanswered approval/question view, for EVERY session.
+ * The `$events` stream replays pending gates on reconnect under the same
+ * eventId (gateway/src/index.ts:512-516) but a follow snapshot never carries
+ * them, so this is what survives a session switch. @type {Map<string, Record<string, any>>} */
 const gates = new Map();
-/** rpcId → its card in the CURRENT flow; cleared on every session switch. @type {Map<string, HTMLElement>} */
+/** eventId → its card in the CURRENT flow; cleared on every session switch. @type {Map<string, HTMLElement>} */
 const gateNodes = new Map();
+/** Which `$events` generation last delivered each pending gate. Bumped on every
+ * `ready` ({@link eventsGeneration}); a gate the new generation did not
+ * re-deliver is closed by {@link purgeUndeliveredGates}. @type {Map<string, number>} */
+const gateDelivery = new Map();
+/** The current `$events` generation: one per `ready`, i.e. per socket. */
+let eventsGeneration = 0;
 
-/** rpcIds this tab is answering right now. The host broadcasts a gate's
- * resolution from INSIDE its respond handler, before the HTTP receipt is even
- * serialized, so the echo normally reaches {@link acceptGateResolved} while the
- * clicking handler is still awaiting `respond()`. Without this the echo would
- * settle the card first, in the WIRE's vocabulary - an approval's outcome is an
- * ApprovalOutcome and never the string `answered`, so a card the operator just
- * approved would read `closed · allowed-once`, and `closed` is the word this
- * client uses for a gate that died with nobody answering it. Whoever answered
- * owns the wording. */
+/** eventIds this tab is answering right now. At dsh 0.2 the host sends the
+ * answering tab NO `cancel` for its own answer (its delivery is removed before
+ * the settlement broadcast, gateway/src/index.ts:618-622), so the old echo race
+ * is gone; the set still guards the one remaining overlap - a `cancel` that
+ * raced the click (another tab, or the turn stopping) must not relabel a card
+ * whose own handler is mid-flight. Whoever answered owns the wording; `closed`
+ * is the word this client uses for a gate that died with nobody here answering it. */
 const answering = new Set();
 /** sessionId → its sidebar row. @type {Map<string, HTMLElement>} */
 const convRows = new Map();
-/** Live frames held while a history page is in flight. @type {unknown[]} */
+/** Frames held while the session on screen's opening window is pending. @type {unknown[]} */
 const queued = [];
-/** The session whose history is loading, or null. Frames queue while it is set. @type {string|null} */
+/** The session whose opening window (follow snapshot or paged read) is pending, or null. Frames queue while it is set. @type {string|null} */
 let loadingSession = null;
 /** Open-session generation; a stale continuation must not touch a newer flow. */
 let openSeq = 0;
-/** session.list generation, so a slow answer cannot overwrite a fresh list. */
+/** session/list generation, so a slow answer cannot overwrite a fresh list. */
 let listSeq = 0;
 /** Trailing-edge handle for the sidebar refresh. @type {ReturnType<typeof setTimeout>|null} */
 let listTimer = null;
 /** sessionId → (projection key → {seq, value}): the whole-value store the
- * `session/projection` frames and history/list projection blocks feed. Every
- * session's units are kept, not just the active one's — the agent panel reads
- * whichever session is on screen when it renders. @type {Map<string, Map<string, {seq: number, value: unknown}>>} */
+ * `session/control` projection frames, the control baseline, the follow
+ * snapshot and the attached list rows' projection blocks feed. Every session's
+ * units are kept, not just the active one's — the agent panel reads whichever
+ * session is on screen when it renders. @type {Map<string, Map<string, {seq: number, value: unknown}>>} */
 const projStore = new Map();
 
 /* Native subagent catalogs are read-only, including for cold parents. Keep
@@ -135,10 +208,26 @@ function isSubagentSession(id) {
 function childRow(address) {
   return subagentCatalogs.get(address.parentSessionId)?.entries.find((row) => row.id === address.childSessionId);
 }
+/* dsh 0.2 has no catalog Remote: compose 0.1.1's listing from the parent's
+ * `subagentCatalog` projection - read with `session/projections`, which never
+ * activates the parent (NEW session-controller src/index.ts:490-512), so a
+ * catalog read stays read-only exactly as `subagent.list` was - and the list
+ * rows the sidebar already holds (parent availability, child running flags). */
 async function readSubagentCatalog(parentSessionId) {
   const token = (subagentCatalogReads.get(parentSessionId) ?? 0) + 1;
   subagentCatalogReads.set(parentSessionId, token);
-  const catalog = normalizeSubagentCatalog(await rpc("subagent.list", { parentSessionId }));
+  const projections = await call("session/projections", { request: { sessionId: parentSessionId } });
+  // null is "no such session" (index.ts:504), not "no children"; a reply that
+  // is not a `{asOfSeq, values}` baseline is unavailable, never an empty list.
+  if (projections === null) throw new Error("子任务目录不可用：父会话不存在。");
+  if (typeof projections !== "object" || projections.values === null || typeof projections.values !== "object") {
+    throw new Error("子任务目录不可用：服务返回了无效记录。");
+  }
+  const catalog = normalizeSubagentCatalog(composeSubagentCatalog({
+    catalog: projections.values.subagentCatalog,
+    parentSummary: lastSessions.find((row) => String(row.sessionId) === parentSessionId),
+    rows: lastSessions,
+  }));
   if (subagentCatalogReads.get(parentSessionId) !== token) return subagentCatalogs.get(parentSessionId) ?? catalog;
   subagentCatalogs.set(parentSessionId, catalog);
   // A newly unavailable/diagnostic child must not retain a usable old address.
@@ -175,6 +264,32 @@ async function loadSubagentInfo() {
   }
   renderSubagents();
 }
+/**
+ * A child's latest records, read WITHOUT activating it - 0.1.1's
+ * `subagent.history {…address, maxMessages: 12}`. Two unary reads: the child's
+ * own projection cut, then one backwards page on its durable subagent address
+ * through that cut (NEW session-controller src/history.ts:77-112; the address is
+ * validated against the child's parent and descriptor there, :243-275, 341-390). Neither Remote ever
+ * promotes a session, and a page needs no stream lifecycle - a one-shot
+ * `session/follow` would return the same window but has to be cancelled, and
+ * would wait forever on a dropped socket.
+ * @param {{parentSessionId: string, childSessionId: string, mode: string}} address - a catalog address.
+ * @returns {Promise<any[]>} the page's `{type:'event', event}` records.
+ */
+async function readChildTail(address) {
+  const cut = await call("session/projections", { request: { sessionId: address.childSessionId } });
+  if (cut === null) throw new Error("子任务记录不可用：会话不存在。");
+  if (typeof cut !== "object" || !Number.isSafeInteger(cut.asOfSeq)) throw new Error("子任务记录格式无效。");
+  const page = await call("session/page", {
+    request: {
+      address: { kind: "subagent", parentSessionId: address.parentSessionId, childSessionId: address.childSessionId, mode: address.mode },
+      throughSeq: cut.asOfSeq,
+      maxMessages: SUBAGENT_OUTPUT_MESSAGES,
+    },
+  });
+  if (page === null || typeof page !== "object" || !Array.isArray(page.records)) throw new Error("子任务记录格式无效。");
+  return page.records;
+}
 function subagentButton(text, run) {
   const button = el("button", "subagent-action", text);
   button.type = "button";
@@ -184,10 +299,16 @@ function subagentButton(text, run) {
 async function interruptSubagent(address, button) {
   button.disabled = true;
   try {
-    await rpc("subagent.interrupt", address);
+    // Three positional wire parameters, and `mode` is the literal
+    // 'continuable' (NEW packages/subagent/subagent/src/index.ts:482-503): a
+    // one-shot child is read-only, so it is refused here rather than sent.
+    if (address.mode !== "continuable") throw new Error("此子任务仅可读取记录。");
+    await call("subagents/interruptByParent", {
+      childSessionId: address.childSessionId, parentSessionId: address.parentSessionId, mode: "continuable",
+    });
     status("已请求中断当前轮；等待运行状态更新，排队消息仍保留。");
     await loadSubagentInfo();
-  } catch (err) { failed(err, "subagent.interrupt"); }
+  } catch (err) { failed(err, "subagents/interruptByParent"); }
   finally {
     if (button.id === "stop") syncSubagentComposer();
     else if (button.isConnected) button.disabled = false;
@@ -269,8 +390,7 @@ function renderSubagents() {
         result.hidden = false;
         result.textContent = "读取记录…";
         try {
-          const page = await rpc("subagent.history", { ...target, maxMessages: 12 });
-          const output = subagentResult(page.events ?? []);
+          const output = subagentResult(await readChildTail(target));
           result.textContent = output ? `${output.interrupted ? "已中断的输出片段\n" : "本次读取的最近输出\n"}${output.text.slice(0, 4000)}${output.text.length > 4000 ? "\n…打开对话查看全文" : ""}` : "最近记录中尚无文本输出；可打开对话检查过程。";
           button.textContent = "收起输出";
         } catch (err) { result.textContent = String(err instanceof Error ? err.message : err); }
@@ -292,20 +412,97 @@ function renderSubagents() {
  * is in no channel. @type {{roster: any[], members: Record<string, any>}|null} */
 let roomInfo = null;
 /** Live fine states of member sessions (thinking / writing / tool) from their
- * own pulses; cleared at their turn boundaries. Presence, not truth. @type {Map<string, string>} */
+ * own pulses - which reach this page only through {@link memberFollows} - or,
+ * for a member not followed yet, from its `api-session/status` running flag;
+ * cleared at their turn boundaries. Presence, not truth. @type {Map<string, string>} */
 const fineStates = new Map();
 
-/** The member session ids of the room on screen: the header fold ∪ what the engine reports. */
+/** The member session ids of the room on screen: the header fold ∪ what the
+ * engine reports ∪ the members the room's own `room` projection names. The
+ * projection lands on the control stream the moment the engine dispatches a
+ * member, well before the next list refresh re-folds the headers - and 0.2 has
+ * no all-session feed that would carry a new member's pulses meanwhile. */
 function memberSessionIds() {
   const ids = new Set((memberFold.rooms.get(activeSession ?? "") ?? []).map((m) => String(m.sessionId)));
   for (const m of Object.values(roomInfo?.members ?? {})) if (typeof m?.sessionId === "string") ids.add(m.sessionId);
+  const room = activeSession === null ? undefined : /** @type {any} */ (projStore.get(activeSession)?.get("room")?.value);
+  if (room !== null && typeof room === "object" && room.kind === "room" && room.members !== null && typeof room.members === "object") {
+    for (const m of Object.values(room.members)) if (typeof m?.sessionId === "string") ids.add(m.sessionId);
+  }
   return ids;
+}
+
+/**
+ * Keep exactly one `session/follow` open per member of the room on screen whose
+ * list row says `agentAvailable` - its Agent is live (NEW session-controller
+ * src/list.ts:113) - and none for anybody else.
+ *
+ * WHY THIS SHAPE. 0.1.1's mux delivered every session's pulses and turn
+ * frames for free; 0.2's transcript arrives only per followed session. Following
+ * a COLD member would background-activate it (history.ts:204-212 promotes a
+ * cold ordinary session after its snapshot), so a member is followed only
+ * while it is already live, which is also the only time it has pulses to give.
+ * `maxMessages: 1` keeps each opening snapshot to the minimum; only live items
+ * are used. A member on screen as the transcript itself is covered by the
+ * active follow and is not followed twice.
+ */
+function syncMemberFollows() {
+  if (mux === null) return;
+  const wanted = new Set();
+  for (const id of memberSessionIds()) {
+    if (id === activeSession) continue;
+    if (lastSessions.find((s) => String(s.sessionId) === id)?.agentAvailable === true) wanted.add(id);
+  }
+  let changed = false;
+  for (const [id, handle] of [...memberFollows]) {
+    if (wanted.has(id)) continue;
+    handle.cancel();
+    memberFollows.delete(id);
+    // Unfollowed means not live, or not on screen: its fine state is over either way.
+    changed = fineStates.delete(id) || changed;
+  }
+  for (const id of wanted) if (!memberFollows.has(id)) memberFollows.set(id, followMember(id));
+  if (changed) renderStrip();
+}
+
+/** Open one live member's follow. Its opening snapshot's records are history,
+ * not liveness, and are dropped; the row's running flag says whether a turn is
+ * open right now. @param {string} id @returns {{cancel: () => void}} */
+function followMember(id) {
+  /** @type {{cancel: () => void}} */
+  let handle;
+  const current = () => memberFollows.get(id) === handle;
+  handle = /** @type {NonNullable<typeof mux>} */ (mux).stream("session/follow", {
+    request: { address: { kind: "session", sessionId: id }, maxMessages: 1, assistantStream: true },
+  }, {
+    onItem: (item) => {
+      if (!current()) return; // a late item for a follow already cancelled
+      if (item?.type === "snapshot") {
+        const running = lastSessions.find((s) => String(s.sessionId) === id)?.running === true;
+        if (running && !fineStates.has(id)) fineStates.set(id, "thinking");
+        else if (!running) fineStates.delete(id);
+        renderStrip();
+      } else if (item?.type === "event") {
+        acceptFrame({ type: "session/event", sessionId: id, event: item.event });
+      } else if (item?.type === "assistant-stream") {
+        acceptFrame({ type: "assistant-stream", sessionId: id, frame: item.frame });
+      }
+    },
+    // Ended or failed: forget it; the next list refresh re-follows it if it is still a live member.
+    onEnd: () => { if (current()) memberFollows.delete(id); },
+    onError: (error) => {
+      if (!current()) return;
+      memberFollows.delete(id);
+      console.warn(`face: member ${id} follow failed: ${error?.code ?? "error"} - ${error?.message ?? ""}`);
+    },
+  });
+  return handle;
 }
 
 /** Refetch the room state for the session on screen; a session in no channel reads `null`. */
 async function loadRoomInfo() {
   const id = activeSession;
-  if (id === null || isSubagentSession(id)) { roomInfo = null; renderStrip(); return; }
+  if (id === null || isSubagentSession(id)) { roomInfo = null; syncMemberFollows(); renderStrip(); return; }
   try {
     const body = await panelData("/data/rooms/state", { sessionId: id });
     if (activeSession !== id) return;
@@ -314,6 +511,7 @@ async function loadRoomInfo() {
     if (activeSession !== id) return;
     roomInfo = null; // 404: not in a channel - no strip
   }
+  syncMemberFollows(); // the engine may know members the header fold does not yet
   renderStrip();
 }
 
@@ -616,7 +814,7 @@ function memberTraceNode(view) {
     body.setAttribute("aria-busy", "true");
     body.replaceChildren(el("div", "trace-note", "正在加载思考轨迹…"));
     try {
-      const views = await loadMemberTrace(rpc, { sessionId: view.memberSessionId, turn: view.memberTurn });
+      const views = await loadMemberTrace(call, { sessionId: view.memberSessionId, turn: view.memberTurn });
       if (!details.isConnected) return;
       body.replaceChildren();
       const calls = new Map();
@@ -857,9 +1055,10 @@ function gateWho(sessionId) {
 }
 
 /**
- * Settle a gate's card: the buttons go, the outcome stays. Idempotent — the
- * host echoes a resolution for the answer this client just sent, and by then
- * there is no `.card-actions` left to replace.
+ * Settle a gate's card: the buttons go, the outcome stays. A second call
+ * re-labels the outcome line rather than stacking another - the one caller that
+ * needs it is a lost race ({@link acceptGateResolved}), where the card already
+ * said "answered" and must be corrected.
  * @param {HTMLElement} node @param {string} outcome - what was sent, in the operator's words.
  * @param {string} [verb] - `answered` when we answered it; `closed` when the host settled it for us.
  */
@@ -867,12 +1066,100 @@ function settle(node, outcome, verb = "answered") {
   node.classList.add("answered");
   // A question's outcome IS the verb ("answered"), so it is said once.
   const line = verb === outcome ? verb : `${verb} · ${outcome}`;
-  node.querySelector(".card-actions")?.replaceWith(el("div", "card-line", line));
+  const said = node.querySelector(".gate-outcome");
+  if (said !== null) { said.textContent = line; return; }
+  node.querySelector(".card-actions")?.replaceWith(el("div", "card-line gate-outcome", line));
+}
+
+/** eventIds whose withdrawal arrived while this tab was still answering them.
+ * The host sends the answering tab no `cancel` for its OWN answer
+ * (gateway/src/index.ts:618-622), so a `cancel` during the call means another
+ * tab - or the host itself (turn stopped, session gone) - settled the gate
+ * first, and this tab's answer came back as the idempotent no-op `ok` of an
+ * answer to a settled gate (:618-621). The card must then not say "answered". */
+const lostRaces = new Set();
+
+/** @returns {NonNullable<typeof mux>} the mux; it exists from the end of this
+ * module's evaluation on, which precedes every click. */
+function liveMux() {
+  if (mux === null) throw new Error("the event stream is not open yet");
+  return mux;
 }
 
 /**
- * The approval card: the Gate-2 surface. Two outcomes and only two —
- * `cancelled` and `unavailable` are host-side and no client may send them.
+ * Whether an answer to this gate can land: the CURRENT `$events` generation
+ * delivered it (or re-delivered it after a reconnect). An answer names the
+ * generation's clientId, and the host treats an answer from a client it never
+ * delivered the gate to as a silent no-op `ok` (gateway/src/index.ts:618-621) -
+ * a card that then read "answered · approve" would be lying about an order.
+ * While the socket is down the generation has not moved yet, so a live gate
+ * still counts as live and the answer fails loudly instead (api.js).
+ * @param {Record<string, any>} view @returns {boolean}
+ */
+function gateIsLive(view) {
+  return gateDelivery.get(view.id) === eventsGeneration;
+}
+
+/** Close a card whose gate this connection no longer holds: it was answered in
+ * another tab, withdrawn, or settled while this page was disconnected, and the
+ * `cancel` went only to the clients holding it then. 0.1.1 surfaced the same
+ * case as a `not-pending` refusal; here the card says so and stops offering an
+ * answer that could not land.
+ * @param {Record<string, any>} view @param {HTMLElement} node
+ * @param {string} [outcome] - the card's closing words.
+ * @param {string} [why] - the status line's. */
+function closeStaleGate(view, node, outcome = "no longer pending",
+  why = "that request is no longer pending here: answered elsewhere, withdrawn, or settled while this page was disconnected") {
+  gates.delete(view.id);
+  gateDelivery.delete(view.id);
+  lostRaces.delete(view.id);
+  answering.delete(view.id);
+  // Forget the card, so a re-delivery of a gate that IS still live draws a fresh one.
+  if (gateNodes.get(view.id) === node) gateNodes.delete(view.id);
+  for (const button of node.querySelectorAll("button")) /** @type {HTMLButtonElement} */ (button).disabled = true;
+  settle(node, outcome, "closed");
+  status(why, true);
+  renderStrip();
+  scheduleListRefresh(); // the sidebar rebuilds its waiting chips from `gates`
+}
+
+/**
+ * A card's answer was refused. The mux says why (api.js `AnswerError.code`):
+ *   `gate-gone`   withdrawn while the answer was in flight - another tab or a
+ *                 Stop settled it first, so this answer was NOT applied;
+ *   `not-pending` this connection does not hold the gate (answered, withdrawn,
+ *                 or settled while disconnected);
+ *   `not-ready`   no connection right now - the gate is replayed on reconnect;
+ *   anything else (the POST itself failed, `bad-value`) - nothing landed.
+ * The first two close the card for good; the others leave a live gate
+ * answerable rather than strand the turn. Our own bookkeeping backs the code
+ * up: a `cancel` seen during the call (`lostRaces`), or a gate the current
+ * `$events` generation no longer holds ({@link gateIsLive}).
+ * @param {Record<string, any>} view @param {HTMLElement} node @param {unknown} err
+ * @returns {boolean} whether the card was closed.
+ */
+function refusedAnswer(view, node, err) {
+  answering.delete(view.id);
+  const code = /** @type {{code?: unknown}} */ (err)?.code;
+  if (code === "gate-gone" || lostRaces.delete(view.id)) {
+    closeStaleGate(view, node, "settled elsewhere", "too late: another answer or a Stop settled that request first, so this answer was not applied");
+    return true;
+  }
+  if (code === "not-pending" || !gateIsLive(view)) {
+    closeStaleGate(view, node);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * The approval card: the Gate-2 surface. Two outcomes and only two. At dsh
+ * 0.2 this is the face CLIENT's rule, no longer the host's: `ApprovalService`
+ * now accepts any outcome in its vocabulary from an answerer
+ * (NEW packages/interaction/user-approval/src/index.ts:285-291), so a client
+ * that sent `cancelled` or `unavailable` would be honoured. This card sends
+ * only `allowed-once` or `rejected` - the bare outcome string is the whole
+ * answer (`$events/result` value, index.ts:55) - and api.js refuses anything else.
  * @param {Record<string, any>} view - an `approval` view.
  * @returns {HTMLElement}
  */
@@ -883,10 +1170,18 @@ function approvalNode(view) {
   const isMember = view.sessionId !== undefined && view.sessionId !== activeSession;
   head.append(el("span", "producer", isMember ? `${gateWho(view.sessionId)} · ${dash(view.toolName)}` : dash(view.toolName)));
   const raw = el("span", "raw", "raw");
-  raw.title = `approvalId ${dash(view.approvalId)} · callId ${dash(view.callId)}`;
+  // No audit approvalId rides the wire any more (user-approval src/index.ts:224-232):
+  // the eventId is what an answer names, the callId what the log correlates by.
+  raw.title = `eventId ${dash(view.id)} · callId ${dash(view.callId)}`;
   head.append(raw);
   node.append(head);
-  if (view.reason) node.append(el("div", "card-line", view.reason));
+  /* `displayReason` is the host's presentation text (sandbox escalations always
+   * send one; never persisted, user-approval src/types.ts:63-76); `reason` is
+   * the audit reason the log keeps. Show the first, and the second too when
+   * it says something else - a trading card never hides why it is asking. */
+  const shown = typeof view.displayReason === "string" && view.displayReason !== "" ? view.displayReason : view.reason;
+  if (shown) node.append(el("div", "card-line", shown));
+  if (view.reason && view.reason !== shown) node.append(el("div", "card-line", view.reason));
 
   const actions = el("div", "card-actions");
   /** @param {string} label @param {"allowed-once"|"rejected"} outcome @param {string} cls */
@@ -894,24 +1189,27 @@ function approvalNode(view) {
     const btn = el("button", `ask-btn ${cls}`, label);
     /** @type {HTMLButtonElement} */ (btn).type = "button";
     btn.addEventListener("click", async () => {
+      if (!gateIsLive(view)) { closeStaleGate(view, node); return; }
       const buttons = [.../** @type {NodeListOf<HTMLButtonElement>} */ (actions.querySelectorAll("button"))];
       for (const b of buttons) b.disabled = true;
-      answering.add(view.id); // claim the wording before the host can echo it back
+      answering.add(view.id); // claim the wording against a racing cancel
       try {
-        await respond(view.id, {
-          sessionId: view.sessionId ?? activeSession,
-          approvalId: view.approvalId,
-          outcome,
-        });
+        await liveMux().answer(view.id, outcome);
         gates.delete(view.id);
-        settle(node, label.toLowerCase());
-        status(`approval ${outcome}`);
+        gateDelivery.delete(view.id);
+        if (lostRaces.delete(view.id)) {
+          settle(node, "settled elsewhere", "closed");
+          status(`approval ${outcome} came too late: the request was already settled elsewhere`, true);
+        } else {
+          settle(node, label.toLowerCase());
+          status(`approval ${outcome}`);
+        }
       } catch (err) {
-        // A refused answer ("not-pending", a dead socket) must leave the gate
-        // answerable: re-enable and say why rather than stranding the turn.
-        answering.delete(view.id);
+        if (refusedAnswer(view, node, err)) return;
+        // A live gate (the socket is down, or the POST failed) must stay
+        // answerable: re-enable and say why rather than strand the turn.
         for (const b of buttons) b.disabled = false;
-        failed(err, "respond");
+        failed(err, "answer");
       }
     });
     return btn;
@@ -965,13 +1263,15 @@ function questionNode(view) {
     if (question?.detail) block.append(el("div", "ask-q-detail", String(question.detail)));
 
     const options = Array.isArray(question?.options) ? question.options : [];
-    /* On a SINGLE-select question the host rejects an answer that carries both
-     * a selection and `custom` (apiproxy `matchesQuestions`), and it rejects it
-     * as a bare `bad-response` with no reason — so the two clear each other
-     * here rather than becoming an error the operator cannot read. Multi-select
-     * is the case where they legitimately coexist: there `custom` SUPPLEMENTS
-     * the labels. Both handlers need both halves, so the row and the field are
-     * built before either is wired. */
+    /* On a SINGLE-select question an answer is one choice: a selection OR
+     * `custom`, never both. 0.1.1's host enforced that (apiproxy
+     * `matchesQuestions`, refusing with a bare `bad-response`); at 0.2 nothing
+     * between this card and the asking tool checks the batch any more - the
+     * `$events/result` value is handed to the asker as sent (user-questions
+     * src/index.ts:322-330) - so the rule is this card's alone, and the two
+     * clear each other here. Multi-select is the case where they legitimately
+     * coexist: there `custom` SUPPLEMENTS the labels. Both handlers need both
+     * halves, so the row and the field are built before either is wired. */
     const single = question?.multiSelect !== true;
     const row = options.length > 0 ? el("div", "opt-row") : undefined;
     // A question with no options is free text; so is the "other" box beside a
@@ -1022,26 +1322,33 @@ function questionNode(view) {
   });
 
   submit.addEventListener("click", async () => {
+    if (!gateIsLive(view)) { closeStaleGate(view, node); return; }
     submitBtn.disabled = true;
     answering.add(view.id); // as in approvalNode: whoever answers owns the wording
     try {
-      await respond(view.id, {
-        sessionId: view.sessionId ?? activeSession,
-        answer: {
-          answers: picks.map((p) => {
-            const answer = { id: p.id, selected: [...p.selected] };
-            if (p.custom.trim() !== "") answer.custom = p.custom.trim();
-            return answer;
-          }),
-        },
+      // The value IS the AskUserQuestionAnswer, `{answers:[{id, selected, custom?}]}`
+      // (NEW packages/interaction/user-questions/src/types.ts:56-69) - 0.1.1's
+      // `{sessionId, answer}` wrapper is gone; the eventId names the ask.
+      await liveMux().answer(view.id, {
+        answers: picks.map((p) => {
+          const answer = { id: p.id, selected: [...p.selected] };
+          if (p.custom.trim() !== "") answer.custom = p.custom.trim();
+          return answer;
+        }),
       });
       gates.delete(view.id);
-      settle(node, "answered");
-      status("answer sent");
+      gateDelivery.delete(view.id);
+      if (lostRaces.delete(view.id)) {
+        settle(node, "settled elsewhere", "closed");
+        status("the answer came too late: the question was already settled elsewhere", true);
+      } else {
+        settle(node, "answered");
+        status("answer sent");
+      }
     } catch (err) {
-      answering.delete(view.id);
+      if (refusedAnswer(view, node, err)) return;
       submitBtn.disabled = false;
-      failed(err, "respond");
+      failed(err, "answer");
     }
   });
   actions.append(submit);
@@ -1075,13 +1382,13 @@ function acceptGate(view) {
    * answered; a gate on a session nobody is watching would leave them waiting
    * for an unrelated refresh, and covers the row that does not exist yet (a
    * member session the sidebar has not listed). It is the debounced list
-   * refresh, so the cost is one `session.list`. Same rebuild
+   * refresh, so the cost is one `session/list`. Same rebuild
    * `acceptGateResolved` relies on. */
   scheduleListRefresh();
   const inRoom = view.sessionId !== undefined && memberSessionIds().has(view.sessionId);
   if (view.sessionId !== undefined && view.sessionId !== activeSession && !inRoom) {
-    // Flag the gated session's OWN row now — once, however many times the mux
-    // replays the gate — rather than waiting for the refresh above.
+    // Flag the gated session's OWN row now — once, however many times
+    // `$events` replays the gate — rather than waiting for the refresh above.
     const sub = convRows.get(view.sessionId)?.querySelector(".conv-sub");
     if (sub && sub.querySelector(".chip.waiting") === null) sub.prepend(waitingChip());
     return;
@@ -1091,45 +1398,66 @@ function acceptGate(view) {
 
 /**
  * A gate the HOST settled without us: the turn was cancelled, the session was
- * disposed, or another answerer got there first. This frame is the only signal
- * — without it `gates` keeps the entry forever, so the dead card is re-appended
- * by {@link openSession} on every session switch and by the mux on every
- * reconnect, its Send button stays live for a request that no longer exists
- * (answering it earns a bare `respond: not-pending`), and the sidebar row keeps
- * a "waiting" chip for a session waiting on nothing.
+ * disposed, or another tab answered first. The `$events` `cancel` frame is the
+ * only signal (gateway/src/index.ts:646-668) — without it `gates` keeps the
+ * entry forever, so the dead card is re-appended by {@link openSession} on
+ * every session switch, its Send button stays live for a request that no
+ * longer exists, and the sidebar row keeps a "waiting" chip for a session
+ * waiting on nothing. {@link purgeUndeliveredGates} reaches here too, for a
+ * gate settled while this page was disconnected.
  * @param {Record<string, any>} view - a `gate-resolved` view.
  */
 function acceptGateResolved(view) {
-  /* A question's resolution names the wire id directly. An approval's names
-   * only the audit id — approvals.d.ts keeps those deliberately separate — so
-   * its gate is found by the `approvalId` it was rendered with. The type check
-   * on that id is load-bearing, not defensive noise: a QUESTION view has no
-   * `approvalId` field at all, so a frame that arrived without one would match
-   * `undefined === undefined` against the first pending question and close
-   * somebody else's card. The host's schema makes `approvalId` required, which
-   * is why this is cheap insurance rather than a live bug. */
-  let id = typeof view.id === "string" ? view.id : undefined;
-  if (id === undefined && typeof view.approvalId === "string") {
-    id = [...gates.entries()].find(([, gate]) => gate.approvalId === view.approvalId)?.[0];
-  }
-  if (id === undefined) return; // already answered here, or never ours
-  gates.delete(id);
-  renderStrip(); // the chip drops back to its coarse state
+  /* Keyed by the eventId alone, for approvals and questions alike: the
+   * withdrawal names the gate by the same eventId its waterfall carried, and
+   * nothing else - no session, no audit approvalId, no OUTCOME
+   * (stream-protocol.ts:61-64). The type check is load-bearing: an id-less
+   * view must never match an entry by accident. */
+  const id = typeof view.id === "string" ? view.id : undefined;
+  if (id === undefined) return;
+  gateDelivery.delete(id);
   const node = gateNodes.get(id);
-  /* The host echoes the resolution for an answer THIS tab sent too, and it
-   * normally wins the race against `respond()` returning. Such a card is left
-   * to its own handler, which settles it in the operator's words —
-   * "answered · deny", the string the Gate-2 drill documents — where this path
-   * has only the wire's (`rejected`, `allowed-once`, `answered`). An
-   * ApprovalOutcome is never the string `answered`, so deriving the verb from
-   * the outcome here would relabel every approval the operator just answered.
-   * `closed` then means exactly one thing: the gate died and nobody here
-   * answered it. */
-  if (node?.isConnected && !answering.has(id)) {
-    for (const button of node.querySelectorAll("button")) button.disabled = true;
-    settle(node, typeof view.outcome === "string" ? view.outcome : "closed", "closed");
+  if (answering.has(id)) {
+    /* The tab that answered gets no `cancel` for its OWN answer (index.ts:622),
+     * so this one lost a race: another tab or the host settled the gate first
+     * and our answer is (or will come back as) a no-op `ok`. If the card
+     * already says "answered", correct it; if the call is still out, tell its
+     * handler (lostRaces) so it never says "answered" at all. */
+    gates.delete(id);
+    if (node?.classList.contains("answered")) settle(node, "settled elsewhere", "closed");
+    else lostRaces.add(id);
+    renderStrip();
+    scheduleListRefresh();
+    return;
   }
+  if (!gates.delete(id)) return; // already answered here, or never ours
+  renderStrip(); // the chip drops back to its coarse state
+  /* Nobody here answered it, and the frame carries no outcome to report, so
+   * `closed` is the whole truth: the gate died, and this page does not know how. */
+  if (node?.isConnected) {
+    for (const button of node.querySelectorAll("button")) button.disabled = true;
+    settle(node, "closed", "closed");
+  }
+  // Forget the settled card, so a (re)delivery of a live gate under this id
+  // draws an answerable one instead of being swallowed by renderGate's dedupe.
+  gateNodes.delete(id);
   scheduleListRefresh(); // the sidebar rebuilds its waiting chips from `gates`
+}
+
+/**
+ * After a reconnect, close every gate the new `$events` generation did not
+ * re-deliver within {@link GATE_REPLAY_GRACE_MS}: the host queues every
+ * still-pending replay before it yields `ready` (gateway/src/index.ts:512-516),
+ * so a gate still missing was settled while this page was away.
+ * @param {number} generation - the generation whose `ready` scheduled this check.
+ */
+function purgeUndeliveredGates(generation) {
+  if (generation !== eventsGeneration) return; // a newer connection owns the check
+  for (const [id, gate] of [...gates]) {
+    if (gateDelivery.get(id) === generation) continue;
+    acceptGateResolved({ kind: "gate-resolved", id });
+    if (gate.sessionId === activeSession) status("a pending request was settled while this page was disconnected", true);
+  }
 }
 
 /** @returns {HTMLElement} the sidebar's "this session is waiting on you" chip. */
@@ -1152,8 +1480,12 @@ function needsYou(sessionId) {
  * @param {Record<string, any>} view
  */
 function renderGate(view) {
+  // Mid-open the window is not drawn yet, and a card appended now would sit
+  // ABOVE the transcript it belongs under; the open draws every pending gate
+  // of the session on screen once its window lands (or its read fails).
+  if (loadingSession !== null) return;
   const already = gateNodes.get(view.id);
-  if (already && already.isConnected) return; // the mux replays pending gates on every reconnect
+  if (already && already.isConnected) return; // `$events` replays pending gates, same eventId, on every reconnect
   const node = view.kind === "approval" ? approvalNode(view) : questionNode(view);
   const stick = atTail();
   flow().append(node);
@@ -1253,20 +1585,32 @@ function accept(view) {
   else if (view.kind === "card") acceptCard(view);
   else if (view.kind === "subagent-message") {
     answerTraces.boundary();
+    /* dsh 0.2 relays run BOTH ways under one source, `{kind:'agent-message',
+     * form:'relay', senderSessionId}`: a child's report to its parent, and a
+     * parent's message to its child (NEW packages/subagent/subagent/src/
+     * continuation.ts:496-498 via continuation-messages.ts:62-72). In a child's
+     * own transcript a relay whose sender is that child's parent is the
+     * parent speaking - not a report, and not a child to open. */
+    const here = view.sessionId ?? activeSession;
+    const ownParent = here === null ? undefined : subagentParents.get(here) ?? subagentAddresses.get(here)?.parentSessionId
+      ?? lastSessions.find((s) => String(s.sessionId) === here && isSubagentRow(s))?.parentSessionId;
+    const fromParent = view.line === "report" && typeof view.childSessionId === "string" && view.childSessionId === ownParent;
     const node = el("article", "subagent-message");
-    node.append(el("strong", "", view.line === "report" ? "子任务报告" : "子任务结束通知"));
-    node.append(el("div", "subagent-note", view.line === "report" ? "子任务提供的内容" : "运行状态通知；不代表任务结论已经验证"));
+    node.append(el("strong", "", fromParent ? "父会话消息" : view.line === "report" ? "子任务报告" : "子任务结束通知"));
+    node.append(el("div", "subagent-note", fromParent ? "父会话发给此子任务的内容" : view.line === "report" ? "子任务提供的内容" : "运行状态通知；不代表任务结论已经验证"));
     const body = el("div", "subagent-message-body");
     body.append(renderMarkdown(typeof view.text === "string" && view.text.trim() !== "" ? view.text : view.summary ?? "").node);
     node.append(body);
-    if (typeof view.childSessionId === "string") {
+    if (fromParent) {
+      node.append(subagentButton("返回父会话", () => openSession(String(ownParent))));
+    } else if (typeof view.childSessionId === "string") {
       const parent = view.sessionId ?? activeSession;
       node.append(subagentButton("查看子任务", async () => {
         try {
           await readSubagentCatalog(parent);
           if (!subagentAddresses.has(view.childSessionId)) throw new Error("子任务记录不可用。");
           await openSession(view.childSessionId);
-        } catch (err) { failed(err, "subagent.history"); }
+        } catch (err) { failed(err, "open subagent"); }
       }));
     }
     place(view, node);
@@ -1278,21 +1622,24 @@ function accept(view) {
 }
 
 /**
- * The single intake for every frame, live or backfilled.
- * @param {unknown} frame - a mux envelope, a bare MuxFrame, or a history entry.
+ * The single intake for every frame, live or backfilled: follow events and
+ * snapshot records re-addressed as `{type:"session/event", sessionId, event}`,
+ * follow `assistant-stream` frames, `session/control` projection items, and
+ * `$events` gates and withdrawals - the vocabulary mapper.js maps.
+ * @param {unknown} frame
  */
 function acceptFrame(frame) {
   if (loadingSession !== null) {
-    // Mid-backfill: hold it. Appending now would put this frame BEFORE the
-    // history it follows, and nothing later would reorder the transcript.
+    // Mid-open: hold it. Appending now would put this frame BEFORE the
+    // snapshot window it follows, and nothing later would reorder the transcript.
     queued.push(frame);
     return;
   }
   const view = mapFrame(frame);
   if (view.kind === "ignore") return;
   if (view.kind === "pulse") {
-    // Live liveness only — no node, no seq, no dedupe. Replayed through a
-    // backfill it still lands in order, so the final status is the true one.
+    // Live liveness only — no node, no seq, no dedupe. Held through an open
+    // it still lands in order, so the final status is the true one.
     if (view.sessionId === undefined || view.sessionId === activeSession) {
       pulse(view.mode);
       if (view.mode === "reasoning") showThinkLive();
@@ -1305,7 +1652,11 @@ function acceptFrame(frame) {
     return;
   }
   if (view.kind === "turn") {
-    scheduleListRefresh(); // children finish off-screen too; catalogs follow them
+    /* Turn boundaries reach this page only from FOLLOWED sessions (the one on
+     * screen, and live room members); every other session's running flag and
+     * activity arrive as `api-session/status` and `/activity` notifications
+     * (acceptHostEvent), which schedule the same refresh. */
+    scheduleListRefresh();
     if (view.sessionId === undefined || view.sessionId === activeSession) {
       const key = typeof view.seq === "number" ? `${view.sessionId ?? activeSession}:${view.seq}` : null;
       if (key !== null && seen.has(key)) return;
@@ -1352,7 +1703,7 @@ function acceptFrame(frame) {
   scheduleListRefresh();
 }
 
-/** Drain the frames held during a backfill, in arrival order. */
+/** Drain the frames held during an open, in arrival order. */
 function flushQueued() {
   const held = queued.splice(0, queued.length);
   for (const frame of held) acceptFrame(frame);
@@ -1360,8 +1711,8 @@ function flushQueued() {
 
 /* ---------- sessions ---------- */
 
-/** Wipe everything that belongs to the session leaving the screen. */
-function resetFlow() {
+/** Wipe the transcript window: what a fresh follow snapshot replaces. */
+function resetTranscript() {
   hideThinkLive();
   answerTraces.reset();
   flow().replaceChildren();
@@ -1370,16 +1721,24 @@ function resetFlow() {
   toolCards.clear();
   gateNodes.clear();
   answering.clear();
+  lostRaces.clear();
   queued.length = 0;
+}
+
+/** Wipe everything that belongs to the session leaving the screen. */
+function resetFlow() {
+  closeActiveView();
+  resetTranscript();
   /* The room on screen leaves with the flow. `loadRoomInfo` refetches for the
-   * session being opened, but only if that open SUCCEEDS — a failed
-   * `session.history` returns with `activeSession` already moved, and the
-   * previous room's chips would sit under a different session until the next
-   * successful open. Fine states are presence, not truth: an entry is deleted
-   * by its member's own `turn/end`, which is matched against the room on
-   * screen, so switching away mid-turn would strand it forever. */
+   * session being opened, but only if that open SUCCEEDS — a failed follow
+   * returns with `activeSession` already moved, and the previous room's chips
+   * would sit under a different session until the next successful open. Fine
+   * states are presence, not truth: an entry is deleted by its member's own
+   * `turn/end`, which is matched against the room on screen, so switching away
+   * mid-turn would strand it forever. The members' follows go with the room. */
   roomInfo = null;
   fineStates.clear();
+  syncMemberFollows();
   renderStrip();
   subagentRefreshSeq += 1;
   subagentInfoError = "";
@@ -1426,10 +1785,11 @@ function convRow(summary) {
    * and the row keeps just the title (operator direction: no date column). */
   row.title = `${dash(summary.cwd ?? id)}\n${when(summary.updatedAt)}`;
 
-  /* Row actions, revealed on hover: rename and fork are the host's own RPCs;
-   * archive and delete are the face's /data routes (the host has neither at
-   * this pin). Delete is permanent and gated by a confirm — and never offered
-   * on a running session. */
+  /* Row actions, revealed on hover: rename and fork are the host's own
+   * Remotes; archive and delete are the face's /data routes (dsh 0.2 still has
+   * no session delete Remote, and the face keeps its own reversible archive
+   * fold over the host's). Delete is permanent and gated by a confirm — and
+   * never offered on a running session. */
   if (!isSubagentRow(summary)) {
   const actions = el("span", "conv-actions");
   const act = (glyph, label, fn) => {
@@ -1447,19 +1807,24 @@ function convRow(summary) {
     const title = window.prompt("rename session", current === "untitled" ? "" : current);
     if (title === null || title.trim() === "" || title.trim() === current) return;
     try {
-      await rpc("session.rename", { sessionId: id, title: title.trim() });
+      // → {title, seq} (NEW session-controller src/types.ts:309-318). Renaming
+      // resumes the session, and a live session's projection cells are driven
+      // on every event (session-projection src/index.ts:220-222), so the list
+      // fetched next already carries the new title.
+      await call("session/rename", { request: { sessionId: id, title: title.trim() } });
       await refreshSessions();
     } catch (err) {
-      failed(err, "session.rename");
+      failed(err, "session/rename");
     }
   });
   act("⑂", "fork — a new session continuing from this one", async () => {
     try {
-      const made = await rpc("session.fork", { sessionId: id });
+      // No atSeq: the host forks the latest completed-turn prefix (types.ts:321-330).
+      const made = await call("session/fork", { request: { sessionId: id } });
       await refreshSessions();
       if (typeof made?.sessionId === "string") void openSession(made.sessionId);
     } catch (err) {
-      failed(err, "session.fork");
+      failed(err, "session/fork");
     }
   });
   const archived = archivedSet.has(id);
@@ -1512,7 +1877,7 @@ function convRow(summary) {
 }
 
 /** Mark the row of the session on screen, and name it in the topbar. The title
- * comes off the row the last `session.list` built — the sidebar is the one
+ * comes off the row the last `session/list` built — the sidebar is the one
  * place titles are known, so the topbar reads it rather than calling again. */
 function markActive() {
   for (const [id, row] of convRows) row.classList.toggle("active", id === activeSession);
@@ -1529,18 +1894,32 @@ function markActive() {
 }
 
 /** Refetch the sidebar. Out-of-order answers are dropped, not rendered. The
- * channel index is refreshed alongside `session.list` on every call — a rename
- * or a newly attached session must show up without a separate reload. */
+ * channel index is refreshed alongside `session/list` on every call — a rename
+ * or a newly attached session must show up without a separate reload — and it
+ * is also what restores each row's `agentPreset` ({@link summaryOf}). */
 async function refreshSessions() {
   const token = ++listSeq;
   let value;
   try {
-    [value] = await Promise.all([rpc("session.list"), loadChannelIndex(), loadBotIndex()]);
+    // `_request` is the Remote's one parameter and must be sent even empty
+    // (NEW session-controller src/index.ts:251-254; gateway strict args).
+    [value] = await Promise.all([call("session/list", { _request: {} }), loadChannelIndex(), loadBotIndex()]);
   } catch (err) {
-    failed(err, "session.list");
+    failed(err, "session/list");
     return;
   }
   if (token !== listSeq) return;
+  if (!Array.isArray(value?.items)) {
+    // An answer without its item list is a broken reply, not "no sessions":
+    // keep the sidebar the operator already has and say so.
+    failed(new Error("the host answered without an item list"), "session/list");
+    return;
+  }
+  /* dsh 0.2 dropped `agentPreset` from the summary: restore it at intake, from
+   * the row's own projection or the face's header hints (summaries.js), so
+   * everything below - the fold, the buckets, the speaker - reads it as before.
+   * `channelIndex` was refreshed by the Promise.all above. */
+  const items = value.items.map((row) => summaryOf(row, channelIndex?.presets));
   const list = $("#conv-list");
   convRows.clear();
   list.replaceChildren();
@@ -1560,28 +1939,31 @@ async function refreshSessions() {
    * @type {Map<string, {channel: Record<string, any>|null, label: string, items: Record<string, any>[]}>} */
   const buckets = new Map();
   /* The effective archive set: the face's own reversible `archivedSet` UNION
-   * the host's one-way `channelIndex.archived`. */
+   * the host's `channelIndex.archived`, which the face never un-archives (dsh
+   * 0.2 could, `workspaceRegistry.unarchiveSession`; upgrade plan D14 keeps it
+   * one-way here - and a host-archived session runs no model step). */
   const hostArchived = new Set(channelIndex?.archived ?? []);
-  lastSessions = (value?.items ?? []).filter((summary) => !deletedSet.has(String(summary.sessionId)));
+  lastSessions = items.filter((summary) => !deletedSet.has(String(summary.sessionId)));
   /* Keep membership for the strip and pending gates. Member conversations
    * have no sidebar rows; their process is read from each answer in the room. */
   const fold = foldMembers(lastSessions);
   memberFold = fold; // module state the strip and the gates read
   /* Re-derive the active session's voice from the list that just landed. Two
    * races need it, and neither is reachable from `setSpeaker`'s own call sites:
-   * a mux reconnect reopens the active session against the PRE-reconnect
-   * snapshot (`onOpen` fires `refreshSessions` and `openSession` back to back,
-   * and only the latter is synchronous), and the roster — `loadBotIndex`, in
-   * the same `Promise.all` above — may only now have arrived to turn a bare
-   * `buffett-type` into `Buffett Type`. A session this list does not carry is
-   * left alone: keep the label on screen rather than reset it to the host. */
+   * a reconnect re-opens the active follow and fires this refresh at once,
+   * and the snapshot may render against a list from before the drop; and the
+   * roster — `loadBotIndex`, in the same `Promise.all` above — may only now
+   * have arrived to turn a bare `buffett-type` into `Buffett Type`. A session
+   * this list does not carry is left alone: keep the label on screen rather
+   * than reset it to the host. */
   const activeRow = lastSessions.find((s) => String(s.sessionId) === activeSession);
   if (activeRow !== undefined) setSpeaker(activeRow);
-  for (const summary of value?.items ?? []) {
+  for (const summary of items) {
     const id = String(summary.sessionId);
     if (deletedSet.has(id)) continue; // a host-memory ghost
-    // Attached sessions list with a projections block — seed the usage store.
-    seedProjections(id, summary.projections);
+    // An attached row's projections block seeds the usage store (a cold row's
+    // `cached` hints are skipped by seedProjections).
+    seedProjections(id, summary.projections, true);
     if (fold.members.has(id)) continue; // shown through its room's answers
     const archived = archivedSet.has(id) || hostArchived.has(id);
     const { key, label, channel } = bucketFor(channelOf(id), archived, isSubagentRow(summary) ? null : botOf(summary), false);
@@ -1610,6 +1992,8 @@ async function refreshSessions() {
     }
   }
   markActive();
+  syncMemberFollows(); // members' availability, and the fold itself, may have moved
+  reconcileActiveView(); // a paged session on screen may be live now
   renderStrip(); // the member fold and `running` may both have moved
   syncPickerFolders(); // a picker already on screen learns the folders the list just revealed
   void loadSubagentInfo();
@@ -1625,12 +2009,19 @@ function scheduleListRefresh() {
 }
 
 /**
- * Put a session on screen: clear, backfill its history, then resume the stream.
+ * Put a session on screen: clear, then READ it - a live session (and every
+ * subagent child) is FOLLOWED: the follow's opening snapshot is the backfill
+ * 0.1.1 fetched with `session.history`, and every later event arrives on the
+ * same stream, gap-free (NEW session-controller src/history.ts:120-241; there
+ * is no all-session feed at dsh 0.2). A COLD ordinary session is PAGED instead:
+ * one non-activating tail read, as 0.1.1's read-only history was - following it
+ * would activate it and write its log irreversibly ({@link activeView}).
  *
- * Two things make this safe to call at any moment, including on every mux
- * reconnect (the documented recovery is "reopen the stream + refetch history"):
- * live frames queue while the page is in flight, and a generation token makes a
- * superseded load return without touching a flow that now belongs to someone else.
+ * Two things make this safe to call at any moment: frames from the other
+ * streams queue while the opening read is pending, and a generation token
+ * makes a superseded open return without touching a flow that now belongs to
+ * someone else. A socket drop needs no call here: the view suspends and
+ * resumes itself ({@link suspendFollows}, {@link reconcileActiveView}).
  * @param {string} id @returns {Promise<void>}
  */
 async function openSession(id) {
@@ -1638,69 +2029,271 @@ async function openSession(id) {
   closeDetail(); // picking a session always brings the chat back
   const previousActive = activeSession;
   activeSession = id;
-  /* Before the history replay, not after: every bubble the replay builds reads
+  /* Before the snapshot renders, not after: every bubble it builds reads
    * `speaker` as it renders, so a session opened cold would otherwise write
    * the PREVIOUS session's name over a whole transcript. The summary is the
    * sidebar's own row - a session the list has not caught up with yet is the
-   * host, which is what an unknown session was already labelled.
+   * host, which is what an unknown session was already labelled, until its own
+   * snapshot names the preset (applySnapshot).
    *
-   * The exception is REOPENING the session already on screen (the mux's
-   * reconnect path): its label was set from a summary the list may not carry
-   * yet - `openBotHome` arms a preset before any session exists, and a
-   * reconnect's `session.list` has not landed. Resetting it to the host there
-   * would relabel a live bot transcript as Kairos, so a same-session reopen
-   * with no row keeps what is on screen; `refreshSessions` heals it when the
-   * list does land. */
+   * The exception is REOPENING the session already on screen: its label was set
+   * from a summary the list may not carry yet - `openBotHome` arms a preset
+   * before any session exists. Resetting it to the host there would relabel a
+   * live bot transcript as Kairos, so a same-session reopen with no row keeps
+   * what is on screen; `refreshSessions` heals it when the list does land. */
   const row = lastSessions.find((s) => String(s.sessionId) === id);
   if (row !== undefined || id !== previousActive) setSpeaker(row ?? null);
   resetFlow();
   markActive();
   loadingSession = id;
 
-  /** @type {any} */
-  let page;
+  /** @type {Record<string, unknown>} */
+  let address;
   try {
     if (isSubagentSession(id)) {
-      const address = await resolveSubagentAddress(id);
+      // A child is followed through its durable parent address; addressed as a
+      // plain session the host refuses it (`session/agent-busy`, history.ts:341-349).
+      const child = await resolveSubagentAddress(id);
       if (token !== openSeq) return;
-      page = await rpc("subagent.history", address);
-      if (token !== openSeq) return;
-      setSubagentSpeaker(address);
+      address = { kind: "subagent", parentSessionId: child.parentSessionId, childSessionId: child.childSessionId, mode: child.mode };
+      setSubagentSpeaker(child);
     } else {
-      page = await rpc("session.history", { sessionId: id });
+      address = { kind: "session", sessionId: id };
     }
   } catch (err) {
     if (token !== openSeq) return;
-    loadingSession = null;
-    renderSubagents();
-    failed(err, isSubagentSession(id) ? "subagent.history" : "session.history");
+    openFailed(id, err, "open subagent");
     return;
   }
-  if (token !== openSeq) return; // a newer open owns the flow now
-  loadingSession = null;
+  viewSession(id, token, address, true);
+}
 
-  /* The tail page carries a projections baseline `{asOfSeq, values}` — the
-   * agent panel's seed for a session opened cold, before any live frame. */
-  seedProjections(id, page?.projections);
-  for (const entry of page?.events ?? []) {
-    // A history entry has no envelope and no frame type; the mapper takes it as
-    // a session/event so a backfilled transcript is identical to a streamed one.
-    acceptFrame({ type: "session/event", sessionId: id, ...entry });
+/** Whether the list says this session's Agent is live (NEW session-controller
+ * src/list.ts:113 `agentAvailable`). An unlisted session is not known live.
+ * @param {string} id @returns {boolean} */
+function isLiveSession(id) {
+  return lastSessions.find((s) => String(s.sessionId) === id)?.agentAvailable === true;
+}
+
+/** Whether following this address could activate a cold session: only an
+ * ordinary one - a subagent address is never promoted (history.ts:204).
+ * @param {Record<string, any>} address @returns {boolean} */
+function followPromotes(address) {
+  return address.kind === "session";
+}
+
+/**
+ * Start reading the session on screen in the mode its liveness allows: follow
+ * when that cannot activate anything, page otherwise.
+ * @param {string} id @param {number} token @param {Record<string, any>} address
+ * @param {boolean} announce - whether the drawn window names the session on the status line.
+ */
+function viewSession(id, token, address, announce) {
+  if (!followPromotes(address) || isLiveSession(id)) followActive(id, token, address, announce);
+  else void pageActive(id, token, address, announce);
+}
+
+/**
+ * Re-decide the read of the session on screen after its liveness may have
+ * changed: the list refreshed, the host said it came alive, this tab prompted
+ * it, or the socket came back.
+ *
+ * - A paged session that is live now is FOLLOWED - following a live session
+ *   promotes nothing - and the follow's snapshot replaces the paged window.
+ * - A `stale` view (its follow was suspended by a socket drop, or ended by the
+ *   host) resumes: followed if live, else re-paged, so whatever happened while
+ *   it was not followed is drawn without activating a session that went cold.
+ * A list refresh never DOWNGRADES a live follow: a list answer can be older
+ * than the prompt that just revived the session. Only the host's own
+ * `api-session/removed` stops a follow ({@link acceptHostEvent}).
+ */
+function reconcileActiveView() {
+  const view = activeView;
+  if (view === null || view.token !== openSeq || view.id !== activeSession || view.failed === true) return;
+  const live = !followPromotes(view.address) || isLiveSession(view.id);
+  if (view.mode === "page" && live) followActive(view.id, view.token, view.address, view.stale === true);
+  else if (view.stale === true) void pageActive(view.id, view.token, view.address, true);
+}
+
+/** Stop following the session on screen without leaving it: it left the live
+ * registry, so a later re-open of its follow (any reconnect) would promote it.
+ * The window stays as drawn; nothing more can happen in a cold session.
+ * @param {string} id */
+function stopFollowing(id) {
+  const view = activeView;
+  if (view === null || view.id !== id || view.mode !== "follow" || !followPromotes(view.address)) return;
+  view.handle?.cancel();
+  activeView = { ...view, mode: "page", handle: null };
+}
+
+/** A socket drop: stop every follow that a re-open could turn into an
+ * activation - each live member's, and the active ordinary session's - before
+ * the mux re-opens them against a host whose sessions may have gone cold
+ * meanwhile (a cold follow is promoted, history.ts:204-212). `onReady` then
+ * re-follows exactly what the fresh list says is live. */
+function suspendFollows() {
+  for (const handle of memberFollows.values()) handle.cancel();
+  memberFollows.clear();
+  const view = activeView;
+  if (view !== null && view.mode === "follow" && followPromotes(view.address)) {
+    view.handle?.cancel();
+    activeView = { ...view, mode: "page", handle: null, stale: true };
+  }
+}
+
+/** The open of `id` failed before its first snapshot: stop holding frames -
+ * the gates and projections queued behind the open are not this transcript's,
+ * and dropping them would strand a gate until the next reconnect - and say why.
+ * @param {string} id @param {unknown} err @param {string} what */
+function openFailed(id, err, what) {
+  if (loadingSession === id) loadingSession = null;
+  renderSubagents();
+  flushQueued();
+  // No window to draw them under, but a pending approval or question for the
+  // session on screen must never wait unseen behind a failed read.
+  if (activeSession === id && loadingSession === null) {
+    for (const gate of gates.values()) if (gate.sessionId === id || memberSessionIds().has(gate.sessionId)) renderGate(gate);
+  }
+  failed(err, what);
+}
+
+/** Cancel the read of the session leaving the screen. */
+function closeActiveView() {
+  const view = activeView;
+  activeView = null;
+  view?.handle?.cancel();
+}
+
+/**
+ * Follow the session on screen: `session/follow` with the assistant stream
+ * (its block-start pulses are the live status line) and the host's default
+ * window, as 0.1.1's tail read took the default (types.ts:486-491). Items are
+ * `snapshot` first, then gap-free `event`s and `assistant-stream` frames
+ * (types.ts:552-563); both kinds of item are re-addressed with this session's
+ * id, since a follow item names none. Callers ensure following cannot activate
+ * the session ({@link viewSession}, {@link reconcileActiveView}).
+ * @param {string} id
+ * @param {number} token - the open (`openSeq`) that owns this follow.
+ * @param {Record<string, any>} address - `{kind:"session", sessionId}` or a subagent address.
+ * @param {boolean} announce - whether an applied snapshot names the session on the status line.
+ */
+function followActive(id, token, address, announce) {
+  closeActiveView();
+  /** @type {{cancel: () => void}} */
+  let handle;
+  const owns = () => activeView !== null && activeView.handle === handle && token === openSeq && activeSession === id;
+  handle = liveMux().stream("session/follow", { request: { address, assistantStream: true } }, {
+    onItem: (item) => {
+      if (!owns()) return; // a late item for a follow the screen already left
+      if (item?.type === "snapshot") void applySnapshot(id, token, item, announce);
+      else if (item?.type === "event") acceptFrame({ type: "session/event", sessionId: id, event: item.event });
+      else if (item?.type === "assistant-stream") acceptFrame({ type: "assistant-stream", sessionId: id, frame: item.frame });
+    },
+    /* The HOST ended the follow (its controller shut down or restarted); the
+     * mux does not re-open an ended stream, so this page resumes it - by the
+     * liveness rule, never by blindly re-following a session that may have
+     * gone cold - keeping the window on screen until a new one replaces it. */
+    onEnd: () => {
+      if (!owns()) return;
+      activeView = { id, token, address, mode: "page", handle: null, stale: true };
+      if (loadingSession === id) openFailed(id, new Error("the host ended the stream before its snapshot"), "session/follow");
+      else status(`session ${id}: the host ended its stream - reopening`, true);
+      setTimeout(reconcileActiveView, FOLLOW_RETRY_MS);
+    },
+    /* A refusal: `session/not-found`, `subagent/not-found`,
+     * `subagent/unauthorized`, `subagent/catalog-diagnostic`
+     * (history.ts:341-390) - terminal for this open, so it is reported, not retried. */
+    onError: (error) => {
+      if (!owns()) return;
+      activeView = { id, token, address, mode: "page", handle: null, failed: true };
+      openFailed(id, new Error(`${error?.code ?? "error"} - ${error?.message ?? "the follow failed"}`), "session/follow");
+    },
+  });
+  activeView = { id, token, address, mode: "follow", handle };
+}
+
+/**
+ * Page the session on screen: 0.1.1's read-only history, rebuilt from two
+ * Remotes that never activate a session - `session/projections` fixes the cut
+ * (its `asOfSeq` is the log cursor, session-projection src/index.ts:338-351)
+ * and `session/page` reads the tail window through it (history.ts:77-112; the
+ * host's default 50 messages, as `session.history` took). The window is drawn
+ * like a follow snapshot ({@link applySnapshot}); nothing live follows it.
+ * @param {string} id @param {number} token @param {Record<string, any>} address
+ * @param {boolean} announce
+ */
+async function pageActive(id, token, address, announce) {
+  closeActiveView();
+  const view = { id, token, address, mode: /** @type {"page"} */ ("page"), handle: null };
+  activeView = view;
+  try {
+    const cut = await call("session/projections", { request: { sessionId: id } });
+    if (activeView !== view || token !== openSeq) return;
+    if (cut === null) throw new Error(`session "${id}" not found`);
+    if (typeof cut !== "object" || !Number.isSafeInteger(cut.asOfSeq)) throw new Error("the host answered without a projections cut");
+    const page = await call("session/page", { request: { address, throughSeq: cut.asOfSeq } });
+    if (activeView !== view || token !== openSeq) return;
+    if (page === null || typeof page !== "object" || !Array.isArray(page.records)) throw new Error("the host answered without history records");
+    await applySnapshot(id, token, { projections: cut, records: page.records }, announce);
+  } catch (err) {
+    if (activeView !== view || token !== openSeq) return;
+    activeView = { ...view, failed: true };
+    openFailed(id, err, "session/page");
+  }
+}
+
+/**
+ * Draw one follow snapshot. The first one of an open is the backfill; a later
+ * one - the mux re-opened the follow after a socket drop, or this page after
+ * the host ended it - REPLACES the window, the upstream journal's own reconnect
+ * rule (gateway src/client/journal-stream.ts:289-304) and 0.1.1's "reopen and
+ * refetch history". Either way the window is followed by the continuation the
+ * old history load ran: room state, subagent catalog, pending gates.
+ * @param {string} id @param {number} token @param {Record<string, any>} snapshot
+ * @param {boolean} announce
+ */
+async function applySnapshot(id, token, snapshot, announce) {
+  if (token !== openSeq || activeSession !== id) return;
+  if (loadingSession !== id) resetTranscript(); // a re-opened follow: replace, never append a second copy
+  loadingSession = null;
+  /* The snapshot names the preset the session runs even when the list does
+   * not (a cold row whose projection cache predates 0.2, or a session the list
+   * has not caught up with): its projection first, its header second
+   * (types.ts:432-443). Only fills a gap - a row that already knows keeps it. */
+  if (!isSubagentSession(id)) {
+    const known = lastSessions.find((s) => String(s.sessionId) === id);
+    const projected = snapshot?.projections?.values?.agentPreset;
+    const headed = snapshot?.header?.agentPreset;
+    const preset = typeof projected === "string" && projected !== "" ? projected
+      : typeof headed === "string" && headed !== "" ? headed : undefined;
+    if (preset !== undefined && typeof known?.agentPreset !== "string") {
+      lastSessions = lastSessions.map((s) => String(s.sessionId) === id ? { ...s, agentPreset: preset } : s);
+      setSpeaker({ sessionId: id, agentPreset: preset });
+    }
+  }
+  // The snapshot's `{asOfSeq, values}` baseline seeds the agent panel for a
+  // session opened cold, before any control frame (types.ts:552-560).
+  seedProjections(id, snapshot?.projections);
+  for (const record of Array.isArray(snapshot?.records) ? snapshot.records : []) {
+    // A record is `{type:"event", event}` and names no session: re-address it
+    // exactly as a live follow event, so a backfilled transcript is identical
+    // to a streamed one.
+    acceptFrame({ type: "session/event", sessionId: id, event: record?.event });
   }
   flushQueued();
   await loadRoomInfo(); // before the gate replay, so a member's gate is found on a cold open
-  if (token !== openSeq) return;
+  if (token !== openSeq || activeSession !== id) return;
   await loadSubagentInfo();
-  if (token !== openSeq) return;
+  if (token !== openSeq || activeSession !== id) return;
   for (const gate of gates.values()) if (gate.sessionId === id || memberSessionIds().has(gate.sessionId)) renderGate(gate);
   toTail();
-  status(`session ${id}`);
+  if (announce) status(`session ${id}`);
 }
 
 /** Start a fresh conversation. No session is created until the first prompt —
  * a session created by a button that is then abandoned is a blank row forever. */
 function newSession() {
-  openSeq += 1; // orphan any in-flight history load
+  openSeq += 1; // orphan any in-flight open (resetFlow cancels its follow)
   closeDetail();
   loadingSession = null;
   activeSession = null;
@@ -1722,24 +2315,24 @@ function newSession() {
  * sidebar grouping. @type {Record<string, any>|null} */
 let channelIndex = null;
 
-/** The `cwd` the NEXT `session.create` carries; `undefined` is the host
+/** The `cwd` the NEXT `session/create` carries; `undefined` is the host
  * default — the workbench repo root. Only takes effect when
  * `pendingWorkspaceId` is unset — see below. @type {string|undefined} */
 let pendingCwd;
 
-/** The workspace the NEXT `session.create` joins. Set by a channel row;
+/** The workspace the NEXT `session/create` joins. Set by a channel row;
  * `undefined` falls back to `pendingCwd`, which is how an OS-picked folder
- * still works. `session.create` accepts workspaceId OR cwd, never both.
+ * still works. `session/create` accepts workspaceId OR cwd, never both.
  * @type {string|undefined} */
 let pendingWorkspaceId;
 
-/** The agent preset the NEXT `session.create` names: a bot's id for its home
+/** The agent preset the NEXT `session/create` names: a bot's id for its home
  * session, `undefined` for Kairos (the gateway then mounts the default).
  * Set with `pendingCwd = <bot>.homeCwd` by openBotHome; reset wherever the
  * other two pendings are. @type {string|undefined} */
 let pendingAgentPreset;
 
-/** The last `session.list` answer (ghosts dropped): the picker derives the
+/** The last `session/list` answer (ghosts dropped, normalized by summaryOf): the picker derives the
  * local folders sessions have worked in from it. @type {Record<string, any>[]} */
 let lastSessions = [];
 
@@ -1815,8 +2408,10 @@ async function loadBotIndex() {
   } catch { /* the sidebar labels a bot by id instead of name */ }
   return botIndex;
 }
-/** The bot a session belongs to, from its own header: `agentPreset` names one
- * and it is not the default. `null` for Kairos and for a preset-less session. */
+/** The bot a session belongs to: its row's `agentPreset` - restored by
+ * {@link summaryOf} from the preset projection or the persisted header, since
+ * the 0.2 summary carries neither itself - names one and it is not the default.
+ * `null` for Kairos and for a preset-less session. */
 function botOf(summary) {
   const id = summary?.agentPreset;
   if (typeof id !== "string" || id === "kairos") return null;
@@ -1826,7 +2421,7 @@ function botOf(summary) {
 
 /** The name the transcript writes over the ACTIVE session's turns: a bot's
  * display name for its own session, `Kairos` for the host's. Per session, not
- * per message — `speakerFor` reads the same `agentPreset` header `botOf`
+ * per message — `speakerFor` reads the same normalized `agentPreset` `botOf`
  * buckets the sidebar by, so the label and the bucket can never disagree.
  * @type {string} */
 let speaker = HOST_NAME;
@@ -1838,7 +2433,8 @@ let speaker = HOST_NAME;
  * the composer placeholder, is rewritten here because it is the one surface
  * already on screen when the voice changes. Call it BEFORE anything renders
  * for a session; `null` means no session, which is the host.
- * @param {{agentPreset?: unknown}|null|undefined} summary */
+ * @param {{sessionId?: unknown, agentPreset?: unknown}|null|undefined} summary - a
+ *   normalized list row ({@link summaryOf}), a `session/create` answer, or an armed preset. */
 function setSpeaker(summary) {
   const address = summary?.sessionId ? subagentAddresses.get(String(summary.sessionId)) : null;
   speaker = isSubagentRow(summary) || address ? `临时子任务 · ${address ? childRow(address)?.label ?? "未命名" : "读取记录中"}` : speakerFor(summary, botIndex);
@@ -2014,7 +2610,7 @@ async function showStrategyPicker() {
   }
   if (index === null) {
     // the listing failed — offer the bare workbench default so a session can
-    // still be created (no workspaceId: session.create falls back to the host default cwd)
+    // still be created (no workspaceId: session/create falls back to the host default cwd)
     rows.append(pickerRow("workbench", undefined, "repo root", picker));
   }
   /* Any local folder, through the OS's own dialog — dsh's native
@@ -2028,8 +2624,9 @@ async function showStrategyPicker() {
   const pickFolder = async () => {
     status("choose a folder in the system dialog…");
     try {
-      const answer = await rpc("host.pickDirectory", {});
-      const path = answer?.path;
+      // A BARE `string | null` at 0.2, not 0.1.1's `{path}` (NEW workspace-controller
+      // src/directory-picker.ts:46-65); null is the operator's cancel.
+      const path = await call("directoryPicker/pick", {});
       if (typeof path !== "string" || path === "") {
         status("new session · pick a strategy, then type below");
         return;
@@ -2048,7 +2645,7 @@ async function showStrategyPicker() {
       rows.insertBefore(row, browse);
       row.click();
     } catch (err) {
-      failed(err, "host.pickDirectory");
+      failed(err, "directoryPicker/pick");
     }
   };
   browse.addEventListener("click", () => void pickFolder());
@@ -2118,6 +2715,32 @@ function timeZone() {
   }
 }
 
+/** A client-minted prompt identity. dsh 0.2 requires one on every prompt
+ * (`requestId`, NEW session-controller src/types.ts:333-341; subagent
+ * control-types.ts:85-90): it is persisted on the accepted message and a retry
+ * carrying the same id is admitted once (commands.ts:330). The upstream client
+ * mints a UUID (client/sessions/session.ts:271-277); api.js's `randomUuid`
+ * builds one from `crypto.getRandomValues`, which - unlike `crypto.randomUUID`
+ * - exists outside a secure context too (critique WC-G4).
+ * @returns {string} */
+function newRequestId() {
+  return randomUuid();
+}
+
+/**
+ * This tab just wrote to a session - a prompt, a command, a room message - and
+ * the host resumed it to do so, so it is live: a paged view of it becomes a
+ * follow now ({@link reconcileActiveView}), without waiting for the host's
+ * `api-session/added`. The list row is patched only until the next refresh
+ * replaces it with the host's own state.
+ * @param {string|null} id
+ */
+function revived(id) {
+  if (id === null || id !== activeSession) return;
+  patchSession(id, { agentAvailable: true });
+  reconcileActiveView();
+}
+
 /** Send the composer's text, creating the session if this is the first prompt. */
 async function send() {
   const input = /** @type {HTMLInputElement} */ ($("#composer-input"));
@@ -2136,7 +2759,14 @@ async function send() {
       const address = await resolveSubagentAddress(target);
       const controls = subagentControls(childRow(address), subagentCatalogs.get(address.parentSessionId)?.parentAvailable === true);
       if (!controls.canPrompt) throw new Error(controls.note);
-      await rpc("subagent.prompt", { ...address, content: [{ type: "text", text }], clientTimeZone: timeZone() });
+      // `requestId` and `delivery` are new and required; the parent must be live
+      // (`subagent/parent-unavailable`, NEW subagent src/index.ts:415-461).
+      await call("subagents/prompt", {
+        request: {
+          requestId: newRequestId(), parentSessionId: address.parentSessionId, childSessionId: address.childSessionId,
+          mode: "continuable", delivery: "queue", content: [{ type: "text", text }], clientTimeZone: timeZone(),
+        },
+      });
       if (ownsComposer()) {
         status("子任务已接收续派消息。");
         void loadSubagentInfo();
@@ -2148,10 +2778,18 @@ async function send() {
         ? { workspaceId: pendingWorkspaceId }
         : (pendingCwd === undefined ? {} : { cwd: pendingCwd });
       if (pendingAgentPreset !== undefined) payload.agentPreset = pendingAgentPreset;
-      const created = await rpc("session.create", payload);
+      // → {sessionId, agentPreset?} (NEW session-controller src/types.ts:285-296).
+      const created = await call("session/create", { request: payload });
       const id = created?.sessionId;
-      if (typeof id !== "string") throw new Error("session.create returned no sessionId");
+      if (typeof id !== "string") throw new Error("session/create returned no sessionId");
       activeSession = id;
+      /* Follow the new session before prompting it: at 0.2 a transcript
+       * reaches this page only through a follow, and its snapshot plus the
+       * gap-free tail cover the prompt whichever the host sees first. The
+       * snapshot draws into the fresh flow; frames from other streams hold
+       * until it lands, exactly as on an open. */
+      loadingSession = id;
+      followActive(id, openSeq, { kind: "session", sessionId: id }, false);
       /* The new session's voice, from the summary the host just answered with
        * — `created.agentPreset`, which `bots-smoke.test.ts` pins on a real tree
        * for both branches: a bot's id, and the literal `kairos` for the host.
@@ -2168,29 +2806,56 @@ async function send() {
       markActive();
       void loadRoomInfo(); // a session born in a channel with bots gets its strip now, not on the next reopen
     }
+    /* Every write below names the session this submission was FOR: the
+     * operator may switch conversations while a call is out, and a prompt
+     * must never land in whatever is on screen by then. */
+    const target = activeSession;
     /* The operator's `@` (spec §4.4 rule 1): resolved on the server against
      * the channel's roster, appended to the room as the operator's own message
      * without waking Kairos, and each named member turns. A text that resolves
      * to nobody is an ordinary prompt. Only inside a channel: elsewhere `@` is
      * just a character. */
-    if (isMentionText(text) && channelOf(activeSession) !== null) {
-      const said = await panelData("/data/rooms/say", { sessionId: activeSession, text });
+    if (isMentionText(text) && channelOf(target) !== null) {
+      const said = await panelData("/data/rooms/say", { sessionId: target, text });
       const addressed = Array.isArray(said.addressed) ? said.addressed : [];
       if (addressed.length > 0) {
         const names = addressed.map((id) => botIndex.find((b) => b.id === id)?.name ?? id).join(", ");
         status(`@ → ${names}`);
+        revived(target); // the room engine resumed the room to append the operator's message
         return;
       }
     }
-    const accepted = await rpc("session.prompt", {
-      sessionId: activeSession,
-      mode: "queue",
-      content: [{ type: "text", text }],
-      clientTimeZone: timeZone(),
+    /* A slash line is a command, never a prompt. 0.1.1's `session.prompt` ran
+     * it itself; 0.2's prompt would hand it to the model as text, so the line
+     * goes to `commands/execute` first (NEW packages/interaction/commands/
+     * src/index.ts:360-366; the agent lookup's wire key is `agentId`) and only a
+     * line no command claims - `undefined`: not command syntax, or no such
+     * command - continues as an ordinary prompt, as the upstream client does
+     * (session-controller src/client/sessions/session.ts:381-391). The command's
+     * result is its only feedback, so it is said here, an error as one. */
+    if (text.startsWith("/")) {
+      // The `agentId` lookup resumes a cold session (session-controller src/agent.ts:147-162).
+      const executed = await call("commands/execute", { agentId: target, line: text, submittedAttachments: [] });
+      revived(target);
+      if (executed !== undefined && executed !== null) {
+        const result = executed.result;
+        const said = typeof result?.text === "string" && result.text !== "" ? result.text : String(result?.kind ?? "done");
+        status(said, result?.kind === "error");
+        return;
+      }
+    }
+    // → {accepted: true} only; a retry with the same requestId is idempotent (types.ts:333-346).
+    await call("session/prompt", {
+      request: {
+        requestId: newRequestId(),
+        sessionId: target,
+        mode: "queue",
+        content: [{ type: "text", text }],
+        clientTimeZone: timeZone(),
+      },
     });
-    // A prompt that is exactly one '/'-prefixed text block is a slash command:
-    // the host runs it and it never reaches the model, so its only feedback is here.
-    status(accepted?.command?.text ?? "sent");
+    revived(target); // a prompt resumes its session first (commands.ts:311-330)
+    status("sent");
   } catch (err) {
     // A failed send cannot plant its instruction in another conversation's
     // draft, or overwrite text typed after this submission.
@@ -2211,10 +2876,12 @@ async function stopTurn() {
       await interruptSubagent(address, $("#stop"));
       return;
     }
-    await rpc("session.cancel", { sessionId: activeSession });
+    // Live-only: a session with no Agent answers `session/not-found` "(not
+    // attached)" - there is nothing to stop (NEW session-controller src/commands.ts:511-524).
+    await call("session/cancel", { request: { sessionId: activeSession } });
     status("cancel requested");
   } catch (err) {
-    failed(err, "session.cancel");
+    failed(err, "session/cancel");
   }
 }
 
@@ -2226,9 +2893,10 @@ async function stopTurn() {
    main agent (Kairos), the local coding CLIs, and the A2A placeholder;
    `memory` indexes the skill packs; `plugin` indexes MCP servers and the
    composed row tree. Picking a session (or "+ new") always brings the chat
-   back. Data: `agent` over RPC the client already reaches plus the
-   projection store; `memory`/`plugin` over the face's own /data panel routes
-   (in-process reads of the booted tree — see src/panels.ts). Read-only. */
+   back. Data: `agent` over the Remotes the client already reaches
+   (`session/modelCatalog`, `credentials/describe`), the face's `/data/host.json`
+   and the projection store; `memory`/`plugin` over the face's own /data panel
+   routes (in-process reads of the booted tree — see src/panels.ts). Read-only. */
 
 /** The sidebar face on screen. @type {"strategy"|"agent"|"memory"|"plugin"} */
 let activePanel = "strategy";
@@ -2309,9 +2977,9 @@ async function openChannel(channel) {
   if (token !== detailSeq) return; // the operator moved on mid-fetch
 
   /* The effective archive fold: the face's own reversible set UNION the
-   * host's one-way one (a host-archived session can never be un-archived at
-   * this pin — same rule `refreshSessions` applies to the sidebar). Session
-   * TITLES come from the sidebar's last `session.list` (`lastSessions`), the
+   * host's own archive (which the face never un-archives - upgrade plan D14 -
+   * the same rule `refreshSessions` applies to the sidebar). Session
+   * TITLES come from the sidebar's last `session/list` (`lastSessions`), the
    * one place titles are known; a channel session not yet in that snapshot
    * (freshly attached) shows as "untitled" rather than blocking the page. */
   const hostArchived = new Set(channelIndex?.archived ?? []);
@@ -2329,12 +2997,13 @@ async function openChannel(channel) {
     renderChannelPage(inner, payload, {
       onRename: async (title) => {
         try {
-          await rpc("workspace.rename", { workspaceId: channel.workspaceId, title });
+          // → {workspace} (NEW workspace-controller src/index.ts:114-117; types.ts:76-84).
+          await call("workspace/rename", { request: { workspaceId: channel.workspaceId, title } });
           await loadChannelIndex();
           await refreshSessions();
           void openChannel({ ...channel, title });
         } catch (err) {
-          failed(err, "workspace.rename");
+          failed(err, "workspace/rename");
         }
       },
       onToggleAgent: async (bin, on) => {
@@ -2411,8 +3080,10 @@ function indexRow(row, open) {
 
 /** Store one projection value, higher seq winning, and keep the agent panel's
  * usage card live when it is the one on screen.
- * @param {Record<string, any>} view - `{sessionId, key, value, seq?}`. */
-function acceptProjection(view) {
+ * @param {Record<string, any>} view - `{sessionId, key, value, seq?}`.
+ * @param {boolean} [fromList] - seeded by the list refresh itself, which
+ *   already re-read everything a change here would refresh. */
+function acceptProjection(view, fromList = false) {
   const id = String(view.sessionId);
   let units = projStore.get(id);
   if (units === undefined) {
@@ -2426,22 +3097,58 @@ function acceptProjection(view) {
   if (id === activeSession && (view.key === "tokenUsage" || view.key === "contextPressure")) {
     renderAgentSession();
   }
-  if (id === activeSession && view.key === "room") renderStrip(); // the coarse states live here
-  // session.list seeds the same snapshot again: only new projection cuts
-  // warrant another catalog read, otherwise listing schedules itself forever.
-  if (view.key === "subagent" && (prev === undefined || prev.seq < seq)) scheduleListRefresh();
+  if (id === activeSession && view.key === "room") {
+    syncMemberFollows(); // a newly dispatched member is named here before any list refresh
+    renderStrip(); // the coarse states live here
+  }
+  // The list that seeded this value IS the refresh; re-scheduling from it
+  // would have the listing schedule itself forever.
+  if (fromList) return;
+  /* A parent's child catalog (`subagentCatalog`) or a child's own identity
+   * (`subagent`) moved: the sidebar's subagent rows and the catalog composed
+   * from them follow (NEW subagent src/projection-types.ts:69-71). Only new cuts. */
+  if ((view.key === "subagentCatalog" || view.key === "subagent") && (prev === undefined || prev.seq < seq)) scheduleListRefresh();
+  /* A title landed. 0.1.1's all-session mux refreshed the list on any event of
+   * any session, which is how a first prompt's generated title reached the
+   * sidebar; at 0.2 the control stream carries the title of every attached
+   * session instead, so a title the sidebar does not show yet (the list row's
+   * own, which `titleOf` reads) is what schedules the refresh. */
+  if (view.key === "title" && typeof view.value === "string"
+    && lastSessions.find((s) => String(s.sessionId) === id)?.projections?.values?.title !== view.value) {
+    scheduleListRefresh();
+  }
 }
 
-/** Seed the store from a `{asOfSeq, values}` projections block (history tail
- * page, or an attached session's list row). Absent or malformed blocks seed
- * nothing. @param {string} sessionId @param {unknown} block */
-function seedProjections(sessionId, block) {
+/** Seed the store from a `{asOfSeq, values}` projections block: a follow
+ * snapshot, the control stream's baseline, or an attached session's list row.
+ * Absent or malformed blocks seed nothing, and so does a list row's `cached`
+ * block: that is a header-only listing's partial hint read from the persisted
+ * projection cache, whose watermark is the stored record's own and "must not be
+ * compared with the connected Session's values" (NEW session-controller
+ * src/types.ts:53-71); the session's own snapshot seeds it exactly when opened.
+ * @param {string} sessionId @param {unknown} block @param {boolean} [fromList] */
+function seedProjections(sessionId, block, fromList = false) {
   if (block === null || typeof block !== "object") return;
-  const { asOfSeq, values } = /** @type {Record<string, any>} */ (block);
+  const { kind, asOfSeq, values } = /** @type {Record<string, any>} */ (block);
+  if (kind === "cached") return;
   if (values === null || typeof values !== "object") return;
   for (const [key, value] of Object.entries(values)) {
-    acceptProjection({ sessionId, key, value, seq: typeof asOfSeq === "number" ? asOfSeq : -1 });
+    acceptProjection({ sessionId, key, value, seq: typeof asOfSeq === "number" ? asOfSeq : -1 }, fromList);
   }
+}
+
+/** Seed every attached session from a `session/control` baseline,
+ * `{projections: {[sessionId]: {asOfSeq, values}}}` (NEW session-controller
+ * src/control.ts:56-75; types.ts:566-569). Each generation of the control
+ * stream opens with one, so a reconnect re-seeds rather than leaving the
+ * store at the cut the socket dropped at. @param {unknown} baseline */
+function seedAllProjections(baseline) {
+  const projections = baseline !== null && typeof baseline === "object" ? /** @type {any} */ (baseline).projections : undefined;
+  if (projections === null || typeof projections !== "object") {
+    console.warn("face: session/control baseline carried no projections map");
+    return;
+  }
+  for (const [sessionId, block] of Object.entries(projections)) seedProjections(sessionId, block);
 }
 
 /** Show one sidebar face and refresh its content. */
@@ -2657,7 +3364,10 @@ function botModelField(value) {
   const field = botField("Default model", input, "Leave empty to inherit the host default. Used for new home conversations.");
   const catalogNote = el("span", "bot-field-hint", "Loading available models…");
   field.append(list, catalogNote);
-  void rpc("llm.models", {}).then((catalog) => {
+  // `session/modelCatalog` → {default, routableProviders, groups, failures}: a
+  // superset of 0.1.1's `llm.models` {groups, failures}, same group/model/failure
+  // rows (NEW session-controller src/types.ts:125-164; index.ts:309-312).
+  void call("session/modelCatalog", {}).then((catalog) => {
     for (const choice of botModelChoices(catalog)) {
       const option = el("option");
       option.value = choice.value;
@@ -3022,8 +3732,22 @@ function openNewBot() {
   });
 }
 
+/** The credential references the keys card describes. */
+const KEY_REFS = ["DEEPSEEK_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"];
+
 /** The main agent's page: identity, model, host, keys, live session usage.
- * Each card degrades alone: one failed call marks its card, not the page.
+ * Each card degrades alone: one failed read marks its card, not the page.
+ *
+ * dsh 0.2 has no `host.describe`, and `settings/describe` needs the
+ * `profileContext` the face does not provide (upgrade plan D1; NEW
+ * settings-controller src/index.ts:216-222), so the three cards read:
+ *   model - `session/modelCatalog`'s `default` {provider, model, reasoningEffort?},
+ *           the selection a new session starts from (session-controller
+ *           src/catalog.ts:22, 67 - `agentDefaultModel.currentSelection()`);
+ *   host  - the face's own `/data/host.json` {cwd, home, attachedSessions,
+ *           version}: 0.1.1 `host.describe`'s fields (src/panels.ts);
+ *   keys  - `credentials/describe`, whose value is the ref map itself, with no
+ *           0.1.1 `.credentials` wrapper (settings-controller src/credentials.ts:82-97).
  * @param {Record<string, any>|undefined} mainInfo - the roster's main block. */
 async function openAgentMain(mainInfo) {
   const name = String(mainInfo?.name ?? "Kairos");
@@ -3032,10 +3756,10 @@ async function openAgentMain(mainInfo) {
     inner.append(el("div", "detail-title", name));
     inner.append(el("div", "sp-note", "loading…"));
   });
-  const [host, settings, creds] = await Promise.allSettled([
-    rpc("host.describe"),
-    rpc("settings.describe"),
-    rpc("credentials.describe", { refs: ["DEEPSEEK_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"] }),
+  const [host, catalog, creds] = await Promise.allSettled([
+    panelData("/data/host.json"),
+    call("session/modelCatalog", {}),
+    call("credentials/describe", { refs: KEY_REFS }),
   ]);
   if (token !== detailSeq) return; // the operator moved on mid-fetch
   openDetail(title, (inner) => {
@@ -3045,15 +3769,13 @@ async function openAgentMain(mainInfo) {
     inner.append(grid);
 
     const model = panelCard("model");
-    if (host.status === "fulfilled") {
-      kvRow(model, "provider", dash(host.value?.provider));
-      kvRow(model, "model", dash(host.value?.model));
+    if (catalog.status === "fulfilled") {
+      const selection = catalog.value?.default;
+      kvRow(model, "provider", dash(selection?.provider));
+      kvRow(model, "model", dash(selection?.model));
+      kvRow(model, "effort", dash(selection?.reasoningEffort));
     } else {
-      model.append(panelError(host.reason, "host.describe"));
-    }
-    if (settings.status === "fulfilled") {
-      const ns = (settings.value?.namespaces ?? []).find((n) => n?.ns === "agent-default-model");
-      kvRow(model, "effort", dash(ns?.value?.reasoningEffort));
+      model.append(panelError(catalog.reason, "session/modelCatalog"));
     }
     grid.append(model);
 
@@ -3063,23 +3785,29 @@ async function openAgentMain(mainInfo) {
       kvRow(hostCard, "attached", dash(host.value?.attachedSessions));
       kvRow(hostCard, "home", dash(host.value?.home));
     } else {
-      hostCard.append(panelError(host.reason, "host.describe"));
+      hostCard.append(panelError(host.reason, "host"));
     }
     grid.append(hostCard);
 
     const keys = panelCard("keys");
-    if (creds.status === "fulfilled") {
-      const map = creds.value?.credentials ?? {};
-      for (const ref of ["DEEPSEEK_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"]) {
+    const map = creds.status === "fulfilled" ? creds.value : undefined;
+    if (creds.status === "rejected") {
+      keys.append(panelError(creds.reason, "credentials/describe"));
+    } else if (map === null || typeof map !== "object") {
+      // Reading a wrong shape as "not set" is exactly how 0.1.1's wrapper would
+      // have silently shown every key missing: a malformed answer says so.
+      keys.append(panelError(new Error("the host answered without a key map"), "credentials/describe"));
+    } else {
+      for (const ref of KEY_REFS) {
         const entry = map[ref];
         const set = entry?.configured === true;
         const row = el("div", "sp-kv");
         row.append(el("span", "sp-k", ref.toLowerCase().replaceAll("_", " ")));
-        row.append(el("span", `sp-v ${set ? "ok" : "miss"}`, set ? `set · ${dash(entry?.source)}` : "not set"));
+        // An absent entry is not a "no": the host describes every ref it was asked for.
+        const text = entry === undefined ? "unknown" : set ? `set · ${dash(entry?.source)}` : "not set";
+        row.append(el("span", `sp-v ${set ? "ok" : "miss"}`, text));
         keys.append(row);
       }
-    } else {
-      keys.append(panelError(creds.reason, "credentials.describe"));
     }
     grid.append(keys);
 
@@ -3548,15 +4276,180 @@ for (const btn of document.querySelectorAll(".rail-btn[data-panel]")) {
 window.addEventListener("hashchange", () => setPanel(panelFromHash(location.hash)));
 setPanel(panelFromHash(location.hash));
 
-openMux(acceptFrame, {
-  onOpen: () => {
+/* ---------- host notifications and the control stream ---------- */
+
+/** Replace fields on one cached list row, if the list has it.
+ * @param {string} id @param {Record<string, unknown>} fields */
+function patchSession(id, fields) {
+  lastSessions = lastSessions.map((s) => String(s.sessionId) === id ? { ...s, ...fields } : s);
+}
+
+/**
+ * Upsert one list row from an `api-session/added` notification - the host's
+ * "upsert the summary and replace its running and availability state"
+ * (NEW session-controller src/types.ts:585-591; emitted on session creation
+ * and on every Agent create/dispose, index.ts:167-179). The member fold is
+ * re-derived at once: member follows and a child's parent availability key on
+ * `agentAvailable`, and the next list refresh is up to a second away.
+ * @param {Record<string, any>} row - already normalized by {@link summaryOf}.
+ */
+function upsertSession(row) {
+  const id = String(row.sessionId);
+  if (deletedSet.has(id)) return; // a host-memory ghost stays hidden
+  const at = lastSessions.findIndex((s) => String(s.sessionId) === id);
+  // A notification whose projections omit the preset must not erase one the list knew.
+  const known = at < 0 ? undefined : lastSessions[at].agentPreset;
+  const merged = row.agentPreset === undefined && typeof known === "string" ? { ...row, agentPreset: known } : row;
+  lastSessions = at < 0 ? [...lastSessions, merged] : lastSessions.map((s, i) => (i === at ? merged : s));
+  memberFold = foldMembers(lastSessions);
+  if (id === activeSession && typeof merged.agentPreset === "string") setSpeaker(merged);
+  if (id === activeSession) reconcileActiveView(); // it came alive: a paged view becomes a follow
+  syncMemberFollows();
+  renderStrip();
+}
+
+/**
+ * One host notification from `$events` (`emit` frames; the forwarded set is
+ * NEW packages/api/remotes/src/remote-events.ts:20-48, the argument lists
+ * session-controller src/types.ts:585-618 and agent-preset-registry
+ * src/types.ts:59-69). 0.1.1's all-session mux told this page about every
+ * session's every event; these facts are what replaces that for sessions
+ * nobody follows, and each schedules the same debounced list refresh.
+ * @param {string} event @param {unknown[]} args
+ */
+function acceptHostEvent(event, args) {
+  const list = Array.isArray(args) ? args : [];
+  switch (event) {
+    case "api-session/added": {
+      const summary = /** @type {any} */ (list[0]);
+      if (summary !== null && typeof summary === "object" && typeof summary.sessionId === "string") {
+        upsertSession(summaryOf(summary, channelIndex?.presets));
+      }
+      scheduleListRefresh();
+      return;
+    }
+    case "api-session/removed": {
+      /* [sessionId]: it left the live registry, so it is no longer live
+       * whatever the list last said - and from now on a (re)opened follow of it
+       * would promote it. Its member follow closes, and the session on screen
+       * stops being followed (its window stays; a cold session does not move). */
+      const id = list[0];
+      if (typeof id === "string") {
+        patchSession(id, { agentAvailable: false, running: false });
+        stopFollowing(id);
+        syncMemberFollows();
+        renderStrip();
+      }
+      scheduleListRefresh();
+      return;
+    }
+    case "api-session/activity":
+      // [sessionId, updatedAt]: a user-authored message moved its list position.
+      scheduleListRefresh();
+      return;
+    case "api-session/status": {
+      /* [sessionId, running]. This replaces 0.1.1's "any turn frame refreshes
+       * the list". A room member nobody follows yet (it just came alive, or the
+       * list has not re-folded) gets its coarse liveness from here; a followed
+       * one gets its fine state from its own pulses. */
+      const [id, running] = list;
+      if (typeof id !== "string" || typeof running !== "boolean") return;
+      patchSession(id, { running });
+      if (memberSessionIds().has(id) && !memberFollows.has(id)) {
+        if (running) fineStates.set(id, "thinking");
+        else fineStates.delete(id);
+      }
+      renderStrip();
+      scheduleListRefresh();
+      return;
+    }
+    case "api-session/error": {
+      // [sessionId, message]: an Agent failure outside any turn - no transcript event will say it.
+      const [id, message] = list;
+      if (id === activeSession) failed(new Error(typeof message === "string" && message !== "" ? message : "the agent failed"), "session");
+      return;
+    }
+    case "agent-preset/selected": {
+      // [sessionId, agentPreset]: a blank session was re-pointed at another preset.
+      const [id, preset] = list;
+      if (typeof id !== "string" || typeof preset !== "string" || preset === "") return;
+      patchSession(id, { agentPreset: preset });
+      memberFold = foldMembers(lastSessions);
+      if (id === activeSession) setSpeaker(lastSessions.find((s) => String(s.sessionId) === id) ?? { sessionId: id, agentPreset: preset });
+      scheduleListRefresh(); // its sidebar bucket may move
+      return;
+    }
+    default:
+      // commands/, credentials/, llm/, plugin-manager/, schedule/ … have no surface here.
+      return;
+  }
+}
+
+/** Retry wait for a control stream the host ended or failed. A failure is
+ * structural (the controller is missing or broken), so it is retried slowly -
+ * and loudly - rather than spun on. */
+const CONTROL_RETRY_MS = { end: FOLLOW_RETRY_MS, error: 10_000 };
+
+/**
+ * The host-wide projection stream, `session/control` (NEW session-controller
+ * src/control.ts:22-75; index.ts:514-522): one `baseline` of every ATTACHED
+ * session's projections per generation, then a `projection` item for every
+ * change on any session - the successor of 0.1.1's `session/projection` mux
+ * frames, and the agent panel's usage feed. The mux re-opens it on every
+ * reconnect; an `end` or `error` from the host is re-opened here.
+ */
+function openControl() {
+  liveMux().stream("session/control", {}, {
+    onItem: (item) => {
+      if (item?.type === "baseline") seedAllProjections(item.value);
+      else acceptFrame(item); // `{type:"projection", sessionId, key, value, seq}` → mapper's projection view
+    },
+    onEnd: () => {
+      console.warn("face: the host ended session/control; reopening");
+      setTimeout(openControl, CONTROL_RETRY_MS.end);
+    },
+    onError: (error) => {
+      status(`live session state unavailable: ${error?.code ?? "error"} - ${error?.message ?? ""}`, true);
+      setTimeout(openControl, CONTROL_RETRY_MS.error);
+    },
+  });
+}
+
+mux = openMux({
+  onReady: () => {
+    /* A new `$events` generation: a new socket, a new clientId, and every
+     * stream still registered - control, a subagent child's follow - already
+     * re-opened by the mux, each delivering a fresh opening (api.js). The
+     * follows a re-open could turn into an activation were suspended when the
+     * socket dropped (onDown); the fresh list decides which of them resume as
+     * follows and which are only re-paged (reconcileActiveView,
+     * syncMemberFollows). */
+    eventsGeneration += 1;
+    const generation = eventsGeneration;
     status("connected");
-    void refreshSessions();
-    // `since` is unimplemented at this pin: the contract's own recovery is to
-    // reopen the stream and refetch history, which is exactly this.
-    if (activeSession !== null) void openSession(activeSession);
+    void refreshSessions().finally(reconcileActiveView);
+    setTimeout(() => purgeUndeliveredGates(generation), GATE_REPLAY_GRACE_MS);
+  },
+  onEvent: acceptHostEvent,
+  /* Gates go AROUND the transcript queue (critique WC-F3): they do not depend
+   * on transcript order, and a Gate-2 card held in a queue behind an open that
+   * never completes would hide an order the host is blocked on. What they do
+   * depend on - being drawn AFTER the window of the session on screen - is
+   * renderGate's to keep: it defers while an open is pending, and the open
+   * draws every pending gate when its window lands (applySnapshot, openFailed). */
+  onGate: (frame) => {
+    // Recorded at delivery: this is the generation an answer to it would travel on.
+    if (typeof frame?.eventId === "string") gateDelivery.set(frame.eventId, eventsGeneration);
+    const view = mapFrame(frame);
+    if (view.kind === "approval" || view.kind === "question") acceptGate(view);
+  },
+  onGateGone: (eventId) => acceptGateResolved(mapFrame({ type: "cancel", eventId })),
+  onDown: (reason) => {
+    status(`disconnected - ${reason}; reconnecting…`, true);
+    suspendFollows();
   },
 });
+openControl();
 
 markActive();
 status("connecting…");

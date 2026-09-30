@@ -1,5 +1,15 @@
 /** The optional discussion contract and each bot's journal, through the real
- * dsh request/log path. Fixture directories and scripted model responses only. */
+ * dsh request/log path. Fixture directories and scripted model responses only.
+ *
+ * dsh 0.2.0 deltas this file follows: `/api` calls go through `remote()` with
+ * the signed browser cookie (tests/remote.ts, PLAN Appendix A); `Session.events`
+ * is `snapshotEvents()` (NEW packages/core/session/src/index.ts:649); a
+ * loop-built request carries the system prompt as its leading `role:'system'`
+ * message, not `request.system` (NEW packages/llm/llm/src/types.ts:511-527);
+ * the journal context is logged as `{kind:'runtime-context', form:'snapshot',
+ * sections}` (NEW packages/core/agent-loop/src/runtime-context.ts:14-19, 161);
+ * and durable reads use a persistence READ handle (NEW
+ * packages/session/session-persistence/src/handle.ts:14-23, 59-83). */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
@@ -18,9 +28,11 @@ import { panelDeps } from "../src/panels.ts";
 import { setBots } from "../src/roster.ts";
 import { installRoom, type RoomContextLike } from "../src/room.ts";
 import { makeRepoBotsRoot } from "./bots-fixture.ts";
+import { mountClient, remote, signIn } from "./remote.ts";
 import { StubAdapter, type StubReply } from "./stub-llm.ts";
 
 const gated = process.env.FACE_SMOKE !== "1";
+
 const BRIEF: StructuredBrief = {
   question: "BRIEF-QUESTION: Does recurring demand support the thesis?",
   context: "BRIEF-CONTEXT: Compare the declared positions and report evidence gaps.",
@@ -54,6 +66,10 @@ const sourceOf = (event: Event): Record<string, unknown> | undefined => {
 const textOf = (message: GenerateOptions["messages"][number]): string =>
   message.content.map((block) => "text" in block ? block.text : "").join("\n");
 const allText = (request: GenerateOptions): string => request.messages.map(textOf).join("\n");
+/** The system prompt a loop-built request actually carried: its first
+ * `role:'system'` message (`request.system` is undefined for loop requests). */
+const systemOf = (request: GenerateOptions): string =>
+  textOf(request.messages.find((message) => "role" in message && message.role === "system") ?? { content: [] } as unknown as GenerateOptions["messages"][number]);
 const kindOf = (message: GenerateOptions["messages"][number]): Record<string, unknown> =>
   ("source" in message ? message.source : {}) as Record<string, unknown>;
 async function waitFor(what: string, check: () => boolean, ms = 30_000): Promise<void> {
@@ -83,7 +99,14 @@ test("room discussion smoke: structured brief, private journals, serial disagree
     const patchPath = join(home, "profiles", "face", "cordis.patch.yml");
     const patch = readFileSync(patchPath, "utf8").replace(/^\[\][ \t]*$/m, "");
     // This smoke owns a scratch profile and must not start the operator's data server.
-    writeFileSync(patchPath, `${patch}\n- id: mcp-akshare\n  disabled: true\n`);
+    /* The host default route is a PROFILE ROW at dsh 0.2.0: without
+     * `profileContext` the face mounts no `configEditor`, and
+     * `agentDefaultModel.saveSelection` then returns without writing anything
+     * (NEW packages/core/agent-default-model/src/index.ts:74-91; PLAN D1/D2).
+     * So the scratch profile names the stub route up front, the same way the
+     * operator names theirs, and the boot below asserts it took. */
+    writeFileSync(patchPath, `${patch}\n- id: mcp-akshare\n  disabled: true\n` +
+      `- id: agent-default-model\n  config:\n    provider: stub\n    model: host-default\n`);
     const { ctx, dispose } = await bootFace({ profileName: "face", port: 0, dshHome: home, botsRoot: bots });
     let disposeRuntime = (): void => undefined;
     let disposeRoom = (): void => undefined;
@@ -117,17 +140,27 @@ test("room discussion smoke: structured brief, private journals, serial disagree
       }));
       const defaults = ctx.get("agentDefaultModel") as {
         currentSelection(): { provider: string; model: string };
-        saveSelection(selection: { provider: string; model: string }): Promise<void>;
       };
-      await defaults.saveSelection({ provider: "stub", model: "host-default" });
       const originalDefault = defaults.currentSelection();
-      const savedBots = () => listBots(bots, () => ctx.agentPresets.list());
+      assert.deepEqual({ ...originalDefault }, { provider: "stub", model: "host-default" }, "the scratch profile's default route took");
+      const presets = ctx.get("agentPresets") as { list(): Promise<{ id: string; broken?: string }[]> };
+      const savedBots = () => listBots(bots, () => presets.list());
       const runtime = installBotRuntime(ctx, savedBots, { readJournal: (bot) => readBotJournal(bots, bot) });
       disposeRuntime = runtime.dispose;
       const registry = ctx.get("workspaceRegistry") as { create(path: string): Promise<{ id: string }> };
+      /* 0.1.1's `readRaw`/`load` are gone with the handle-based seam
+       * (bec6805d6a). A READ handle never takes ownership and, opened after a
+       * flush, observes at least the flushed prefix (handle.ts:48-57). */
       const persistence = ctx.get("sessionPersistence") as {
-        readRaw(id: SessionId): Promise<{ content: string } | undefined>;
-        load(id: SessionId): Promise<{ events: Event[] }>;
+        open(id: SessionId, access: "read"): Promise<{ read(): Promise<{ events: readonly Event[] }>; close(): Promise<void> }>;
+      };
+      const readStored = async (id: SessionId): Promise<readonly Event[]> => {
+        const handle = await persistence.open(id, "read");
+        try {
+          return (await handle.read()).events;
+        } finally {
+          await handle.close();
+        }
       };
       const ws = await registry.create(channelDir);
       await setBots(home, ws.id, ["alpha", "beta", "gamma"]);
@@ -135,29 +168,26 @@ test("room discussion smoke: structured brief, private journals, serial disagree
       const engine = installRoom({ ctx: ctx as unknown as RoomContextLike, home, channelFor: deps.channelFor, listBots: savedBots });
       disposeRoom = () => engine.dispose();
       const base = `http://127.0.0.1:${ctx.webServer.port}`;
-      let sequence = 0;
-      const rpc = async (method: string, payload: object): Promise<Record<string, unknown>> => {
-        const response = await fetch(`${base}/api/${method}`, {
-          method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ type: "client-request", rpcId: `discussion-${++sequence}`, method, payload }),
-        });
-        const body = await response.json() as { result?: { ok?: boolean; value?: Record<string, unknown>; error?: unknown } };
-        assert.equal(body.result?.ok, true, `${method}: ${JSON.stringify(body.result?.error)}`);
-        return body.result!.value!;
-      };
-      const created = await rpc("session.create", { workspaceId: ws.id });
+      mountClient(ctx);
+      const cookie = await signIn(ctx, base);
+      const rpc = (endpoint: string, args: object): Promise<Record<string, unknown>> =>
+        remote<Record<string, unknown>>(base, cookie, endpoint, args);
+      const created = await rpc("session/create", { request: { workspaceId: ws.id } });
       const roomId = SessionId(String(created.sessionId));
       assert.equal(created.agentPreset, "kairos");
       const room = ctx.agents.get(roomId)!;
       assert.ok(room);
-      await rpc("session.prompt", { sessionId: roomId, mode: "queue", content: [{ type: "text", text: "Examine recurring demand and compare the cohort evidence." }] });
+      await rpc("session/prompt", { request: {
+        requestId: `discussion-${crypto.randomUUID()}`, sessionId: roomId, mode: "queue",
+        content: [{ type: "text", text: "Examine recurring demand and compare the cohort evidence." }],
+      } });
       await waitFor("the completed synthesis", () => Boolean(synthesis)
-        && room.session.events.some((event) => event.type === "assistant/message" && JSON.stringify(event.data).includes("DISCUSSION-SYNTHESIS")));
+        && room.session.snapshotEvents().some((event) => event.type === "assistant/message" && JSON.stringify(event.data).includes("DISCUSSION-SYNTHESIS")));
       await room.whenIdle();
       assert.ok(synthesis);
       assert.deepEqual(defaults.currentSelection(), originalDefault, "member routes never change the global default");
 
-      const events = room.session.events;
+      const events: readonly Event[] = room.session.snapshotEvents();
       const sources = events.filter((event) => event.type === "user/message").map(sourceOf);
       const answers = sources.filter((source) => source?.kind === "room" && source.form === "answer");
       assert.equal(answers.length, 3, "all valid and malformed answers remain in the discussion");
@@ -191,24 +221,38 @@ test("room discussion smoke: structured brief, private journals, serial disagree
         for (const marker of ["BRIEF-QUESTION", "BRIEF-CONTEXT", "BRIEF-EVIDENCE", "BRIEF-FALSIFICATION", "BRIEF-OUTPUT"]) assert.ok(prompt.includes(marker), `${id}: ${marker}`);
         assert.match(prompt, /room-view/);
         assert.ok(prompt.includes(`PRIVATE-${id.toUpperCase()}-JOURNAL`));
-        assert.doesNotMatch(request.system ?? "", /PRIVATE-.*-JOURNAL/);
+        assert.equal(request.system, undefined, "loop-built requests carry the prompt as a system message");
+        assert.ok(systemOf(request).length > 0, `${id}: the request carries a system-role prompt`);
+        assert.doesNotMatch(systemOf(request), /PRIVATE-.*-JOURNAL/);
         for (const other of ["alpha", "beta", "gamma"].filter((other) => other !== id)) {
           assert.ok(!prompt.includes(`PRIVATE-${other.toUpperCase()}-JOURNAL`), `${id} never loads ${other}'s journal`);
         }
         const member = ctx.agents.get(request.sessionId!)!;
         await member.whenIdle();
-        const delta = member.session.events.find((event) => sourceOf(event)?.form === "delta");
+        const memberEvents: readonly Event[] = member.session.snapshotEvents();
+        const delta = memberEvents.find((event) => sourceOf(event)?.form === "delta");
         assert.deepEqual(sourceOf(delta!)?.brief, BRIEF, "structured brief source survives delivery");
-        const journalEvent = member.session.events.find((event) => event.type === "user/message"
-          && sourceOf(event)?.plugin === "@deepseek-ai/dsh-system-prompt"
+        /* 0.1.1 logged `{kind:'plugin', plugin:'@deepseek-ai/dsh-system-prompt'}`;
+         * the `plugin` kind is gone and the loop owns this message now. */
+        const journalEvent = memberEvents.find((event) => event.type === "user/message"
+          && sourceOf(event)?.kind === "runtime-context"
           && JSON.stringify(event.data).includes(`PRIVATE-${id.toUpperCase()}-JOURNAL`));
         assert.ok(journalEvent, `${id}: runtime context is in the canonical event log`);
-        assert.equal(sourceOf(journalEvent)?.kind, "plugin");
+        assert.equal(sourceOf(journalEvent)?.kind, "runtime-context");
         assert.equal(sourceOf(journalEvent)?.form, "snapshot");
         assert.ok((sourceOf(journalEvent)?.sections as { name: string }[]).some((section) => section.name === "bot-journal"));
+        /* `inspect` refuses (409) unless the session's `agentPreset`
+         * PROJECTION names this bot, so reaching the assertions below proves
+         * bot-runtime's projection read (the `resolveSessionPreset`
+         * successor) resolved the member to its bot. */
         const inspection = await runtime.inspect(id, String(request.sessionId));
         assert.ok("journal" in inspection);
         assert.equal(inspection.journal?.status, "loaded");
+        /* The captured SOUL is the persona-PREFIX section (dsh 0.2.0 renamed
+         * `deployment:persona`, NEW packages/core/system-prompt/src/index.ts:179);
+         * a capture still matching the old name reads `soul: null` for every bot. */
+        assert.match(String(inspection.soul), new RegExp(`You are ${id}, a fixture research voice`),
+          `${id}: the inspected SOUL is the bot's own persona-prefix section`);
       }
       const betaRequest = requests.find((entry) => entry.who === "beta")!.request;
       assert.ok(allText(betaRequest).includes(ALPHA_PROSE), "serial beta sees alpha's real answer before declaring disagreement");
@@ -221,17 +265,19 @@ test("room discussion smoke: structured brief, private journals, serial disagree
       assert.ok(allText(synthesis).includes(GAMMA_TEXT), "the malformed contract's original answer still reaches synthesis");
       assert.doesNotMatch(allText(synthesis), /PRIVATE-.*-JOURNAL/, "private journal snapshots are not directly copied to Kairos");
 
-      // Flush through the public lifecycle barrier, then read both the durable
-      // artifact and the persistence loader, independent of the UI projection.
+      // Flush through the public lifecycle barrier, then read the durable log
+      // through a fresh persistence READ handle, independent of host memory
+      // and the UI projection. (0.1.1 also read the raw artifact bytes via
+      // `readRaw`; that method has no successor, and node:zlib decodes only
+      // the FIRST Zstandard frame of the multi-frame v4 file, so the raw check
+      // folds into this one.)
       await ctx.sessions.flush(room.session);
-      const artifact = await persistence.readRaw(roomId);
-      assert.ok(artifact);
-      assert.ok(artifact.content.includes("BETA-DISAGREEMENT"));
-      assert.ok(artifact.content.includes("displayText"));
-      const persisted = await persistence.load(roomId);
-      const persistedAnswers = persisted.events.filter((event) => sourceOf(event)?.form === "answer").map(sourceOf);
+      const persisted = await readStored(roomId);
+      assert.ok(JSON.stringify(persisted).includes("BETA-DISAGREEMENT"));
+      assert.ok(JSON.stringify(persisted).includes("displayText"));
+      const persistedAnswers = persisted.filter((event) => sourceOf(event)?.form === "answer").map(sourceOf);
       assert.deepEqual(persistedAnswers, answers, "source view/displayText/viewIssue fields survive durable reload");
-      const persistedRound = persisted.events.find((event) => sourceOf(event)?.form === "round-end")!;
+      const persistedRound = persisted.find((event) => sourceOf(event)?.form === "round-end")!;
       assert.deepEqual(sourceOf(persistedRound)?.discussion, discussion, "round discussion source survives durable reload");
     } finally {
       disposeRoom();

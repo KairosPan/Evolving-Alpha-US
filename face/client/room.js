@@ -6,10 +6,14 @@
  * without a browser.
  *
  * WHAT THE WIRE CARRIES (plan 2 of the bots-and-rooms spec): no `room/*`
- * events. A member is known from its HEADER (`parentSessionId` + a bot
- * `agentPreset`, no `origin`); a room's coarse states come from the `room`
- * projection value; fine states (thinking / writing / tool) are the member
- * sessions' own pulses, which the mux forwards for every live session.
+ * events. A member is known from its list row (`parentSessionId` + a bot
+ * `agentPreset`, no `origin`) - at dsh 0.2 the row's `agentPreset` is restored
+ * by summaries.js from the preset projection or the persisted header, because
+ * the 0.2 summary no longer carries it; a room's coarse states come from the
+ * `room` projection value (the control stream); fine states (thinking /
+ * writing / tool) are the member sessions' own pulses, which chat.js receives
+ * by following each LIVE member of the room on screen - 0.2 has no all-session
+ * feed, and following a cold member would activate it.
  * @module
  */
 

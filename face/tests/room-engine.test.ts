@@ -4,11 +4,11 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RoomEngine, dispatchToolDefinition, gatePending, installRoom, isQuiet, registerRoomRoutes, type RoomDeps } from "../src/room.ts";
+import { RoomEngine, dispatchToolDefinition, eventsOf, gatePending, installRoom, isQuiet, registerRoomRoutes, unreadableLog, type RoomDeps } from "../src/room.ts";
 import { ROOM_CAPS, type EventLike, type RosterBot } from "../src/room-rules.ts";
 import { setBots } from "../src/roster.ts";
 import type { DiscussionSummary } from "../src/room-contract.ts";
-import { makeFakeTree, type FakeTree } from "./room-fake.ts";
+import { fakeRoomContext, legacyToolResultMessage, makeFakeTree, toolResultMessage, type FakeAgentCtx, type FakeTree } from "./room-fake.ts";
 import { recorder } from "./route-recorder.ts";
 
 const CHANNEL = { workspaceId: "ws-1", name: "storage-chain", dir: "/repo/strategies/storage-chain" };
@@ -20,12 +20,12 @@ const roster: RosterBot[] = [
 
 function engineOn(tree: FakeTree, over: Partial<RoomDeps> = {}): RoomEngine {
   return new RoomEngine({
-    ctx: tree.ctx as unknown as RoomDeps["ctx"],
+    ctx: fakeRoomContext(tree),
     home: "/nowhere",
     channelFor: async (cwd) => (cwd === CHANNEL.dir ? CHANNEL : null),
     listBots: async () => roster.map((b) => ({ ...b })),
     clock: tree.clock,
-    installModelSelection: (agentCtx, ref) => { tree.selections.push({ agent: (agentCtx as { agent: { id: string } }).agent.id, selection: ref.current }); return () => {}; },
+    installModelSelection: (agentCtx, ref) => { tree.selections.push({ agent: (agentCtx as FakeAgentCtx).fakeAgentId, selection: ref.current }); return () => {}; },
     log: () => {},
     ...over,
   });
@@ -46,9 +46,39 @@ test("ensureMember creates a member once: root-created, parented, preset-joined,
   assert.deepEqual(created.agentOptions, { provider: "stub", model: "echo" }, "preset.yml's route, served, is the member's");
   assert.deepEqual(tree.mounts, [{ agent: created.sessionId, preset: "buffett" }]);
   assert.deepEqual(tree.selections[0].selection, { provider: "stub", model: "echo" });
-  assert.equal(tree.ctx.permissionPresets.current(a.agent.session.events), "read-only");
-  assert.equal(a.agent.session.events[0].type, "permission/preset", "the pin is the session's first fact - inside setup, before publish (a fresh session has no end-seed marker)");
+  assert.equal(tree.ctx.permissionPresets.current(tree.sessions.get(a.agent.id)!), "read-only");
+  assert.equal(tree.publishedWith.get(created.sessionId), "read-only", "read-only AT publication: pinned inside setup, on setup's own agent argument");
+  assert.deepEqual(a.agent.session.snapshotEvents().filter((e) => e.type === "permission/preset").map((e) => (e.data as { preset: string }).preset), ["read-only"],
+    "the pin is the session's first and only permission fact - dsh's announcement pin of the user default never fired");
+  assert.equal(a.agent.session.snapshotEvents()[0].type, "permission/preset", "the pin is the session's first fact - inside setup, before publish (a fresh session has no end-seed marker)");
   assert.deepEqual(tree.attached, [created.sessionId]);
+});
+
+test("a member whose pin did not take is refused before its first prompt (fails closed)", async () => {
+  /* dsh pins the user default on announcement when setup pinned nothing; a
+   * setup whose `set` had no effect must never yield a prompted, writable voice. */
+  const tree = makeFakeTree();
+  tree.newRoom("session-room", CHANNEL.dir);
+  const ctx = fakeRoomContext(tree);
+  const engine = engineOn(tree, { ctx: { ...ctx, permissionPresets: { ...ctx.permissionPresets, set: () => {} } } });
+  await assert.rejects(engine.ensureMember(engine.roomOf("session-room", CHANNEL), roster[0]), /is "workspace-write", not read-only; refusing to prompt it/);
+});
+
+test("setup is (agentCtx, agent): the engine never reads an `agent` off the scoped context (dsh 0.2 deleted Context.agent)", async () => {
+  const tree = makeFakeTree();
+  tree.newRoom("session-room", CHANNEL.dir);
+  const ctx = fakeRoomContext(tree);
+  const seen: unknown[] = [];
+  /* A create that hands setup a ctx which THROWS on `.agent`, as a 0.1.1-shaped engine would read it. */
+  const create: typeof ctx.agents.create = async (opts) => ctx.agents.create({ ...opts, setup: async (agentCtx, agent) => {
+    const guarded = new Proxy(agentCtx, { get(target, key, receiver) { if (key === "agent") throw new Error("Context.agent does not exist in dsh 0.2"); return Reflect.get(target, key, receiver); } });
+    seen.push(agent.id);
+    await opts.setup(guarded, agent);
+  } });
+  const engine = engineOn(tree, { ctx: { ...ctx, agents: { ...ctx.agents, create } } });
+  const member = await engine.ensureMember(engine.roomOf("session-room", CHANNEL), roster[0]);
+  assert.deepEqual(seen, [member.agent.id]);
+  assert.equal(tree.publishedWith.get(member.agent.id), "read-only");
 });
 
 test("an unserved preset.yml route falls back to the default with a note; no route at all is the default silently", async () => {
@@ -57,7 +87,7 @@ test("an unserved preset.yml route falls back to the default with a note; no rou
   const engine = engineOn(tree);
   const room = engine.roomOf("session-room", CHANNEL);
   const odd = await engine.ensureMember(room, { id: "speculator", name: "投机型", model: "nope/x" });
-  assert.deepEqual((tree.agentsCreated[0] as { agentOptions: unknown }).agentOptions, { provider: "deepseek-official", model: "deepseek-v4-flash" });
+  assert.deepEqual((tree.agentsCreated[0] as { agentOptions: unknown }).agentOptions, { provider: "deepseek-official", model: "deepseek-flash" });
   assert.match(engine.noteFor(room, "speculator") ?? "", /nope\/x is not served/);
   await engine.ensureMember(room, roster[2]);
   assert.equal(engine.noteFor(room, "macro"), undefined);
@@ -110,6 +140,55 @@ test("a member session the operator deleted is not a permanent brick: the next r
   assert.equal(newer.agentsCreated.length, 0);
 });
 
+test("a pre-0.2 member session dsh refuses to open fails THAT member's turn with the legacy reason; the round still ends and wakes Kairos", async () => {
+  /* dsh 0.2's v2→v3 edge refuses `kind:'room'` messages in a 0.1.1 log
+   * (NEW packages/session/session-format-v2-to-v3/src/payload.ts:81, 110-114). */
+  const tree = makeFakeTree();
+  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  tree.persistMember("session-legacy", "session-room", "buffett", CHANNEL.dir);
+  const refusal = Object.assign(new Error("cannot safely transform unclassified message source"), { name: "SessionFormatUnsupportedMigrationError" });
+  tree.unopenable.set("session-legacy", new Error("resume failed", { cause: refusal }));
+  tree.script("speculator", () => ({ kind: "answer", text: "卖" }));
+  const logged: string[] = [];
+  const engine = engineOn(tree, { log: (line) => logged.push(line) });
+  await engine.dispatch("session-room", CHANNEL, { to: ["buffett", "speculator"], mode: "parallel", brief: "q", reason: "r" }, roster);
+  await tree.clock.advance(100);
+  assert.equal(tree.agentsCreated.filter((c) => (c as { meta: { agentPreset: string } }).meta.agentPreset === "buffett").length, 0, "no silent fresh member: the voice's memory is not forked");
+  const end = kairos.inbox.nextTurn[0];
+  assert.ok(end !== undefined, "the round ended and woke Kairos");
+  const turns = (end.source as unknown as { turns: { bot: string; state: string; reason?: string }[] }).turns;
+  const buffett = turns.find((t) => t.bot === "buffett")!;
+  assert.equal(buffett.state, "failed");
+  assert.match(buffett.reason ?? "", /session-legacy is unreadable under dsh 0.2 \(legacy format: .*\)/, "model-visible: the round-end names the legacy format");
+  assert.match(end.content[0].text ?? "", /巴菲特型 \(buffett's member session session-legacy is unreadable/);
+  assert.equal(turns.find((t) => t.bot === "speculator")!.state, "answered", "the other voice is untouched");
+  assert.match(logged.join("\n"), /session-legacy is unreadable under dsh 0\.2.*stays on disk untouched/, "log-visible, with what the operator can do");
+});
+
+test("a resume that fails for another reason is reported as such, not as a legacy log", async () => {
+  const tree = makeFakeTree();
+  tree.newRoom("session-room", CHANNEL.dir);
+  tree.persistMember("session-busy", "session-room", "buffett", CHANNEL.dir);
+  tree.unopenable.set("session-busy", Object.assign(new Error("session is held by another writer"), { name: "SessionAlreadyOwnedError" }));
+  const engine = engineOn(tree);
+  await assert.rejects(engine.ensureMember(engine.roomOf("session-room", CHANNEL), roster[0]), (err: Error) => {
+    assert.match(err.message, /session-busy could not be resumed: session is held by another writer/);
+    assert.doesNotMatch(err.message, /legacy/);
+    return true;
+  });
+});
+
+test("persistence rows are dsh 0.2 snapshots ({header, revision}): a member is found by its header, never by a bare row", async () => {
+  const tree = makeFakeTree();
+  tree.newRoom("session-room", CHANNEL.dir);
+  tree.persistMember("session-old", "session-room", "buffett", CHANNEL.dir);
+  const rows = await tree.ctx.sessionPersistence.list();
+  assert.equal((rows[0] as unknown as { id?: unknown }).id, undefined, "the fake lists the NEW shape: no id on the row itself");
+  const engine = engineOn(tree);
+  const m = await engine.ensureMember(engine.roomOf("session-room", CHANNEL), roster[0]);
+  assert.equal(m.agent.id, "session-old", "read through `.header`");
+});
+
 test("a member whose preset is gone fails visibly at ensure, with dsh's reason", async () => {
   const tree = makeFakeTree();
   tree.newRoom("session-room", CHANNEL.dir);
@@ -132,7 +211,7 @@ test("one driven turn: the member gets the attributed delta with the rules, its 
   assert.equal(result.record.state, "answered");
   assert.equal(result.text, "I read: yes. 买");
   assert.equal(result.record.turn, 1);
-  const prompt = member.agent.session.events.find((e) => e.type === "user/message")!.data as { content: { text: string }[]; source: Record<string, unknown> };
+  const prompt = member.agent.session.snapshotEvents().find((e) => e.type === "user/message")!.data as { content: { text: string }[]; source: Record<string, unknown> };
   assert.match(prompt.content[0].text, /操作员: SanDisk 值得买吗/);
   assert.match(prompt.content[0].text, /Kairos asks this batch: state a view/);
   assert.match(prompt.content[0].text, /exactly \(pass\)/);
@@ -140,7 +219,7 @@ test("one driven turn: the member gets the attributed delta with the rules, its 
   // the cursor: a second turn with nothing new says so
   const second = engine.runMemberTurn(room, member, roster, "mention");
   await tree.clock.advance(50);
-  const prompt2 = member.agent.session.events.filter((e) => e.type === "user/message")[1].data as { content: { text: string }[]; source: { messageIds: string[] } };
+  const prompt2 = member.agent.session.snapshotEvents().filter((e) => e.type === "user/message")[1].data as { content: { text: string }[]; source: { messageIds: string[] } };
   assert.match(prompt2.content[0].text, /\(nothing new\)/);
   assert.deepEqual(prompt2.source.messageIds, []);
   await second;
@@ -198,14 +277,14 @@ test("post: an answer is appended to the room log at once while no Kairos turn i
   const room = engine.roomOf("session-room", CHANNEL);
   const msg = (id: string) => ({ id, role: "user" as const, content: [{ type: "text", text: "v" }], source: { kind: "room", form: "answer", bot: "buffett", name: "巴菲特型", sessionId: "s", turn: 1, round: 1 } });
   engine.post(room, msg("a1"));
-  assert.deepEqual(sources(kairos.session.events).map((s) => s.form), ["answer"], "quiet room: appended now");
+  assert.deepEqual(sources(kairos.session.snapshotEvents()).map((s) => s.form), ["answer"], "quiet room: appended now");
   kairos.wake(); // Kairos opens a turn
   engine.post(room, msg("a2"));
-  assert.equal(sources(kairos.session.events).length, 1, "a turn is open: held");
+  assert.equal(sources(kairos.session.snapshotEvents()).length, 1, "a turn is open: held");
   kairos.sleep();
   await tree.clock.flush();
-  assert.equal(sources(kairos.session.events).length, 2, "flushed on turn/end");
-  assert.equal(kairos.session.events.at(-1)!.type, "user/message");
+  assert.equal(sources(kairos.session.snapshotEvents()).length, 2, "flushed on turn/end");
+  assert.equal(kairos.session.snapshotEvents().at(-1)!.type, "user/message");
 });
 
 test("gatePending reads an open ask or an undecided approval from the member's own log; isQuiet reads the last turn boundary", () => {
@@ -215,17 +294,52 @@ test("gatePending reads an open ask or an undecided approval from the member's o
   ];
   assert.equal(gatePending(events, 1), true);
   assert.equal(gatePending(events, 2), false);
-  events.push({ type: "tool/result", seq: 2, data: { turn: 1, step: 1, message: { id: "r", role: "user", content: [{ type: "tool-result", toolCallId: "q1", content: [] }], source: { kind: "tool", callId: "q1" } } } });
+  /* dsh 0.2's tool-role result closes the ask: `toolCallId` on the message itself. */
+  events.push({ type: "tool/result", seq: 2, data: { turn: 1, step: 1, message: toolResultMessage("r", "q1", false) } });
   assert.equal(gatePending(events, 1), false);
   events.push({ type: "approval/asked", seq: 3, data: { id: "ap1", toolName: "bash" } });
   assert.equal(gatePending(events, 1), true);
   events.push({ type: "approval/decided", seq: 4, data: { id: "ap1", outcome: "rejected" } });
   assert.equal(gatePending(events, 1), false);
-  const session = { id: "s", header: {}, events, seq: events.length, append: () => undefined };
+  const session = { id: "s", header: {}, snapshotEvents: () => events, seq: events.length, append: () => undefined };
   assert.equal(isQuiet(session), false, "turn 1 is still open");
   events.push({ type: "turn/end", seq: 5, data: { turn: 1, reason: { kind: "completed" } } });
   assert.equal(isQuiet(session), true);
-  assert.equal(isQuiet({ ...session, events: [] }), true, "an empty log is quiet");
+  assert.equal(isQuiet({ ...session, snapshotEvents: () => [] }), true, "an empty log is quiet");
+});
+
+test("gatePending no longer matches dsh 0.1.1's wrapper result: an ask answered only in that shape stays open", () => {
+  /* The old `{role:'user', content:[{type:'tool-result', toolCallId}]}` never
+   * reaches a live dsh 0.2 Session (the v3→v4 edge lifts it on load,
+   * NEW packages/session/session-format-v3-to-v4/src/tool-role.ts:27-60), so
+   * reading `content[0]` too would only let a foreign event close a gate. */
+  const events: EventLike[] = [
+    { type: "turn/start", seq: 0, data: { turn: 1 } },
+    { type: "tool/call", seq: 1, data: { turn: 1, step: 1, callId: "q1", name: "ask_user_question", arguments: "{}" } },
+    { type: "tool/result", seq: 2, data: { turn: 1, step: 1, message: legacyToolResultMessage("r", "q1", false) } },
+  ];
+  assert.equal(gatePending(events, 1), true);
+});
+
+test("a session with no snapshotEvents() fails CLOSED with a reason: never quiet, never appended to, the round's delivery refused by name", async () => {
+  /* The structural cast hides a missing reader from tsc; 0.1.1's `session.events`
+   * read `undefined.length` and threw inside a microtask. */
+  const drifted = { id: "s-drift", header: {}, seq: 0, append: () => { throw new Error("must not append"); } } as unknown as Parameters<typeof isQuiet>[0];
+  assert.equal(isQuiet(drifted), false, "unknown turn state is not quiet");
+  assert.match(unreadableLog(drifted) ?? "", /s-drift exposes no snapshotEvents\(\)/);
+  assert.throws(() => eventsOf(drifted), /exposes no snapshotEvents\(\)/);
+
+  const tree = makeFakeTree();
+  tree.newRoom("session-room", CHANNEL.dir);
+  const logged: string[] = [];
+  const engine = engineOn(tree, { log: (line) => logged.push(line) });
+  const room = engine.roomOf("session-room", CHANNEL);
+  const live = tree.sessions.get("session-room")!;
+  Object.defineProperty(live, "snapshotEvents", { value: undefined });
+  engine.post(room, { id: "a1", role: "user", content: [{ type: "text", text: "v" }], source: { kind: "room", form: "answer", bot: "buffett" } });
+  assert.equal(room.outbox.length, 1, "held, not appended");
+  assert.match(logged.join("\n"), /exposes no snapshotEvents\(\).*1 message\(s\) stay in the outbox/);
+  await assert.rejects(engine.whenQuiet(room), /exposes no snapshotEvents\(\)/, "a waiter would wait forever; it is refused with the reason");
 });
 
 const answers = (events: readonly EventLike[]) => sources(events).filter((s) => s.kind === "room" && s.form === "answer").map((s) => s.bot);
@@ -244,14 +358,14 @@ test("a parallel round: every member gets the same delta and sees no peer this r
   await tree.clock.advance(100);
   assert.doesNotMatch(prompts.buffett, /投机型:/, "parallel: no peer answer this round");
   assert.doesNotMatch(prompts.speculator, /巴菲特型:/);
-  assert.deepEqual(answers(kairos.session.events), ["buffett"], "a pass is not an answer");
+  assert.deepEqual(answers(kairos.session.snapshotEvents()), ["buffett"], "a pass is not an answer");
   assert.equal(kairos.inbox.nextTurn.length, 1, "woken exactly once");
   const end = kairos.inbox.nextTurn[0];
   assert.deepEqual(end.source.form, "round-end");
   assert.equal((end.source as unknown as { outcome: string }).outcome, "settled");
   assert.deepEqual((end.source as unknown as { turns: { bot: string; state: string }[] }).turns.map((t) => `${t.bot}:${t.state}`), ["speculator:passed", "buffett:answered"]);
   assert.match(end.content[0].text ?? "", /Answered: 巴菲特型\. Passed: 投机型\./);
-  assert.ok(kairos.session.events.findIndex((e) => (e.data as { source?: { form?: string } })?.source?.form === "answer") >= 0, "the answer is in the log BEFORE the wake is queued");
+  assert.ok(kairos.session.snapshotEvents().findIndex((e) => (e.data as { source?: { form?: string } })?.source?.form === "answer") >= 0, "the answer is in the log BEFORE the wake is queued");
 });
 
 test("a serial round: the later member's delta carries the earlier answer", async () => {
@@ -284,7 +398,7 @@ test("structured briefs and self-reported views survive the round; malformed vie
   assert.match(received, /Is the premise supported\?/);
   assert.match(received, /Dated filings/);
   assert.match(received, /A contradictory filing/);
-  const emitted = kairos.session.events.filter((event) => (event.data as { source?: { form?: string } })?.source?.form === "answer")
+  const emitted = kairos.session.snapshotEvents().filter((event) => (event.data as { source?: { form?: string } })?.source?.form === "answer")
     .map((event) => event.data as { content: { text: string }[]; source: Record<string, unknown> });
   assert.equal(emitted[0].content[0].text, first, "the source answer is preserved for audit and model history");
   assert.equal(emitted[0].source.displayText, "My premise is tentative.");
@@ -311,7 +425,7 @@ test("a mention inside structured evidence does not call an extra peer", async (
   await engine.dispatch("session-room", CHANNEL, { to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, roster);
   await tree.clock.advance(200);
   assert.equal(tree.agentsCreated.length, 1);
-  assert.deepEqual(answers(kairos.session.events), ["buffett"]);
+  assert.deepEqual(answers(kairos.session.snapshotEvents()), ["buffett"]);
   engine.dispose();
 });
 
@@ -325,7 +439,7 @@ test("a serial round: a peer @ in the first answer never gives an already-dispat
   await engine.dispatch("session-room", CHANNEL, { to: ["buffett", "speculator"], mode: "serial", brief: "q", reason: "r" }, roster);
   await tree.clock.advance(200);
   assert.deepEqual(turns, ["buffett:1", "speculator:1"], "the peer's own dispatched turn is its one turn this round");
-  assert.deepEqual(answers(kairos.session.events), ["buffett", "speculator"]);
+  assert.deepEqual(answers(kairos.session.snapshotEvents()), ["buffett", "speculator"]);
   const end = kairos.inbox.nextTurn[0];
   assert.equal((end.source as unknown as { turns: unknown[] }).turns.length, 2);
   assert.match(end.content[0].text ?? "", /Answered: 巴菲特型, 投机型\./);
@@ -342,10 +456,10 @@ test("a peer @ queues one continuation after the dispatched turns, bounded, and 
   await engine.dispatch("session-room", CHANNEL, { to: ["buffett", "speculator"], mode: "parallel", brief: "q", reason: "r" }, roster);
   await tree.clock.advance(200);
   assert.equal(macroTurns, 1, "one continuation for macro however many peers named it");
-  assert.deepEqual(answers(kairos.session.events).sort(), ["buffett", "macro", "speculator"]);
+  assert.deepEqual(answers(kairos.session.snapshotEvents()).sort(), ["buffett", "macro", "speculator"]);
   const end = kairos.inbox.nextTurn[0];
   assert.equal((end.source as unknown as { turns: unknown[] }).turns.length, 3);
-  assert.ok(kairos.session.events.filter((e) => (e.data as { source?: { form?: string } })?.source?.form === "answer").length === 3, "all three answers precede the wake");
+  assert.ok(kairos.session.snapshotEvents().filter((e) => (e.data as { source?: { form?: string } })?.source?.form === "answer").length === 3, "all three answers precede the wake");
 });
 
 test("a round that runs while Kairos is mid-turn: the answers are held, and they are all in the log before the one wake", async () => {
@@ -357,11 +471,11 @@ test("a round that runs while Kairos is mid-turn: the answers are held, and they
   const engine = engineOn(tree);
   await engine.dispatch("session-room", CHANNEL, { to: ["buffett", "speculator"], mode: "parallel", brief: "q", reason: "r" }, roster);
   await tree.clock.advance(100);
-  assert.deepEqual(answers(kairos.session.events), [], "held while a turn is open");
+  assert.deepEqual(answers(kairos.session.snapshotEvents()), [], "held while a turn is open");
   assert.equal(kairos.inbox.nextTurn.length, 0, "and no wake while the round cannot land its answers");
   kairos.sleep();
   await tree.clock.advance(10);
-  assert.deepEqual(answers(kairos.session.events).sort(), ["buffett", "speculator"], "flushed on turn/end");
+  assert.deepEqual(answers(kairos.session.snapshotEvents()).sort(), ["buffett", "speculator"], "flushed on turn/end");
   assert.equal(kairos.inbox.nextTurn.length, 1, "then woken once");
   assert.equal((kairos.inbox.nextTurn[0].source as unknown as { outcome: string }).outcome, "settled");
 });
@@ -376,7 +490,7 @@ test("caps: the round cap refuses a fourth dispatch; the bot-message cap ends a 
   await tree.clock.advance(100);
   await engine.dispatch("session-room", CHANNEL, args, roster);
   await tree.clock.advance(100);
-  const ends = roundEnds(kairos.session.events.concat(kairos.inbox.nextTurn.map((m, i) => ({ type: "user/message", seq: 1000 + i, data: m }))));
+  const ends = roundEnds(kairos.session.snapshotEvents().concat(kairos.inbox.nextTurn.map((m, i) => ({ type: "user/message", seq: 1000 + i, data: m }))));
   assert.deepEqual(ends.map((e) => e.outcome), ["settled", "capped"], "round 2 ran one turn of three before the message cap");
   await assert.rejects(engine.dispatch("session-room", CHANNEL, args, roster), /round cap/);
   // the operator speaks: the gateway logs a user message on the room
@@ -398,7 +512,7 @@ test("a dispatch while a round is running is refused; an operator message mid-ro
   await tree.clock.advance(20);
   kairos.session.append("user/message", { id: "u2", role: "user", content: [{ type: "text", text: "换个话题" }], source: { kind: "user" } }, { surfaceOp: "append" });
   await tree.clock.advance(200);
-  assert.deepEqual(answers(kairos.session.events).sort(), ["buffett", "speculator"], "the running turn finished and landed; the continuation never started");
+  assert.deepEqual(answers(kairos.session.snapshotEvents()).sort(), ["buffett", "speculator"], "the running turn finished and landed; the continuation never started");
   const end = kairos.inbox.nextTurn[0];
   assert.equal((end.source as unknown as { outcome: string }).outcome, "superseded");
 });
@@ -471,29 +585,31 @@ test("say: an @ is the operator's message, appended to the room, not a prompt; t
   engine.rosterFor = async () => roster; // the roster read is the file's; stub it here
   const first = await engine.say("session-room", "@buffett @speculator 你们怎么看");
   assert.deepEqual(first.addressed, ["buffett", "speculator"]);
-  assert.deepEqual(sources(kairos.session.events).at(-1), { kind: "user", mention: ["buffett", "speculator"] }, "in the room log as the operator's, with whom it addressed");
+  assert.deepEqual(sources(kairos.session.snapshotEvents()).at(-1), { kind: "user", mention: ["buffett", "speculator"] }, "in the room log as the operator's, with whom it addressed");
   assert.equal(kairos.inbox.nextTurn.length, 0, "Kairos is not prompted");
   const second = await engine.say("session-room", "@buffett 补一句");
   assert.deepEqual(second.addressed, ["buffett"]);
   await tree.clock.advance(100);
   assert.deepEqual(turns, ["buffett:1", "speculator:1", "buffett:2"], "the second @ ran after the first turn, never refused");
-  assert.deepEqual(answers(kairos.session.events), ["speculator", "buffett", "buffett"]);
+  assert.deepEqual(answers(kairos.session.snapshotEvents()), ["speculator", "buffett", "buffett"]);
   assert.equal(kairos.inbox.nextTurn.length, 0, "no round-end for @ turns");
   const none = await engine.say("session-room", "no mention at all");
   assert.deepEqual(none, { addressed: [] });
-  assert.equal(tree.modelsCalls.length, 0, "a live room needs no resume");
+  assert.equal(tree.resolveCalls.length, 0, "a live room needs no resume");
 });
 
-test("say on a cold room resumes it through the gateway's own composition before touching it", async () => {
+test("say on a cold room resumes it through the session controller's own composition before touching it", async () => {
   const tree = makeFakeTree();
   const engine = engineOn(tree);
   engine.rosterFor = async () => roster;
   tree.persisted.push({ id: "session-cold", cwd: CHANNEL.dir, agentPreset: "kairos", createdAt: 1 });
-  tree.ctx.apiProxy.sessions.models = async (request: { payload: { sessionId: string } }) => { tree.modelsCalls.push(request.payload.sessionId); tree.newRoom(request.payload.sessionId, CHANNEL.dir); return { ok: true }; };
+  tree.resolveCold = (sessionId) => ({ agent: tree.newRoom(sessionId, CHANNEL.dir) });
   tree.script("buffett", () => ({ kind: "answer", text: "b" }));
   const out = await engine.say("session-cold", "@buffett hi");
   assert.deepEqual(out.addressed, ["buffett"]);
-  assert.deepEqual(tree.modelsCalls, ["session-cold"]);
+  assert.deepEqual(tree.resolveCalls, ["session-cold"]);
+  const kairos = tree.agents.get("session-cold")!;
+  assert.deepEqual(sources(kairos.session.snapshotEvents()).at(0), { kind: "user", mention: ["buffett"] }, "the @ landed on the resumed room");
 });
 
 test("rosterFor refuses a channel with no roster row and an unreadable roster file, each with the repair the operator needs", async () => {
@@ -507,14 +623,37 @@ test("rosterFor refuses a channel with no roster row and an unreadable roster fi
   assert.deepEqual((await engineOn(tree, { home }).rosterFor(CHANNEL)).map((b) => `${b.id}:${b.name}`), ["buffett:巴菲特型", "macro:Macro View"], "the file's ids, named by the bot roster");
 });
 
-test("say refuses when the gateway's resume leaves the room session cold", async () => {
+/* 0.1.1's `apiProxy.sessions.models` resolved without saying whether it
+ * resumed, so the engine re-read `agents.get` and answered 404 when the room
+ * stayed cold. dsh 0.2's `resolveAgent` RETURNS its failure
+ * (NEW packages/api/session-controller/src/agent.ts:61-66, 199-230); each code
+ * becomes the route's status with dsh's own reason. */
+test("say maps the session controller's failures: not-found is 404, anything else 409 with dsh's reason (the legacy format named)", async () => {
   const tree = makeFakeTree();
   const engine = engineOn(tree);
   engine.rosterFor = async () => roster;
   tree.persisted.push({ id: "session-cold", cwd: CHANNEL.dir, agentPreset: "kairos", createdAt: 1 });
-  tree.ctx.apiProxy.sessions.models = async (request: { payload: { sessionId: string } }) => { tree.modelsCalls.push(request.payload.sessionId); return { ok: true }; };
-  await assert.rejects(engine.say("session-cold", "@buffett hi"), /no such session/);
-  assert.deepEqual(tree.modelsCalls, ["session-cold"], "the resume was attempted, once");
+  await assert.rejects(engine.say("session-cold", "@buffett hi"), (err: Error & { status?: number }) => {
+    assert.equal(err.status, 404);
+    assert.match(err.message, /no such session/);
+    return true;
+  });
+  assert.deepEqual(tree.resolveCalls, ["session-cold"], "the resume was attempted, once");
+  tree.resolveCold = () => ({ error: { code: "gateway/internal", message: 'resume failed for session "session-cold": SessionFormatUnsupportedMigrationError: cannot safely transform unclassified message source' } });
+  await assert.rejects(engine.say("session-cold", "@buffett hi"), (err: Error & { status?: number }) => {
+    assert.equal(err.status, 409);
+    assert.match(err.message, /could not be resumed \(gateway\/internal: resume failed .*unclassified message source\)/);
+    assert.match(err.message, /log written before dsh 0\.2/, "a pre-0.2 room log is named as such");
+    return true;
+  });
+  tree.resolveCold = () => ({ error: { code: "session/writer-held", message: "another process holds the session" } });
+  await assert.rejects(engine.say("session-cold", "@buffett hi"), (err: Error & { status?: number }) => {
+    assert.equal(err.status, 409);
+    assert.match(err.message, /session\/writer-held: another process holds the session/);
+    assert.doesNotMatch(err.message, /before dsh 0\.2/);
+    return true;
+  });
+  assert.equal(tree.agents.has("session-cold"), false, "a failed resume composes nothing itself");
 });
 
 test("describe reports the roster, the runtime members and the caps left", async () => {
@@ -545,7 +684,7 @@ test("the dispatch tool: global, Kairos-only, channel-only, roster-checked; vali
   const kairos = tree.newRoom("session-room", CHANNEL.dir);
   tree.script("buffett", () => ({ kind: "answer", text: "b" }));
   const engine = installRoom({
-    ctx: tree.ctx as unknown as RoomDeps["ctx"], home,
+    ctx: fakeRoomContext(tree), home,
     channelFor: async (cwd) => (cwd === CHANNEL.dir ? CHANNEL : null),
     listBots: async () => roster, clock: tree.clock, installModelSelection: () => () => {}, log: () => {},
   });
@@ -562,9 +701,15 @@ test("the dispatch tool: global, Kairos-only, channel-only, roster-checked; vali
   const exec = (agent: unknown) => ({ agent, signal: new AbortController().signal }) as never;
 
   await assert.rejects(tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, exec(undefined)), /needs a session/);
-  const bot = { id: "session-bot", status: "idle", session: { id: "session-bot", header: { cwd: CHANNEL.dir, agentPreset: "buffett" }, events: [], seq: 0 } };
+  const bot = { id: "session-bot", status: "idle", session: { id: "session-bot", header: { cwd: CHANNEL.dir, agentPreset: "buffett" }, snapshotEvents: () => [], seq: 0 } };
   await assert.rejects(tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, exec(bot)), /Kairos's tool/);
-  const nowhere = { ...kairos, session: { ...kairos.session, header: { cwd: "/elsewhere", agentPreset: "kairos" } } };
+  /* dsh 0.2: a blank Kairos session re-selected to a bot keeps `kairos` in its
+   * frozen header; the `agentPreset` projection is what it RUNS
+   * (NEW packages/preset/agent-preset-registry/src/session.ts:1-15). */
+  const reselected = tree.newRoom("session-reselected", CHANNEL.dir);
+  tree.emit(reselected.session, { type: "agent-preset/selected", seq: reselected.session.seq, data: { agentPreset: "buffett" } });
+  await assert.rejects(tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, exec(reselected)), /Kairos's tool/, "the running preset refuses even under a kairos header");
+  const nowhere = tree.newRoom("session-nowhere", "/elsewhere");
   await assert.rejects(tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, exec(nowhere)), /in no channel/);
   await assert.rejects(tool.execute({ to: ["macro"], mode: "parallel", brief: "q", reason: "r" }, exec(kairos)), /macro is not on this channel's roster.*buffett, speculator/);
 
@@ -589,7 +734,7 @@ test("the two routes: say and state, fenced like every /data route", async () =>
   tree.newRoom(ROOM_ID, CHANNEL.dir);
   tree.script("buffett", () => ({ kind: "answer", text: "b" }));
   const engine = installRoom({
-    ctx: tree.ctx as unknown as RoomDeps["ctx"], home,
+    ctx: fakeRoomContext(tree), home,
     channelFor: async (cwd) => (cwd === CHANNEL.dir ? CHANNEL : null),
     listBots: async () => roster, clock: tree.clock, installModelSelection: () => () => {}, log: () => {},
   });
