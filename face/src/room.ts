@@ -15,6 +15,22 @@
  * Kairos's session with `source.kind === 'room'`; the member's cursor is the
  * delta message in ITS log.
  *
+ * `kind: 'room'` is a native v4 message source (dsh 0.2 admits any non-empty
+ * kind but `plugin`, NEW packages/session/session-format-v3-to-v4/src/message-sources.ts:7-11),
+ * so logs this engine writes now reload. Logs written under dsh 0.1.1 do NOT:
+ * the v2→v3 migration edge refuses every `user/message` whose kind it does not
+ * know (NEW packages/session/session-format-v2-to-v3/src/payload.ts:10, 81, 110-114),
+ * so a pre-0.2 room or member session fails to OPEN. The engine tolerates that
+ * per member and per request, naming the legacy format, and never rewrites the
+ * operator's logs (plan D11).
+ *
+ * HOW THE LOG IS READ: `session.snapshotEvents()` - dsh 0.2 removed the
+ * `events` getter (commit 5660f44d29; NEW packages/core/session/src/index.ts:649-661,
+ * deprecated for new callers but still upstream's own read, e.g.
+ * NEW packages/api/session-controller/src/index.ts:229-241). Every read goes
+ * through `eventsOf`/`unreadableLog`, so a later pin that drops it too fails
+ * closed and says so instead of iterating `undefined`.
+ *
  * HOW AN ANSWER REACHES KAIROS (deviation 2): appended straight onto the room
  * session's log with `surfaceOp: 'append'` - visible at once, seq now, in the
  * next request's history - but ONLY while the room log is quiet (no open turn),
@@ -57,7 +73,9 @@ const BIN = "kairos-face";
 export interface SessionLike {
   readonly id: string;
   readonly header: { readonly cwd?: string; readonly parentSession?: string; readonly agentPreset?: string; readonly origin?: string };
-  readonly events: readonly EventLike[];
+  /** The whole log as one frozen snapshot, cached by dsh until the next append
+   * (NEW packages/core/session/src/index.ts:649-661). Read it through `eventsOf`. */
+  snapshotEvents(): readonly EventLike[];
   readonly seq: number;
   append(type: "user/message", data: MessageLike, opts: { surfaceOp: "append" }): unknown;
 }
@@ -72,16 +90,32 @@ export interface AgentLike {
 export interface ModelSelectionLike { provider: string; model: string; reasoningEffort?: ReasoningEffortId }
 /** dsh-agent's `ModelSelectionRef`; assignable to it, so the real call below is type-checked. */
 export interface ModelSelectionRefLike { current: ModelSelectionLike | undefined; assembled: ModelSelectionLike | undefined }
-/** The scoped `Context` `setup` receives (dsh-agent-loop calls `setup(prepared.agent.ctx)`): `agentCtx.agent` is the agent being composed. */
-export interface AgentCtxLike { agent?: AgentLike }
+/** The agent-scoped cordis `Context` that `setup` receives, held opaquely: the
+ * engine only hands it back to dsh (`installModelSelection`, `agentPresets.mount`).
+ * It no longer carries the agent - `Context.agent` was deleted (commit
+ * ebce3a5f04) and the agent is `setup`'s SECOND argument now. */
+export type AgentCtxLike = object;
+/** dsh-agent's `AgentSetup` is `(agentCtx, agent)` (NEW packages/core/agent/src/index.ts:51-54);
+ * the loop awaits it before inserting or announcing the session or the agent
+ * (:100-112), which is what makes a pin inside it the member's first fact. */
+export type MemberSetup = (agentCtx: AgentCtxLike, agent: AgentLike) => Promise<void>;
 export interface CreateMemberOptions {
   sessionId: string;
+  /** No `parentAgent`: omitting it makes the member a runtime ROOT (NEW packages/core/agent/src/index.ts:66-67). */
   meta: { cwd: string; parentSession: string; agentPreset: string };
   agentOptions: { provider: string; model: string };
-  setup(agentCtx: AgentCtxLike): Promise<void>;
+  setup: MemberSetup;
 }
-export interface ResumeMemberOptions { resumeSessionId: string; agentOptions: { provider: string; model: string }; setup(agentCtx: AgentCtxLike): Promise<void> }
+export interface ResumeMemberOptions { resumeSessionId: string; agentOptions: { provider: string; model: string }; setup: MemberSetup }
+/** dsh-session's `SessionHeader`, narrowed (NEW packages/core/session/src/types.ts:93-129). */
 export interface PersistedHeaderLike { id: string; cwd?: string; parentSession?: string; agentPreset?: string; origin?: string; createdAt: number }
+/** dsh-session-persistence's `SessionPersistenceSnapshot`: `list()` now returns
+ * `{header, revision, …}` rows, not bare headers (NEW packages/session/session-persistence/src/index.ts:50-58, 201;
+ * upstream maps `s.header`, NEW packages/workspace/workspace/src/index.ts:825-827). */
+export interface PersistedSnapshotLike { readonly header: PersistedHeaderLike }
+/** The session domain's resolve result (NEW packages/api/session-controller/src/agent.ts:61-66):
+ * the live agent, or a `RemoteError` with a slash-namespaced `code`. */
+export type ResolveAgentResultLike = { readonly agent: AgentLike } | { readonly error: { readonly code?: string; readonly message: string } };
 /** dsh-tools' `ToolRunContext`, narrowed: the calling agent and Kairos's TURN signal (which the round must not run on). */
 export interface RoomToolExec { agent?: AgentLike; signal: AbortSignal }
 /** dsh-tools' `ToolDefinition`, stated the way agents.ts states it. */
@@ -101,16 +135,24 @@ export interface RoomContextLike {
     resume(options: ResumeMemberOptions): Promise<{ agent: AgentLike }>;
   };
   sessions: { get(id: string): SessionLike | undefined };
-  sessionPersistence?: { list(): Promise<PersistedHeaderLike[]> };
+  sessionPersistence?: { list(): Promise<readonly PersistedSnapshotLike[]> };
   tools: { register(definition: RoomToolDefinition): () => void };
-  sessionProjections?: { register(definition: never): () => void };
-  permissionPresets: { set(session: SessionLike, name: string): void; current(events: readonly EventLike[]): string };
+  /** `stateOf(session, 'agentPreset')` is the preset a session RUNS - the header
+   * is only the one it started with (NEW packages/preset/agent-preset-registry/src/session.ts:1-15;
+   * NEW packages/session/session-projection/src/index.ts:319). */
+  sessionProjections?: { register(definition: never): () => void; stateOf?(session: SessionLike, key: "agentPreset"): unknown };
+  /** `current` folds the `permissions` projection of a SESSION now, not an event
+   * list (NEW packages/interaction/permission-presets/src/index.ts:343-345; `set` :398-400). */
+  permissionPresets: { set(session: SessionLike, name: string): void; current(session: SessionLike): string };
   agentPresets: { mount(agentCtx: AgentCtxLike, id: string): Promise<unknown> };
   agentDefaultModel: { currentSelection(): ModelSelectionLike };
   llm: { resolveCallConfig(config: { provider: string; model: string }): Promise<unknown> };
   workspaceRegistry: { resolveByPath(path: string): Promise<{ attachSession(id: string): Promise<void> } | undefined> };
-  /** The gateway; `sessions.models` resumes a cold session through the gateway's OWN composition (see `ensureLive`). */
-  apiProxy?: { sessions: { models(request: { rpcId: string; payload: { sessionId: string } }): Promise<unknown> } };
+  /** The session domain (service `sessionController`, NEW packages/api/session-controller/src/index.ts:71-76):
+   * `resolveAgent` resumes a cold session through the host's OWN composition
+   * (`composeAgent` = model selection + preset mount, agent.ts:381-397) - the
+   * successor of 0.1.1's `apiProxy.sessions.models` path (see `ensureLive`). */
+  sessionController?: { resolveAgent(sessionId: string): Promise<ResolveAgentResultLike> };
   on(name: "session/event", listener: (session: SessionLike, event: EventLike) => void): () => boolean;
   logger?: { warn(message: string): void };
 }
@@ -169,9 +211,28 @@ export interface Room {
 const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 const defaultClock: RoomClock = { now: () => Date.now(), setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (h) => clearTimeout(h as NodeJS.Timeout) };
 
-/** No open turn on this log: the last `turn/start` has its `turn/end`. */
+/** Why this session's log cannot be read here, or `undefined` when it can.
+ * The structural `SessionLike` cast hides a missing reader from `tsc`, so the
+ * check is made at runtime, with the reason spelled out. */
+export function unreadableLog(session: SessionLike): string | undefined {
+  return typeof (session as Partial<SessionLike>).snapshotEvents === "function" ? undefined
+    : `session ${session.id} exposes no snapshotEvents(): the dsh Session API moved under the face, so the room engine cannot read this log`;
+}
+
+/** The session's whole log, or a throw that names the drift (never `undefined`). */
+export function eventsOf(session: SessionLike): readonly EventLike[] {
+  const reason = unreadableLog(session);
+  if (reason !== undefined) throw new Error(reason);
+  return session.snapshotEvents();
+}
+
+/** No open turn on this log: the last `turn/start` has its `turn/end`.
+ * FAILS CLOSED on an unreadable log: `false` keeps answers in the outbox rather
+ * than dropping a user message between a tool call and its result. The callers
+ * that can speak (`flush`, `whenQuiet`) report `unreadableLog`'s reason. */
 export function isQuiet(session: SessionLike): boolean {
-  const events = session.events;
+  if (unreadableLog(session) !== undefined) return false;
+  const events = session.snapshotEvents();
   for (let i = events.length - 1; i >= 0; i--) {
     const type = events[i].type;
     if (type === "turn/end") return true;
@@ -189,8 +250,14 @@ export function gatePending(events: readonly EventLike[], turn: number): boolean
     if (data === undefined) continue;
     if (event.type === "tool/call" && data.turn === turn && data.name === "ask_user_question" && typeof data.callId === "string") openAsks.add(data.callId);
     else if (event.type === "tool/result" && data.turn === turn) {
-      const block = (data.message as { content?: { toolCallId?: unknown }[] } | undefined)?.content?.[0];
-      if (typeof block?.toolCallId === "string") openAsks.delete(block.toolCallId);
+      /* dsh 0.2's first-class tool-role message: `{role:'tool', toolCallId, isError?}`
+       * on the MESSAGE (NEW packages/llm/llm/src/message.ts:173-180, built by
+       * `createToolResultMessage` :299-306). The 0.1.1 wrapper put it in
+       * `content[0]`; that shape is never read here - a live Session holds only
+       * v4 events, because the v3→v4 edge lifts every stored wrapper on load
+       * (NEW packages/session/session-format-v3-to-v4/src/tool-role.ts:27-60). */
+      const callId = (data.message as { toolCallId?: unknown } | undefined)?.toolCallId;
+      if (typeof callId === "string") openAsks.delete(callId);
     } else if (event.type === "approval/asked" && typeof data.id === "string") openApprovals.add(data.id);
     else if (event.type === "approval/decided" && typeof data.id === "string") openApprovals.delete(data.id);
   }
@@ -230,11 +297,11 @@ export class RoomEngine {
   constructor(private readonly deps: RoomDeps) {
     this.caps = { ...ROOM_CAPS, ...deps.caps };
     this.clock = deps.clock ?? defaultClock;
-    /* dsh-agent-loop's `setupAndPublish` calls `setup(prepared.agent.ctx)`, so
-     * what `setup` holds IS the agent-scoped cordis `Context` this wants; the
-     * cast erases only dsh's branded ids (`MessageId` on `Session.append`),
-     * which this module states as plain strings. The ref is NOT cast — it is
-     * checked against dsh's own `ModelSelectionRef`. */
+    /* dsh-agent-loop calls `setup(prepared.agent.ctx, prepared.agent)` (commit
+     * ebce3a5f04), so `setup`'s first argument IS the agent-scoped cordis
+     * `Context` this wants; `AgentCtxLike` holds it opaquely, hence the cast.
+     * The ref is NOT cast — it is checked against dsh's own `ModelSelectionRef`
+     * (NEW packages/core/agent/src/model-selection.ts:81). */
     this.installSelection = deps.installModelSelection ?? ((agentCtx, ref) => installDshModelSelection(agentCtx as unknown as Context, ref));
     this.log = deps.log ?? ((line) => console.log(`${BIN}: ${line}`));
     const off = deps.ctx.on("session/event", (session, event) => this.onEvent(session, event));
@@ -339,7 +406,13 @@ export class RoomEngine {
   private flush(room: Room): void {
     if (room.outbox.length === 0) return;
     const session = this.deps.ctx.sessions.get(room.id);
-    if (session === undefined || !isQuiet(session)) return;
+    if (session === undefined) return;
+    const unreadable = unreadableLog(session);
+    if (unreadable !== undefined) {
+      this.log(`${unreadable}; ${room.outbox.length} message(s) stay in the outbox of ${room.channel.name}`);
+      return;
+    }
+    if (!isQuiet(session)) return;
     for (const message of room.outbox.splice(0)) session.append("user/message", message, { surfaceOp: "append" });
   }
 
@@ -352,6 +425,9 @@ export class RoomEngine {
   whenQuiet(room: Room): Promise<void> {
     const session = this.deps.ctx.sessions.get(room.id);
     if (session === undefined) return Promise.reject(new Error(`room session ${room.id} is not live`));
+    /* An unreadable log never reads quiet, so waiting would be forever: refuse with the reason. */
+    const unreadable = unreadableLog(session);
+    if (unreadable !== undefined) return Promise.reject(new Error(unreadable));
     if (isQuiet(session)) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const list = this.quietWaiters.get(room.id) ?? [];
@@ -406,7 +482,7 @@ export class RoomEngine {
   private async findMemberSession(room: Room, bot: string): Promise<string | undefined> {
     const live = this.deps.ctx.sessions.get(room.id);
     let logged: string | undefined;
-    for (const event of live?.events ?? []) {
+    for (const event of live === undefined ? [] : eventsOf(live)) {
       if (event.type !== "user/message") continue;
       const source = (event.data as MessageLike | undefined)?.source as { kind?: unknown; bot?: unknown; sessionId?: unknown } | undefined;
       if (source?.kind === "room" && source.bot === bot && typeof source.sessionId === "string" && source.sessionId !== "") { logged = source.sessionId; break; }
@@ -417,7 +493,12 @@ export class RoomEngine {
      * id is confirmed against the session store before it is trusted; when it
      * is gone the header scan and, failing that, creation take over. */
     if (logged !== undefined && this.deps.ctx.agents.get(logged) !== undefined) return logged;
-    const headers = await this.deps.ctx.sessionPersistence?.list() ?? [];
+    /* Snapshots, not headers, since dsh 0.2: reading `h.id` off a snapshot is
+     * `undefined`, which never matched - every round after a restart created a
+     * fresh member and orphaned the old one. A `list()` that throws is NOT
+     * read as "no sessions" (that would fork the member silently): it fails
+     * this member's turn, visibly, through `prepare`. */
+    const headers = (await this.deps.ctx.sessionPersistence?.list() ?? []).map((s) => s.header);
     if (logged !== undefined) {
       if (headers.some((h) => h.id === logged)) return logged;
       this.log(`${bot}'s member session ${logged} in ${room.channel.name} is gone from the session store; looking for a newer one`);
@@ -432,31 +513,46 @@ export class RoomEngine {
     const selection = await this.selectionFor(room, bot);
     const agentOptions = { provider: selection.provider, model: selection.model };
     const existing = await this.findMemberSession(room, bot.id);
-    /* The gateway's own composeAgent, restated: the model selection ref, then the
-     * preset join. Plus, for a NEW member, the read-only pin — INSIDE setup so it
-     * is the session's first permission fact and no create→set window exists. */
-    const setup = async (agentCtx: AgentCtxLike, pin: boolean): Promise<void> => {
+    /* The host's own composeAgent, restated (NEW packages/api/session-controller/src/agent.ts:381-397):
+     * the model selection ref, then the preset join. Plus, for a NEW member,
+     * the read-only pin - INSIDE setup, on setup's own `agent` argument (the
+     * upstream pattern, same lines), so it lands before the session is
+     * announced: dsh-permission-presets pins the user default on
+     * `session/created` only when no permission fact exists yet
+     * (NEW packages/interaction/permission-presets/src/index.ts:245-247, 428-456),
+     * and there is no create→set window a prompt could slip through. */
+    const setup = async (agentCtx: AgentCtxLike, agent: AgentLike, pin: boolean): Promise<void> => {
       this.installSelection(agentCtx, { current: { ...selection }, assembled: undefined });
       await this.deps.ctx.agentPresets.mount(agentCtx, bot.id);
-      if (pin) {
-        const session = agentCtx.agent?.session;
-        if (session === undefined) throw new Error("member setup has no scoped agent");
-        this.deps.ctx.permissionPresets.set(session, "read-only");
-      }
+      if (pin) this.deps.ctx.permissionPresets.set(agent.session, "read-only");
     };
     let agent: AgentLike;
     if (existing !== undefined) {
-      agent = this.deps.ctx.agents.get(existing)
-        ?? (await this.deps.ctx.agents.resume({ resumeSessionId: existing, agentOptions, setup: (agentCtx) => setup(agentCtx, false) })).agent;
+      const live = this.deps.ctx.agents.get(existing);
+      if (live !== undefined) agent = live;
+      else {
+        try {
+          agent = (await this.deps.ctx.agents.resume({ resumeSessionId: existing, agentOptions, setup: (agentCtx, a) => setup(agentCtx, a, false) })).agent;
+        } catch (err) {
+          /* Never fall back to a fresh member here: that would fork the voice's
+           * memory silently. The turn fails with the reason (the round-end text
+           * carries it to Kairos) and the log line tells the operator what to do. */
+          const reason = memberResumeFailure(bot.id, existing, err);
+          this.log(`${reason} (channel ${room.channel.name})`);
+          throw new Error(reason);
+        }
+      }
     } else {
       const sessionId = `session-${randomUUID()}`;
       agent = (await this.deps.ctx.agents.create({
         sessionId,
         meta: { cwd: room.channel.dir, parentSession: room.id, agentPreset: bot.id },
         agentOptions,
-        setup: (agentCtx) => setup(agentCtx, true),
+        setup: (agentCtx, a) => setup(agentCtx, a, true),
       })).agent;
-      const effective = this.deps.ctx.permissionPresets.current(agent.session.events);
+      /* Re-read AFTER publication, from the session itself: whatever the
+       * announcement listeners appended, the member is prompted only read-only. */
+      const effective = this.deps.ctx.permissionPresets.current(agent.session);
       if (effective !== "read-only") throw new Error(`member session ${sessionId} for ${bot.id} is "${effective}", not read-only; refusing to prompt it`);
       const ws = await this.deps.ctx.workspaceRegistry.resolveByPath(room.channel.dir).catch(() => undefined);
       await ws?.attachSession(sessionId).catch((err: unknown) => this.log(`could not attach ${sessionId} to channel ${room.channel.name}: ${errText(err)}`));
@@ -478,8 +574,8 @@ export class RoomEngine {
   /** The delta this member has not seen: room lines (log + outbox) minus its cursor. */
   private deltaFor(room: Room, roster: readonly RosterBot[], member: Member): { text: string; messageIds: string[] } {
     const roomSession = this.deps.ctx.sessions.get(room.id);
-    const lines = roomLinesOf(roomSession?.events ?? [], room.outbox, roster);
-    const seen = seenIdsOf(member.agent.session.events);
+    const lines = roomLinesOf(roomSession === undefined ? [] : eventsOf(roomSession), room.outbox, roster);
+    const seen = seenIdsOf(eventsOf(member.agent.session));
     const fresh = lines.filter((line) => !seen.has(line.id));
     return { text: formatDelta(fresh, member.bot), messageIds: fresh.map((line) => line.id) };
   }
@@ -498,7 +594,7 @@ export class RoomEngine {
       if (reason.kind === "error") return { record: { ...base, turn: outcome.turn, state: "failed", reason: errorText(reason.error) }, text: "" };
       if (reason.kind === "aborted") return { record: { ...base, turn: outcome.turn, state: outcome.cancelledByUs ? "timed-out" : "failed", reason: outcome.cancelledByUs ? "turn hard cap" : "cancelled" }, text: "" };
       if (reason.kind === "interrupted") return { record: { ...base, turn: outcome.turn, state: "failed", reason: "interrupted" }, text: "" };
-      const answer = finalTextOf(member.agent.session.events, outcome.turn);
+      const answer = finalTextOf(eventsOf(member.agent.session), outcome.turn);
       if (answer === "" || isPass(answer)) return { record: { ...base, turn: outcome.turn, state: "passed" }, text: "" };
       return { record: { ...base, turn: outcome.turn, state: "answered" }, text: answer };
     }
@@ -535,7 +631,16 @@ export class RoomEngine {
       };
       const check = (): void => {
         const elapsed = this.clock.now() - startedAt;
-        const running = member.agent.status === "running" || (turn !== undefined && gatePending(session.events, turn));
+        /* This runs in a TIMER: a throw here is an uncaught exception, which
+         * tears the face down (main.ts). An unreadable log counts as no gate -
+         * the hard cap still bounds the turn - and says so. */
+        let gate = false;
+        if (turn !== undefined) {
+          const unreadable = unreadableLog(session);
+          if (unreadable === undefined) gate = gatePending(session.snapshotEvents(), turn);
+          else this.log(`${unreadable}; ${member.bot}'s deadline counts only its running status`);
+        }
+        const running = member.agent.status === "running" || gate;
         if (elapsed < this.caps.turnHardCapMs && running) {
           arm(Math.min(this.caps.turnTimeoutMs, this.caps.turnHardCapMs - elapsed));
           return;
@@ -640,7 +745,11 @@ export class RoomEngine {
       }
     };
     const drive = async (member: Member, trig: TurnTrigger): Promise<void> => {
-      const result = await this.enqueue(member, () => this.runMemberTurn(room, member, roster, trig, brief));
+      /* A member turn that THROWS (an unreadable log, say) is that member's
+       * failed turn with its reason - never a rejected round, which would skip
+       * `finishRound` and leave Kairos asleep with no round-end at all. */
+      const result = await this.enqueue(member, () => this.runMemberTurn(room, member, roster, trig, brief))
+        .catch((err: unknown): MemberTurnResult => ({ record: { bot: member.bot, name: member.name, sessionId: member.agent.id, state: "failed", reason: errText(err) }, text: "" }));
       round.turns.push(result.record);
       if (result.record.state !== "answered") return;
       const parsed = parseMemberView(result.text, roster.map((bot) => bot.id), member.bot);
@@ -715,21 +824,29 @@ export class RoomEngine {
   private async channelOf(sessionId: string): Promise<RoomChannel | null> {
     const live = this.deps.ctx.sessions.get(sessionId);
     let cwd = live?.header.cwd;
-    if (cwd === undefined) cwd = (await this.deps.ctx.sessionPersistence?.list() ?? []).find((h) => h.id === sessionId)?.cwd;
+    /* `.header`: persistence lists snapshots since dsh 0.2 (see `findMemberSession`). */
+    if (cwd === undefined) cwd = (await this.deps.ctx.sessionPersistence?.list() ?? []).find((s) => s.header.id === sessionId)?.header.cwd;
     return this.deps.channelFor(cwd);
   }
 
-  /** A cold room session becomes live through the gateway's OWN composition path
-   * (`session.models` resumes via its agent resolver and changes nothing else),
-   * so the face never composes Kairos's session itself. */
+  /** A cold room session becomes live through the host's OWN composition path:
+   * `sessionController.resolveAgent` resumes it with the model selection and
+   * preset join the session domain gives every session and changes nothing
+   * else (NEW packages/api/session-controller/src/index.ts:215-221; agent.ts:147-230),
+   * so the face never composes Kairos's session itself. Its failures are
+   * results, not throws; each becomes the route's status with dsh's reason. */
   private async ensureLive(sessionId: string): Promise<AgentLike> {
     const live = this.deps.ctx.agents.get(sessionId);
     if (live !== undefined) return live;
-    if (this.deps.ctx.apiProxy === undefined) throw new HttpError(409, "the room session is not live and the gateway is not available to resume it");
-    await this.deps.ctx.apiProxy.sessions.models({ rpcId: `room-${randomUUID()}`, payload: { sessionId } });
-    const resumed = this.deps.ctx.agents.get(sessionId);
-    if (resumed === undefined) throw new HttpError(404, "no such session");
-    return resumed;
+    const controller = this.deps.ctx.sessionController;
+    if (controller === undefined) throw new HttpError(409, "the room session is not live and the session controller is not in the tree to resume it");
+    const resolved = await controller.resolveAgent(sessionId);
+    if ("error" in resolved) {
+      const { code, message } = resolved.error;
+      if (code === "session/not-found") throw new HttpError(404, "no such session");
+      throw new HttpError(409, `the room session could not be resumed (${code ?? "error"}: ${message})${isLegacyFormatText(message) ? LEGACY_HINT : ""}`);
+    }
+    return resolved.agent;
   }
 
   /**
@@ -783,6 +900,35 @@ const errorText = (error: unknown): string => {
   return code === undefined ? (message || "error") : (message === "" ? code : `${code}: ${message}`);
 };
 
+/* ---------- legacy logs (plan D11) ---------- */
+
+/** dsh-session-format's refusals are `SessionFormatError` and its subclasses
+ * (NEW packages/session/session-format/src/error.ts:2-9); the persistence
+ * layer's is `SessionFormatUnsupportedError` (NEW packages/session/session-persistence/src/errors.ts:111).
+ * The session domain flattens them into a `gateway/internal` message via
+ * `String(error)` (NEW packages/api/session-controller/src/agent.ts:217-226),
+ * so the NAME is what survives - matched in text, the one form both paths share. */
+export const isLegacyFormatText = (text: string): boolean => /SessionFormat[A-Za-z]*Error|unclassified message source/.test(text);
+
+const LEGACY_HINT = "; it looks like a log written before dsh 0.2, whose `room` messages the 0.2 migration refuses - the file stays on disk untouched";
+
+/** Walk the error and its `cause` chain for a session-format refusal. */
+function isLegacyFormatError(err: unknown): boolean {
+  for (let e: unknown = err, depth = 0; e !== undefined && e !== null && depth < 8; e = (e as { cause?: unknown }).cause, depth++) {
+    const name = (e as { name?: unknown }).name;
+    if (typeof name === "string" && name.startsWith("SessionFormat")) return true;
+    if (isLegacyFormatText(errText(e))) return true;
+  }
+  return false;
+}
+
+/** The model- and log-visible reason a member session could not be resumed. */
+export function memberResumeFailure(bot: string, sessionId: string, err: unknown): string {
+  return isLegacyFormatError(err)
+    ? `${bot}'s member session ${sessionId} is unreadable under dsh 0.2 (legacy format: ${errText(err)})${LEGACY_HINT}; deleting that member session gives ${bot} a fresh one in this room (archiving does not: an archived session is still found)`
+    : `${bot}'s member session ${sessionId} could not be resumed: ${errText(err)}`;
+}
+
 /* ---------- the tool (spec §4.3) ---------- */
 
 /** The caps sentence is model-facing TRUTH: the numbers come from the engine
@@ -801,7 +947,19 @@ export const dispatchDescription = (caps: RoomCaps): string =>
   `${caps.maxContinuations} peer ${caps.maxContinuations === 1 ? "continuation" : "continuations"} per round. ` +
   "Dispatch grants a bot nothing.";
 
-export function dispatchToolDefinition(engine: RoomEngine, deps: Pick<RoomDeps, "channelFor">): RoomToolDefinition {
+/** Every preset this session is on record as: the header's creation value and,
+ * when the tree has the `agentPreset` projection, the one it RUNS now - a
+ * blank session re-selected to a bot keeps `kairos` in its frozen header
+ * (NEW packages/preset/agent-preset-registry/src/session.ts:1-15, 36-46). */
+function presetsOf(session: SessionLike, projections: RoomContextLike["sessionProjections"]): string[] {
+  const out: string[] = [];
+  if (session.header.agentPreset !== undefined) out.push(session.header.agentPreset);
+  const running = projections?.stateOf?.(session, "agentPreset");
+  if (typeof running === "string") out.push(running);
+  return out;
+}
+
+export function dispatchToolDefinition(engine: RoomEngine, deps: Pick<RoomDeps, "channelFor"> & { ctx?: Pick<RoomContextLike, "sessionProjections"> }): RoomToolDefinition {
   return {
     name: "dispatch",
     description: dispatchDescription(engine.caps),
@@ -829,8 +987,10 @@ export function dispatchToolDefinition(engine: RoomEngine, deps: Pick<RoomDeps, 
     async execute(args, exec) {
       const agent = exec.agent;
       if (agent === undefined) throw new Error("dispatch needs a session to run in");
-      const preset = agent.session.header.agentPreset;
-      if (preset !== undefined && preset !== DEFAULT_PRESET) throw new Error("dispatch is Kairos's tool; a voice does not dispatch");
+      /* The 0.1.1 check read the header only. Both records are checked now and
+       * EITHER naming a bot refuses - strictly narrower, never wider. The mask
+       * already keeps `dispatch` out of a voice's roster; this is the second lock. */
+      if (presetsOf(agent.session, deps.ctx?.sessionProjections).some((preset) => preset !== DEFAULT_PRESET)) throw new Error("dispatch is Kairos's tool; a voice does not dispatch");
       const channel = await deps.channelFor(agent.session.header.cwd);
       if (channel === null) throw new Error("dispatch works in a channel session; this session is in no channel");
       const roster = await engine.rosterFor(channel);

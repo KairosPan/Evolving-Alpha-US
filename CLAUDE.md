@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Descriptive, not prescriptive — present-tense facts about the tree, updated when the tree
-moves; the only CLAUDE.md in the repo. Owner: the operator. Last reviewed 2026-09-09. Depth
+moves; the only CLAUDE.md in the repo. Owner: the operator. Last reviewed 2026-09-30. Depth
 lives in `DEVELOPMENT.md`, `Kairos-Design.md`, `face/README.md`, docstrings, and `docs/`.
 
 ## What this is
@@ -22,12 +22,12 @@ are `alpaca_kit` — one Python package, two faces: importable library and MCP s
 | `alpaca_kit/{pit,feeds,features}/` + `{replay,universe,stock,integrity}.py` | PIT store/capture/CHECKSUMS · EDGAR (live) + FINRA/float (stubs) · trend_template/gainer screens + breadth · backtest day iterator · daily screen + its snapshot models · canonical hasher |
 | `alpaca_kit/mcp/` | the MCP tool surface, read-only by default; order tools register only under `ALPACA_KIT_ENABLE_ORDERS=1` AND keys; screen/breadth disk cache in `data/.screen_cache`, never inside a bed |
 | `strategies/` · `data/` · `scripts/` | one directory per strategy (`_template` is the copy source, `room-drill` the room drill's fixture channel) · gitignored PIT beds + caches · capture_window / capture_broad / smoke_alpaca / `face_data.py` (the instruments' producer) / convert_seeds |
-| `dsh/` | the harness config: `profile/cordis.yml` template (indicative shape, not a validated dsh config) + `skills/mechanics` (rules, tool guide) + `skills/style-kairos` (operator style). Install is `cd face && npm run setup`; `dsh/README.md` steps 2 and 6 predate the face and Gate 2 |
-| `face/` | kairos-face: Node 22, hosts dsh in-process from profile `face`, serves chat + `/market` + `/account` at 127.0.0.1:3090; `strategies/*` are rostered channels; `src/orders.ts` is Gate 2, the per-order approval card |
+| `dsh/` | the harness config: `profile/cordis.yml` template (indicative shape, not a validated dsh config) + `skills/mechanics` (rules, tool guide) + `skills/style-kairos` (operator style). Install is `cd face && npm run setup`, then the operator's rows per `dsh/README.md` |
+| `face/` | kairos-face: Node 22, hosts dsh 0.2.0-rc.2 in-process from profile `face`, serves chat + `/market` + `/account` at 127.0.0.1:3090; `strategies/*` are rostered channels; `src/orders.ts` is Gate 2, the per-order approval card |
 | `face/src/akshare.ts` | project-owned AKShare MCP connection for public A-share queries; composed below operator profile/home patches; no PIT guard; install/version and live-query limits in `face/README.md` |
-| `bots/` | one directory per bot (`_template` is the copy source, `kairos` the inert default, `drill-bull`/`drill-bear` the room drill's two voices): a dsh agent preset — persona + allow-list mask via `face/plugins/bot.js`; in a room (a channel session with bots rostered) `face/src/room.ts` creates one `read-only` member session per bot and Kairos calls `dispatch` |
-| `docs/` | `backtest-rules.md` (the five honest-eval rules) · `superpowers/{specs,plans,runbooks}` (per-feature decision history; everything dated 2026-06/07, and the one runbook, describes the retired product) · `research/` (frozen inputs) · `design/prototypes` (face rounds R1–R4) |
-| `tests/` · `face/tests/` | offline pytest, no keys · `node --test` via tsx; `FACE_SMOKE=1` adds the six real boots (`room-smoke` among them) |
+| `bots/` | one directory per bot (`_template` is the copy source, `kairos` the inert default, `drill-bull`/`drill-bear` the room drill's two voices), declared by the face as a dsh agent preset (`face/src/bot-presets.ts`, re-declared on every save) — persona + allow-list mask via `face/plugins/bot.js`; in a room (a channel session with bots rostered) `face/src/room.ts` creates one `read-only` member session per bot and Kairos calls `dispatch` |
+| `docs/` | `backtest-rules.md` (the five honest-eval rules) · `superpowers/{specs,plans,runbooks}` (per-feature decision history; everything dated 2026-06/07, and `runbooks/p-b-p-c-activation.md`, describes the retired product; `runbooks/2026-09-30-dsh-0.2.0-rc.2-go-live.md` is the operator's go-live procedure) · `research/` (frozen inputs) · `design/prototypes` (face rounds R1–R4) |
+| `tests/` · `face/tests/` | offline pytest, no keys · `node --test` via tsx; `FACE_SMOKE=1` adds the 12 real boots (`room-smoke` and `order-gate-smoke` among them) |
 
 ## Commands
 ```bash
@@ -38,7 +38,7 @@ python -m alpaca_kit.mcp    # the MCP server, stdio
 # face/
 npm run setup               # once, after npm install: writes $DSH_HOME/profiles/face, never overwrites
 npm test && npm run typecheck
-npm start                   # http://127.0.0.1:3090 (see face/README.md)
+npm start                   # prints http://127.0.0.1:3090/?token=… — open that (see face/README.md)
 ```
 
 ## Gotchas
@@ -60,8 +60,10 @@ npm start                   # http://127.0.0.1:3090 (see face/README.md)
   `ALPACA_KIT_ENABLE_ORDERS` in the real harness home: the automated drill uses `mcp__drill__*`
   stand-ins, the manual half arms Gate 1 in a scratch home only (`face/README.md`).
 - **`$DSH_HOME/profiles/face/cordis.yml` is rewritten to `[]` on every face boot.** The
-  operator's file is `cordis.patch.yml`; the face's overlay rows (webserver, connection, the
-  storage chain, tool-ask-user…) compose last and override it silently.
+  operator's file is `cordis.patch.yml`: the face's overlay rows (webserver, connection, the Remote
+  controllers, the preset registry…) override it silently; `face/src/policy.ts` defaults yield to it.
+- **The chat URL is tokenized.** Open the `…/?token=…` URL `npm start` prints: that visit sets a
+  30-day cookie for the exact host:port (`localhost` is not `127.0.0.1`); `/api` 401s without it.
 - **`face/client/*` is served with no cache headers** — hard-reload the browser after any client
   edit, or you drill a stale `chat.js`.
 

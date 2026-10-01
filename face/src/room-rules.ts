@@ -218,7 +218,13 @@ function lineOfUserMessage(message: MessageLike | undefined, roster: readonly Ro
   if (source.kind === "room" && source.form === "answer" && typeof source.bot === "string") {
     return { id: message.id, speaker: { kind: "bot", bot: source.bot, name: typeof source.name === "string" ? source.name : nameOf(roster, source.bot) }, text };
   }
-  return undefined; // round-end and delta are room facts, plugin/tool context is not conversation
+  /* round-end and delta are room facts; every other kind is context, not
+   * conversation - dsh 0.2's `agent-instructions`, `runtime-context`,
+   * `model-selection` notices (NEW packages/core/agent/src/model-selection.ts:47-60)
+   * and relays all fall through here, as its sources are meant to
+   * (NEW packages/llm/llm/src/message.ts:104-110). Tool results are `tool/result`
+   * events with a `role:'tool'` message, never `user/message`. */
+  return undefined;
 }
 
 /**

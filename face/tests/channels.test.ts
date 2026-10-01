@@ -7,7 +7,7 @@ import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
 import {
-  createChannel, listChannelDirs, listSessionHeads, mergeSessionHeads, readChannelStatus,
+  createChannel, listChannelDirs, listSessionHeads, mergeSessionHeads, presetHintsOf, readChannelStatus,
   readChannelBody, reconcileChannels, registerChannelRoutes, WORKBENCH,
 } from "../src/channels.ts";
 import { rosterFor, setRoster } from "../src/roster.ts";
@@ -504,16 +504,63 @@ test("routes: the POSTs are POST-only and application/json-only", async () => {
   }
 });
 
-test("routes: the listing carries channels, the ungrouped count, and the archive set", async () => {
+test("routes: the listing carries channels, the ungrouped count, the archive set, and (empty) preset hints", async () => {
   const routes = await routesFor(await makeRoot(), await mkdtemp(join(tmpdir(), "face-rt3-")));
   const ok = fakeRes();
   await routes.get("/data/channels.json")!.handler(getReq("127.0.0.1:3090"), ok.res);
   assert.equal(ok.out.status, 200);
-  const payload = JSON.parse(ok.out.body) as { ok: boolean; channels: { name: string }[]; ungrouped: unknown[]; archived: unknown[] };
+  const payload = JSON.parse(ok.out.body) as { ok: boolean; channels: { name: string }[]; ungrouped: unknown[]; archived: unknown[]; presets: unknown };
   assert.equal(payload.ok, true);
   assert.deepEqual(payload.channels.map((c) => c.name), ["workbench", "alpha", "市场情绪"]);
   assert.deepEqual(payload.ungrouped, []);
   assert.deepEqual(payload.archived, []);
+  assert.deepEqual(payload.presets, {}, "present even when no session names a preset");
+});
+
+/* ---------- the preset hints (dsh 0.2: the list summary lost `agentPreset`) ---------- */
+
+test("presetHintsOf: every head that names a preset, by session id; blank and absent are left out", () => {
+  assert.deepEqual(presetHintsOf([
+    { sessionId: "room", cwd: "/c", agentPreset: "kairos" },
+    { sessionId: "m1", cwd: "/c", agentPreset: "buffett" },
+    { sessionId: "plain", cwd: "/c" },
+    { sessionId: "blank", cwd: "/c", agentPreset: "" },
+  ]), { room: "kairos", m1: "buffett" });
+  assert.deepEqual(presetHintsOf([]), {});
+});
+
+test("presetHintsOf: a session id is a plain key, never the object's prototype", () => {
+  const hints = presetHintsOf([{ sessionId: "__proto__", agentPreset: "buffett" }]);
+  assert.equal(Object.getPrototypeOf(hints), Object.prototype);
+  assert.equal(Object.hasOwn(hints, "__proto__"), true);
+  assert.equal(JSON.parse(JSON.stringify(hints)).__proto__, "buffett");
+});
+
+test("routes: the listing's presets come from the same merged heads the reconcile ran on - live winning over persisted", async () => {
+  const root = await makeRoot();
+  const { registry } = fakeRegistry();
+  const routes: WebRoute[] = [];
+  registerChannelRoutes({ register: (route) => routes.push(route) }, {
+    registry, root, home: await mkdtemp(join(tmpdir(), "face-rt-presets-")),
+    // The shape main.ts feeds: persisted heads (from snapshot headers) merged with live ones.
+    listSessions: () => listSessionHeads(
+      async () => [
+        { sessionId: "cold-bot", cwd: join(root, "strategies", "alpha"), agentPreset: "buffett" },
+        { sessionId: "re-pointed", cwd: root, agentPreset: "kairos" },
+      ],
+      () => [{ sessionId: "re-pointed", cwd: root, agentPreset: "speculator" }, { sessionId: "live-host", cwd: root }],
+      () => { throw new Error("the durable listing did not fail here"); },
+    ),
+    connectedBins: async () => [],
+    listBots: async () => [],
+  });
+  const out = fakeRes();
+  await routes.find((r) => r.path === "/data/channels.json")!.handler(getReq("127.0.0.1:3090"), out.res);
+  assert.equal(out.out.status, 200);
+  const payload = JSON.parse(out.out.body) as { presets: Record<string, string>; channels: { name: string; sessionIds: string[] }[] };
+  assert.deepEqual(payload.presets, { "cold-bot": "buffett", "re-pointed": "speculator" });
+  // The same read fed the reconcile: the cold bot session attached to its channel.
+  assert.deepEqual(payload.channels.find((c) => c.name === "alpha")!.sessionIds, ["cold-bot"]);
 });
 
 test("routes: overview answers by workspace id, and a body value never becomes a path", async () => {

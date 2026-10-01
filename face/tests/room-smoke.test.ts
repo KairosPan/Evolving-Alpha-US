@@ -4,11 +4,15 @@
  * One boot, one file (this one): every FACE_SMOKE test owns its own bootFace,
  * which is why the room's live drill is room-smoke.test.ts rather than another
  * case inside smoke.test.ts. The bots root is `mkdtemp`'d INSIDE the
- * repository so the shipped relative plugin path mounts (bots-fixture.ts).
+ * repository so the shipped relative plugin path (`../../face/plugins/bot.js`),
+ * which the face rebases against the bot's own directory when it declares the
+ * preset (src/bot-presets.ts), lands on the real face/plugins/bot.js
+ * (bots-fixture.ts).
  * @module
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -22,6 +26,7 @@ import { panelDeps } from "../src/panels.ts";
 import { setBots } from "../src/roster.ts";
 import { installRoom, registerRoomRoutes, type RoomContextLike } from "../src/room.ts";
 import { makeRepoBotsRoot } from "./bots-fixture.ts";
+import { mountClient, remote, signIn } from "./remote.ts";
 import { StubAdapter, type StubReply } from "./stub-llm.ts";
 
 const gated = process.env.FACE_SMOKE !== "1";
@@ -65,12 +70,15 @@ test("room smoke: dispatch → two members → answers in the room log → one w
     writeFileSync(patchPath, `${patch}\n- id: mcp-akshare\n  disabled: true\n`);
     const { ctx, dispose } = await bootFace({ profileName: "face", port: 0, dshHome: home, botsRoot: bots });
     try {
-      /* `as unknown as`: dsh's own `SessionHeader` is a closed interface, not a `Record`. */
-      const sessions = ctx.get("sessions") as unknown as { get(id: string): { id: string; header: Record<string, unknown>; events: Ev[] } | undefined };
-      const agents = ctx.get("agents") as { get(id: string): { id: string; session: { header: Record<string, unknown>; events: Ev[] } } | undefined };
+      /* `as unknown as`: dsh's own `SessionHeader` is a closed interface, not a
+       * `Record`. The log is `snapshotEvents()` since dsh 0.2 - the `events`
+       * getter is gone (NEW packages/core/session/src/index.ts:649-661). */
+      const sessions = ctx.get("sessions") as unknown as { get(id: string): { id: string; header: Record<string, unknown>; snapshotEvents(): readonly Ev[] } | undefined };
+      const agents = ctx.get("agents") as unknown as { get(id: string): { id: string; session: { header: Record<string, unknown>; snapshotEvents(): readonly Ev[] } } | undefined };
       const presets = ctx.get("agentPresets") as { list(): Promise<{ id: string; broken?: string }[]> };
       const tools = ctx.get("tools") as { schemas(scope?: object): { name: string }[]; execute(exec: object): Promise<{ isError: boolean; content?: { text?: string }[] }> };
-      const permission = ctx.get("permissionPresets") as { current(events: readonly Ev[]): string };
+      /* `current` takes the SESSION now (NEW packages/interaction/permission-presets/src/index.ts:343-345). */
+      const permission = ctx.get("permissionPresets") as unknown as { current(session: object): string };
       const systemPrompt = ctx.get("systemPrompt") as { assemble(context: { scope?: object; agent?: object }): Promise<Parameters<typeof renderPrompt>[0]> };
       const registry = ctx.get("workspaceRegistry") as { create(path: string): Promise<{ id: string; path: string }> };
       const projections = ctx.get("sessionProjections") as { snapshot(session: object): { values: Record<string, unknown> } };
@@ -122,27 +130,29 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       registerRoomRoutes(ctx.webServer, engine);
 
       const base = `http://127.0.0.1:${ctx.webServer.port}`;
-      let n = 0;
-      const rpc = async (method: string, payload: object): Promise<Record<string, unknown>> => {
-        const res = await fetch(`${base}/api/${method}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "client-request", rpcId: `r${++n}`, method, payload }) });
-        const body = await res.json() as { result?: { ok?: boolean; value?: Record<string, unknown>; error?: unknown } };
-        assert.equal(body.result?.ok, true, `${method}: ${JSON.stringify(body.result?.error)}`);
-        return body.result!.value!;
-      };
+      /* dsh 0.2's wire (PLAN Appendix A): `POST /api/<ns>/<method>` with the
+       * browser-session cookie, args under `payload.args`; `remote` throws on
+       * `{ok:false}` with the slash-namespaced code. `/data/*` stays fence-only (D8).
+       * The cookie is minted only by the face's `/` (static.ts, behind
+       * `authorizeIndex`), which `bootFace` does not mount - main.ts does - so
+       * mount it first, or the token URL gets the webserver's bare 404. */
+      mountClient(ctx);
+      const cookie = await signIn(ctx, base);
+      const rpc = <T = Record<string, unknown>>(endpoint: string, args: object): Promise<T> => remote<T>(base, cookie, endpoint, args);
       const data = async (path: string, body: object): Promise<Record<string, unknown>> => {
         const res = await fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
         return await res.json() as Record<string, unknown>;
       };
 
       /* Kairos's room session, on the stub route. */
-      const created = await rpc("session.create", { workspaceId: ws.id });
+      const created = await rpc<{ sessionId: string; agentPreset?: string }>("session/create", { request: { workspaceId: ws.id } });
       const roomId = String(created.sessionId);
       assert.equal(created.agentPreset, "kairos");
-      await rpc("session.selectModel", { sessionId: roomId, provider: "stub", model: "echo" });
+      await rpc("session/selectModel", { request: { sessionId: roomId, provider: "stub", model: "echo" } });
       assert.ok(tools.schemas(agents.get(roomId) as object).some((s) => s.name === "dispatch"), "dispatch is in Kairos's roster");
 
-      await rpc("session.prompt", { sessionId: roomId, mode: "queue", content: [{ type: "text", text: "各位对 X 的看法？" }] });
-      const room = () => sessions.get(roomId)!.events;
+      await rpc("session/prompt", { request: { requestId: randomUUID(), sessionId: roomId, mode: "queue", content: [{ type: "text", text: "各位对 X 的看法？" }] } });
+      const room = () => sessions.get(roomId)!.snapshotEvents();
       await waitFor("the synthesis", () => {
         const events = room();
         const end = events.findIndex((e) => sourceOf(e)?.form === "round-end");
@@ -172,26 +182,41 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       assert.deepEqual(Object.fromEntries(roundEnd.turns.map((t) => [t.bot, t.state])), { alpha: "answered", beta: "passed", gamma: "failed" }, "a failing model is failed and the round settles");
 
       /* The members: parented, preset-joined, read-only before their first prompt, AGENTS.md in the chain, no dispatch. */
-      const list = (await rpc("session.list", {})).items as { sessionId: string; parentSessionId?: string; agentPreset?: string; cwd?: string; origin?: string; projections?: { values: Record<string, unknown> } }[];
+      /* dsh 0.2's `SessionSummary` carries no `agentPreset` (NEW packages/api/session-controller/src/types.ts:177-188);
+       * the preset a member runs is its `agentPreset` projection, read here off the live session's header
+       * (members are never re-selected, so header and projection agree). */
+      const rows = (await rpc<{ items: { sessionId: string; parentSessionId?: string; cwd?: string; origin?: string; projections?: { values: Record<string, unknown> } }[] }>("session/list", { _request: {} })).items;
+      const list = rows.map((s) => ({ ...s, agentPreset: sessions.get(s.sessionId)?.header.agentPreset as string | undefined }));
       const members = list.filter((s) => s.parentSessionId === roomId);
       assert.deepEqual(members.map((m) => m.agentPreset).sort(), ["alpha", "beta", "gamma"]);
       for (const m of members) {
         assert.equal(m.cwd, channelDir);
         assert.equal(m.origin, undefined);
+        assert.equal(m.projections?.values.agentPreset ?? m.agentPreset, m.agentPreset, "the listed projection, when present, names the same preset");
         const agent = agents.get(m.sessionId)!;
-        assert.equal(permission.current(agent.session.events), "read-only");
-        assert.equal(agent.session.events[0].type, "permission/preset", "the pin is the first event - dsh appends no end-seed marker to a fresh session");
+        const memberEvents = agent.session.snapshotEvents();
+        assert.equal(permission.current(agent.session), "read-only");
+        /* Re-measured for dsh 0.2 (PLAN S5): setup runs BEFORE `session/created`
+         * (NEW packages/core/agent/src/index.ts:100-112), where
+         * dsh-permission-presets pins the user default only if nothing is pinned
+         * (NEW packages/interaction/permission-presets/src/index.ts:245-247, 428-456).
+         * So the room's pin is the first event AND the only preset fact before the first prompt. */
+        assert.equal(memberEvents[0].type, "permission/preset", "the pin is the first event - dsh appends no end-seed marker to a fresh session");
+        assert.equal((memberEvents[0].data as { preset?: unknown } | undefined)?.preset, "read-only", "and it is the read-only pin, not dsh's announcement default");
+        const firstPrompt = memberEvents.findIndex((e) => e.type === "turn/start");
+        assert.deepEqual(memberEvents.slice(0, firstPrompt).filter((e) => e.type === "permission/preset").map((e) => (e.data as { preset?: unknown }).preset), ["read-only"],
+          "no other preset was ever in force before the first turn");
         assert.equal(tools.schemas(agent as object).some((s) => s.name === "dispatch"), false, "a voice never sees dispatch");
         const prompt = renderPrompt(await systemPrompt.assemble({ agent: agent as object, scope: agent as object }));
         assert.ok(prompt.includes(`You are ${m.agentPreset![0].toUpperCase()}${m.agentPreset!.slice(1)}, a test voice`), "the bot's persona is in its prompt (S6)");
         /* `agent-instructions`, not `plugin`: `workspaceContextMessage`'s `kind:"plugin"`
          * message is only a content carrier - what dsh-agent-instructions publishes
          * onto the log is the `agent-instructions`/`instructions` source. */
-        const chain = agent.session.events.find((e) => e.type === "user/message" && sourceOf(e)?.kind === "agent-instructions" && JSON.stringify(e.data).includes(MARKER));
-        assert.ok(chain !== undefined, `${m.agentPreset}: the channel's AGENTS.md chain reached the member; user/message sources seen: ${JSON.stringify(agent.session.events.filter((e) => e.type === "user/message").map((e) => sourceOf(e)?.kind))}`);
+        const chain = agent.session.snapshotEvents().find((e) => e.type === "user/message" && sourceOf(e)?.kind === "agent-instructions" && JSON.stringify(e.data).includes(MARKER));
+        assert.ok(chain !== undefined, `${m.agentPreset}: the channel's AGENTS.md chain reached the member; user/message sources seen: ${JSON.stringify(agent.session.snapshotEvents().filter((e) => e.type === "user/message").map((e) => sourceOf(e)?.kind))}`);
       }
       const alpha = members.find((m) => m.agentPreset === "alpha")!;
-      const alphaDelta = agents.get(alpha.sessionId)!.session.events.find((e) => sourceOf(e)?.form === "delta");
+      const alphaDelta = agents.get(alpha.sessionId)!.session.snapshotEvents().find((e) => sourceOf(e)?.form === "delta");
       assert.match(JSON.stringify(alphaDelta?.data), /各位对 X 的看法/);
       assert.match(JSON.stringify(alphaDelta?.data), /exactly \(pass\)/);
 
@@ -205,9 +230,14 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       assert.equal((row.projections?.values.room as { kind?: string } | undefined)?.kind, "room", "the room value rides session.list");
       assert.equal((members[0].projections?.values.room as { kind?: string } | undefined)?.kind, "member");
 
-      /* The cache row (R13): Kairos's turn/end is a mandatory write. */
-      const cacheFile = join(home, "storages", "session_projcache.json");
-      await waitFor("the projection cache file", () => existsSync(cacheFile) && readFileSync(cacheFile, "utf8").includes(roomId), 10_000);
+      /* The cache row (R13): Kairos's turn/end is a mandatory write. dsh 0.2
+       * stores the domain `per-record`: one document per session under
+       * `<storages>/session_projcache/sessions/<id>.json`
+       * (NEW packages/session/session-projection-cache/src/spec.ts:1-9, 101-106;
+       * NEW packages/storage/storage-json/src/per-record-unit.ts:151), no longer
+       * one `session_projcache.json` holding every session. */
+      const cacheFile = join(home, "storages", "session_projcache", "sessions", `${roomId}.json`);
+      await waitFor("the room's projection cache record", () => existsSync(cacheFile) && readFileSync(cacheFile, "utf8").includes(`"room"`), 10_000);
 
       /* The operator's @: not a prompt; alpha turns, tries to write into the channel, is refused INSIDE the tool content (D12, R10). */
       const before = room().length;
@@ -216,7 +246,7 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       await waitFor("alpha's second answer", () => room().slice(before).some((e) => sourceOf(e)?.form === "answer" && String(sourceOf(e)?.bot) === "alpha"), 60_000);
       const mention = room().slice(before).find((e) => e.type === "user/message" && sourceOf(e)?.kind === "user");
       assert.deepEqual(sourceOf(mention!)?.mention, ["alpha"], "the operator's message is in the room, addressed");
-      const alphaEvents = agents.get(alpha.sessionId)!.session.events;
+      const alphaEvents = agents.get(alpha.sessionId)!.session.snapshotEvents();
       const probe = alphaEvents.find((e) => e.type === "tool/result" && JSON.stringify(e.data).includes("s4-member-should-not-exist"));
       assert.ok(probe !== undefined, "the member ran its write");
       assert.match(JSON.stringify(probe!.data), /sandbox: file access denied/);
@@ -224,7 +254,7 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       assert.equal(room().filter((e) => e.type === "turn/start").length, 2, "an @ never woke Kairos");
 
       /* Plan 1's deferral 4: a HOME session writes its journal and is refused on ../SOUL.md. */
-      const homeSession = await rpc("session.create", { cwd: join(bots, "alpha", "journal"), agentPreset: "alpha" });
+      const homeSession = await rpc<{ sessionId: string }>("session/create", { request: { cwd: join(bots, "alpha", "journal"), agentPreset: "alpha" } });
       const homeAgent = agents.get(String(homeSession.sessionId))!;
       const write = async (target: string) => tools.execute({ callId: `home-${Math.random()}`, name: "bash", arguments: { command: `printf probe > ${JSON.stringify(target)}`, description: "home write probe" }, agent: homeAgent, signal: new AbortController().signal });
       const inside = await write(join(bots, "alpha", "journal", "probe.md"));

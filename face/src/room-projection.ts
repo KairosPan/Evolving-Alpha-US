@@ -222,10 +222,17 @@ export function applyRoomEvent(state: RoomState, event: EventLike): RoomState {
     case "tool/result": {
       const pending = state.pending;
       if (pending === undefined) return state;
-      const block = (data?.message as { content?: { toolCallId?: unknown; isError?: unknown }[] } | undefined)?.content?.[0];
-      if (typeof block?.toolCallId !== "string" || block.toolCallId !== pending.callId) return state;
+      /* dsh 0.2's tool-role message carries `toolCallId` and `isError` on the
+       * MESSAGE (NEW packages/llm/llm/src/message.ts:173-180, `createToolResultMessage`
+       * :299-306), not in a `content[0]` wrapper as 0.1.1 did. Only the new shape
+       * is read: the fold runs over live v4 events, and the v3→v4 edge lifts every
+       * stored wrapper on load (NEW packages/session/session-format-v3-to-v4/src/tool-role.ts:27-60),
+       * so a wrapper reaching here would be a foreign event, not this call's result.
+       * The fold is unchanged in meaning, so ROOM_STATE_VERSION stays. */
+      const message = data?.message as { toolCallId?: unknown; isError?: unknown } | undefined;
+      if (typeof message?.toolCallId !== "string" || message.toolCallId !== pending.callId) return state;
       const settled = roomView(state);
-      if (block.isError !== true) return settled; // the round is real; only the bookkeeping goes
+      if (message.isError !== true) return settled; // the round is real; only the bookkeeping goes
       /* Refused: the round it opened never ran, so the strip shows what stood
        * before the call - a running round's real member states, or nothing. */
       const restored: RoomState = { ...settled, kind: pending.kind };
@@ -247,7 +254,10 @@ export function applyRoomEvent(state: RoomState, event: EventLike): RoomState {
 export interface ProjectionDefinitionLike {
   key: string;
   stateSchema: z.ZodType<RoomState>;
-  init(): RoomState;
+  /** dsh 0.2 passes `(header, inheritedEventCount)` (NEW packages/session/session-projection/src/index.ts:56-62).
+   * The room fold ignores both, exactly as 0.1.1's no-argument `init` did: a
+   * room is made by its events, never by its header. */
+  init(header?: unknown, inheritedEventCount?: number): RoomState;
   apply(state: RoomState, event: EventLike): RoomState;
   wire: { viewSchema: z.ZodType<RoomState>; view(state: RoomState): RoomState };
   stateVersion: number;

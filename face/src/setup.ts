@@ -1,9 +1,9 @@
 /** One-shot setup of the face's dsh profile at `$DSH_HOME/profiles/face`.
  *
  * The profile bundles ONLY `@deepseek-ai/dsh-base` — the face's own host rows
- * (webserver, api gateway, connection, ...) are inserted programmatically at
- * boot by `faceOverlay()`, never written to disk. The written patch layer is
- * therefore empty: it belongs to the operator.
+ * (webserver, connection, the Remote controllers, the preset registry, ...)
+ * are inserted programmatically at boot by `faceOverlay()`, never written to
+ * disk. The written patch layer is therefore empty: it belongs to the operator.
  *
  * The three written files mirror dsh-app-boot's own `initProfile` (manifest,
  * patch layer, pnpm settings) so a face profile is indistinguishable from one
@@ -28,18 +28,34 @@ const PROFILE_PKG = {
  * loader patch entries" on anything that is not an array — and a comment-ONLY
  * YAML document parses to `undefined`. A header with no `[]` would therefore
  * hard-fail boot the moment the profile loaded. dsh's own initProfile template
- * ends with the same `[]` for the same reason. Covered by the loader test. */
+ * ends with the same `[]` for the same reason (still true at 0.2.0-rc.2:
+ * NEW packages/boot/app-boot/README.md:61). Covered by the loader test.
+ *
+ * The face-owned list below is faceOverlay's row set (src/overlay.ts), plus the
+ * rows composeFace patches itself; keep the two in step. Everything the text
+ * says about ordering is boot.ts's composition: bundles, then the face's
+ * policy defaults (src/policy.ts), then this file, then the home layer, then
+ * the face's own rows. */
 const PATCH_HEADER = `# face profile patch layer. The face's own host rows (webserver :3090,
-# api gateway, connection) are inserted programmatically by kairos-face at
-# boot - do NOT add them here. This file is the operator's: mount the
-# alpaca_kit MCP server and skill roots here per dsh/README.md steps 3-6.
+# connection, the Remote controllers, the agent preset registry) are inserted
+# programmatically by kairos-face at boot - do NOT add them here. This file is
+# the operator's: mount the alpaca_kit MCP server and skill roots here per
+# dsh/README.md steps 3-6.
 #
 # Face-owned rows are applied AFTER this file and win over it, silently: a
-# patch here targeting webserver, connection, api-gateway, directory-picker,
-# cordis-host-runner, tool-ask-user, agent-presets, session-projection-cache, the system-prompt persona,
-# the storage chain (storage, storage-json, storage-domain, workspace), or the
-# hmr / session-telemetry-otel switches is accepted, overridden, and never
-# reported. Change those in kairos-face's overlay, not here.
+# patch here targeting webserver, connection, api-remotes, file-upload,
+# workspace, session-controller, workspace-controller, settings-controller,
+# directory-picker, tool-ask-user, agent-preset-registry, preset-kairos, the
+# system-prompt persona (personaPrefix only - other system-prompt keys set
+# here are kept), or the hmr / session-telemetry-otel switches (the latter
+# is DSH_TELEMETRY_DISABLED, applied only while it is set) is accepted,
+# overridden, and never reported. Change those in kairos-face's overlay, not
+# here.
+#
+# The storage chain (storage, storage-json, storage-domain) and
+# session-projection-cache now come from dsh-base, and a patch here reaches
+# them. kairos-face's policy defaults (src/policy.ts) sit BELOW this file;
+# patch those rows here to override them.
 []
 `;
 

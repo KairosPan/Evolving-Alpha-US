@@ -20,9 +20,18 @@ deferring. Every style-kairos SKILL.md carries that scope header at the top.
    deps (`mcp`, `pandas`, `pyarrow`, `pydantic`); `[live]` adds `alpaca-py`, without which the
    live `daily_bars` path cannot fetch. Nothing below works until this import does:
    `python -c "import alpaca_kit.mcp.server"`.
-2. **Create the harness home.** `npx @deepseek-ai/dsh web` once (`$DSH_HOME`, default
-   `~/.dsh`; the web UI comes up on http://127.0.0.1:3080). This is what creates the profile
-   directory layout the next step writes into.
+2. **Create the harness home and the face profile.** `cd face && npm install && npm run setup`
+   creates `$DSH_HOME/profiles/face/` (`$DSH_HOME` defaults to `~/.dsh`): a `package.json`
+   bundling `dsh-base`, the operator's `cordis.patch.yml` and `pnpm-workspace.yaml`; it never
+   overwrites an existing profile (see `face/README.md`). The dsh command line is not part of
+   this install, and another dsh sharing the home changes it: the 0.2.0-rc.2 CLI's first
+   run imports `$DSH_HOME/settings.yaml` into ITS OWN active profile and renames the file
+   `settings.yaml.imported`, and a 0.1.1-rc.2 CLI or face must never run again on a home that
+   0.2.0 has written — it re-heals its module link farm under `profiles/node_modules` and forks
+   the session history (`DEVELOPMENT.md` §4.8, PLAN D12 and D13). A home a 0.1.1 face already
+   uses moves to 0.2.0 by the go-live runbook
+   (`docs/superpowers/runbooks/2026-09-30-dsh-0.2.0-rc.2-go-live.md`): backup, a dry run on a
+   copy (`face/scripts/check-home.ts`), the decisions, then the first boot.
 3. **Copy the profile in.** Copy `dsh/profile/cordis.yml` into the harness home's profile
    location per the current dsh docs — as of the frozen survey that is
    `$DSH_HOME/profiles/<name>/` and its patch file is `cordis.patch.yml` (for the `face`
@@ -34,9 +43,19 @@ deferring. Every style-kairos SKILL.md carries that scope header at the top.
    ABSOLUTE path of the interpreter step 1 installed into (`python -c "import sys;
    print(sys.executable)"`) — dsh spawns the server as a subprocess whose `PATH` need not be
    your shell's, and a bare `python` can resolve to a system interpreter that has none of the
-   deps. Confirm what actually booted with `dsh --profile <name> --dump-config`.
+   deps. Add Kairos's default model to the same file — the face reads no `settings.yaml`, so
+   without this row it runs dsh-base's `deepseek-official/deepseek-flash`, and nothing in the
+   running face saves a model choice back:
+   ```yaml
+   - id: agent-default-model
+     config: { provider: deepseek-official, model: deepseek-v4-pro, reasoningEffort: max }
+   ```
+   Confirm what actually booted in the face's plugin panel (`/data/plugins.json`: every loader
+   row with its phase, and the tools each MCP server registered). `dsh --profile face
+   --dump-config` shows the profile's own layers only — never the face's policy, AKShare and host
+   rows — and only a 0.2.0 CLI may run it on this home (step 2).
 4. **Give it the keys.** `source .env.alpaca` and `source .env.deepseek` in the shell that
-   launches dsh (`APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `DEEPSEEK_API_KEY`), or put the
+   launches the face (`APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `DEEPSEEK_API_KEY`), or put the
    variables in the home profile's env block. Neither file is loaded automatically, and
    neither is in git. `ALPHA_PIT_ROOT` is already in the template's env block (`data/pit/2yr`,
    relative to the server's `cwd`) — keep it: without it the snapshot-backed tools
@@ -68,35 +87,32 @@ deferring. Every style-kairos SKILL.md carries that scope header at the top.
    so a wrong path still lists all ten. That failure shows up per call instead:
    `screen` returns `ok=False, SnapshotMissingError`. Ten tools means the wiring is right; it does
    not by itself mean the bed is.
-6. **The ORDERS flag lives ONLY in the home copy — and it is the only gate this repo enforces.**
-   `place_order`/`cancel_order` register only when `ALPACA_KIT_ENABLE_ORDERS=1` **and** the APCA
-   keys are present — the flag alone registers nothing (`alpaca_kit/mcp/tools.py` gates on
-   `orders_on and has_keys`). That is the spec's **Gate 1, registration**; the `has_keys` half is
-   extra hardening on the same gate, not a second one. The flag stays commented out in the repo
-   copy of `cordis.yml` and is uncommented, if ever, only by the operator in the installed copy —
-   outside the agent's workspace, where the agent cannot edit it back on.
+6. **The ORDERS flag lives ONLY in the home copy.** `place_order`/`cancel_order` register only
+   when `ALPACA_KIT_ENABLE_ORDERS=1` **and** the APCA keys are present — the flag alone registers
+   nothing (`alpaca_kit/mcp/tools.py` gates on `orders_on and has_keys`). That is the spec's
+   **Gate 1, registration**; the `has_keys` half is extra hardening on the same gate, not a second
+   one. The flag stays commented out in the repo copy of `cordis.yml` and is uncommented, if ever,
+   only by the operator in the installed copy — outside the agent's workspace, where the agent
+   cannot edit it back on.
 
-   **Gate 2 — per-order human approval — is INTENT in this branch, not an established layer.**
-   The template's `permissions: always_ask: [place_order, cancel_order]` is written in the same
-   indicative shape as the rest of the file and is **not** validated against a live dsh: in the
-   frozen survey, approval policy is a per-SESSION `ask`/`never` knob, per-tool allow/deny/ask
-   lives in the `tools/pre-execute` waterfall rather than in profile YAML, and MCP tools carry a
-   `serverName` namespace, so bare tool names would not match even if a top-level block bound. An
-   unrecognised YAML key merges silently, which fails open. So: **pin Gate 2 at install** against
-   the current dsh docs, by whichever mechanism it then offers — a permission preset whose
-   approval policy is `ask` (the shipped `workspace-write` preset already is), a
-   `tools/pre-execute` ask rule, or a per-tool key if one now exists — and then **confirm that an
-   order call actually prompts, before you trust the flag**. Until that confirmation, treat Gate 1
-   as the only layer standing between the agent and a paper order; do not rely on Gate 2 to hold
-   if the flag is ever mis-set. The face's approval surface and its drill live in
-   `face/README.md` — once that drill passes on a live face, Gate 2 has a validated home there.
+   **Gate 2 — per-order human approval — is the face's, not the profile's.** `face/src/orders.ts`
+   (built 2026-09-04) registers a `tools/pre-execute` listener that raises an approval card for
+   every `place_order`/`cancel_order` call, matched on the raw tool name so a renamed MCP server
+   cannot slip one past, and a guard that admits the call only on a logged one-shot approval for
+   that exact call. It binds only while dsh runs inside the face; a dsh tree composed without the
+   face has Gate 1 alone. The template's `permissions: always_ask: [place_order, cancel_order]`
+   block is inert — an unrecognised YAML key merges silently, which fails open — and stays in the
+   template as the record of what did not work. The gate's automated drill passes on a real tree,
+   the approved order dispatching included; its human half has not been run. Run the
+   order-approval drill in `face/README.md` in a SCRATCH home, and see a person read the card,
+   before the flag ever flips in the real one.
 7. **Re-check the key names.** dsh is a developer preview and states that there will be
    compatibility-breaking changes. The shape in `profile/cordis.yml` is indicative, pinned
    against a survey frozen 2026-08-22
    (`docs/research/2026-08-22-deepseek-harness-dsh-survey.md`), not against a live install.
    Expect one adaptation pass; the content is the deliverable, the container is not.
 
-## Installed state — the `face` profile (2026-08-31)
+## Installed state — the `face` profile (2026-08-31; re-checked for dsh 0.2.0-rc.2 on 2026-09-30)
 
 The template above is realized, live and drilled, in the face's profile. The shapes that
 actually bound, for the next install or the next pin bump:
@@ -104,13 +120,23 @@ actually bound, for the next install or the next pin bump:
 - **The MCP bridge is `@deepseek-ai/dsh-mcp-client`, and it is NOT in dsh-base.** It is
   declared in `face/package.json` at the exact `DSH_PIN` (the lockstep sweep in
   `face/tests/version.test.ts` covers it automatically), not installed into the profile —
-  patch rows resolve plugin names from the face's dependency closure via the healed
-  profiles fallback.
+  patch rows resolve plugin names from the face's dependency closure through the runtime
+  module resolution the face computes from `face/package.json` at every boot. There is no
+  module fallback to heal any more: 0.1.1's link farm under `$DSH_HOME/profiles/node_modules`
+  is written by nothing, and a stale one is consulted only for a row naming a package outside
+  the face's closure — delete it once no 0.1.1 tool runs on the home (`DEVELOPMENT.md` §4.8,
+  PLAN D13).
 - **The two operator rows live in `$DSH_HOME/profiles/face/cordis.patch.yml`:** one
   `dsh-mcp-client` insert (`serverName: alpaca-kit`, stdio, absolute interpreter path,
   `cwd` = this repo, env block as in the template) and one `skill-filesystem` config patch
   (`customSkillDirs` = the two group roots — a patch REPLACES the addressed row's whole
-  config, which is fine here because dsh-base mounts the row configless).
+  config, which is fine here because dsh-base mounts the row configless). Both are unchanged
+  and valid at 0.2.0-rc.2: the stdio config and the `customSkillDirs` / `includeDefaultRoots`
+  keys are the same. Since 0.2.0 stdio negotiation starts a probe process before the serving
+  one, so the server is spawned twice per connect.
+- **The default-model row lives there too** (`agent-default-model`, step 3). 0.1.1 took the
+  model from `$DSH_HOME/settings.yaml`; the face at 0.2.0 reads no settings file (it provides
+  no `profileContext`), so the row is the only place Kairos's model is set.
 - **`toolCallTimeoutMs: 300000` on the MCP row is load-bearing.** `screen(trend_template)`
   computes ~188 s for one day on the 2yr bed (measured 2026-08-31); the 60 s default kills
   it every time, as `MCP error -32001: Request timed out`. Since then screen/breadth results
@@ -120,12 +146,17 @@ actually bound, for the next install or the next pin bump:
 - **The MCP child's env is scrubbed.** The APCA keys must be passed explicitly on the row
   (`!!js process.env...`); they do not flow in ambiently.
 - **Accepted residual:** the face process holds the paper keys in its environment (for
-  `/account`), and the session's bash tool inherits them — so Gate 1 gates the ORDER TOOLS,
-  not the capability: a shell can reach `alpaca_kit.account` directly. Accepted
-  operator-trust posture (paper account, single operator, git as ledger), not an oversight.
-- **Gate-2 drill: PASSED on the live face, 2026-08-31.** Both outcomes exercised — deny
-  (command did not run, model saw a rejection result) and approve (`allowed-once`, one-shot)
-  — with paired `approval/asked`/`approval/decided` records in the session log.
+  `/account` and the watchlist's quotes). A session's bash tool does NOT inherit them — dsh
+  drops every `KEY|PASSWORD|SECRET|TOKEN` name from a child's environment — but a shell turn
+  can read `.env.alpaca` at the repo root and import `alpaca_kit.account` directly, so Gate 1
+  gates the ORDER TOOLS, not the capability. Accepted operator-trust posture (paper account,
+  single operator, git as ledger), not an oversight.
+- **The approval-channel drill (`face/README.md`'s "Gate-2 drill"): PASSED on the live face,
+  2026-08-31, on dsh 0.1.1-rc.2.** A file write outside the workspace escalated to a card; both
+  outcomes exercised — deny (command did not run, model saw a rejection result) and approve
+  (`allowed-once`, one-shot) — with paired `approval/asked`/`approval/decided` records in the
+  session log. At 0.2.0-rc.2 the channel is automated on a real tree (`face/tests/smoke.test.ts`,
+  `order-gate-smoke.test.ts`); the live re-run is owed.
 
 ## Notes
 

@@ -12,12 +12,13 @@ import { makeBotsRoot } from "./bots-fixture.ts";
 import {
   BOT_PLUGIN_RELATIVE, DEFAULT_ALLOW, TEMPLATE_SOUL, createBot, isBotId, listBots,
   registerBotRoutes, rejectSoul, renderComposition, renderPresetMeta, updateBotSettings, updateSoul,
+  type BotRouteDeps,
 } from "../src/bots.ts";
 import { HttpError } from "../src/http.ts";
 
 const noPresets = async () => [] as { id: string; broken?: string }[];
 
-test("isBotId is dsh's preset grammar minus the two names the face reserves", () => {
+test("isBotId is the retired dsh preset-id grammar - now the face's only gate - minus the two names the face reserves", () => {
   for (const ok of ["buffett", "a", "spec-2", "x".repeat(64)]) assert.equal(isBotId(ok), true, ok);
   for (const bad of ["", "Buffett", "_template", "kairos", "-lead", "a_b", "a.b", "a b", "巴菲特", "x".repeat(65), 42, null]) {
     assert.equal(isBotId(bad), false, JSON.stringify(bad));
@@ -142,6 +143,24 @@ test("listBots reads every directory in the grammar, marks the default, carries 
   assert.equal(byId.get("cracked")!.name, "cracked");        // no preset.yml → id
   const unlisted = await listBots(root, noPresets);
   assert.equal(unlisted.find((b) => b.id === "probe")!.listed, false);
+});
+
+/* dsh 0.2.0 lists only what was declared, so a bot the face could not declare
+ * (src/bot-presets.ts) is simply absent from dsh's roster; without the face's
+ * own reason it would read as "not reported" rather than as broken. */
+test("listBots reports a bot the face could not declare as broken with the face's reason, and dsh's own reason when it has one", async () => {
+  const root = await makeBotsRoot();
+  await createBot(root, { id: "probe", name: "Probe", soul: "You are Probe." });
+  await createBot(root, { id: "mounted", name: "Mounted", soul: "You are Mounted." });
+  const errors = new Map([["probe", "bots/probe/agent.cordis.yml is not valid YAML: bad indentation"], ["mounted", "stale face reason"]]);
+  const presets = async () => [{ id: "kairos" }, { id: "mounted", broken: "bot (file:///x/bot.js): import failed" }];
+  const byId = new Map((await listBots(root, presets, errors)).map((b) => [b.id, b]));
+  assert.equal(byId.get("probe")!.broken, "bots/probe/agent.cordis.yml is not valid YAML: bad indentation");
+  assert.equal(byId.get("probe")!.listed, false);
+  assert.equal(byId.get("mounted")!.broken, "bot (file:///x/bot.js): import failed", "the registry's reason for a declared bot wins");
+  assert.equal(byId.get("mounted")!.listed, true);
+  assert.equal(byId.get("kairos")!.broken, undefined);
+  assert.equal((await listBots(root, presets)).find((b) => b.id === "probe")!.broken, undefined, "no errors map, no face reason");
 });
 
 test("preset.yml may carry a face-only model route; createBot writes it and listBots reads it", async () => {
@@ -346,9 +365,9 @@ function postReq(body: string, host = "127.0.0.1:3090", headers: Record<string, 
   (req as { method: string }).method = "POST";
   return req;
 }
-function routesFor(root: string): Map<string, WebRoute> {
+function routesFor(root: string, extra: Partial<BotRouteDeps> = {}): Map<string, WebRoute> {
   const routes: WebRoute[] = [];
-  registerBotRoutes({ register: (route) => routes.push(route) }, { botsRoot: root, listPresets: async () => [{ id: "kairos" }] });
+  registerBotRoutes({ register: (route) => routes.push(route) }, { botsRoot: root, listPresets: async () => [{ id: "kairos" }], ...extra });
   return new Map(routes.map((r) => [r.path, r]));
 }
 
@@ -422,4 +441,60 @@ test("routes: settings persists an editable profile and reports stale revisions 
   const bad = fakeRes();
   await route.handler(postReq("[]"), bad.res);
   assert.equal(bad.out.status, 400);
+});
+
+/* dsh 0.2.0 never re-reads bots/<id>/ (0.1.1 re-read it on every mount), so
+ * every write route must hand the saved bot to the re-declaration seam - and
+ * finish it before answering, because the client re-reads the roster the
+ * moment a save returns. */
+test("routes: create, soul and settings re-declare the saved bot before answering - and never after a refused write", async () => {
+  const root = await makeBotsRoot();
+  const changed: { id: string; soul: string }[] = [];
+  const routes = routesFor(root, {
+    onBotChanged: async (id) => { changed.push({ id, soul: await readFile(join(root, id, "SOUL.md"), "utf8") }); },
+  });
+  const created = fakeRes();
+  await routes.get("/data/bots")!.handler(postReq('{"name":"Probe","soul":"v1"}'), created.res);
+  assert.equal(created.out.status, 200);
+  assert.deepEqual(changed, [{ id: "probe", soul: "v1\n" }], "the files were on disk when the seam ran");
+  const soul = fakeRes();
+  await routes.get("/data/bots/soul")!.handler(postReq('{"id":"probe","soul":"v2"}'), soul.res);
+  assert.equal(soul.out.status, 200);
+  const settings = fakeRes();
+  await routes.get("/data/bots/settings")!.handler(postReq('{"id":"probe","name":"Renamed"}'), settings.res);
+  assert.equal(settings.out.status, 200);
+  assert.deepEqual(changed.map((c) => c.id), ["probe", "probe", "probe"]);
+  assert.equal(changed[1].soul, "v2\n");
+  for (const [path, body, status] of [
+    ["/data/bots", '{"name":"Probe"}', 409],
+    ["/data/bots/soul", '{"id":"ghost","soul":"x"}', 404],
+    ["/data/bots/settings", '{"id":"probe","soul":"{{model}}"}', 400],
+  ] as const) {
+    const refused = fakeRes();
+    await routes.get(path)!.handler(postReq(body), refused.res);
+    assert.equal(refused.out.status, status, path);
+  }
+  assert.equal(changed.length, 3, "a refused write re-declares nothing");
+});
+
+test("routes: a failed re-declaration answers 500 saying the files ARE saved, and the listing carries declaration errors", async () => {
+  const root = await makeBotsRoot();
+  const errors = new Map<string, string>();
+  const routes = routesFor(root, {
+    declarationErrors: errors,
+    onBotChanged: async () => { throw new Error("the bot declarations are disposed"); },
+  });
+  const created = fakeRes();
+  await routes.get("/data/bots")!.handler(postReq('{"name":"Probe","soul":"v1"}'), created.res);
+  assert.equal(created.out.status, 500);
+  const answer = JSON.parse(created.out.body) as { ok: boolean; error: string };
+  assert.equal(answer.ok, false);
+  assert.match(answer.error, /bots\/probe was saved, but the running face could not re-declare it \(the bot declarations are disposed\); restart the face/);
+  await stat(join(root, "probe", "agent.cordis.yml"));
+  errors.set("probe", "bots/probe/agent.cordis.yml is not valid YAML: x");
+  const listing = fakeRes();
+  await routes.get("/data/bots.json")!.handler(getReq(), listing.res);
+  const probe = (JSON.parse(listing.out.body) as { bots: { id: string; broken?: string; listed: boolean }[] }).bots.find((b) => b.id === "probe")!;
+  assert.equal(probe.broken, "bots/probe/agent.cordis.yml is not valid YAML: x");
+  assert.equal(probe.listed, false);
 });

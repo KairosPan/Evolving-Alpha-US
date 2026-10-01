@@ -12,11 +12,13 @@
  * placeholder, and the status pulse. Four surfaces, one name, as many agents
  * as the operator had bots.
  *
- * WHAT IT IS NOT. It is not attribution. It reads the SESSION's own header,
+ * WHAT IT IS NOT. It is not attribution. It reads the SESSION's own preset,
  * the same `agentPreset` field `botOf` (chat.js) buckets the sidebar by, so
  * the label and the bucket can never disagree — but it says nothing about
  * which agent produced any individual frame. Per-MESSAGE attribution, several
- * voices in one room log, is plan 3 and does not exist yet.
+ * voices in one room log, is plan 3 and does not exist yet. (At dsh 0.2 the
+ * raw summary carries no `agentPreset`; summaries.js restores it on every list
+ * row - preset projection first, persisted header second - before it reaches here.)
  *
  * THE FALLBACK DIRECTION IS THE POINT. An unknown preset (a deleted bot, a
  * roster fetch that failed) degrades to the ID, never to `Kairos`. Labelling a
@@ -34,7 +36,8 @@ export const HOST_NAME = "Kairos";
  * field present but empty is no preset at all), the bot's id when the roster
  * has no name for it, else Kairos.
  * @param {{agentPreset?: unknown}|null|undefined} summary - the session
- *   summary from `session.list`/`session.create`, or `null` for no session.
+ *   summary from `session/list` (normalized by summaries.js) or `session/create`,
+ *   or `null` for no session.
  * @param {{id: string, name?: unknown}[]} bots - the `/data/bots.json` rows.
  * @returns {string} the display name to write over the session's turns.
  */

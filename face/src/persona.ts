@@ -1,20 +1,26 @@
-/** Kairos's deployment persona — the order-0 `deployment:persona` section of
- * every prompt the face assembles, set on dsh-base's `system-prompt` row by
- * the patch `composeFace` pushes (boot.ts). Before this file existed the row's
- * `persona` was `''` and the model was never told it was Kairos (charter D11).
+/** Kairos's deployment persona — the order-0 `deployment:persona-prefix`
+ * section of every prompt the face assembles, set as `personaPrefix` on
+ * dsh-base's `system-prompt` row by the patch `composeFace` pushes (boot.ts).
+ * dsh 0.2.0 renamed the key and the section (`persona` / `deployment:persona`
+ * at 0.1.1; NEW packages/core/system-prompt/src/index.ts:125-127, 179,
+ * 409-436; commit 40792330c0) without moving the slot: order 0, after the
+ * harness identity line. Before this file existed the row's persona was `''`
+ * and the model was never told it was Kairos (charter D11).
  *
- * The renderer is STRICT (dsh-system-prompt README: "complete `{{…}}` groups
- * are interpreted strictly against the registered variables … with no escape
- * syntax"): an unknown variable fails EVERY step of EVERY session. So the text
- * is validated where it is read, and a bad file refuses the boot with the path
- * in the message rather than shipping a prompt that throws later.
+ * The renderer is STRICT (NEW packages/core/system-prompt/src/index.ts:
+ * 268-279, 325-347: complete `{{…}}` groups are interpreted against the
+ * registered variables with no escape syntax): an unknown variable fails EVERY
+ * step of EVERY session. So the text is validated where it is read, and a bad
+ * file refuses the boot with the path in the message rather than shipping a
+ * prompt that throws later.
  * @module
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** The variables the shipped loop registers (dsh-system-prompt README, `persona` row). */
+/** The variables the shipped loop registers ("The loop supplies `model` and
+ * `cwd`": NEW packages/core/system-prompt/README.md:70; unchanged at 0.2.0-rc.2). */
 export const PERSONA_VARIABLES: readonly string[] = ["model", "cwd"];
 
 /** Resolved from this module, never from the working directory (data.ts does the same). */
@@ -26,7 +32,8 @@ export function validatePersonaTemplate(text: string): string | undefined {
   if (text.trim() === "") return "persona is empty";
   const GROUP = /\{\{([^{}]*)\}\}/g;
   /* The name is the RAW text between the braces, never trimmed - dsh takes
-   * `group[0].slice(2, -2)` and tests it against `/^[a-z][a-z0-9_]*$/` (lib/index.js).
+   * `group[0].slice(2, -2)` and tests it against `/^[a-z][a-z0-9_]*$/` (NEW
+   * packages/core/system-prompt/src/index.ts:185, 188, 334-347).
    * So `{{ model }}` is malformed there, and trimming here would pass it. */
   for (const match of text.matchAll(GROUP)) {
     const variable = match[1];

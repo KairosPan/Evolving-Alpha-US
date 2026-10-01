@@ -1,5 +1,16 @@
 /** Pure decisions for temporary subagent sessions. A catalog, not a running
- * flag or a room roster, determines the durable control address. */
+ * flag or a room roster, determines the durable control address.
+ *
+ * dsh 0.2.0-rc.2 has no catalog Remote: 0.1.1's `subagent.list` is gone, and
+ * the upstream client composes the same facts itself (NEW
+ * packages/api/session-controller/src/client/sessions/manager.ts:130-172,
+ * 378-388). {@link composeSubagentCatalog} does that composition in the 0.1.1
+ * shape, so {@link normalizeSubagentCatalog} - and every decision below it -
+ * stays exactly as it was. Diagnostics the old listing carried for unreadable
+ * children now arrive as errors of the read that needs them (`session/follow`
+ * or `session/page` on a subagent address: `subagent/catalog-diagnostic`,
+ * `subagent/not-found`, `subagent/unauthorized`; NEW
+ * packages/api/session-controller/src/history.ts:341-390). */
 
 /** @param {unknown} value */
 const object = (value) => value !== null && typeof value === "object";
@@ -32,6 +43,58 @@ export function normalizeSubagentCatalog(value) {
   return { entries, parentAvailable: body.parentAvailable === true };
 }
 
+/**
+ * Compose 0.1.1's `subagent.list` answer from what dsh 0.2.0-rc.2 still serves:
+ * the parent's `subagentCatalog` projection and the session list.
+ *
+ * - entries: the parent's catalog rows `[{id, createdAt, mode, label?}]`, in
+ *   catalog order (NEW packages/subagent/subagent/src/projection-types.ts:9-19,
+ *   69-71). A row the catalog records in mode `unknown` - the 0.2 migration's
+ *   unreadable-membership marker (NEW docs/persistence-changes/2026-09-20-unknown-child-catalog.md)
+ *   - becomes the `unsupported` diagnostic 0.1.1 gave an unknown mode ("the
+ *   parent catalog records an unknown child mode", control-types.ts:60-69):
+ *   visible, never controllable.
+ * - parentAvailable: the parent summary's `agentAvailable` (session-controller
+ *   src/list.ts:113; the upstream manager reads the same field, manager.ts:378-381).
+ *   An unlisted parent is not available.
+ * - activity: the child's own list row, `running` → "running" else "inactive"
+ *   (the upgrade plan's mapping); omitted when the list has no row for the child,
+ *   which {@link normalizeSubagentCatalog} reads as "unknown" - never guessed idle.
+ * - hasChildren: some listed row names this child as its subagent parent - the
+ *   old field's own definition, "a direct descendant has durable
+ *   `origin: 'subagent'`" (OLD packages/subagent/subagent/src/list-children.ts:56).
+ * @param {{catalog: unknown, parentSummary: any, rows: ReadonlyArray<any>}} input -
+ *   `catalog` is `values.subagentCatalog` from `session/projections` for the
+ *   parent (undefined when the projection is absent: no children recorded).
+ * @returns {{entries: any[], parentAvailable: boolean}} the 0.1.1 listing shape.
+ * @throws {Error} when a catalog is present but is not a list: a malformed
+ *   projection is "unavailable", never an empty successful listing.
+ */
+export function composeSubagentCatalog({ catalog, parentSummary, rows }) {
+  if (catalog !== undefined && !Array.isArray(catalog)) throw new Error("子任务目录不可用：服务返回了无效记录。");
+  const listed = (Array.isArray(rows) ? rows : []).filter(object);
+  const byId = new Map(listed.map((row) => [String(row.sessionId), row]));
+  const entries = [];
+  for (const entry of catalog ?? []) {
+    // Malformed rows are skipped exactly as normalizeSubagentCatalog skips them.
+    if (!object(entry) || !word(entry.id)) continue;
+    if (entry.mode === "unknown") {
+      entries.push({ kind: "diagnostic", id: entry.id, reason: "unsupported" });
+      continue;
+    }
+    const row = byId.get(entry.id);
+    entries.push({
+      kind: "child",
+      id: entry.id,
+      mode: entry.mode,
+      ...(word(entry.label) ? { label: entry.label } : {}),
+      ...(row === undefined ? {} : { activity: row.running === true ? "running" : "inactive" }),
+      hasChildren: listed.some((other) => other.origin === "subagent" && other.parentSessionId === entry.id),
+    });
+  }
+  return { entries, parentAvailable: parentSummary?.agentAvailable === true };
+}
+
 /** The catalog is authoritative even when an old projection disagrees.
  * @param {string} parentSessionId @param {string} childSessionId @param {unknown} catalog
  * @returns {{parentSessionId: string, childSessionId: string, mode: string}|null} */
@@ -58,7 +121,9 @@ export function subagentControls(row, parentAvailable, waiting = false) {
 }
 
 /** Last recorded assistant output, retaining interruption provenance.
- * @param {any[]} events */
+ * @param {any[]} events - history records, each `{event}`: 0.2's `session/page`
+ *   records are `{type:'event', event}` (session-controller src/types.ts:425-429),
+ *   which read the same way. */
 export function subagentResult(events) {
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i]?.event;

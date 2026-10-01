@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WebRoute } from "@deepseek-ai/dsh-host-webserver";
-import { contentTypeFor, registerStatic, resolveClientPath } from "../src/static.ts";
+import { contentTypeFor, registerStatic, resolveClientPath, type IndexAuth } from "../src/static.ts";
 
 test("content types", () => {
   assert.equal(contentTypeFor("index.html"), "text/html; charset=utf-8");
@@ -58,8 +58,13 @@ function recorder(): { rec: Recorded; res: ServerResponse } {
   return { rec, res: res as unknown as ServerResponse };
 }
 
+/** The index gate every fixture mounts unless a test hands it another: it
+ * lets the page through, like `ctx.connection.authorizeIndex` on a request
+ * that carries a valid cookie. */
+const ALWAYS_SIGNED_IN: IndexAuth = { authorizeIndex: () => true };
+
 /** A client dir with the three pages and one asset, plus a secret OUTSIDE it. */
-function fixture(): { clientDir: string; routes: WebRoute[] } {
+function fixture(auth: IndexAuth = ALWAYS_SIGNED_IN): { clientDir: string; routes: WebRoute[] } {
   const root = mkdtempSync(join(tmpdir(), "face-client-"));
   const clientDir = join(root, "client");
   writeFileSync(join(root, "secret.txt"), "do not serve me");
@@ -69,7 +74,7 @@ function fixture(): { clientDir: string; routes: WebRoute[] } {
   writeFileSync(join(clientDir, "account.html"), "<p>account</p>");
   writeFileSync(join(clientDir, "chat.css"), "body{}");
   const routes: WebRoute[] = [];
-  registerStatic({ register: (route) => routes.push(route) }, clientDir);
+  registerStatic({ register: (route) => routes.push(route) }, clientDir, auth);
   return { clientDir, routes };
 }
 
@@ -78,7 +83,7 @@ async function call(routes: WebRoute[], kind: WebRoute["kind"], path: string, ur
   const route = routes.find((r) => r.kind === kind && r.path === path);
   assert.ok(route !== undefined, `no ${kind} route at ${path}`);
   const { rec, res } = recorder();
-  await route.handler({ url } as IncomingMessage, res);
+  await route.handler({ url, method: "GET", headers: {} } as IncomingMessage, res);
   return rec;
 }
 
@@ -132,4 +137,65 @@ test("the /client route serves assets, 404s misses, and 403s traversal", async (
   const escaped = await call(routes, "prefix", "/client", "/client/../secret.txt");
   assert.equal(escaped.status, 403);
   assert.equal(escaped.body, undefined);
+});
+
+/* `/` is the sign-in (dsh 0.2 browser-session auth): the cookie every `/api`
+ * call and the `/api/remote.mux` upgrade now demand is minted ONLY by
+ * `ctx.connection.authorizeIndex` on `GET /?token=…` (NEW
+ * packages/client/connection/src/browser-auth.ts:238-280). A `/` that served
+ * the page without asking would load a chat whose every call 401s - with the
+ * whole offline suite green, which is why the gate is drilled here too. The
+ * gate OWNS its refusal: it has already written the 303 or 401, so the route
+ * must write nothing after it. */
+test("/ asks the index gate first and serves index.html only when it says yes", async () => {
+  const seen: { url?: string; res?: unknown }[] = [];
+  const refusing: IndexAuth = {
+    authorizeIndex(req, res) {
+      seen.push({ url: req.url, res });
+      res.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
+      res.end("dsh web authentication required");
+      return false;
+    },
+  };
+  const { routes } = fixture(refusing);
+  const refused = await call(routes, "exact", "/", "/");
+  assert.equal(refused.status, 401, "the gate's own answer must reach the browser untouched");
+  assert.equal(refused.body, "dsh web authentication required", "index.html must not be written after a refusal");
+  assert.equal(seen.length, 1, "the gate runs once per request");
+  assert.equal(seen[0]!.url, "/", "the gate sees the raw request target (it reads ?token= off it)");
+
+  const admitted = await call(fixture({ authorizeIndex: () => true }).routes, "exact", "/", "/");
+  assert.equal(admitted.status, 200);
+  assert.equal(String(admitted.body), "<p>page</p>");
+});
+
+/* The token exchange answers `303 ./` + Set-Cookie and returns false; the page
+ * itself is served on the browser's follow-up request, not on this one. */
+test("/ writes nothing of its own when the gate answers the token exchange", async () => {
+  const minting: IndexAuth = {
+    authorizeIndex(_req, res) {
+      res.writeHead(303, { location: "./", "set-cookie": "dsh-auth-x=v1.a.b; Path=/; HttpOnly; SameSite=Strict" });
+      res.end();
+      return false;
+    },
+  };
+  const rec = await call(fixture(minting).routes, "exact", "/", "/?token=abc");
+  assert.equal(rec.status, 303);
+  assert.equal(rec.headers.location, "./");
+  assert.equal(rec.body, undefined);
+});
+
+/* D8: only `/` is gated, because only `/` can mint the cookie. The instrument
+ * pages and the assets stay open, as every non-`/api` route was at 0.1.1 and
+ * as upstream's own dist server keeps non-index assets. A gate that throws
+ * proves none of them even asks. */
+test("the instrument pages and /client assets never consult the index gate", async () => {
+  const tripwire: IndexAuth = {
+    authorizeIndex() { throw new Error("only / may consult the index gate"); },
+  };
+  const { routes } = fixture(tripwire);
+  for (const path of ["/market", "/account"]) {
+    assert.equal((await call(routes, "exact", path, path)).status, 200, path);
+  }
+  assert.equal((await call(routes, "prefix", "/client", "/client/chat.css")).status, 200);
 });

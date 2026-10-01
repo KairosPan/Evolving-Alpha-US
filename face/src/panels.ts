@@ -1,13 +1,16 @@
-/** The master-rail panel feeds the host RPC surface cannot serve: agent
- * roster, memory, and plugin.
+/** The master-rail panel feeds the host Remote surface cannot serve: host
+ * facts, agent roster, memory, and plugin.
  *
- * The sidebar's four sections split by data source. `strategy` runs on
- * `session.*`/`workspace.*` and the face's own session routes; the `agent`
- * panel's MAIN-agent cards run on RPC the client can already call
- * (`host.describe`, `settings.describe`, `credentials.describe`), while its
- * LOCAL-agent roster — the coding agents connected beside Kairos — lives
- * here, because only the face process can ask the machine what is on its
- * PATH. The roster is OPERATOR-CURATED, not fixed: it starts empty; auto-
+ * The sidebar's four sections split by data source. `strategy` runs on the
+ * `session/*` and `workspace/*` Remotes and the face's own session routes; the
+ * `agent` panel's MAIN-agent cards run on Remotes the client calls itself
+ * (`session/modelCatalog` for the default model and effort,
+ * `credentials/describe` for the keys) plus this module's `/data/host.json`:
+ * dsh 0.2 has no `host.describe` (the apiproxy that served it is gone,
+ * upstream commit 4f00a8b82a), so its host facts - cwd, home, attached
+ * sessions - are answered here, in-process. The LOCAL-agent roster — the
+ * coding agents connected beside Kairos — lives here too, because only the
+ * face process can ask the machine what is on its PATH. The roster is OPERATOR-CURATED, not fixed: it starts empty; auto-
  * discovery probes a known list of coding-agent CLIs and offers what answers;
  * a connect probes one binary and adds it to `$DSH_HOME/face/agents.json`
  * (the same face-metadata home archived.json uses); a disconnect removes it.
@@ -22,10 +25,14 @@
  *   and style-kairos packs). `skill.list` over RPC needs an attached session
  *   and drops source/path/body; `ctx.skills` has the full record and the
  *   markdown body, so the routes here read it directly.
- * - PLUGIN is the composed row tree and the MCP tool roster. Neither has any
- *   RPC at this pin (`dsh-host-plugin-inventory` is not mounted, and its
- *   record is a 12-line projection of `ctx.loader.entries()` anyway — restated
- *   here rather than mounted, so no new row and no second gateway).
+ * - PLUGIN is the composed row tree and the MCP tool roster. At dsh 0.2
+ *   `dsh-host-plugin-inventory` is a Typert Remote namespace, `pluginInventory`
+ *   with one `list` method, and exports the projection itself as
+ *   `readPluginInventory(ctx)` (NEW packages/host/plugin-inventory/
+ *   src/index.ts:51-82) — but only dsh-web-app mounts it (web-app
+ *   cordis.patch.yml:117-118), and its row is a short projection of
+ *   `ctx.loader.entries()` anyway, so it is restated here rather than mounted:
+ *   no new row, and no MCP-server pairing the upstream record lacks.
  *
  * The roster's connect/disconnect are the only writes to face state made
  * here (its own metadata file). Same-origin-fenced like every `/data` route.
@@ -33,6 +40,7 @@
  */
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Context } from "@deepseek-ai/cordis";
@@ -57,13 +65,15 @@ export {
 };
 export type { AgentToolDefinition, AgentToolRegistry };
 
-/** Exactly a dsh skill name (`isSkillName`, dsh-tool-skill 0.1.1-rc.2):
+/** Exactly a dsh skill name (dsh-skill's `SKILL_NAME`, NEW packages/skill/
+ * skill/src/index.ts:21, the same pattern as 0.1.1's `isSkillName`):
  * kebab-case, which is what makes it safe to hand to a registry lookup. */
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** Fiber state → phase word, the mirror of dsh-host-plugin-inventory's
- * FIBER_PHASE (lib/index.js:47-63): PENDING/LOADING/ACTIVE/FAILED/DISPOSED/
- * UNLOADING by ordinal, DISPOSED reading as null like an absent fiber. */
+ * FIBER_PHASE (NEW packages/host/plugin-inventory/src/index.ts:30-47):
+ * PENDING/LOADING/ACTIVE/FAILED/DISPOSED/UNLOADING by ordinal, DISPOSED
+ * reading as null like an absent fiber. */
 const FIBER_PHASE: ReadonlyArray<string | null> = [
   "pending", "loading", "active", "failed", null, "unloading",
 ];
@@ -255,10 +265,18 @@ export interface PanelDeps {
     fiber?: { state: number };
   }>;
   /** The workbench repo root: skill discovery resolves project roots against
-   * it, and a run whose session directory is gone falls back to it. */
+   * it, and a run whose session directory is gone falls back to it. It is also
+   * the host's default session cwd - main.ts passes `process.cwd()` after its
+   * chdir, the directory dsh's SessionController captures at construction
+   * (NEW packages/api/session-controller/src/index.ts:139) - so `/data/host.json`
+   * reports it as the host cwd. */
   cwd: string;
   /** The harness home holding the face's agents.json roster file. */
   home: string;
+  /** How many sessions hold a live Agent right now - `ctx.agents.list().length`,
+   * 0.1.1 `host.describe`'s `attachedSessions`. Optional so the roster tests'
+   * fakes need not care; {@link hostInfo} reports `null` without it. */
+  attachedSessions?: () => number;
   /** Which channel a session's directory belongs to, or `null` when it
    * belongs to none. Injected so the agent tools need no registry import. */
   channelFor(cwd: string | undefined): Promise<{ workspaceId: string; name: string; dir: string } | null>;
@@ -312,7 +330,8 @@ export function defaultAuthProber(): PanelDeps["probeAuth"] {
  * Build the real {@link PanelDeps} from the booted root context.
  *
  * Fails loud at boot rather than 500 at first click: a tree missing any of
- * these services is a composition error (`dsh-base` mounts all four), and a
+ * these services is a composition error (`dsh-base` mounts the first four,
+ * and dsh-agent's `agents` is its core), and a
  * panel that comes up dead with nothing on stderr saying why is the failure
  * mode this check exists to prevent.
  * @param ctx - the settled root context `bootFace` returned.
@@ -330,13 +349,17 @@ export function panelDeps(ctx: Context, cwd: string, home = resolveDshHome(undef
    * TYPES (only its name, in this comment), so tsc never learns `Context`
    * carries `workspaceRegistry` — the same reason main.ts reads it this way. */
   const workspaceRegistry = ctx.get("workspaceRegistry") as RegistryLike | undefined;
+  /* dsh-agent's registry (`ctx.agents.list()`, NEW packages/core/agent/src/index.ts:586):
+   * the host facts' attached-session count. */
+  const agents = ctx.get("agents") as { list(): readonly unknown[] } | undefined;
   const missing = [
     ...(skills === undefined ? ["skills"] : []),
     ...(tools === undefined ? ["tools"] : []),
     ...(loader === undefined ? ["loader"] : []),
     ...(workspaceRegistry === undefined ? ["workspaceRegistry"] : []),
+    ...(agents === undefined ? ["agents"] : []),
   ];
-  if (skills === undefined || tools === undefined || loader === undefined || workspaceRegistry === undefined) {
+  if (skills === undefined || tools === undefined || loader === undefined || workspaceRegistry === undefined || agents === undefined) {
     throw new Error(`kairos-face: panel services missing from the composed tree: ${missing.join(", ")}`);
   }
   return {
@@ -346,6 +369,7 @@ export function panelDeps(ctx: Context, cwd: string, home = resolveDshHome(undef
     loaderEntries: () => loader.entries(),
     cwd,
     home,
+    attachedSessions: () => agents.list().length,
     /* `resolveByPath`, not `create`: this is a LOOKUP (Task 6/8's lesson —
      * the real registry canonicalizes via fs.realpath, and a session cwd
      * must never conjure a channel into existence just by being asked
@@ -445,6 +469,40 @@ export async function disconnectLocalAgent(deps: PanelDeps, bin: unknown): Promi
   const next = { connected: meta.connected.filter((row) => row.bin !== bin) };
   await writeAgentsMeta(deps.home, next);
   return next;
+}
+
+/* ---------- host: what 0.1.1's `host.describe` answered ---------- */
+
+/** The host facts the agent panel's host card shows. */
+export interface HostInfo {
+  /** The host's default session cwd (see {@link PanelDeps.cwd}). */
+  cwd: string;
+  /** The OS home directory - `os.homedir()`, the value 0.1.1's `host.describe`
+   * reported and dsh 0.2's `$events` `ready` frame still carries as `host.home`
+   * (NEW packages/api/remotes/src/index.ts:42). */
+  home: string;
+  /** Sessions holding a live Agent; `null` when the tree gave no count. */
+  attachedSessions: number | null;
+  /** The dsh family this face is pinned to. 0.1.1's `host.describe` reported
+   * a `0.0.1` placeholder here (OLD packages/host/apiproxy/src/api-proxy.ts:2825-2828);
+   * the pin is the version that actually answers. */
+  version: string;
+}
+
+/**
+ * The host facts 0.1.1's `host.describe` answered and dsh 0.2 serves nowhere
+ * (OLD packages/host/apiproxy/src/api-proxy.ts:2823-2839; the upgrade plan's
+ * S8). Its model fields are gone from here on purpose: `session/modelCatalog`'s
+ * `default` is the live answer, and the client reads that Remote directly.
+ * @param deps - the process seams; only `cwd` and `attachedSessions` are read.
+ */
+export function hostInfo(deps: Pick<PanelDeps, "cwd" | "attachedSessions">): HostInfo {
+  return {
+    cwd: deps.cwd,
+    home: homedir(),
+    attachedSessions: deps.attachedSessions?.() ?? null,
+    version: DSH_PIN,
+  };
 }
 
 /* ---------- memory: the skill catalog ---------- */
@@ -568,7 +626,8 @@ export function pluginListing(deps: PanelDeps): {
 
 /**
  * Mount the panel routes and bring the agent tools in line with the roster.
- * Reads: `GET /data/memory.json`, `/data/plugins.json`, `/data/agents.json`.
+ * Reads: `GET /data/host.json`, `/data/memory.json`, `/data/plugins.json`,
+ * `/data/agents.json`.
  * Lookups and actions: `POST /data/memory/skill` ({name}),
  * `/data/agents/connect` and `/disconnect` ({bin}), `/data/agents/rescan`
  * ({}). Every roster write re-syncs
@@ -659,6 +718,9 @@ export async function registerPanelRoutes(webServer: RouteRegistrar, deps: Panel
   /** The live agent tools, kept in step with the roster. */
   const registry: AgentToolRegistry = new Map();
 
+  /* Fence-only like every /data route (the upgrade plan's D8 default): the
+   * payload is paths and a count, never a secret. */
+  webServer.register({ kind: "exact", path: "/data/host.json", handler: get(() => hostInfo(deps)) });
   webServer.register({ kind: "exact", path: "/data/memory.json", handler: get(() => memoryListing(deps)) });
   webServer.register({ kind: "exact", path: "/data/plugins.json", handler: get(() => pluginListing(deps)) });
   webServer.register({ kind: "exact", path: "/data/agents.json", handler: get(() => agentsListing(cachedDeps)) });

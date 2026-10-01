@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   auditOrderTools, describeOrder, effectiveApprovalPolicy, hasApprovalGrant, isGatedTool,
-  isOrderTool, orderApprovalDecision, orderGuardReason,
+  isOrderTool, orderApprovalDecision, orderGuardReason, orderGuardReasonForSession,
+  unreadableSessionLogReason, type PreToolDecision,
 } from "../src/orders.ts";
 
 /* --- which tools the gate claims ------------------------------------------ */
@@ -262,5 +263,92 @@ test("describeOrder: a crafted field cannot run away with the operator's only li
 test("orderGuardReason: everything else passes untouched", () => {
   for (const [name, description] of [["bash", "run"], ["mcp__x__orders", "list orders"]]) {
     assert.equal(orderGuardReason(name, description, [], "c1"), undefined, name);
+  }
+});
+
+/* --- dsh 0.2.0 shapes ------------------------------------------------------ */
+
+test("PreToolDecision admits every NEW kind (tools/src/index.ts:607-611), so a passed-through inner decision types", () => {
+  // Compile-time half: each literal must be assignable, or `npm run typecheck` fails.
+  const decisions: PreToolDecision[] = [
+    { kind: "allow" },
+    { kind: "deny", reason: "r", info: { code: "X" } },
+    { kind: "cancel" },
+    { kind: "ask", reason: "r", displayReason: { en: "r", zh: "r" } },
+  ];
+  assert.deepEqual(decisions.map((d) => d.kind), ["allow", "deny", "cancel", "ask"]);
+});
+
+test("orderApprovalDecision: displayReason carries the same order line as reason", () => {
+  // An upstream-style panel renders displayReason INSTEAD of reason when present
+  // (ui-approval ApprovalPanel.tsx:17): both must name the order.
+  const decision = orderApprovalDecision("mcp__alpaca-kit__place_order", "ask", { symbol: "NVDA", qty: 2, side: "buy" });
+  assert.equal(decision?.kind, "ask");
+  if (decision?.kind !== "ask") return;
+  assert.match(decision.reason ?? "", /NVDA/);
+  assert.deepEqual(decision.displayReason, { en: decision.reason });
+  // The never branch stays a plain deny - nothing to display, nobody asked.
+  const never = orderApprovalDecision("mcp__alpaca-kit__place_order", "never");
+  assert.deepEqual(Object.keys(never ?? {}).sort(), ["kind", "reason"]);
+});
+
+/* --- the guard given a SESSION: an unreadable log is not a missing grant ---- */
+
+const liveSession = (events: readonly { type: string; data?: object }[]) => ({ snapshotEvents: () => events });
+
+test("orderGuardReasonForSession: a granted order passes through snapshotEvents()", () => {
+  assert.equal(orderGuardReasonForSession("mcp__x__place_order", undefined, liveSession(granted), "c1"), undefined);
+});
+
+test("orderGuardReasonForSession: no grant in a READABLE log is the ordinary 'no grant' denial", () => {
+  const reason = orderGuardReasonForSession("mcp__x__place_order", undefined, liveSession([]), "c1");
+  assert.match(reason ?? "", /without a logged allowed-once/);
+});
+
+test("orderGuardReasonForSession: a session without snapshotEvents is denied with the DISTINCT reason", () => {
+  /* Exactly the 0.1.1 session shape: the `events` getter, holding a real
+   * grant. dsh 0.2.0 removed that getter (5660f44d29); a guard still reading
+   * it saw `undefined` and reported every approved order as "no grant". This
+   * is the assertion that would have caught the regression: the grant is
+   * there, the log is unreadable, and the denial must SAY so. */
+  const oldShape = { events: granted };
+  const reason = orderGuardReasonForSession("mcp__x__place_order", undefined, oldShape, "c1");
+  assert.equal(reason, unreadableSessionLogReason("mcp__x__place_order"));
+  assert.match(reason ?? "", /cannot read this session's log/);
+  assert.doesNotMatch(reason ?? "", /without a logged allowed-once/);
+  /* The exact sentence the LIVE guard denies with: boot.ts's `tools.guard`
+   * calls orderGuardReasonForSession itself, so there is one producer and
+   * pinning its text here pins what the operator reads. */
+  assert.equal(reason,
+    "mcp__x__place_order: cannot read this session's log to verify an allowed-once approval (dsh Session API changed: no snapshotEvents)");
+});
+
+test("orderGuardReasonForSession: a throwing or non-array snapshotEvents is unreadable, fail closed", () => {
+  const throwing = { snapshotEvents: () => { throw new Error("log detached"); } };
+  assert.equal(orderGuardReasonForSession("mcp__x__place_order", undefined, throwing, "c1"),
+    unreadableSessionLogReason("mcp__x__place_order", "snapshotEvents threw"));
+  const odd = { snapshotEvents: () => undefined };
+  assert.equal(orderGuardReasonForSession("mcp__x__place_order", undefined, odd, "c1"),
+    unreadableSessionLogReason("mcp__x__place_order", "snapshotEvents returned no event list"));
+  // A non-object "session" cannot hold a log either.
+  assert.equal(orderGuardReasonForSession("mcp__x__place_order", undefined, 42, "c1"),
+    unreadableSessionLogReason("mcp__x__place_order"));
+});
+
+test("orderGuardReasonForSession: a marked tool with an unreadable log is still denied", () => {
+  const reason = orderGuardReasonForSession("mcp__x__submit_order", "(operator-gated)", {}, "c1");
+  assert.equal(reason, unreadableSessionLogReason("mcp__x__submit_order"));
+});
+
+test("orderGuardReasonForSession: an agentless call is 'no grant', not 'unreadable'", () => {
+  const reason = orderGuardReasonForSession("mcp__x__place_order", undefined, undefined, "c1");
+  assert.match(reason ?? "", /without a logged allowed-once/);
+});
+
+test("orderGuardReasonForSession: a drifted Session API never bricks a tool the gate does not own", () => {
+  for (const [name, description] of [["bash", "run"], ["mcp__x__orders", "list orders"]] as const) {
+    assert.equal(orderGuardReasonForSession(name, description, {}, "c1"), undefined, name);
+    const throwing = { snapshotEvents: () => { throw new Error("never read for an ungated tool"); } };
+    assert.equal(orderGuardReasonForSession(name, description, throwing, "c1"), undefined, name);
   }
 });

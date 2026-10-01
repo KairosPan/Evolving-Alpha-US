@@ -6,6 +6,7 @@ import {
   ROOM_CAPS, dispatchResultText, finalTextOf, formatDelta, isPass, memberPrompt, parseModelRoute,
   resolveMentions, roomLinesOf, roundEndText, validateDispatch, type EventLike, type MessageLike, type RosterBot,
 } from "../src/room-rules.ts";
+import { toolResultMessage } from "./room-fake.ts";
 
 const roster: RosterBot[] = [
   { id: "buffett", name: "巴菲特型" },
@@ -59,7 +60,8 @@ test("isPass: the Hermes regex, whole-text only", () => {
 const msg = (turn: number, text: string, seq: number): EventLike => ({
   type: "assistant/message", seq, data: { turn, step: 1, message: { id: `m${seq}`, role: "assistant", content: [{ type: "text", text }], source: { kind: "model", provider: "p", model: "m" } } },
 });
-const tool = (turn: number, seq: number): EventLike => ({ type: "tool/result", seq, data: { turn, step: 1, message: { id: `t${seq}`, role: "user", content: [{ type: "tool-result", toolCallId: "c1", content: [] }], source: { kind: "tool", callId: "c1" } } } });
+/** dsh 0.2's tool-role result (NEW packages/llm/llm/src/message.ts:173-180). */
+const tool = (turn: number, seq: number): EventLike => ({ type: "tool/result", seq, data: { turn, step: 1, message: toolResultMessage(`t${seq}`, "c1", false) } });
 
 test("finalTextOf: a text-only turn is its text; a tool-using turn is the text after the last tool result; a tool-only turn is empty", () => {
   assert.equal(finalTextOf([msg(1, "hello", 3)], 1), "hello");
@@ -104,10 +106,14 @@ const user = (id: string, text: string, seq: number, source: Record<string, unkn
 const answer = (id: string, bot: string, name: string, text: string, seq: number): EventLike =>
   user(id, text, seq, { kind: "room", form: "answer", bot, name, sessionId: "s-b", turn: 1, round: 1 });
 
-test("roomLinesOf: operator prompts, Kairos replies and member answers, in order; room events, plugin context and tool results are not lines", () => {
+test("roomLinesOf: operator prompts, Kairos replies and member answers, in order; room events, context and tool results are not lines", () => {
   const events: EventLike[] = [
     user("u1", "开个会", 1),
-    user("ctx", "Instructions from AGENTS.md", 2, { kind: "plugin", plugin: "agent-instructions", form: "instructions" }),
+    /* dsh 0.2's context sources (the 0.1.1 `plugin` kind is gone): instructions,
+     * the runtime-context snapshot and the model-change notice are never conversation. */
+    user("ctx", "Instructions from AGENTS.md", 2, { kind: "agent-instructions", form: "instructions" }),
+    user("rt", "runtime context", 2, { kind: "runtime-context", form: "snapshot", sections: [] }),
+    user("ms", "[model changed: …]", 2, { kind: "model-selection", form: "notice", summary: "a → b" }),
     msg(1, "让大家先说", 3),
     tool(1, 4),
     answer("a1", "buffett", "巴菲特型", "买", 5),
@@ -169,7 +175,7 @@ test("roundEndText: outcome word, each state group, rounds left; superseded and 
 });
 
 test("parseModelRoute splits provider/model once and refuses anything else", () => {
-  assert.deepEqual(parseModelRoute("deepseek-official/deepseek-v4-flash"), { provider: "deepseek-official", model: "deepseek-v4-flash" });
+  assert.deepEqual(parseModelRoute("deepseek-official/deepseek-flash"), { provider: "deepseek-official", model: "deepseek-flash" });
   assert.deepEqual(parseModelRoute("stub/echo:v2"), { provider: "stub", model: "echo:v2" });
   assert.equal(parseModelRoute("deepseek-v4-flash"), undefined);
   assert.equal(parseModelRoute("a/b/c"), undefined);

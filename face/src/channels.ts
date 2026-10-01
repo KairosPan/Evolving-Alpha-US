@@ -220,8 +220,9 @@ export async function readChannelBody(dir: string): Promise<ChannelBody> {
 }
 
 /** One workspace as this module uses it - structural, matching
- * `@deepseek-ai/dsh-workspace`'s `Workspace` (lib/types/types.d.ts:20-90),
- * so the tests drive the reconcile without booting a harness. */
+ * `@deepseek-ai/dsh-workspace`'s `Workspace` (NEW packages/workspace/workspace/
+ * src/types.ts:63-144, unchanged in the members read here), so the tests drive
+ * the reconcile without booting a harness. */
 export interface WorkspaceLike {
   readonly id: string;
   readonly path: string;
@@ -240,16 +241,18 @@ export interface RegistryLike {
    *
    * The real signature takes a second `title`, and this one deliberately does
    * not narrow it in. That argument is honored ONLY when `create` MAKES the
-   * record - "repeated calls for the same canonical path return the existing
+   * record - "Repeated calls for the same canonical path return the existing
    * entity without changing its title"
-   * (`dsh-workspace/lib/types/index.d.ts:71-76`) - so a title passed from here
+   * (NEW packages/workspace/workspace/src/index.ts:220-236, where upstream now
+   * marks the parameter itself for removal) - so a title passed from here
    * would land on a channel's very first listing and be silently ignored on
    * every listing after, for the whole life of the record.
    *
    * That fire-and-forget write is not worth having, because the title is not
    * the face's to set: it is a renameable display field decoupled from the
-   * folder name (this module's header), the operator reaches it through
-   * `/api/workspace.rename` -> `Workspace.setTitle`, and the channel design
+   * folder name (this module's header), the operator reaches it through the
+   * `workspace/rename` Remote (NEW packages/api/workspace-controller/
+   * src/index.ts:114-117) -> `Workspace.setTitle`, and the channel design
    * spells the listing rule `workspaceRegistry.create(path)` with no title at
    * all, recording the repo root's own title as "evolving-alpha-us" while
    * still calling it the workbench entry (the channels-design spec's section 2
@@ -272,25 +275,32 @@ export interface RegistryLike {
   resolveByPath(path: string): Promise<WorkspaceLike | undefined>;
 }
 
-/** The two header fields the reconcile reads off a session summary. */
+/** The header fields the face reads off a session: the reconcile's id and cwd,
+ * and the preset the session was CREATED with, which becomes the client's
+ * `presets` hint (see {@link presetHintsOf}). */
 export interface SessionHeadLike {
   sessionId: string;
   cwd?: string;
+  /** The header's `agentPreset` (NEW packages/core/session/src/types.ts:94-131),
+   * when the session names one. Absent, not blank, when it does not. */
+  agentPreset?: string;
 }
 
 /**
  * Union a persisted session listing with a live one, live winning on a
  * shared id. `sessions.list()` (dsh-session) answers only "All live
- * sessions, in creation order" (`dsh-session/lib/types/index.d.ts:395`) —
- * sessions loaded into THIS process — never the durable history; feeding the
+ * sessions, in creation order" (NEW packages/core/session/src/index.ts:1232-1235)
+ * — sessions loaded into THIS process — never the durable history; feeding the
  * reconcile from that alone means a session attaches only if it happens to be
  * live at the moment the sidebar polls, which strands most of the operator's
- * past sessions in `ungrouped` (C1). `sessionPersistence.list()`
- * (`dsh-session-persistence/lib/types/index.d.ts:176`) is the seam that
- * answers the durable listing instead; `dsh-workspace`'s own registry
- * bootstrap reads both this way, live indexed after persisted so a live
- * header overrides a possibly-stale persisted one for the same id
- * (`dsh-workspace/lib/index.js:320-325`).
+ * past sessions in `ungrouped` (C1). `sessionPersistence.list()` is the seam
+ * that answers the durable listing instead; at dsh 0.2 it returns SNAPSHOTS
+ * `{header, revision, eventCount?, sizeBytes?}` rather than bare headers
+ * (NEW packages/session/session-persistence/src/index.ts:50-58, 196-201), and
+ * main.ts maps each `snapshot.header` to a head. `dsh-workspace`'s own
+ * registry bootstrap reads both this way, live indexed after persisted so a
+ * live header overrides a possibly-stale persisted one for the same id
+ * (NEW packages/workspace/workspace/src/index.ts:207-214, 825-833).
  *
  * Order is `[...persisted, ...live]` folded through a `Map`, so live entries
  * — later in the array — overwrite a same-id persisted entry rather than the
@@ -341,14 +351,38 @@ export async function listSessionHeads(
   }
 }
 
+/**
+ * sessionId → the preset its header names, for every head that names one: the
+ * `presets` field of `/data/channels.json`.
+ *
+ * WHY THE CLIENT NEEDS IT. dsh 0.2's `session/list` summary dropped the
+ * `agentPreset` field 0.1.1's carried (NEW packages/api/session-controller/
+ * src/types.ts:177-188); the value now rides the row's projection block,
+ * which a COLD row may lack or omit - listing hints are "partial: missing
+ * cells and cache rows are never materialized" (list.ts:304-305), and a cache
+ * record written by 0.1.1 yields only the predecessor title (list.ts:283). The
+ * header still records the creation-time preset, so the client's intake
+ * (client/summaries.js) falls back to this map when the projection is silent -
+ * otherwise every cold bot or member row would silently read as the host.
+ * A blank or non-string value is no preset and is left out.
+ * @param heads - the merged persisted + live heads the reconcile already read.
+ */
+export function presetHintsOf(heads: readonly SessionHeadLike[]): Record<string, string> {
+  // fromEntries defines own data properties, so no session id - not even
+  // `__proto__` - can reach the object's prototype the way an assignment would.
+  return Object.fromEntries(heads
+    .filter((head): head is SessionHeadLike & { agentPreset: string } => typeof head.agentPreset === "string" && head.agentPreset !== "")
+    .map((head) => [head.sessionId, head.agentPreset]));
+}
+
 /** One channel as the sidebar and the picker see it. */
 export interface ChannelRow {
   workspaceId: string;
   /** Directory basename (or "workbench") - the git-visible identity. */
   name: string;
   /** The registry's display title: the operator's field, defaulting to the
-   * basename at create and changed only through `/api/workspace.rename`. Read
-   * here, never written - see {@link RegistryLike.create}. */
+   * basename at create and changed only through the `workspace/rename` Remote.
+   * Read here, never written - see {@link RegistryLike.create}. */
   title: string;
   dir: string;
   isRoot: boolean;
@@ -491,7 +525,9 @@ export interface ChannelRouteDeps {
   root: string;
   /** The harness home holding `face/channels.json`. */
   home: string;
-  /** Every visible session's id and cwd - `session.list`, host-side. */
+  /** Every persisted and live session's id, cwd and header preset - main.ts
+   * maps `sessionPersistence.list()` snapshots and `sessions.list()` through
+   * {@link listSessionHeads}. */
   listSessions(): Promise<SessionHeadLike[]>;
   /** The bins a newly adopted channel's roster is seeded from. */
   connectedBins(): Promise<string[]>;
@@ -509,11 +545,16 @@ export function registerChannelRoutes(webServer: RouteRegistrar, deps: ChannelRo
     res.end(typeof body === "string" ? body : JSON.stringify(body));
   };
 
-  const reconcile = async (): Promise<{ channels: ChannelRow[]; ungrouped: SessionHeadLike[] }> =>
-    reconcileChannels({
+  /** One reconcile, plus the heads it ran on - the listing route answers the
+   * clients' preset hints from the very same read. */
+  const reconcile = async (): Promise<{ channels: ChannelRow[]; ungrouped: SessionHeadLike[]; heads: SessionHeadLike[] }> => {
+    const heads = await deps.listSessions();
+    const reconciled = await reconcileChannels({
       registry: deps.registry, root: deps.root, home: deps.home,
-      sessions: await deps.listSessions(), connectedBins: await deps.connectedBins(),
+      sessions: heads, connectedBins: await deps.connectedBins(),
     });
+    return { ...reconciled, heads };
+  };
 
   /** The guard the three writing routes share. */
   const guardPost = (req: IncomingMessage, res: ServerResponse): boolean => {
@@ -539,10 +580,13 @@ export function registerChannelRoutes(webServer: RouteRegistrar, deps: ChannelRo
     handler: async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
       if (!isTrustedDataRequest(req)) return send(res, 403, FORBIDDEN);
       try {
-        const { channels, ungrouped } = await reconcile();
+        const { channels, ungrouped, heads } = await reconcile();
         return send(res, 200, {
           ok: true, root: deps.root, channels, ungrouped,
           archived: [...deps.registry.archivedSessionIds],
+          // sessionId → header preset: the client's fallback where a 0.2 list
+          // row's projection block does not name one (presetHintsOf).
+          presets: presetHintsOf(heads),
         });
       } catch {
         /* nothing from the filesystem error reaches the body */

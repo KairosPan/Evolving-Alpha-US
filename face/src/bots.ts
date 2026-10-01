@@ -1,20 +1,28 @@
 // face/src/bots.ts
 /** Bots: operator-authored dsh agent presets under `bots/<id>/` (spec §2).
  *
- * A bot is a directory holding `agent.cordis.yml` (the composition dsh mounts),
- * `preset.yml` (display metadata dsh reads), `SOUL.md` (the persona SOURCE),
- * `skills/` (a dsh skill root) and `journal/` (the only directory the bot may
- * write, from its home). The face is the only writer: it copies `_template`,
- * writes the metadata and the soul, and RENDERS the composition so the persona
- * row's `text` is the soul's text - dsh's `!!js` cannot read a sibling file
- * (cordis-plugin-loader evaluates it in an ESM `new Function` with neither
- * `require` nor `__dirname`), so the YAML carries a derived copy and this
- * module keeps the two in step. Editing `SOUL.md` by hand reaches nothing
+ * A bot is a directory holding `agent.cordis.yml` (its composition),
+ * `preset.yml` (display metadata plus the face-only `model`), `SOUL.md` (the
+ * persona SOURCE), `skills/` (a dsh skill root) and `journal/` (the only
+ * directory the bot may write, from its home). dsh 0.2.0 reads none of these
+ * files: the face turns each directory into a dsh preset declaration
+ * (src/bot-presets.ts) and re-declares it whenever a route here saves it
+ * (`BotRouteDeps.onBotChanged`). The face is the only writer: it copies
+ * `_template`, writes the metadata and the soul, and RENDERS the composition
+ * so the persona row's `text` is the soul's text - dsh's `!!js` cannot read a
+ * sibling file (cordis-plugin-loader evaluates it in an ESM `new Function` with
+ * neither `require` nor `__dirname`), so the YAML carries a derived copy and
+ * this module keeps the two in step. Editing `SOUL.md` by hand reaches nothing
  * until `updateSoul` runs again (spec R4).
  *
- * `_template` is invisible to dsh (a leading underscore is outside the preset
- * grammar) and refused as an id here; `kairos` is the inert default preset
- * (`bots/kairos`), never a bot. Ids are dsh's grammar `[a-z0-9][a-z0-9-]*`.
+ * `_template` is never declared (src/bot-presets.ts declares only `isBotId`
+ * directories) and is refused as an id here; `kairos` is the default preset,
+ * declared from `bots/kairos` by the overlay's static `preset-kairos` row,
+ * never a bot. Ids keep the retired dsh-agent-presets grammar
+ * `[a-z0-9][a-z0-9-]*` (OLD packages/preset/agent-presets/src/preset.ts:18):
+ * dsh 0.2.0 requires only a non-blank id (NEW
+ * packages/preset/agent-preset-registry/src/index.ts:82), so {@link BOT_ID_RE}
+ * is the face's only gate.
  * @module
  */
 import { createHash, randomUUID } from "node:crypto";
@@ -30,15 +38,19 @@ import type { RouteRegistrar } from "./static.ts";
 const BIN = "kairos-face";
 
 export const TEMPLATE = "_template";
-/** dsh-agent-presets' preset-id grammar, bounded to 64 code points. */
+/** The retired dsh-agent-presets preset-id grammar (OLD preset.ts:18), bounded
+ *  to 64 code points - kept as the face's own gate now that dsh has none. */
 export const BOT_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 /** Ids the grammar admits but the face refuses: the default preset is not a bot. */
 export const RESERVED_IDS: ReadonlySet<string> = new Set(["kairos"]);
 export const isBotId = (value: unknown): value is string =>
   typeof value === "string" && BOT_ID_RE.test(value) && !RESERVED_IDS.has(value);
 
-/** Relative from `bots/<id>/` - the preset mount resolves a relative plugin
- *  path from the preset's own directory (dsh-agent-presets README). */
+/** Relative from `bots/<id>/`, the on-disk authoring form every bot ships.
+ *  dsh 0.2.0 would resolve it against the DECLARING context's base, not the
+ *  bot directory (NEW agent-preset-registry/src/index.ts:108,
+ *  src/mount.ts:258-264), so the face rebases it to an absolute `file:` URL
+ *  when it builds the declaration (src/bot-presets.ts `definitionFor`). */
 export const BOT_PLUGIN_RELATIVE = "../../face/plugins/bot.js";
 
 /** What a voice keeps of Kairos's roster (spec §2.2.1): the shell, file read
@@ -48,7 +60,10 @@ export const BOT_PLUGIN_RELATIVE = "../../face/plugins/bot.js";
  *  background jobs, every `agent_<bin>`, and every order or account tool -
  *  `orders`, `place_order`, `cancel_order`. Names come from the tree the face
  *  boots (`tools.schemas()`, dumped 2026-09-07); `mcp__*__<raw>` expands
- *  against the live tree in the plugin. */
+ *  against the live tree in the plugin, again after every tool change.
+ *  `str_replace_editor` left dsh-base at 0.2.0 (commit 36a4665144) and exists
+ *  only while the face's policy layer keeps it (PLAN D9); without it the
+ *  plugin logs the name as missing and masks to the rest. */
 export const DEFAULT_ALLOW: readonly string[] = [
   "ask_user_question", "bash", "edit", "glob", "grep", "read", "read_image", "skill",
   "str_replace_editor", "web_search", "write",
@@ -75,9 +90,11 @@ export function renderComposition(opts: { soul: string; allow: readonly string[]
 }
 
 /** `preset.yml`'s face-only `model:` - `<provider>/<model>`, the route a bot's
- *  sessions select when the tree serves it (spec §2.5). dsh's reader keeps only
- *  name/description/order and drops it, so it is harmless to dsh. Exactly two
- *  non-empty segments: a bare model id is refused rather than guessed at. */
+ *  sessions select when the tree serves it (spec §2.5). dsh 0.2.0 reads no
+ *  preset.yml and a preset carries no route (NEW
+ *  agent-preset-registry/src/definition.ts:5-11); the face copies only
+ *  name/description/order into the declaration (src/bot-presets.ts). Exactly
+ *  two non-empty segments: a bare model id is refused rather than guessed at. */
 export const MODEL_ROUTE_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9][A-Za-z0-9_.:-]*$/;
 
 export function renderPresetMeta(name: string, description: string, model?: string): string {
@@ -111,12 +128,15 @@ export interface BotRow {
   model?: string;
   /** `kairos`: the host composition, not a bot. */
   isDefault: boolean;
-  /** dsh's own reason when the composition cannot mount (Rule 5: shown, never skipped). */
+  /** Why the bot cannot be used (Rule 5: shown, never skipped): dsh's own
+   *  reason when its declared composition cannot mount, or the face's reason
+   *  when it could not declare it at all (src/bot-presets.ts `errors`). */
   broken?: string;
   /** false when the directory is here but the preset roster did not report it. */
   listed: boolean;
 }
 
+/** `ctx.agentPresets.list()`, narrowed (NEW agent-preset-registry/src/index.ts:153-165). */
 export type PresetLister = () => Promise<{ id: string; broken?: string }[]>;
 
 /** Lowercase ASCII, whitespace and `_` to `-`, everything outside the grammar dropped; `""` when nothing survives. */
@@ -198,7 +218,10 @@ async function localSkills(dir: string, issues: string[]): Promise<BotRow["skill
   return skills;
 }
 
-async function rowFor(root: string, id: string, presets: Map<string, { broken?: string }>): Promise<BotRow> {
+async function rowFor(
+  root: string, id: string, presets: Map<string, { broken?: string }>,
+  declarationErrors?: ReadonlyMap<string, string>,
+): Promise<BotRow> {
   const dir = join(root, id);
   const files = await readConfig(dir);
   const setupIssues: string[] = [];
@@ -230,18 +253,29 @@ async function rowFor(root: string, id: string, presets: Map<string, { broken?: 
   }
   const skills = await localSkills(dir, setupIssues);
   const preset = presets.get(id);
+  /* A bot the face could not declare is absent from dsh's roster, so the
+   * registry has no reason to give; the face's own reason stands in, else the
+   * bot would read as merely "not reported". At most one of the two exists: a
+   * failed re-declaration disposes the old declaration first. */
+  const broken = preset?.broken ?? declarationErrors?.get(id);
   return {
     id, name: typeof meta.name === "string" ? meta.name : id, description: typeof meta.description === "string" ? meta.description : "", dir, homeCwd: join(dir, "journal"), soul,
     revision: configRevision(files), allow, compositionSoul, soulInSync: compositionSoul !== null && compositionSoul.trim() === soul, skills, setupIssues,
     ...(typeof meta.model === "string" ? { model: meta.model } : {}),
     isDefault: id === "kairos",
-    ...(preset?.broken === undefined ? {} : { broken: preset.broken }),
+    ...(broken === undefined ? {} : { broken }),
     listed: preset !== undefined,
   };
 }
 
-/** Every directory under `bots/` in the grammar, with dsh's view of it merged in. */
-export async function listBots(root: string, presets: PresetLister): Promise<BotRow[]> {
+/** Every directory under `bots/` in the grammar, with dsh's view of it merged
+ * in, and the face's own declaration failures as broken reasons.
+ * @param root - the `bots/` directory.
+ * @param presets - dsh's roster (`ctx.agentPresets.list()`).
+ * @param declarationErrors - `declareBots(...).errors` (src/bot-presets.ts):
+ * why a bot is not declared. Omitted, a bot the face failed to declare reads
+ * only as not listed. */
+export async function listBots(root: string, presets: PresetLister, declarationErrors?: ReadonlyMap<string, string>): Promise<BotRow[]> {
   let entries: import("node:fs").Dirent[] = [];
   try {
     entries = await readdir(root, { withFileTypes: true });
@@ -254,7 +288,7 @@ export async function listBots(root: string, presets: PresetLister): Promise<Bot
     .filter((e) => e.isDirectory() && BOT_ID_RE.test(e.name))
     .map((e) => e.name)
     .sort((a, b) => a.localeCompare(b));
-  return Promise.all(ids.map((id) => withBotLock(join(root, id), () => rowFor(root, id, reported))));
+  return Promise.all(ids.map((id) => withBotLock(join(root, id), () => rowFor(root, id, reported, declarationErrors))));
 }
 
 /** Serialize the face's readers and writers for each bot. An optional revision
@@ -320,7 +354,7 @@ export async function createBot(root: string, body: Record<string, unknown>): Pr
   const soul = rejectSoul(body.soul === undefined ? TEMPLATE_SOUL.replace("<bot name>", () => name ?? id) : body.soul);
   const model = body.model === undefined ? undefined : body.model;
   if (model !== undefined && (typeof model !== "string" || !MODEL_ROUTE_RE.test(model))) {
-    throw new HttpError(400, "model must be one provider/model route, e.g. deepseek-official/deepseek-v4-flash");
+    throw new HttpError(400, "model must be one provider/model route, e.g. deepseek-official/deepseek-flash");
   }
   const dir = join(root, id);
   return withBotLock(dir, async () => {
@@ -366,7 +400,7 @@ export async function updateBotSettings(root: string, body: Record<string, unkno
   if (body.name !== undefined && (typeof body.name !== "string" || body.name.trim() === "")) throw new HttpError(400, "name must be a non-empty string");
   if (body.description !== undefined && typeof body.description !== "string") throw new HttpError(400, "description must be a string");
   if (body.model !== undefined && body.model !== null && (typeof body.model !== "string" || !MODEL_ROUTE_RE.test(body.model))) {
-    throw new HttpError(400, "model must be one provider/model route, e.g. deepseek-official/deepseek-v4-flash, or null to use the default");
+    throw new HttpError(400, "model must be one provider/model route, e.g. deepseek-official/deepseek-flash, or null to use the default");
   }
   if (body.revision !== undefined && (typeof body.revision !== "string" || body.revision === "")) throw new HttpError(400, "revision must be a non-empty string");
   const soul = body.soul === undefined ? undefined : rejectSoul(body.soul);
@@ -405,6 +439,16 @@ export interface BotRouteDeps {
   botsRoot: string;
   /** `ctx.agentPresets.list()`, narrowed - dsh's view of the roster, `broken` reasons included. */
   listPresets: PresetLister;
+  /** `declareBots(...).errors` (src/bot-presets.ts), merged into the listing
+   *  as broken reasons; see {@link listBots}. */
+  declarationErrors?: ReadonlyMap<string, string>;
+  /** Called with the bot's id after a create, settings or soul route has
+   *  written its files, before the route answers: `declareBots(...).redeclare`.
+   *  dsh 0.2.0 never re-reads `bots/<id>/` (0.1.1 re-read it on every mount),
+   *  so without this a saved soul or a new bot reaches nothing until a
+   *  restart. It records a bot-level failure as a declaration error rather
+   *  than rejecting; a rejection is answered 500, naming what was saved. */
+  onBotChanged?(id: string): Promise<void>;
 }
 
 /** A soul is prose; the default 4 KiB body limit is for names and ids. */
@@ -449,8 +493,26 @@ export function registerBotRoutes(webServer: RouteRegistrar, deps: BotRouteDeps)
       }
     };
 
-  webServer.register({ kind: "exact", path: "/data/bots.json", handler: get(async () => ({ bots: await listBots(deps.botsRoot, deps.listPresets) })) });
-  webServer.register({ kind: "exact", path: "/data/bots", handler: post(SOUL_BODY_LIMIT, async (body) => ({ bot: await createBot(deps.botsRoot, body) })) });
-  webServer.register({ kind: "exact", path: "/data/bots/soul", handler: post(SOUL_BODY_LIMIT, async (body) => ({ bot: await updateSoul(deps.botsRoot, body.id, body.soul) })) });
-  webServer.register({ kind: "exact", path: "/data/bots/settings", handler: post(SOUL_BODY_LIMIT, async (body) => ({ bot: await updateBotSettings(deps.botsRoot, body) })) });
+  /* After the write and before the answer: the client re-reads the roster as
+   * soon as a save returns (client/chat.js loadBotIndex), and must find the
+   * new declaration - or its failure reason - already there. A rejection is
+   * NOT "request failed": the files ARE saved, and the operator must know the
+   * running face did not pick them up. */
+  const declared = async (bot: BotRow): Promise<{ bot: BotRow }> => {
+    if (deps.onBotChanged !== undefined) {
+      try {
+        await deps.onBotChanged(bot.id);
+      } catch (err) {
+        console.error(`${BIN}: bots/${bot.id} was saved but not re-declared:`, err);
+        throw new HttpError(500, `bots/${bot.id} was saved, but the running face could not re-declare it` +
+          ` (${err instanceof Error ? err.message : String(err)}); restart the face to load the saved files`);
+      }
+    }
+    return { bot };
+  };
+
+  webServer.register({ kind: "exact", path: "/data/bots.json", handler: get(async () => ({ bots: await listBots(deps.botsRoot, deps.listPresets, deps.declarationErrors) })) });
+  webServer.register({ kind: "exact", path: "/data/bots", handler: post(SOUL_BODY_LIMIT, async (body) => declared(await createBot(deps.botsRoot, body))) });
+  webServer.register({ kind: "exact", path: "/data/bots/soul", handler: post(SOUL_BODY_LIMIT, async (body) => declared(await updateSoul(deps.botsRoot, body.id, body.soul))) });
+  webServer.register({ kind: "exact", path: "/data/bots/settings", handler: post(SOUL_BODY_LIMIT, async (body) => declared(await updateBotSettings(deps.botsRoot, body))) });
 }
