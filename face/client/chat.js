@@ -1197,13 +1197,17 @@ function approvalNode(view) {
         await liveMux().answer(view.id, outcome);
         gates.delete(view.id);
         gateDelivery.delete(view.id);
-        if (lostRaces.delete(view.id)) {
-          settle(node, "settled elsewhere", "closed");
-          status(`approval ${outcome} came too late: the request was already settled elsewhere`, true);
-        } else {
-          settle(node, label.toLowerCase());
-          status(`approval ${outcome}`);
-        }
+        /* Resolved = the host took THIS answer: a `cancel` on the generation
+         * that sent it rejects `gate-gone` instead, and api.js holds every other
+         * report on this gate until that verdict. So `lostRaces` is no verdict
+         * here - what can still fill it while the call is out, this page's own
+         * purgeUndeliveredGates after a socket drop, is exactly what the win
+         * looks like from the next socket (REVIEW-adversarial finding 2: a
+         * placed order read "settled elsewhere"). A lost race whose `cancel`
+         * trails the response still relabels the card via acceptGateResolved. */
+        lostRaces.delete(view.id);
+        settle(node, label.toLowerCase());
+        status(`approval ${outcome}`);
       } catch (err) {
         if (refusedAnswer(view, node, err)) return;
         // A live gate (the socket is down, or the POST failed) must stay
@@ -1338,13 +1342,10 @@ function questionNode(view) {
       });
       gates.delete(view.id);
       gateDelivery.delete(view.id);
-      if (lostRaces.delete(view.id)) {
-        settle(node, "settled elsewhere", "closed");
-        status("the answer came too late: the question was already settled elsewhere", true);
-      } else {
-        settle(node, "answered");
-        status("answer sent");
-      }
+      // As in approvalNode: a resolved answer was taken - `lostRaces` is no verdict on it.
+      lostRaces.delete(view.id);
+      settle(node, "answered");
+      status("answer sent");
     } catch (err) {
       if (refusedAnswer(view, node, err)) return;
       submitBtn.disabled = false;

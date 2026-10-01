@@ -7,17 +7,23 @@
  *     carried, and hands every non-gate waterfall straight back with `next`;
  *   - every (re)connect re-opens every registered stream under a FRESH id
  *     (a duplicate `open` closes the host's socket: stream-server.ts:201-204);
+ *   - an answer in flight is the only judge of its own gate: a withdrawal or a
+ *     missing replay seen across a reconnect never reports a WON answer's gate
+ *     gone, nor lets the page card call it "settled elsewhere";
  *   - a closed mux never opens a second socket.
  * Getting any of these subtly wrong fails at runtime as a 4xx, a socket the host
- * closes, or an approval that silently never lands — exactly the class of bug a
- * browser-only file would hide until the live drill.
+ * closes, an approval that silently never lands, or a card that lies about an
+ * order — exactly the class of bug a browser-only file would hide until the live drill.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import vm from "node:vm";
+import ts from "typescript";
 import { call, openMux, randomUuid } from "../client/api.js";
+import { mapFrame } from "../client/mapper.js";
 
 interface Sent {
   url: string;
@@ -733,6 +739,364 @@ test("retirement survives a chain of reconnects, and never reports a gate this p
       await sleep(60);
       assert.deepEqual(gone, ["ev-held"], "the gate generation 1 held and nobody replayed is retired by generation 3");
     });
+});
+
+/* ---------- an answer in flight across a reconnect (REVIEW-adversarial finding 2) ----------
+ *
+ * `answer` binds the generation it starts on and awaits the `$events/result`
+ * POST. If the socket drops meanwhile, the NEXT generation may retire the gate
+ * (no replay) or see it withdrawn - and both are exactly what this tab's own
+ * win looks like from there: the host settles the gate with the winner's answer,
+ * so it has nothing to replay, and it withdraws every OTHER delivery, a newer
+ * socket of this same tab included, while the winner gets no `cancel`
+ * (NEW packages/api/gateway/src/index.ts:618-623, 646-668). Only the answer's
+ * own verdict can tell; before the fix the retirement reported the gate gone and
+ * chat.js labelled a PLACED order "closed · settled elsewhere". */
+
+/**
+ * A host whose responses to `$events/result` are slow (a busy event loop - the
+ * reviewer probe's shape): each answer's POST is held until the test releases
+ * it by eventId. Every other call is answered at once.
+ */
+function holdAnswers() {
+  const waiting = new Map<string, (respond: (sent: Sent) => Response) => void>();
+  return {
+    reply(sent: Sent): Response | Promise<Response> {
+      if (sent.body.method !== "$events/result") return ok(sent);
+      const eventId = String(sent.body.payload.args.eventId);
+      assert.ok(!waiting.has(eventId), `a second answer to ${eventId} while one is held`);
+      return new Promise<Response>((resolve) => { waiting.set(eventId, (respond) => resolve(respond(sent))); });
+    },
+    /** Land the held answer to `eventId` with `respond` (default: the host's `ok`). */
+    release(eventId: string, respond: (sent: Sent) => Response = (sent) => ok(sent)): void {
+      const land = waiting.get(eventId);
+      assert.ok(land, `no answer to ${eventId} is in flight`);
+      waiting.delete(eventId);
+      land(respond);
+    },
+  };
+}
+
+/** The host's reply to a result naming a clientId whose `$events` stream it has
+ * already dropped: a plain Error, so `gateway/internal` (gateway/src/index.ts:433-440, 1364-1377). */
+const noActiveStream = (sent: Sent) => Response.json({
+  type: "server-response", rpcId: sent.body.rpcId,
+  result: { ok: false, error: { code: "gateway/internal", message: "typert gateway: Remote event result identifies no active event stream", details: {} } },
+});
+
+/** A Gate-2 approval waterfall, as the host delivers it. */
+const approvalFrame = (eventId: string) => ({ type: "waterfall", event: "approval/request", eventId, agentId: "s1",
+  request: { toolName: "mcp__alpaca-kit__place_order", callId: `call-${eventId}`, reason: "PAPER order - buy 1 AAPL" } });
+
+test("an answer in flight across a reconnect that then resolves WON: its gate is never reported gone, and answer resolves", async () => {
+  // The reviewer's sequence. This tab's answer was the only one, so the host
+  // took it and settled the gate; only the HTTP response was slow. The new
+  // generation replays nothing, which retires an UNANSWERED gate - and, for the
+  // answered one, is just its own win.
+  const log: string[] = [];
+  const host = holdAnswers();
+  await withMux({
+    reconnectMs: 5, replaySettleMs: 10, onGate: () => {},
+    onGateGone: (eventId) => log.push(`gone:${eventId}`), onDown: () => log.push("down"),
+  }, async ({ mux, socket, posts }) => {
+    socket(0).ready("client-W1");
+    socket(0).event(approvalFrame("ev-order"));
+    socket(0).event(approvalFrame("ev-other"));
+    const answered = mux.answer("ev-order", "allowed-once")
+      .then(() => log.push("answer:ok"), (err) => log.push(`answer:${err.code}`));
+    assert.equal(posts[0]?.body.payload.args.clientId, "client-W1", "sent under the generation that held the gate");
+    socket(0).drop();
+    await sleep(20);
+    socket(1).ready("client-W2"); // no replay: ev-order is settled (by this tab), ev-other was settled while away
+    await sleep(40); // past replaySettleMs: the retirement ran while the POST is still out
+    assert.deepEqual(log, ["down", "gone:ev-other"], "the unanswered gate is retired; the answered one waits for its verdict");
+    host.release("ev-order");
+    await answered;
+    assert.deepEqual(log, ["down", "gone:ev-other", "answer:ok"], "the answer resolves, and its gate is never reported gone");
+    // Settled by this page: no later generation retires it, and nothing can answer it again.
+    socket(1).drop();
+    await sleep(20);
+    socket(2).ready("client-W3");
+    await sleep(40);
+    assert.deepEqual(log, ["down", "gone:ev-other", "answer:ok", "down"]);
+    await assert.rejects(() => mux.answer("ev-order", "allowed-once"), { code: "not-pending" });
+  }, host.reply);
+});
+
+test("a withdrawal on a NEWER generation while the answer is in flight is the answer's own win: never reported", async () => {
+  // The same race when the new generation opened BEFORE the host took the answer:
+  // the gate was still pending, so it was replayed to the new socket; then the
+  // answer settled it, and the host withdrew the new socket's delivery (:657-668).
+  // ev-a: that `cancel` lands while the POST is still out. ev-b: the POST's
+  // response outruns it - the replayed delivery must die with the win, or a
+  // second answer would post and "resolve" against a settled gate (:618-621).
+  const log: string[] = [];
+  const host = holdAnswers();
+  await withMux({ reconnectMs: 5, replaySettleMs: 10, onGate: (frame) => log.push(`gate:${frame.eventId}`),
+    onGateGone: (eventId) => log.push(`gone:${eventId}`) }, async ({ mux, socket, posts }) => {
+    socket(0).ready("client-N1");
+    socket(0).event(approvalFrame("ev-a"));
+    socket(0).event(approvalFrame("ev-b"));
+    const a = mux.answer("ev-a", "allowed-once");
+    const b = mux.answer("ev-b", "rejected");
+    socket(0).drop();
+    await sleep(20);
+    socket(1).ready("client-N2");
+    socket(1).event(approvalFrame("ev-a")); // replayed: the host had not reached the answers yet
+    socket(1).event(approvalFrame("ev-b"));
+    socket(1).event({ type: "cancel", eventId: "ev-a" }); // ...then ev-a's answer settled it
+    await sleep(40);
+    host.release("ev-a");
+    host.release("ev-b");
+    await Promise.all([a, b]);
+    await assert.rejects(() => mux.answer("ev-a", "allowed-once"), { code: "not-pending" });
+    // Before ev-b's withdrawal lands, its replayed delivery is already dead: the win settled it.
+    const again = mux.answer("ev-b", "allowed-once");
+    assert.equal(posts.length, 2, "no second answer reached the host");
+    await assert.rejects(again, { code: "not-pending" });
+    socket(1).event({ type: "cancel", eventId: "ev-b" }); // ev-b's withdrawal trails its response
+    assert.deepEqual(log, ["gate:ev-a", "gate:ev-b", "gate:ev-a", "gate:ev-b"], "delivered twice each, never reported gone");
+  }, host.reply);
+});
+
+test("the converse: a withdrawal on the ANSWERING generation means it lost - gate-gone, reported once, just before it rejects", async () => {
+  // Only a `cancel` on the generation that SENT the answer is the host's word
+  // that another answer or a Stop settled the gate first (the winner never gets
+  // one, :618-623); the POST then comes back as the no-op `ok` (:618-621). The
+  // report waits for that verdict and is made once, however many signals said
+  // the gate was over (this cancel, the next generation's retirement).
+  const log: string[] = [];
+  const host = holdAnswers();
+  await withMux({ reconnectMs: 5, replaySettleMs: 10, onGate: () => {}, onGateGone: (eventId) => log.push(`gone:${eventId}`) },
+    async ({ mux, socket }) => {
+      socket(0).ready("client-L1");
+      socket(0).event(approvalFrame("ev-order"));
+      const answered = mux.answer("ev-order", "allowed-once")
+        .then(() => log.push("answer:ok"), (err) => log.push(`answer:${err.code}`));
+      socket(0).event({ type: "cancel", eventId: "ev-order" }); // another tab's answer won
+      assert.deepEqual(log, [], "withheld while this tab's own answer is out");
+      socket(0).drop();
+      await sleep(20);
+      socket(1).ready("client-L2"); // nothing to replay
+      await sleep(40);
+      assert.deepEqual(log, [], "the retirement is withheld too");
+      host.release("ev-order");
+      await answered;
+      assert.deepEqual(log, ["gone:ev-order", "answer:gate-gone"], "reported once, before the rejection reaches the page");
+      socket(1).drop();
+      await sleep(20);
+      socket(2).ready("client-L3");
+      await sleep(40);
+      assert.deepEqual(log, ["gone:ev-order", "answer:gate-gone"], "and never again");
+    }, host.reply);
+});
+
+test("an answer whose POST fails reports a gate withheld meanwhile once - unless a late replay proved it still pending", async () => {
+  // The host dropped the old clientId before the answers arrived, so neither
+  // landed (gateway/src/index.ts:433-440). A gate the new generation never
+  // replayed was settled while away: nobody here holds it, and the page must
+  // hear it is over. One it replayed late is live on the new socket.
+  const log: string[] = [];
+  const host = holdAnswers();
+  await withMux({ reconnectMs: 5, replaySettleMs: 10, onGate: () => {}, onGateGone: (eventId) => log.push(`gone:${eventId}`) },
+    async ({ mux, socket, posts }) => {
+      socket(0).ready("client-F1");
+      socket(0).event(approvalFrame("ev-settled"));
+      socket(0).event(approvalFrame("ev-pending"));
+      const settled = mux.answer("ev-settled", "allowed-once");
+      const pending = mux.answer("ev-pending", "allowed-once");
+      socket(0).drop();
+      await sleep(20);
+      socket(1).ready("client-F2");
+      await sleep(40);
+      assert.deepEqual(log, [], "both retirements wait for their answers' verdicts");
+      socket(1).event(approvalFrame("ev-pending")); // later than replaySettleMs, but still pending after all
+      host.release("ev-settled", noActiveStream);
+      host.release("ev-pending", noActiveStream);
+      await Promise.all([
+        assert.rejects(settled, { code: "gateway/internal" }),
+        assert.rejects(pending, { code: "gateway/internal" }),
+      ]);
+      assert.deepEqual(log, ["gone:ev-settled"], "only the gate no generation holds is reported over");
+      await assert.rejects(() => mux.answer("ev-settled", "allowed-once"), { code: "not-pending" });
+      const again = mux.answer("ev-pending", "allowed-once");
+      assert.equal(posts.at(-1)?.body.payload.args.clientId, "client-F2", "the live gate is answered on the new socket");
+      host.release("ev-pending");
+      await again;
+      assert.deepEqual(log, ["gone:ev-settled"]);
+    }, host.reply);
+});
+
+test("close() while an answer is in flight silences its verdict too: no report reaches a closed page", async () => {
+  const log: string[] = [];
+  const host = holdAnswers();
+  await withMux({ reconnectMs: 5, replaySettleMs: 10, onGate: () => {}, onGateGone: (eventId) => log.push(`gone:${eventId}`) },
+    async ({ mux, socket }) => {
+      socket(0).ready("client-X1");
+      socket(0).event(approvalFrame("ev-order"));
+      const answered = mux.answer("ev-order", "allowed-once");
+      socket(0).drop();
+      await sleep(20);
+      socket(1).ready("client-X2");
+      await sleep(40); // the retirement is withheld for the answer's verdict...
+      mux.close();
+      host.release("ev-order", noActiveStream); // ...which lands after close()
+      await assert.rejects(answered, { code: "gateway/internal" });
+      assert.deepEqual(log, [], "a closed mux calls no handler");
+    }, host.reply);
+});
+
+/** Just the DOM chat.js's gate cards touch: classes, children, event listeners,
+ * a one-class or one-tag selector, and replaceWith. */
+class FakeNode {
+  readonly classes: Set<string>;
+  readonly children: FakeNode[] = [];
+  parent: FakeNode | null = null;
+  readonly listeners = new Map<string, (() => unknown)[]>();
+  readonly isConnected = true;
+  textContent: string;
+  disabled = false;
+  type = "";
+  title = "";
+  value = "";
+  placeholder = "";
+  constructor(readonly tag: string, cls = "", text = "") {
+    this.classes = new Set(cls.split(" ").filter(Boolean));
+    this.textContent = text;
+  }
+  get classList() {
+    const classes = this.classes;
+    return {
+      add: (name: string) => { classes.add(name); },
+      remove: (name: string) => { classes.delete(name); },
+      contains: (name: string) => classes.has(name),
+      toggle: (name: string, on: boolean) => { if (on) classes.add(name); else classes.delete(name); },
+    };
+  }
+  append(...nodes: FakeNode[]): void {
+    for (const node of nodes) { node.parent = this; this.children.push(node); }
+  }
+  addEventListener(type: string, listener: () => unknown): void {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+  }
+  /** Dispatch `type` and wait for the page's (async) handlers to finish. */
+  dispatch(type: string): Promise<unknown> {
+    return Promise.all((this.listeners.get(type) ?? []).map((listener) => listener()));
+  }
+  querySelectorAll(selector: string): FakeNode[] {
+    const hit = (node: FakeNode) => (selector.startsWith(".") ? node.classes.has(selector.slice(1)) : node.tag === selector);
+    const found: FakeNode[] = [];
+    const walk = (node: FakeNode) => { for (const child of node.children) { if (hit(child)) found.push(child); walk(child); } };
+    walk(this);
+    return found;
+  }
+  querySelector(selector: string): FakeNode | null {
+    return this.querySelectorAll(selector)[0] ?? null;
+  }
+  replaceWith(node: FakeNode): void {
+    const parent = this.parent;
+    if (parent === null) return;
+    parent.children[parent.children.indexOf(this)] = node;
+    node.parent = parent;
+    this.parent = null;
+  }
+}
+
+test("the page: answers that won across a reconnect read as the operator's choice; one that lost still reads settled elsewhere", async () => {
+  // End to end over chat.js's OWN gate code (loaded from its source, as
+  // subagents.test.ts does) and the real mux. chat.js has a second path to the
+  // same lie: its own purgeUndeliveredGates (GATE_REPLAY_GRACE_MS) records an
+  // in-flight gate in `lostRaces`, which its approval and question success
+  // branches used to read as "settled elsewhere". A resolved answer is now
+  // never relabelled by it.
+  const chatSource = ts.createSourceFile("chat.js", readFileSync(new URL("../client/chat.js", import.meta.url), "utf8"),
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const statuses: string[] = [];
+  const cards = new Map<string, FakeNode>();
+  const context = vm.createContext({
+    gates: new Map(), gateNodes: new Map(), gateDelivery: new Map(), answering: new Set(), lostRaces: new Set(),
+    eventsGeneration: 0, activeSession: "s1", convRows: new Map(), mux: null,
+    el: (tag: string, cls?: string, text?: string) => new FakeNode(tag, cls, text),
+    dash: (value: unknown) => (typeof value === "string" && value !== "" ? value : "—"),
+    gateWho: () => "Kairos",
+    status: (text: string) => { statuses.push(text); },
+    failed: (err: unknown) => { statuses.push(`failed: ${String(err)}`); },
+    renderStrip: () => {}, scheduleListRefresh: () => {}, memberSessionIds: () => new Set(), waitingChip: () => new FakeNode("span"),
+    // renderGate's own choice of card (chat.js renderGate), minus the placement in the flow.
+    renderGate: (view: { id: string; kind: string }) => {
+      const node = view.kind === "approval" ? context.approvalNode(view) : context.questionNode(view);
+      context.gateNodes.set(view.id, node);
+      cards.set(view.id, node);
+    },
+  });
+  const names = new Set(["approvalNode", "questionNode", "settle", "liveMux", "gateIsLive", "closeStaleGate", "refusedAnswer",
+    "acceptGate", "acceptGateResolved", "purgeUndeliveredGates"]);
+  const declarations = chatSource.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && names.has(node.name?.text ?? ""));
+  assert.equal(declarations.length, names.size, "the test runs chat.js's own gate code");
+  vm.runInContext(declarations.map((node) => node.getText(chatSource)).join("\n"), context);
+
+  const host = holdAnswers();
+  const graceMs = 15; // chat.js's GATE_REPLAY_GRACE_MS, shortened as replaySettleMs is
+  await withMux({
+    reconnectMs: 5, replaySettleMs: 10,
+    // chat.js's own mux wiring (the openMux call at the bottom of chat.js).
+    onReady: () => {
+      context.eventsGeneration += 1;
+      const generation = context.eventsGeneration;
+      setTimeout(() => context.purgeUndeliveredGates(generation), graceMs);
+    },
+    onGate: (frame) => {
+      if (typeof frame?.eventId === "string") context.gateDelivery.set(frame.eventId, context.eventsGeneration);
+      const view = mapFrame(frame);
+      if (view.kind === "approval" || view.kind === "question") context.acceptGate(view);
+    },
+    onGateGone: (eventId) => context.acceptGateResolved(mapFrame({ type: "cancel", eventId })),
+  }, async ({ mux, socket }) => {
+    // In a browser the page and api.js share one realm. Here chat.js runs in a
+    // vm context, so an answer object it builds is cloned into this realm, as
+    // the wire would carry it (api.js tests a plain object by its prototype).
+    context.mux = { answer: (eventId: string, value: unknown) => mux.answer(eventId, structuredClone(value)) };
+    const outcome = (id: string) => cards.get(id)?.querySelector(".gate-outcome")?.textContent;
+    const button = (id: string, label: string) => {
+      const found = cards.get(id)?.querySelectorAll("button").find((node) => node.textContent === label);
+      assert.ok(found, `no ${label} button on ${id}'s card`);
+      return found;
+    };
+
+    // Won: the reviewer's race, as the operator sees it - an approval and a
+    // question answered, both POSTs still out when the socket drops.
+    socket(0).ready("client-P1");
+    socket(0).event(approvalFrame("ev-won"));
+    socket(0).event({ type: "waterfall", event: "user-questions/request", eventId: "ev-asked", agentId: "s1",
+      request: { questions: [{ id: "q1", question: "How many shares on paper?" }] } });
+    const approved = button("ev-won", "Approve").dispatch("click");
+    const field = cards.get("ev-asked")?.querySelector(".ask-input");
+    assert.ok(field, "the free-text answer field");
+    field.value = "10";
+    await field.dispatch("input");
+    const sent = button("ev-asked", "Send").dispatch("click");
+    socket(0).drop();
+    await sleep(20);
+    socket(1).ready("client-P2"); // nothing to replay: this tab's answers settled both
+    await sleep(60); // api.js's retirement AND chat.js's own purge ran while the POSTs were out
+    host.release("ev-won");
+    host.release("ev-asked");
+    await Promise.all([approved, sent]);
+    assert.equal(outcome("ev-won"), "answered · approve", "the card says what the operator chose - and the host took");
+    assert.equal(outcome("ev-asked"), "answered", "a question answered through the same race reads answered too");
+    assert.ok(statuses.includes("approval allowed-once"), statuses.join("\n"));
+    assert.ok(statuses.includes("answer sent"), statuses.join("\n"));
+    assert.ok(!statuses.some((line) => /came too late|settled elsewhere|not applied|failed/.test(line)), statuses.join("\n"));
+    assert.equal(context.lostRaces.size, 0, "no stale race record is left behind");
+
+    // Lost: the host withdrew the gate from the ANSWERING generation while the POST was out.
+    socket(1).event(approvalFrame("ev-lost"));
+    const lost = button("ev-lost", "Approve").dispatch("click");
+    socket(1).event({ type: "cancel", eventId: "ev-lost" });
+    host.release("ev-lost"); // the no-op `ok` of an answer to a settled gate (gateway/src/index.ts:618-621)
+    await lost;
+    assert.equal(outcome("ev-lost"), "closed · settled elsewhere", "a real lost race still says so");
+  }, host.reply);
 });
 
 test("close() inside the reconnect window is honoured: no second socket, ever", async () => {

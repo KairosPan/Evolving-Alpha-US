@@ -37,16 +37,19 @@
  * 4. No `createProcessShutdown`, no SIGINT/SIGTERM and no `installFailLoud`
  *    here: `main.ts` owns process lifetime and installs `installFailLoud`
  *    itself; `ctx.appExit` stays a plain `process.exit`.
- * 5. `appReady` commits LAST, after the face's own audits and after Gate 2 is
- *    armed — not right after `boot()` as the CLI does. The gateway admits no
- *    `/api/remote.mux` stream until it fires (NEW packages/api/gateway/src/
- *    index.ts:265-276), so no browser can open an approval stream before the
- *    order gate exists. The invariant that buys: every success path commits,
- *    or every stream stays dead with no error — the smoke's 101 upgrade is
- *    the proof. A tree that stopped during startup is refused, not returned
- *    uncommitted. `main.ts` moves the commit later still, after its own
- *    routes (`deferReady` + `BootedFace.commitReady`), so a reconnecting tab
- *    never finds `/data` half-mounted.
+ * 5. `appReady` commits LAST, after the face's own audits — including the
+ *    check that Gate 2 armed — not right after `boot()` as the CLI does. The
+ *    gateway admits no `/api/remote.mux` stream until it fires (NEW
+ *    packages/api/gateway/src/index.ts:265-276), so no browser can open an
+ *    approval stream before the face is complete. The invariant that buys:
+ *    every success path commits, or every stream stays dead with no error —
+ *    the smoke's 101 upgrade is the proof. A tree that stopped during startup
+ *    is refused, not returned uncommitted. `main.ts` moves the commit later
+ *    still, after its own routes (`deferReady` + `BootedFace.commitReady`),
+ *    so a reconnecting tab never finds `/data` half-mounted. This holds back
+ *    the STREAMS only: unary `/api` is served from the moment the gateway row
+ *    activates, mid-boot — which is why Gate 2 itself cannot wait for the
+ *    commit (divergence 10).
  * 6. {@link INSTALL_ANCHOR} is the FACE's package.json, not the CLI's.
  * 7. A skipped bundle is a hard failure. `loadProfile` now SKIPS a bundle it
  *    cannot load instead of throwing (NEW packages/boot/app-boot/src/
@@ -60,6 +63,22 @@
  * 9. A face policy layer (src/policy.ts, PLAN S4) between the bundle layer and
  *    the operator's layers, restoring the 0.1.1 tool roster, egress and
  *    telemetry posture where dsh-base 0.2.0 changed them.
+ * 10. Gate 2 for orders arms INSIDE `prepare` ({@link armOrderGate}), before
+ *    the first config-tree row mounts — not after `boot()` resolves, where
+ *    0.1.1 armed it. The gateway claims unary `/api` the moment its row
+ *    activates and does not wait for readiness (NEW packages/api/gateway/src/
+ *    index.ts:233-239; only the upgrade at :265-276 does), and an MCP row's
+ *    tools are registered as that row activates. So for as long as ANY slow
+ *    row held `boot()` open, a tab still holding its 30-day cookie could
+ *    `session/create` and drive a turn into a live order tool while no ask
+ *    listener and no guard existed: the order dispatched with no card
+ *    (REVIEW-adversarial finding 1, proven by a probe;
+ *    tests/order-gate-midboot-smoke.test.ts keeps it closed). Each half now
+ *    waits, through `hostCtx.inject`, for exactly the service it reads — the
+ *    guard for `tools`, the ask listener for `approval` — so the guard exists
+ *    from the first moment the tool registry does, whatever order the rows
+ *    activate in. Only the registrations moved: every audit still runs after
+ *    `boot()`, plus {@link assertOrderGateArmed}.
  * The telemetry opt-out is honored exactly as the CLI honors it.
  *
  * LAYERING, and the one place the face inverts the CLI's: {@link faceOverlay}
@@ -199,6 +218,15 @@ export interface FaceBootOptions {
    * its last step, which is what every smoke that boots without `main.ts`
    * needs. */
   deferReady?: boolean;
+  /** An in-memory patch layer composed directly AFTER the operator's layers
+   * (the profile's `cordis.patch.yml`, then the home's) and BEFORE the face's
+   * own switches, persona and host rows - so it wins over every operator row
+   * and loses to every face-owned one. It exists for tools that must change an
+   * operator's composition without writing the operator's files:
+   * `scripts/check-home.ts` disables the MCP rows of a harness-home COPY this
+   * way instead of appending rows to the copy's patch file. `main.ts` never
+   * sets it; unset, the stack is exactly what it was without the option. */
+  extraPatches?: FacePatchList;
 }
 
 /** What {@link bootFace} hands back. */
@@ -235,8 +263,9 @@ function composedRowIds(layers: readonly FacePatchList[]): Set<string> {
  * bundle layers in `dsh.profile.bundles` order, the face's policy defaults
  * (src/policy.ts), the project's AKShare connection, the profile's own user
  * layer, the machine-local home layer (`$DSH_HOME/cordis.patch.yml`, which
- * outranks the per-profile one), the telemetry switch, the hmr switch, Kairos's
- * persona, then the face's host rows last.
+ * outranks the per-profile one), the caller's in-memory
+ * {@link FaceBootOptions.extraPatches} (usually none), the telemetry switch,
+ * the hmr switch, Kairos's persona, then the face's host rows last.
  *
  * Pure with respect to the environment — the home is threaded explicitly into
  * every dsh-app-boot call rather than materialized into `$DSH_HOME` — but NOT
@@ -287,7 +316,13 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
   );
   const marketPatches = aksharePatches();
   const homePatches = loadOptionalPatches(BIN, join(home, PROFILE_PATCH_FILENAME)) ?? [];
-  const patches: FacePatchList = [...bundlePatches, ...policyPatches, ...marketPatches, ...profile.patches, ...homePatches];
+  /* Cloned: the include's patch algorithm pushes inserted rows by reference
+   * and later patches assign into them, so composing the caller's own objects
+   * could rewrite them under the caller. */
+  const extraPatches: FacePatchList = structuredClone(opts.extraPatches ?? []);
+  const patches: FacePatchList = [
+    ...bundlePatches, ...policyPatches, ...marketPatches, ...profile.patches, ...homePatches, ...extraPatches,
+  ];
   /* Both switches below are guarded on the row actually being in the composed
    * tree. A patch that matches nothing is inert and — measured, not assumed —
    * SILENT: the include plugin does call a warn sink for it, but nothing
@@ -297,7 +332,7 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
    * never mounted the row. (With the policy layer disabling
    * `session-telemetry-otel` by default the env switch is redundant until an
    * operator re-enables the row - and then it still wins, composing after.) */
-  const below = composeEntries([bundlePatches, policyPatches, marketPatches, profile.patches, homePatches]);
+  const below = composeEntries([bundlePatches, policyPatches, marketPatches, profile.patches, homePatches, extraPatches]);
   const rows = new Set(below.flatMap((row) => (typeof row.id === "string" ? [row.id] : [])));
   /* app-boot exports the CLI's own resolver now (NEW packages/boot/app-boot/
    * src/profile-context.ts:52-55): ANY non-empty value disables, and a
@@ -528,6 +563,194 @@ function hasActiveEntry(ctx: Context, pkg: string): boolean {
   return false;
 }
 
+/** One Gate-2 fiber as {@link assertOrderGateArmed} reads it — the same four
+ * members the row audit's {@link whyInactive} reads off a Loader entry's fiber.
+ * Structural: what `ctx.inject` returns is a cordis `Fiber` and more. */
+type GateFiberLike = NonNullable<AuditEntryLike["fiber"]>;
+
+/** The two fibers that carry Gate 2, as {@link armOrderGate} returns them. */
+export interface OrderGateFibers {
+  /** Holds the `tools/pre-execute` ask listener; ACTIVE only while `approval` is. */
+  listener: GateFiberLike;
+  /** Holds the monotonic `tools.guard`; ACTIVE only while `tools` is. */
+  guard: GateFiberLike;
+}
+
+/** The approval service as the ask listener reads it: the two public halves of
+ * its private `effectivePolicy` (orders.ts {@link effectiveApprovalPolicy}). */
+interface GateApprovalLike {
+  overrideOf(session: unknown): ApprovalPolicyLike | undefined;
+  config?: { policy?: ApprovalPolicyLike };
+}
+
+/** The tool registry as the guard reads it: the guard seam itself
+ * (`ToolGuard`, NEW packages/core/tools/src/index.ts:731, 1136-1142) and the
+ * live lookup of a call's description. */
+interface GateToolsLike {
+  get(name: string, scope?: unknown): { description?: string } | undefined;
+  guard(check: (exec: { name: string; callId?: unknown; agent?: { session: unknown } }) => string | undefined): () => void;
+}
+
+/** `ctx.on`, narrowed to the one event the ask listener handles, in the face's
+ * own structural terms. dsh-tools' declarations do augment cordis's event map
+ * with this event, but they reach this compilation only transitively - the
+ * face does not depend on `@deepseek-ai/dsh-tools` - so the listener states the
+ * slice of `ToolExecution` it reads, as orders.ts states `PreToolDecision`. */
+interface GateEventsLike {
+  on(
+    name: "tools/pre-execute",
+    listener: (
+      exec: { name: string; arguments?: unknown; agent?: { session: unknown } },
+      next: () => Promise<PreToolDecision>,
+    ) => Promise<PreToolDecision>,
+    options?: { prepend?: boolean },
+  ): () => boolean;
+}
+
+/**
+ * Arm GATE 2 FOR ORDERS on the host context, from inside `prepare`
+ * (divergence 10). Two registrations, because neither alone is enough: only a
+ * `tools/pre-execute` listener can return `ask` (a guard is deny-only:
+ * `ToolGuard = (exec) => string | undefined`, NEW packages/core/tools/src/
+ * index.ts:731), and only a guard is monotonic - it is evaluated on EVERY
+ * allow (`tools/src/index.ts:1519`), including the allow that `allowed-once`
+ * becomes.
+ *
+ * WHEN. Each half is a `hostCtx.inject` fiber (NEW vendor/cordis/src/
+ * registry.ts:300-302): it runs once the service it reads is ACTIVE, and
+ * everything it registers is an effect of THAT fiber - `ctx.on` through the
+ * events service (vendor/cordis/src/events.ts:254-260, 292-301), `tools.guard`
+ * through the calling context, which owns the effect (tools/src/index.ts:
+ * 1136-1142; packages/core/scope/src/store.ts:226-264). So a registration can
+ * never outlive or double its service: when `approval` or `tools` is replaced,
+ * cordis unloads the fiber - disposing the old registration - before it runs
+ * the callback again for the new service (vendor/cordis/src/fiber.ts:625-696),
+ * and disposing the host disposes both. Each half waits for exactly what it
+ * reads, so neither is held back by the other: the guard arms with `tools`
+ * alone, and while `approval` is absent an order is DENIED by the guard (no
+ * logged grant can exist) rather than dispatched. And the guard arms before
+ * any row can reach the new registry: `reflect.notify` wakes fibers in
+ * registry order (vendor/cordis/src/reflect.ts:314-330) and these two were
+ * registered before any config-tree row existed, so each one's single
+ * microtask of `_reload` (fiber.ts:646-650) runs ahead of every row woken by
+ * the same service.
+ *
+ * ORDER. `prepend` puts the listener in front of everything registered before
+ * it - which, from `prepare`, is nothing. cordis runs a waterfall
+ * outermost-first and `prepend` unshifts (NEW vendor/cordis/src/events.ts:
+ * 226-243, 253-257), and each listener is free to ignore what `next()`
+ * returned, so a row that registers with `prepend` LATER sits outside ours and
+ * could take our `ask` and hand back `allow`. At 0.2.0-rc.2 the only one in
+ * the composed tree is dsh-tool-jobs's, which records an output limit and
+ * always returns `next()` (NEW packages/jobs/tool-jobs/src/index.ts:220-224).
+ * Armed after `boot()` the listener was outermost over the boot-time rows too;
+ * from `prepare` it is not, and that is exactly the case the guard exists for.
+ * It asks the SESSION LOG rather than remembering what the listener saw:
+ * `hasApprovalGrant` cannot be satisfied by any listener decision - only by a
+ * logged `allowed-once` for this exact callId and tool - so an outer listener
+ * that swallows our `ask` can at worst turn an order into a denial, never into
+ * an unapproved dispatch. (A re-armed listener prepends again, so it returns
+ * to the front.)
+ * @param hostCtx - the root context `boot()` hands `prepare`.
+ * @returns the two fibers, for {@link assertOrderGateArmed} once `boot()` settles.
+ */
+export function armOrderGate(hostCtx: Context): OrderGateFibers {
+  const listener = hostCtx.inject(["approval"], function orderGateAskListener(gateCtx) {
+    const approval = gateCtx.get("approval") as GateApprovalLike | undefined;
+    /* The inject guarantees it (a fiber runs only for the epoch its services
+     * were ACTIVE in, vendor/cordis/src/fiber.ts:648-656); a throw here would
+     * FAIL this fiber, which assertOrderGateArmed refuses with the reason. */
+    if (approval === undefined) throw new Error(`${BIN}: order gate: the approval service vanished before the listener armed`);
+    (gateCtx as unknown as GateEventsLike).on("tools/pre-execute", async (exec, next) => {
+      if (!isOrderTool(exec.name)) return next();
+      /* Without a session there is nobody to ask, and `serviceAsk` would deny
+       * anyway (NEW packages/core/tools/src/index.ts:1738-1743) - deny in our
+       * own words rather than letting it report a refusal nobody made. */
+      const session = exec.agent?.session;
+      if (session === undefined) {
+        return {
+          kind: "deny",
+          reason: `${exec.name} needs a per-order approval card and this call has no session to ask in`,
+        };
+      }
+      const decision = orderApprovalDecision(
+        exec.name,
+        effectiveApprovalPolicy(approval, session),
+        exec.arguments,
+      );
+      return decision ?? next();
+    }, { prepend: true });
+  });
+  const guard = hostCtx.inject(["tools"], function orderGateGuard(gateCtx) {
+    const tools = gateCtx.get("tools") as GateToolsLike | undefined;
+    if (tools === undefined) throw new Error(`${BIN}: order gate: the tools service vanished before the guard armed`);
+    /* The backstop, evaluated per call on every allow. It reads the LIVE
+     * description rather than a boot snapshot because the registry fills in
+     * asynchronously: `dsh-mcp-client` defaults `failOnStartupError` to false
+     * (NEW packages/mcp/mcp-client/src/index.ts:128, 138), so a server whose
+     * first connection failed still activates and can register its tools after
+     * the boot audit has already run.
+     *
+     * It is handed the SESSION, not its events. 0.2.0 removed the
+     * `Session.events` getter this guard used to read (commit 5660f44d29), and
+     * the read went `undefined` without a word: every APPROVED order was then
+     * denied as "without a logged allowed-once approval" (MAP gate2 §0.1).
+     * `orderGuardReasonForSession` (orders.ts) reads `snapshotEvents()` (NEW
+     * packages/core/session/src/index.ts:649-661) - and only for a gated tool,
+     * since a full snapshot copies the log once per append and this runs on
+     * every allow of every tool - and gives an UNREADABLE log its own denial,
+     * distinct from a missing grant. */
+    tools.guard((exec) =>
+      orderGuardReasonForSession(
+        exec.name,
+        tools.get(exec.name, exec.agent)?.description,
+        exec.agent?.session,
+        exec.callId,
+      )
+    );
+  });
+  return { listener, guard };
+}
+
+/**
+ * Refuse a boot on which Gate 2 did not arm. {@link armOrderGate}'s fibers
+ * are not Loader entries, so the strict row audit cannot see them, and cordis
+ * CONTAINS a throw from an inject callback (it logs it and marks the fiber
+ * FAILED, NEW vendor/cordis/src/fiber.ts:659-664) - a half that failed to arm
+ * would otherwise leave the face looking healthy with the gate quietly half
+ * there. 0.1.1 registered both halves in `bootFace`'s own body, where any
+ * failure refused the boot; this keeps that.
+ * @param gate - the fibers {@link armOrderGate} returned inside `prepare`, or
+ * `undefined` if `prepare` never reached it.
+ * @throws naming each half that is not ACTIVE, with why (pending on which
+ * service, or the error it failed with).
+ */
+async function assertOrderGateArmed(gate: OrderGateFibers | undefined): Promise<void> {
+  if (gate === undefined) {
+    throw new Error(`${BIN}: Gate 2 was never armed - prepare did not reach armOrderGate`);
+  }
+  const halves: ReadonlyArray<readonly [label: string, fiber: GateFiberLike]> = [
+    ["ask listener (waits for approval)", gate.listener],
+    ["guard (waits for tools)", gate.guard],
+  ];
+  const problems: string[] = [];
+  for (const [label, fiber] of halves) {
+    /* Let an in-flight (re)load settle first, so a transition is not
+     * mistaken for a failure; a startup error is recovered by whyInactive. */
+    try {
+      await fiber.await();
+    } catch {
+      // reported below
+    }
+    if (fiber.state !== FIBER_ACTIVE) problems.push(`${label}: ${await whyInactive(fiber)}`);
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `${BIN}: Gate 2 did not arm - ${problems.join("; ")} - the face refuses to serve orders through a half-armed gate`,
+    );
+  }
+}
+
 /**
  * Boot the face's dsh tree in-process and return it with its disposer.
  *
@@ -544,8 +767,9 @@ function hasActiveEntry(ctx: Context, pkg: string): boolean {
  * declarations, and the readiness commit (already done unless deferred).
  * @throws after disposing the tree when any enabled row did not activate, a
  * required service is missing, the `ask_user_question` tool did not register,
- * an operator-gated tool escapes the order gate, the preset roster cannot
- * supply its own default, or a declared bot is not listed; `StartupError`
+ * either half of Gate 2 did not arm, an operator-gated tool escapes the order
+ * gate, the preset roster cannot supply its own default, or a declared bot is
+ * not listed; `StartupError`
  * (from `boot`) when a required dsh entry is inactive; and whatever `boot`
  * throws when the plugin tree fails to load.
  */
@@ -570,6 +794,8 @@ export async function bootFace(opts: FaceBootOptions): Promise<BootedFace> {
   const dispose = (): Promise<void> => disposal ??= (async () => {
     await app.current?.fiber.dispose();
   })();
+  /* Gate 2's two fibers, set inside `prepare` and audited once boot() settles. */
+  let gate: OrderGateFibers | undefined;
   try {
     const ctx = await boot(BIN, rootConfig, structuredClone(patches), async (hostCtx) => {
       app.current = hostCtx;
@@ -591,6 +817,14 @@ export async function bootFace(opts: FaceBootOptions): Promise<BootedFace> {
        * exit for a hang, which is the worse failure for a request to stop.
        * `ready` is the gateway's WebSocket admission gate (divergence 5). */
       provideCmdline(hostCtx, { args: [], exit: (code) => process.exit(code), ready: appReady.service });
+      /* Gate 2 arms HERE (divergence 10): still before the first config-tree
+       * row mounts, because boot() mounts the root include only once `prepare`
+       * resolves (NEW packages/boot/app-boot/src/index.ts:1001-1004). Neither
+       * half can arm yet - no row has provided `tools` or `approval` - but
+       * each will the moment its service does, instead of once boot() has
+       * settled, by which time a slow row may have let unary `/api` drive a
+       * turn into a live order tool with nothing listening. */
+      gate = armOrderGate(hostCtx);
     });
     app.current = ctx;
     await assertEntriesActive(ctx);
@@ -625,97 +859,17 @@ export async function bootFace(opts: FaceBootOptions): Promise<BootedFace> {
      * guesses. Asserted against the live REGISTRY rather than the composed row
      * list because the two disagree exactly where it matters: a row can be
      * ACTIVE and still register nothing a model can call. */
-    const tools = ctx.get("tools") as
-      | {
-        schemas(): ToolSchemaLike[];
-        get(name: string, scope?: unknown): { description?: string } | undefined;
-        guard(check: (exec: { name: string; callId?: unknown; agent?: { session: unknown } }) => string | undefined): () => void;
-      }
-      | undefined;
+    const tools = ctx.get("tools") as { schemas(): ToolSchemaLike[] } | undefined;
     if (tools?.schemas().some((schema) => schema.name === ASK_USER_TOOL) !== true) {
       throw new Error(
         `${BIN}: ${ASK_USER_TOOL} is not registered - Kairos would have no way to ask the operator` +
           ` anything, silently (the \`tool-ask-user\` overlay row mounts it)`,
       );
     }
-    /* GATE 2 FOR ORDERS. Two registrations, because neither alone is enough:
-     * only a `tools/pre-execute` listener can return `ask` (a guard is
-     * deny-only: `ToolGuard = (exec) => string | undefined`, NEW
-     * packages/core/tools/src/index.ts:731), and only a guard is monotonic - it
-     * is evaluated on EVERY allow (`tools/src/index.ts:1519`), including the
-     * allow that `allowed-once` becomes.
-     *
-     * `prepend` puts the listener outermost: cordis runs a waterfall
-     * outermost-first and `prepend` unshifts (NEW vendor/cordis/src/
-     * events.ts:226-243, 253-257), and each listener is free to ignore what
-     * `next()` returned, so a listener registered outside ours could otherwise
-     * take our `ask` and hand back `allow`.
-     *
-     * That last case is exactly why the guard asks the SESSION LOG rather than
-     * remembering what the listener saw. `prepend` is last-registrant-wins, so
-     * anything mounted after this boot sits outside us; a guard that only checked
-     * "did I see this call" would wave such an override through, having seen it.
-     * `hasApprovalGrant` cannot be satisfied by any listener decision - only by a
-     * logged `allowed-once` for this exact callId. */
-    const approval = ctx.get("approval") as
-      | {
-        overrideOf(session: unknown): ApprovalPolicyLike | undefined;
-        config?: { policy?: ApprovalPolicyLike };
-      }
-      | undefined;
-    const gateCtx = ctx as unknown as {
-      on(
-        name: "tools/pre-execute",
-        listener: (
-          exec: { name: string; arguments?: unknown; agent?: { session: unknown } },
-          next: () => Promise<PreToolDecision>,
-        ) => Promise<PreToolDecision>,
-        options?: { prepend?: boolean },
-      ): () => boolean;
-    };
-    gateCtx.on("tools/pre-execute", async (exec, next) => {
-      if (!isOrderTool(exec.name)) return next();
-      /* Without a session there is nobody to ask, and `serviceAsk` would deny
-       * anyway (NEW packages/core/tools/src/index.ts:1738-1743) - deny in our own
-       * words rather than letting it report a refusal nobody made. */
-      const session = exec.agent?.session;
-      if (approval === undefined || session === undefined) {
-        return {
-          kind: "deny",
-          reason: `${exec.name} needs a per-order approval card and this call has no session to ask in`,
-        };
-      }
-      const decision = orderApprovalDecision(
-        exec.name,
-        effectiveApprovalPolicy(approval, session),
-        exec.arguments,
-      );
-      return decision ?? next();
-    }, { prepend: true });
-    /* The backstop, evaluated per call on every allow. It reads the LIVE
-     * description rather than a boot snapshot because the registry fills in
-     * asynchronously: `dsh-mcp-client` defaults `failOnStartupError` to false
-     * (NEW packages/mcp/mcp-client/src/index.ts:128, 138), so a server whose
-     * first connection failed still activates and can register its tools after
-     * the audit below has already run.
-     *
-     * It is handed the SESSION, not its events. 0.2.0 removed the
-     * `Session.events` getter this guard used to read (commit 5660f44d29), and
-     * the read went `undefined` without a word: every APPROVED order was then
-     * denied as "without a logged allowed-once approval" (MAP gate2 §0.1).
-     * `orderGuardReasonForSession` (orders.ts) reads `snapshotEvents()` (NEW
-     * packages/core/session/src/index.ts:649-661) - and only for a gated tool,
-     * since a full snapshot copies the log once per append and this runs on
-     * every allow of every tool - and gives an UNREADABLE log its own denial,
-     * distinct from a missing grant. */
-    tools.guard((exec) =>
-      orderGuardReasonForSession(
-        exec.name,
-        tools.get(exec.name, exec.agent)?.description,
-        exec.agent?.session,
-        exec.callId,
-      )
-    );
+    /* GATE 2 FOR ORDERS armed inside `prepare` (divergence 10, armOrderGate);
+     * what remains here is proving it did, then cross-checking the live
+     * registry against it. */
+    await assertOrderGateArmed(gate);
     const audit = auditOrderTools(tools.schemas());
     if (audit.ungated.length > 0) {
       throw new Error(

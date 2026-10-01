@@ -146,7 +146,13 @@ let nextId = 1;
  *   gateway/src/index.ts:646-668), or a reconnect did not replay it, so it was
  *   settled while this page was disconnected (retired `replaySettleMs` after the
  *   new `ready`). The tab whose answer WON gets no such call (:622): its own
- *   `answer` settles its card. It IS called for a gate this page already
+ *   `answer` settles its card. While this page's own `answer` to a gate is in
+ *   flight, neither a withdrawal nor a retirement is reported for it: across a
+ *   reconnect both are also exactly what that answer's win looks like from the
+ *   next socket, so the answer's verdict decides. It resolves: never reported.
+ *   It rejects (`gate-gone`, or the POST failed): a report withheld meanwhile
+ *   is made then, once, just before the rejection - unless a late replay has
+ *   shown the gate still pending. It IS called for a gate this page already
  *   answered when the host's `cancel` lands after that answer resolved: the
  *   host never cancels the winner, so the answer lost the race and was not
  *   applied - the caller must relabel a card it marked answered.
@@ -169,7 +175,8 @@ let nextId = 1;
  *                  (another tab answered first, or the turn stopped): NOT applied.
  *   `bad-value`    the value is outside the gate's vocabulary: nothing was sent.
  * Any other failure is the `CallError` of the `$events/result` call itself, and
- * the gate stays answerable.
+ * the gate stays answerable - unless a withdrawal or a missing replay was seen
+ * while the call was out: then `onGateGone` has just reported it over.
  * @typedef {Error & {code: "not-ready"|"not-pending"|"gate-gone"|"bad-value"}} AnswerError
  */
 
@@ -182,7 +189,9 @@ let nextId = 1;
  *   one gate this generation holds: an approval with `"allowed-once"` or
  *   `"rejected"`, a question with `{answers:[{id, selected, custom?}]}`
  *   (user-questions/src/types.ts:56-69). Rejects with an `AnswerError` (see its
- *   codes) or the call's `CallError`; resolves only when the host took THIS answer.
+ *   codes) or the call's `CallError`; resolves only when the host took THIS answer,
+ *   and then the gate is this answer's: whatever a reconnect saw while it was in
+ *   flight, `onGateGone` never reports it (see there for the one late exception).
  * @property {() => void} close - stop for good: the socket closes and a pending
  *   reconnect is cancelled.
  */
@@ -458,7 +467,8 @@ function safely(label, run) {
  * `eventId` (gateway/src/index.ts:512-516); a gate the page was given that the
  * new generation does NOT replay was settled while no delivery of this page
  * existed - no `cancel` can say so (:640-644) - and is reported gone
- * `replaySettleMs` after `ready`. A socket that closes, a frame that
+ * `replaySettleMs` after `ready` (one this page is answering waits for that
+ * answer's verdict: `gone`). A socket that closes, a frame that
  * breaks the grammar, and an `$events` stream that ends or fails all lose the
  * generation the same way: the socket is dropped and the next one opens after
  * `reconnectMs` - the upstream client treats every one of them as a lost
@@ -487,19 +497,89 @@ export function openMux(options = {}) {
    * answered here, or retired): the cards the page may still be showing,
    * across generations. @type {Set<string>} */
   const held = new Set();
+  /** eventId → how many of this page's `answer` POSTs for it are in flight, on
+   * any generation. While one is, that answer's verdict - not a withdrawal or a
+   * retirement - decides whether the gate is reported over (`gone`).
+   * @type {Map<string, number>} */
+  const inFlight = new Map();
+  /** Gates whose report was held back while an answer to them was in flight;
+   * that answer's verdict makes the report or drops it (`settleAnswer`).
+   * @type {Set<string>} */
+  const withheld = new Set();
 
-  /** Report one held gate over, once. @param {string} eventId */
+  /** @param {string} eventId */
+  const report = (eventId) => safely("onGateGone", () => onGateGone?.(eventId));
+
+  /** Report one held gate over, once - unless this page's own answer to it is
+   * in flight. A withdrawal or a missing replay seen then is, across a
+   * reconnect, exactly what that answer's WIN looks like from the next socket:
+   * the host settles the gate with the winning answer, so nothing is left to
+   * replay, and withdraws every OTHER delivery - a newer socket of this same
+   * page included - while the winner gets no `cancel` (gateway/src/index.ts:618-623,
+   * 646-668). Reported early, it relabelled an order this page had just placed
+   * "settled elsewhere" (REVIEW-adversarial finding 2); so it waits.
+   * @param {string} eventId */
   const gone = (eventId) => {
-    if (held.delete(eventId)) safely("onGateGone", () => onGateGone?.(eventId));
+    if (!held.has(eventId)) return;
+    if (inFlight.has(eventId)) {
+      withheld.add(eventId);
+      return;
+    }
+    held.delete(eventId);
+    report(eventId);
   };
 
   /** Retire every held gate this generation was not re-delivered: settled while
-   * no delivery of this page existed, so no `cancel` will come for it.
+   * no delivery of this page existed, so no `cancel` will come for it (one with
+   * an answer in flight waits for that answer: `gone`).
    * @param {Generation} gen */
   const retireUnreplayed = (gen) => {
     gen.retire = null;
     if (gen !== current || gen.dead) return;
     for (const eventId of [...held]) if (!gen.gates.has(eventId)) gone(eventId);
+  };
+
+  /**
+   * Close one `answer`'s in-flight window with its verdict.
+   *
+   * Won - the POST resolved and no `cancel` reached the generation that sent
+   * it, so the host took THIS answer (its delivery was still there,
+   * gateway/src/index.ts:618-627) and the gate is settled. It leaves `held`,
+   * the withheld reports, and a newer generation that was re-delivered it
+   * before the host reached the answer: the settlement withdraws that delivery
+   * (:657-668), so an answer through it would only earn the silent no-op `ok`
+   * (:618-621). Nothing is reported - the card is the caller's to settle.
+   * Otherwise - `gate-gone`, or the POST failed - a report withheld meanwhile
+   * is made now, once, before the rejection reaches the caller. A (late)
+   * replay has already voided it if the gate turned out to be still pending
+   * (`acceptEvent`): that one stays answerable on the new socket.
+   *
+   * Beyond this page's reach: the host's `ok` is the same for a win and for a
+   * no-op on a gate something else settled first (:618-621); only the `cancel`
+   * sent to the loser's generation tells them apart. If that `cancel` dies
+   * with its socket, a lost race reads as won - as it always did when the
+   * response beat the next generation's retirement.
+   * @param {Generation} gen - the generation the answer was sent under.
+   * @param {string} eventId @param {boolean} won
+   */
+  const settleAnswer = (gen, eventId, won) => {
+    const left = (inFlight.get(eventId) ?? 1) - 1;
+    if (left > 0) inFlight.set(eventId, left);
+    else inFlight.delete(eventId);
+    if (won) {
+      held.delete(eventId);
+      withheld.delete(eventId);
+      if (current !== null && current !== gen) current.gates.delete(eventId);
+      // Remembered so a `cancel` that trails this response on its own
+      // generation still reports the lost race (ANSWERED_MEMORY); a Set
+      // iterates oldest-first.
+      gen.answered.add(eventId);
+      if (gen.answered.size > ANSWERED_MEMORY) gen.answered.delete(gen.answered.values().next().value);
+      return;
+    }
+    if (left > 0 || !withheld.delete(eventId)) return;
+    held.delete(eventId);
+    report(eventId);
   };
 
   /** The module's own `$events` stream: exactly `{args:{}}`, or the gateway
@@ -563,15 +643,17 @@ export function openMux(options = {}) {
       return;
     }
     if (item.type === "cancel") {
+      const eventId = item.eventId;
       // Only a gate this generation holds can be withdrawn from it (:646-668).
-      if (gen.gates.delete(item.eventId)) {
-        gone(item.eventId);
-      } else if (gen.answered.delete(item.eventId)) {
+      if (gen.gates.delete(eventId)) {
+        gone(eventId);
+      } else if (gen.answered.delete(eventId)) {
         // A gate this generation already ANSWERED: the host never cancels the
         // winner (:618-623), so this answer lost a race its HTTP response
-        // outran. It is no longer `held`, so report it directly.
-        const eventId = item.eventId;
-        safely("onGateGone", () => onGateGone?.(eventId));
+        // outran. It is no longer `held`, so it is reported directly - or, if
+        // another answer to it is in flight, by that answer's verdict (`gone`).
+        if (inFlight.has(eventId)) withheld.add(eventId);
+        else report(eventId);
       }
       return;
     }
@@ -581,6 +663,8 @@ export function openMux(options = {}) {
     }
     gen.gates.set(item.eventId, item.event);
     held.add(item.eventId);
+    // A (late) replay proves the gate still pending: a report withheld for it is void.
+    withheld.delete(item.eventId);
     // A throwing renderer leaves the gate pending, as 0.1.1 did: the host keeps
     // waiting (never granting), Stop still withdraws it, and a reload replays it.
     safely("onGate", () => onGate(/** @type {GateFrame} */ (item)));
@@ -723,19 +807,24 @@ export function openMux(options = {}) {
       if (event === "user-questions/request" && !(isRecord(value) && Array.isArray(value.answers))) {
         throw answerError("bad-value", "a question takes {answers:[{id, selected, custom?}]}");
       }
-      await call("$events/result", { clientId: gen.clientId, eventId, outcome: { kind: "result", value } });
-      // The winner's own delivery is removed BEFORE the host settles, so the
-      // winner never gets a `cancel` (gateway/src/index.ts:618-623, 646-668): a
-      // `cancel` that landed while this answer was in flight means another
-      // answer or a Stop settled the gate first, and this one was a no-op.
-      if (!gen.gates.delete(eventId)) {
-        throw answerError("gate-gone", `gate ${eventId} was settled elsewhere before this answer arrived; it was not applied`);
+      // In flight from here to its verdict: no withdrawal or retirement reports
+      // this gate meanwhile, on this generation or a later one (`gone`).
+      inFlight.set(eventId, (inFlight.get(eventId) ?? 0) + 1);
+      let won = false;
+      try {
+        await call("$events/result", { clientId: gen.clientId, eventId, outcome: { kind: "result", value } });
+        // The winner's own delivery is removed BEFORE the host settles, so the
+        // winner never gets a `cancel` (gateway/src/index.ts:618-623, 646-668):
+        // a `cancel` that landed on THIS generation while the answer was in
+        // flight means another answer or a Stop settled the gate first, and
+        // this one was a no-op.
+        if (!gen.gates.delete(eventId)) {
+          throw answerError("gate-gone", `gate ${eventId} was settled elsewhere before this answer arrived; it was not applied`);
+        }
+        won = true;
+      } finally {
+        settleAnswer(gen, eventId, won);
       }
-      held.delete(eventId); // settled by this answer: its card is the caller's to settle, not a gone gate's
-      // Remembered so a `cancel` that trails this response still reports the
-      // lost race (ANSWERED_MEMORY); a Set iterates oldest-first.
-      gen.answered.add(eventId);
-      if (gen.answered.size > ANSWERED_MEMORY) gen.answered.delete(gen.answered.values().next().value);
     },
 
     close() {
@@ -747,6 +836,9 @@ export function openMux(options = {}) {
       current = null;
       registry.clear();
       held.clear();
+      // An answer still in flight settles into nothing: a closed mux reports nothing.
+      inFlight.clear();
+      withheld.clear();
       if (gen === null) return;
       gen.dead = true;
       if (gen.retire !== null) clearTimeout(gen.retire);
