@@ -2,7 +2,8 @@
 
 **Status:** living charter, written 2026-08-30; revised through 2026-09-09 for bots and rooms;
 revised 2026-09-11 for bot settings, discussion evidence, journal context and temporary
-subagents · **Owner:** the operator ·
+subagents; §4, §5 and §7.3 pointers re-read 2026-09-30 for the dsh 0.2.0-rc.2 re-host ·
+**Owner:** the operator ·
 **Authority:** this charter carries intent and principles; mechanism lives in `DEVELOPMENT.md`,
 `face/README.md` (the current face contracts and drills), and code. On a question of intent, the charter
 wins; on a question of mechanism, the code is the fact and the documents follow it. The pointer
@@ -133,15 +134,16 @@ Who may change what. This table is the charter's core; everything else supports 
 | Bot definitions: `preset.yml`, `SOUL.md`, composition and skills under `bots/` | operator, through the face's supported settings or file edits; Kairos and temporary subagents may propose changes, never author them | git and review; settings saves check revisions, and inspection distinguishes saved settings from mounted configuration (D13) |
 | `bots/<id>/journal/notes.md` | operator; the bot in its own home session, subject to that session's permissions | home work is scoped to its own `journal/`; room sessions start read-only (D12). Context loading only reads notes and records the consumed snapshot; it never writes them |
 | `data/pit/` beds | nobody — read-only captured artifacts | a `CHECKSUMS` manifest on the 2yr bed (the broad bed predates the manifest and carries none), checked by hand; recapture is the only legitimate write |
-| paper orders | nobody today | **Gate 1** (registration; enforced, test-pinned): the order tools exist in a session only when the operator's flag AND broker keys are both present. **Gate 2** (per-order approval; built 2026-09-04, in the face): every call to an order tool stops for a card the operator must answer (under a `never` policy, or with no session to ask in, it is denied outright rather than asked), and a guard admits the call only on a logged one-shot approval for that exact call and tool. Its automated drill passed and is mutation-proven for the refusing half (the card is raised, the read-only listing is not gated, an unapproved order does not dispatch); the admitting half — a real logged grant letting an approved order through the live pipeline — is unit-tested only; its human half — a person reading the card against armed tools in a scratch home — has not been run (D3). It binds only when dsh runs inside the face (D8) |
+| paper orders | nobody today | **Gate 1** (registration; enforced, test-pinned): the order tools exist in a session only when the operator's flag AND broker keys are both present. **Gate 2** (per-order approval; built 2026-09-04, in the face): every call to an order tool stops for a card the operator must answer (under a `never` policy, or with no session to ask in, it is denied outright rather than asked), and a guard admits the call only on a logged one-shot approval for that exact call and tool. Its automated drill passed and is mutation-proven for the refusing half (the card is raised, the read-only listing is not gated, an unapproved order does not dispatch); the admitting half — a real logged grant letting an approved order through the live pipeline — is automated too (2026-09-30), over the browser's own answer channel as well; its human half — a person reading the card against armed tools in a scratch home — has not been run (D3). It binds only when dsh runs inside the face (D8) |
 
 Three honesty notes the table depends on. First, both order gates hold the MCP tool *surface*,
 not the account: the library's order function carries no flag, the broker key file is readable
 from the workspace, and a shell turn could import the client directly — the paper-hostname pin
 bounds what that can do, and D8 carries the rest. Second, Gate 2 is a gate, not containment: it
 stops the model's ordinary tool calls; a wrapper on dsh's execute seam or an unrestricted shell
-walks around it, and the same shell can answer its own card over loopback — the respond route
-carries no token — leaving a genuine one-shot approval in the log, so the guard proves that a
+walks around it, and the same shell can answer its own card over loopback — the answer route's
+browser cookie is signed by a secret stored in the harness home, which a shell turn can read —
+leaving a genuine one-shot approval in the log, so the guard proves that a
 grant was recorded, not who recorded it (D10; Rule 2 applied honestly). Third, the workspace
 boundary protects the runtime,
 not the repo: `alpaca_kit`, the face, the mechanics skills and Gate 2's own code are inside the
@@ -163,8 +165,8 @@ solved would be worse than carrying them.
 | D7 | No instrument for net-negative drift: nothing compares "now" against "never-evolved" | strategies are few; the operator still reads everything | when an independent evaluator exists (see D1) |
 | D8 | Both order gates are prose against a shell: they hold the tool surface, the key file sits at the repo root, and Gate 2 exists only inside the face | paper account; hostname pin; the flag has never been armed | real-money intent, or any host other than the face running the profile with the flag set |
 | D9 | The channel roster is a menu, not a fence: tool schemas are tree-wide, a session in no channel is never roster-checked, and a shell turn can call a CLI directly | it reduces noise and states intent; writes are logged | if a rostered agent ever gets a capability the operator would not grant every channel |
-| D10 | The harness home and the face's own routes are reachable over loopback from inside the workspace — a fence, not authentication — including the approval-answer route, so a shell turn can approve its own order card; and the MCP server, a child of the face process, writes outside the sandbox | one operator, one machine; the writes are small and visible; the paper pin bounds an answered card | a second human, a hosted deployment, real-money intent, or the first unexplained change to `$DSH_HOME/face/*` |
-| D11 | *Resolved 2026-09-07.* The model is told it is Kairos: `dsh/profile/persona.md` is the `system-prompt` row's `persona`, set by the face at compose time; a bot's preset shadows it for that bot's sessions | — | — |
+| D10 | The harness home and the face's own routes are reachable over loopback from inside the workspace — a fence, not authentication — and so is the approval-answer route, whose browser cookie (dsh 0.2) is signed by a secret in the harness home, so a shell turn can approve its own order card; and the MCP server, a child of the face process, writes outside the sandbox | one operator, one machine; the writes are small and visible; the paper pin bounds an answered card | a second human, a hosted deployment, real-money intent, or the first unexplained change to `$DSH_HOME/face/*` |
+| D11 | *Resolved 2026-09-07.* The model is told it is Kairos: `dsh/profile/persona.md` is the `system-prompt` row's `personaPrefix`, set by the face at compose time; a bot's preset shadows it for that bot's sessions | — | — |
 | D12 | Bot tool masks are visibility, not authority. dsh scopes and `tools.restrict` are "live visibility composition, not an authority boundary"; a bot with a shell writes whatever its session's sandbox mode allows and reaches whatever the network allows | held by: the `read-only` permission preset logged into every bot room session inside its creation (file effects, subject to an operator-granted escalation card), the `journal/`-scoped `cwd` of every bot home session, Gate 2 tree-wide (the account), and the room transcript naming every dispatch and every member not called. Not held by the mask, and not held for the network | if a bot's composition is ever given the account tools, or a room session is created other than read-only (§8) |
 | D13 | Kairos's sessions and delegated tasks can work at the repository root, which includes `bots/`; their prohibition on editing bot files, including journals, is carried by `AGENTS.md` and review, not by the sandbox | single operator; every edit reviewed; git is the ledger; a bot's own home-journal writes follow §4 | the first unauthorized edit under `bots/` |
 | D14 | Structured room evidence and child-task results have no independent verification or result-acceptance mechanism; passing runtime drills does not establish better research | originals, request snapshots and task histories remain reviewable; Kairos checks results and the operator judges them | before claiming a research-quality gain or reducing review on the strength of these features |
@@ -265,8 +267,9 @@ later send can resume parked work. dsh owns this lifecycle, including recovery.
   the approval channel. The face hosts it in-process and registers the order producer on dsh's
   published `tools/pre-execute` seam; that is configuration in code on a pinned version, not a
   fork, and the two pins make the dependence explicit. We do not fork it or wrap its loop.
-- **No hosted face.** Loopback only, one machine, no authentication machinery on the local
-  surfaces (see D10 for what that costs).
+- **No hosted face.** Loopback only, one machine, no authentication machinery of the face's own
+  on the local surfaces — dsh 0.2's browser cookie on `/api` is dsh's (see D10 for what that
+  costs).
 - **No multi-tenant, cryptographic, or kernel-level machinery.** One operator, one machine.
   The risks are named here in one line each instead of being built against: a hosted or
   multi-user deployment invalidates this charter rather than extending it.
