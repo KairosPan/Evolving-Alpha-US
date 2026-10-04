@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#f7f6f2"/>
+  <g fill="none" stroke="#dfd9cd"><circle cx="945" cy="330" r="205"/><circle cx="945" cy="330" r="150" stroke-dasharray="4 8"/><ellipse cx="945" cy="330" rx="228" ry="80" transform="rotate(-35 945 330)"/></g>
+  <text x="75" y="105" font-family="Arial,sans-serif" font-size="38" font-weight="700" letter-spacing="-1.5" fill="#242921">gravit<tspan fill="#d45a34">.</tspan></text>
+  <text x="75" y="260" font-family="Arial,sans-serif" font-size="59" letter-spacing="-2.5" fill="#242921" font-weight="600">Investment research,</text>
+  <text x="75" y="337" font-family="Arial,sans-serif" font-size="59" letter-spacing="-2.5" fill="#d45a34" font-weight="600">in perspective.</text>
+  <text x="75" y="400" font-family="Arial,sans-serif" font-size="20" fill="#74786f">Markets, evidence, and multiple perspectives.</text>
+  <text x="75" y="431" font-family="Arial,sans-serif" font-size="20" fill="#74786f">One AI research workspace.</text>
+  <circle cx="945" cy="320" r="86" fill="#f9f4ea" stroke="#d2c0ac"/>
+  <text x="913" y="342" font-family="Georgia,serif" font-style="italic" font-size="120" fill="#bf5939">g</text>
+  <path d="M75 525h1050" stroke="#dddfd6"/>
+  <text x="75" y="565" font-family="monospace" font-size="14" letter-spacing="2" fill="#74786f">AI-NATIVE INVESTMENT RESEARCH</text>
+  <text x="1125" y="565" text-anchor="end" font-family="monospace" font-size="14" fill="#74786f">OBSERVE. QUESTION. EVOLVE.</text>
+</svg>
