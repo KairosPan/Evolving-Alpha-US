@@ -1,4 +1,4 @@
 [submodule "demo"]
 	path = demo
 	url = https://github.com/linqizhe07/buyer-agent-demo
-	branch = feat/prediction-markets
+	branch = main
