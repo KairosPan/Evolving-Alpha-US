@@ -3,6 +3,7 @@
 **日期：** 2026-10-05 · **写给：** 接手这项工作的下一个 agent · **来自：** 2026-10-01 至 10-04 的设计 session（Claude Code，session_01TrWt4ehRrR7e4TJ9XyFX2K）。
 **一句话任务：** 把 Linqi 的几个分支和场所插件设计稿统一成一版，以做出 demo 为目标；决策和交互形式在 Claude Design 画布上。
 **原则：** 这份简报只记事实、结论和待定项。机制以代码为准；意图以 `Kairos-Design.md` 为准；引用都带路径和行号，行号读自 `main @ a09f217`。
+**状态（2026-10-05，operator 拍板）：** 这份简报的方案已被取代。operator 定了 demo 为主线：**现在站 C**（demo 以 `demo/` 子模块钉进树，PR #5；`face/` 与 `dsh/` 不调用它，两个产品互不接），**方向朝 A**（Kairos 经一行 MCP row 做 demo Account 的租客，在下一份 charter 里定）。§7 的 S0 被 PR #5 的落法取代：main + `feat/demo` + 子模块 bump 到 demo 的 main 头 `2d49602`；S1–S7 在下一份 charter 选定 A 或 B 之前不做。§3 的分支事实读自 10-03，10-05 的清理是：PR #1、#2、#3 关闭（paper-book 线暂存，分支保留为归档）、`feat/prediction-markets` 与 `feat/account-layer` 删除。§6 的 D1–D5、U1–U8 没有逐条答复；两种形状的五个冲突点（门在哪、谁签字、网络、每写一卡、账本）是下一份 charter 的议程。demo 当前的样子见 PR #5 与 demo 的 README。
 
 ---
 
@@ -134,4 +135,4 @@ S1 凭据引用进 MCP row 的 env；S2 row 工具表何时可审计、拒绝后
 
 ## 11. 给下一个 agent 的开场提示词
 
-> 读 `docs/superpowers/plans/2026-10-05-venue-plugins-unification-handoff.md`，再读 `Kairos-Design.md` §1–§2、§8，`AGENTS.md`，`CLAUDE.md`。画布 <https://claude.ai/artifact/2aXJoRzTzp5kDhMqCD8fLk> 第二页是设计；设计稿 v1 在 PR #4。operator 对 D1–D5、U1–U8 的答复是：`<在此填写，例如 U1-A U2-A U3-A U4-A U5-A U6-A U7-A U8-A>`。按简报 §7 从 S0 开始；每一步先说要做什么再做；S1 之前先跑 spike S1、S2；任何真钱、testnet 或 mainnet 的事都先停下来问。
+> 先读本简报顶部的「状态」行，再读 `Kairos-Design.md` §1–§2、§7.3、§8，`AGENTS.md`，`CLAUDE.md`。operator 的决定（2026-10-05）是：**现在站 C，方向朝 A**。不要按 §7 施工：S0 已由 PR #5 落地，S1–S7 等下一份 charter。先读 PR #5 和 `demo/` 的 README（回灌 Kairos 表），再读设计稿 v1（PR #4）的 §4、§5、§11。画布 <https://claude.ai/artifact/2aXJoRzTzp5kDhMqCD8fLk> 是当时的图，不是现在的计划。下一个文档任务是下一份 charter：议程是两种形状的五个冲突点（门在哪、谁签字、网络、每写一卡、账本），A 和 B 是它要选的两种形状。任何真钱、testnet 或 mainnet 的事，以及任何把 demo 接进 face 的事，都先停下来问。

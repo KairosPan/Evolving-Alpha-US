@@ -1,9 +1,16 @@
 # Venue Plugins — Design
 
-**Status:** design, awaiting operator review on the five decisions in §11. Not built. Extends the
-skeleton design (`2026-08-29-market-strategy-account-skeleton-design.md`, the `alpaca_kit` seam) and
-the bots design (`2026-09-07-bots-and-rooms-design.md`, the tool mask); it prepares, and does not
-itself fire, the charter's real-money and hosted-deployment triggers (§12).
+**Status (2026-10-05):** superseded, not built. The operator chose the buyer-agent demo
+(`linqizhe07/buyer-agent-demo`) as the main line: **posture C** now — the demo is pinned as `demo/` by
+PR #5 and nothing in `face/` or `dsh/` calls it — with **direction A** — Kairos as a tenant of the demo's
+Account through one MCP row, to be settled in the next charter. This spec stays as the record of the
+face-side shape, one dsh row per venue behind Gate 2, and of the five decisions in §11, which were never
+answered one by one. The five conflicts between the two shapes — where the gate lives, who signs, which
+network, one card per write, the ledger — are the next charter's agenda; the demo's README (回灌 Kairos)
+maps its pieces to the seams named here. As written: a design extending the skeleton design
+(`2026-08-29-market-strategy-account-skeleton-design.md`, the `alpaca_kit` seam) and the bots design
+(`2026-09-07-bots-and-rooms-design.md`, the tool mask); it prepares, and does not itself fire, the
+charter's real-money and hosted-deployment triggers (§12).
 **Companion:** the design canvas this spec is the written form of —
 <https://claude.ai/artifact/2aXJoRzTzp5kDhMqCD8fLk> (seven artboards, private to the operator). On a
 disagreement the spec wins; the canvas is the picture.
