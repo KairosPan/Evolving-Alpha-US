@@ -3,7 +3,7 @@
 **日期：** 2026-10-05 · **写给：** 接手这项工作的下一个 agent · **来自：** 2026-10-01 至 10-04 的设计 session（Claude Code，session_01TrWt4ehRrR7e4TJ9XyFX2K）。
 **一句话任务：** 把 Linqi 的几个分支和场所插件设计稿统一成一版，以做出 demo 为目标；决策和交互形式在 Claude Design 画布上。
 **原则：** 这份简报只记事实、结论和待定项。机制以代码为准；意图以 `Kairos-Design.md` 为准；引用都带路径和行号，行号读自 `main @ a09f217`。
-**状态（2026-10-05，operator 拍板）：** 这份简报的方案已被取代。operator 定了 demo 为主线：**现在站 C**（demo 以 `demo/` 子模块钉进树，PR #5；`face/` 与 `dsh/` 不调用它，两个产品互不接），**方向朝 A**（Kairos 经一行 MCP row 做 demo Account 的租客，在下一份 charter 里定）。§7 的 S0 被 PR #5 的落法取代：main + `feat/demo` + 子模块 bump 到 demo 的 main 头 `2d49602`；S1–S7 在下一份 charter 选定 A 或 B 之前不做。§3 的分支事实读自 10-03，10-05 的清理是：PR #1、#2、#3 关闭（paper-book 线暂存，分支保留为归档）、`feat/prediction-markets` 与 `feat/account-layer` 删除。§6 的 D1–D5、U1–U8 没有逐条答复；两种形状的五个冲突点（门在哪、谁签字、网络、每写一卡、账本）是下一份 charter 的议程。demo 当前的样子见 PR #5 与 demo 的 README。
+**状态（2026-10-05，operator 拍板）：** 这份简报的方案已被取代。operator 定了 demo 为主线：**现在站 C**（demo 以 `demo/` 子模块钉进树，PR #5；`face/` 与 `dsh/` 不调用它，两个产品互不接），**方向朝 A**（Kairos 经一行 MCP row 做 demo Account 的租客，在下一份 charter 里定）。§7 的 S0 被 PR #5 的落法取代：main + `feat/demo` + 子模块 bump 到 demo 的 main 头 `2d49602`；S1–S7 在下一份 charter 选定 A 或 B 之前不做。§3 的分支事实读自 10-03，10-05 的清理是：PR #1、#2、#3 关闭（paper-book 线暂存，分支保留为归档）、`feat/prediction-markets` 与 `feat/account-layer` 删除。§6 的 D1–D5、U1–U8 没有逐条答复；两种形状的五个冲突点（门在哪、谁签字、网络、每写一卡、账本）是下一份 charter 的议程。demo 当前的样子见 PR #5 与 demo 的 README。五个冲突点的完整记录、不冲突的部分和三种站法在 §12。
 
 ---
 
@@ -135,4 +135,41 @@ S1 凭据引用进 MCP row 的 env；S2 row 工具表何时可审计、拒绝后
 
 ## 11. 给下一个 agent 的开场提示词
 
-> 先读本简报顶部的「状态」行，再读 `Kairos-Design.md` §1–§2、§7.3、§8，`AGENTS.md`，`CLAUDE.md`。operator 的决定（2026-10-05）是：**现在站 C，方向朝 A**。不要按 §7 施工：S0 已由 PR #5 落地，S1–S7 等下一份 charter。先读 PR #5 和 `demo/` 的 README（回灌 Kairos 表），再读设计稿 v1（PR #4）的 §4、§5、§11。画布 <https://claude.ai/artifact/2aXJoRzTzp5kDhMqCD8fLk> 是当时的图，不是现在的计划。下一个文档任务是下一份 charter：议程是两种形状的五个冲突点（门在哪、谁签字、网络、每写一卡、账本），A 和 B 是它要选的两种形状。任何真钱、testnet 或 mainnet 的事，以及任何把 demo 接进 face 的事，都先停下来问。
+> 先读本简报顶部的「状态」行，再读 `Kairos-Design.md` §1–§2、§7.3、§8，`AGENTS.md`，`CLAUDE.md`。operator 的决定（2026-10-05）是：**现在站 C，方向朝 A**。不要按 §7 施工：S0 已由 PR #5 落地，S1–S7 等下一份 charter。先读 PR #5 和 `demo/` 的 README（回灌 Kairos 表），再读设计稿 v1（PR #4）的 §4、§5、§11。画布 <https://claude.ai/artifact/2aXJoRzTzp5kDhMqCD8fLk> 是当时的图，不是现在的计划。下一个文档任务是下一份 charter：议程是两种形状的五个冲突点（门在哪、谁签字、网络、每写一卡、账本，记录在本简报 §12），A 和 B 是它要选的两种形状。任何真钱、testnet 或 mainnet 的事，以及任何把 demo 接进 face 的事，都先停下来问。
+
+## 12. 冲突记录：v1 的形状 vs demo 的形状（2026-10-05）
+
+operator 的决定：**现在站 C**，两个产品互不接；**方向朝 A**。要接的时候回到这一节，先把 12.1 的五个点定了再动代码。这一节只记事实和分歧，不做决定。demo 的事实读自 `linqizhe07/buyer-agent-demo @ 2d49602`（PR #5 钉的那个提交）的 README 与它的 PR #3–#5 说明；v1 的事实读自设计稿 `docs/superpowers/specs/2026-10-02-venue-plugins-design.md`。
+
+### 12.1 真正冲突的五个点（不能都要）
+
+| # | 点 | v1 设计稿（face 侧） | demo @ 2d49602 | 为什么不能都要 |
+|---|---|---|---|---|
+| C1 | 门在哪 | face 的 Gate 2 是全树唯一的卡生产者（`face/src/orders.ts`），manifest 只喂写工具名（设计稿 §4.3） | 自己的门（`src/agent/gate.ts`）+ 授权书（`src/agent/mandates.ts`）+ Account 层的支出 / 交易额度（`src/portfolio/account/state.ts`），Conservative / Aggressive 两档 | 两道门两个进程，就是 `Kairos-Design.md` §7.3「no bespoke harness」和本简报 U2-B 否掉的东西；接了就只能留一道 |
+| C2 | 谁签字 | 人在 face 上点卡，答复进会话日志（`allowed-once`）；真正的边界在场所侧（agent key 不能提币、`validUntil`）；签名器「不建」（设计稿 §6.4、§12） | owner 是浏览器里的 P-256 设备钥匙，每条指令是带 nonce 的 EIP-712 签名信封；批卡 = owner 对卡哈希的签名，放行时重查（`src/portfolio/account/sign.ts`、`exchange.ts`） | 这正是设计稿 D5-A 和残差 R3a 要的答案，也正是 charter §7.3 写明不建的 cryptographic machinery；要么接受签名协议并改 charter，要么留在点卡加场所侧约束 |
+| C3 | 网络 | paper / testnet；manifest 里 `network: mainnet` 一律拒绝（设计稿 §4.1） | 主网真账户（ccxt 覆盖的交易所、Alpaca、Kalshi、Robinhood、Polymarket、六条 EVM 链上的浏览器钱包、MetaMask）；真实下单**默认开**，`--read-only` 才关，`--live-cap` 单笔默认 $100 | 「拒绝 mainnet」和「默认开」不能同时成立；接了就要选 fence 是哪一种 |
+| C4 | 每写一卡 | charter P5：每次写停一张卡 | Aggressive 模式：额度内 agent 直接下单、直接动钱，不出卡 | 这是 P5 本身；Aggressive 进 face 就要改 charter |
+| C5 | 账本 | `/account` 只读汇总，不存东西（设计稿 D3-A、§8） | 多本哈希链 JSONL（agent ledger、account ledger）+ statement + 对账；签名信封嵌在账本行里 | 可以并存一阵，长期只能有一本真账；demo 的形状就是设计稿 D3-B 推迟的「有存储的账本」 |
+
+另一处分歧，不算冲突但要知道：demo 为比价和拆单抽了统一的场所形状（`markets / market / place / cancel / status`，`src/portfolio/live/trade.ts`），设计稿按 Rule 8 说第二个场所出现前不抽 Protocol。
+
+### 12.2 不冲突的部分
+
+- demo 的插件合同就是设计稿 §4：manifest allow-list、挂载审计四条规则、`intent → 授权书 → 卡 → grant → 场所 → 账本`。demo 在四个模拟器上把这一层验证了（十一个场景，`test/e2e.test.ts`）。这一层没有取舍。
+- demo 的资金面（每个场所的出入金门、在途资金、地址簿冷静期、agent 子账户 float、经 LI.FI 的跨链、x402 / MPP / AP2 付款）设计稿没有，是加法。
+- 设计稿的 face / dsh 接法 demo 没有：MCP row 组合（`face/src/akshare.ts` 模式）、credential seam、bot mask、`AGENTS.md` 一段。demo README 的「回灌 Kairos」表把这些列为目标，一条没做。纯互补。
+
+### 12.3 三种站法
+
+| 站法 | 做什么 | 代价 | 设计稿 v1 的去向 |
+|---|---|---|---|
+| A · Kairos 做 Account 的租客 | face 一行 MCP row 接 demo 的 `portfolio:mcp`，agent key 由 owner 授权；owner 在 Account 页批卡；Gate 2 不再看场所写入 | 两个审批面（Alpaca paper 仍在 face 出卡）；两个 home；charter 必须重写，C2、C3、C4 全触发 | §4.3 的 Gate 2 喂名作废；§7 的 PIT 立场和 §4.5 的 bot mask 仍适用 |
+| B · demo 的件搬进 face | 本简报 S1–S4：manifest 审计、授权书、账本移植进 `face/src`；Gate 2 仍是唯一的门，demo 的门退役；签名协议不要或重做 | 重写已有的东西；Kairos 长期停在 paper / testnet；Linqi 的 Account 线和 face 分叉 | 原样成立 |
+| C · 两个产品，先不接 | 现状：demo 以 `demo/` 钉在树里（PR #5），谁也不调用谁；设计稿留作 face 侧接法的记录 | 没有共享的门、账本、凭据；Kairos 仍只有 Alpaca paper 一个席位 | 记录 |
+
+### 12.4 什么时候回来这一节
+
+- Kairos 真的需要第二个场所的时候：先在 12.1 上选 A 或 B，再动代码。
+- 任何真钱之前：先写下一份 charter（`Kairos-Design.md` §8 最后一行），C1–C5 就是它的议程。
+- 再 bump `demo/` 之前：读 demo 那次 PR 的说明，知道又有多少能动真钱的代码进树；2d49602 起 demo 默认开着真实下单。
+- demo 自己承认没有一把真钥匙用过（README「诚实边界」）：Kairos 接过去并不比它的 Alpaca paper 席位更真，所以 Rule 8 的「内容来之前别选 substrate」在这里仍然成立。
