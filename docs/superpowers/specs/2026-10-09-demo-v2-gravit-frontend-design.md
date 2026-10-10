@@ -435,3 +435,45 @@ header now reads 我的插件 · n and + Create; in §12 the rail's 248 gives wa
    Connect an account work as drawers.
 6. **Tokens.** The equity blue is Linqi's `--alloc-equity`; the white words on it use `--on-equity`, a
    second addition beside `--down-edge` (his own `--blue` is his orange RWA colour).
+
+## 14. Amendment, 2026-10-10 (round 3)
+
+The operator's words, after round 2: the 我的插件 pill loses its count and takes an English name; "by
+MCP I meant wrapping Discover as an MCP, so that plugins users make themselves can be uploaded into
+Discover"; no "Free · by …" and no 刚装好, keep Open in Messages; pressing the mail key switches fully to
+a mail screen. Where this section and §7.1, §7.3, §7.4, §7.5, §7.7, §12 or §13 disagree, this section
+wins.
+
+1. **My plugins.** The pill reads My plugins, with no count; pressed, it shows 装了的 and 你创建的 as before.
+2. **No author or price.** Cards have no author line (§7.3's "Free · by Gravit" is gone) and no 刚装好
+   chip; a just-installed card keeps only "Open in Messages ›", and the install toast stays. The drawer's
+   meta line is the kind and, for a catalogue plugin, how many installed it ("Bots · 1.2k 装了"); for your
+   own plugin, where it stands ("Data · Private", "Data · 审核中", "Data · Public"). The drawer has no
+   怎么付 section. `by` stays in the data, never on screen; the shop stamps the author from the signature.
+3. **Create is Discover's own MCP face (replaces §13.4).** Discover is itself an MCP server (§7.7), and
+   Create shows it: a dialog titled Discover MCP with the server address, its seven tools as chips
+   (`shop.search` · `shop.get` · `shop.install` · `shop.uninstall` · `shop.publish` · `shop.mine` ·
+   `plugin.call`), a 客户端 switch (Claude Code · Cursor · Codex) with the line that client takes to add
+   Discover and a 复制 key, and the status 等待连接. Nothing in the dialog can be typed. When a client
+   connects, the status reads "<client> 已连接" and the client's calls are listed (`shop.mine()` ✓). When it
+   asks `shop.publish`, the owner sees the manifest (logo, name, one line, kind, tools, what it needs),
+   picks 放哪 (只给我自己 · Private | 放进 Public shop) and signs it in the drawer's grammar (你签的是:
+   private = publish and install for Gravit, with May, May not and Until; public = publish into the
+   Public shop), with 拒绝 or Publish. Focus never lands on Publish by itself.
+   - Private: published and installed at once; the plugin opens its teaching conversation, leads its
+     kind's shelf and See all, and sits under 你创建的; toast "<name> 已上传 · Private · Open".
+   - Public: reviewed first (a sandbox run, its permissions and author read; 5 s here) behind a clock key
+     on its card and a disabled 审核中 in its drawer; toast "<name> 已上传 · 审核中". When the review
+     passes, Discover writes to Gravit's mailbox ("<name> 过审了"), Discover shows "<name> 过审了 · Public
+     · Open", and the owner installs it with the drawer's usual signature.
+   - Here the client is scripted: 复制, or the director's 插件上传, starts it; it connects after 1.5 s and
+     asks to publish 1.5 s later. The uploads come in turn (Moat score, private; CPI 速读, public; then
+     the same again with a number). The back end of §9 gains `shop.publish`'s client authorization and
+     the real review path.
+4. **Mail is a screen (replaces the mailbox drawer of §13.5).** The mail key is a link to `#/mail`; on Mail
+   it is current. The second level, which §13.1 kept for Messages, also opens on Mail: the title Mail,
+   Gravit's address, and the letters newest first (sender, time, subject; an unread letter has the dot
+   and a bold subject). The main column shows the open letter (`#/mail/<id>`: subject, sender and time,
+   its files, the body) or, with none open, 没选中邮件. Opening a letter reads it; an unknown letter opens
+   the inbox. Below 860 px the letters stand alone until one is open.
+5. **The director** gains 插件上传 and sits above the dialog's scrim.
