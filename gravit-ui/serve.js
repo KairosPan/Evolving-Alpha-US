@@ -17,13 +17,15 @@ export function contentType(path) {
 export function createApp(root = ROOT) {
   return createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    let path = normalize(decodeURIComponent(url.pathname));
+    let path;
+    try { path = normalize(decodeURIComponent(url.pathname)); } catch { res.writeHead(400); return res.end(); }
     if (path.endsWith(sep) || path.endsWith('/')) path += 'index.html';
     const file = join(root, path);
     if (!file.startsWith(root)) { res.writeHead(403); return res.end(); }
     try {
       const s = await stat(file);
-      if (s.isDirectory()) { res.writeHead(302, { location: url.pathname + '/' }); return res.end(); }
+      // one leading slash, so the redirect can never read as a protocol-relative //host
+      if (s.isDirectory()) { res.writeHead(302, { location: '/' + url.pathname.replace(/^\/+/, '') + '/' }); return res.end(); }
       res.writeHead(200, { 'content-type': contentType(file), 'cache-control': 'no-store' });
       res.end(await readFile(file));
     } catch {
