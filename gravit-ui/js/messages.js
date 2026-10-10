@@ -2,7 +2,7 @@
 export const LEVELS = {
   text: 'grey', proposal: 'green', signal: 'white', ta: 'white', brief: 'white',
   card: 'orange', limit: 'orange', install: 'orange',
-  refusal: 'red', breaking: 'red', call: 'red',
+  refusal: 'red', breaking: 'red', call: 'red', alert: 'red',
   receipt: 'green', done: 'green',
 };
 

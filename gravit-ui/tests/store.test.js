@@ -40,6 +40,13 @@ test('a saved state is loaded; a corrupt one falls back to the initial', () => {
   assert.equal(none.get().n, 5);
 });
 
+test('a saved state the accept predicate refuses falls back to the initial', () => {
+  const stale = createStore({ initial: { v: 1, n: 0 }, reducers, storage: fakeStorage({ k: '{"v":2,"n":7}' }), key: 'k', accept: s => s.v === 1 });
+  assert.equal(stale.get().n, 0);
+  const same = createStore({ initial: { v: 1, n: 0 }, reducers, storage: fakeStorage({ k: '{"v":1,"n":7}' }), key: 'k', accept: s => s.v === 1 });
+  assert.equal(same.get().n, 7);
+});
+
 test('reset replaces the state and notifies with type reset', () => {
   const store = createStore({ initial: { n: 1 }, reducers });
   let last;
@@ -55,6 +62,7 @@ test('the message model: levels by kind, what needs an answer', () => {
   assert.equal(levelOf(message('gravit', 'receipt', 'x')), 'green');
   assert.equal(levelOf(message('gravit', 'brief', 'x')), 'white');
   assert.equal(LEVELS.call, 'red');
+  assert.equal(levelOf(message('gravit', 'alert', 'x')), 'red');
   assert.equal(needsAnswer(message('gravit', 'card', 'x')), true);
   assert.equal(needsAnswer({ ...message('gravit', 'card', 'x'), answer: 'approved' }), false);
   assert.equal(needsAnswer(message('gravit', 'text', 'x')), false);

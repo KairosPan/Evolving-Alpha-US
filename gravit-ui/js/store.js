@@ -1,12 +1,14 @@
 // gravit-ui/js/store.js — one state object, pure reducers, subscribers, optional persistence
-export function createStore({ initial, reducers, storage = null, key = 'gravit-ui.state' }) {
+// accept(saved) decides whether a saved state may be used; a refused one boots `initial`
+export function createStore({ initial, reducers, storage = null, key = 'gravit-ui.state', accept = () => true }) {
   let state = load() ?? initial;
   const subs = new Set();
 
   function load() {
     try {
       const raw = storage?.getItem(key);
-      return raw ? JSON.parse(raw) : null;
+      const saved = raw ? JSON.parse(raw) : null;
+      return saved && accept(saved) ? saved : null;
     } catch {
       return null;
     }
