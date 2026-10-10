@@ -144,3 +144,68 @@ test('account: mode, memory add/edit/forget/forget all, switches, settings', () 
   assert.equal(s.settingsOpen, true);
   assert.equal(R.closeSettings(s).settingsOpen, false);
 });
+
+test('nav normalises a missing or empty conversation id to the first; new without a draft too', () => {
+  assert.equal(R.nav(fresh(), { screen: 'messages', id: 'c-99' }).route.id, 'c-1');
+  assert.equal(R.nav(fresh(), { screen: 'messages', id: null }).route.id, 'c-1');
+  assert.equal(R.nav(fresh(), { screen: 'messages', id: 'new' }).route.id, 'c-1');
+  const drafting = R.startDraft(fresh(), { now: NOW });
+  assert.equal(R.nav(drafting, { screen: 'messages', id: 'new' }).route.id, 'new');
+  const empty = { ...fresh(), conversations: [] };
+  assert.equal(R.nav(empty, { screen: 'messages', id: 'c-1' }).route.id, null);
+});
+
+test('send into a route that names a missing conversation writes into the first one', () => {
+  const s0 = { ...fresh(), route: { screen: 'messages', id: 'c-99' } };
+  const s1 = R.send(s0, { text: 'x', now: NOW });
+  assert.equal(s1.conversations.length, 4);
+  assert.equal(conv(s1, 'c-1').messages.at(-1).text, 'x');
+  assert.equal(s1.route.id, 'c-1');
+});
+
+test('a stopped or withdrawn conversation takes no more messages from Gravit or a bot', () => {
+  const stopped = R.stopGravit(fresh(), { convId: 'c-1', now: NOW });
+  assert.equal(R.append(stopped, { convId: 'c-1', msg: { from: 'gravit', kind: 'text', text: 'late', data: {} }, at: NOW }), stopped);
+  const withdrawn = R.withdraw(fresh(), { convId: 'c-2', now: NOW });
+  assert.equal(R.append(withdrawn, { convId: 'c-2', msg: { from: 'politician', kind: 'text', text: 'late', data: {} }, at: NOW }), withdrawn);
+});
+
+test('a call leaves a call card; dismissing a banner leaves the breaking message', () => {
+  let s = R.incomingCall(fresh(), { from: 'gravit', about: '想说 BTC 的事' });
+  s = R.answerCall(s, { accept: false, now: NOW });
+  const missed = s.conversations[0].messages.at(-1);
+  assert.equal(missed.kind, 'call');
+  assert.equal(missed.answer, 'missed');
+  assert.equal(missed.data.about, '想说 BTC 的事');
+  const took = R.answerCall(R.incomingCall(fresh(), { from: 'gravit', about: 'x' }), { accept: true, now: NOW });
+  assert.equal(took.conversations[0].messages.at(-1).answer, 'accepted');
+  const b = R.showBanner(fresh(), { id: 'b1', headline: 'H', body: 'B', at: NOW });
+  const d = R.dismissBanner(b, { now: NOW });
+  assert.equal(d.banner, null);
+  const last = d.conversations[0].messages.at(-1);
+  assert.equal(last.kind, 'breaking');
+  assert.deepEqual([last.data.headline, last.data.body, last.at], ['H', 'B', NOW]);
+  assert.equal(R.dismissBanner(d, { now: NOW }), d);
+});
+
+test('publish toasts data only; pressing Installed asks before the trash key', () => {
+  const s = R.publish(fresh(), { manifest: { name: 'Pairs 2', blurb: '价差', kind: 'Quant', tools: '', needs: '没有。', visibility: 'private' }, now: NOW });
+  assert.equal(s.discover.toast.text, 'Pairs 2 发布了 · Private');
+  const pub = R.publish(fresh(), { manifest: { name: 'Pub', blurb: '', kind: 'Data', tools: '', needs: '没有。', visibility: 'public' }, now: NOW });
+  assert.equal(pub.discover.toast.text, 'Pub 发布了 · Public · 等过审');
+  const asked = R.askUninstall(fresh(), 'buffett');
+  assert.equal(asked.discover.asking, 'buffett');
+  assert.equal(R.uninstall(asked, 'buffett').discover.asking, null);
+  assert.equal(R.closeDrawer(asked).discover.asking, null);
+  assert.equal(R.openPlugin(asked, 'news').discover.asking, null);
+});
+
+test('append fills order and ledger placeholders from the counters', () => {
+  const receipt = { from: 'gravit', kind: 'receipt', text: '0.00008 BTC @ 62,500 · {ord} · 账本 {ledger}', data: { status: 'filled' } };
+  const s1 = R.append(fresh(), { convId: 'c-1', msg: receipt, at: NOW });
+  const s2 = R.append(s1, { convId: 'c-1', msg: receipt, at: NOW });
+  assert.equal(conv(s1, 'c-1').messages.at(-1).text, '0.00008 BTC @ 62,500 · ord-0010 · 账本 #59');
+  assert.equal(conv(s2, 'c-1').messages.at(-1).text, '0.00008 BTC @ 62,500 · ord-0011 · 账本 #60');
+  const prop = { from: 'politician', kind: 'proposal', text: 'x', data: { status: 'filled', ord: '{ord}', venue: 'Stand-in Broker' } };
+  assert.equal(conv(R.append(fresh(), { convId: 'c-2', msg: prop, at: NOW }), 'c-2').messages.at(-1).data.ord, 'ord-0010');
+});

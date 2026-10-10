@@ -9,8 +9,10 @@ const disc = (s, patch) => ({ ...s, discover: { ...s.discover, ...patch } });
 export const reducers = {
   setQuery: (s, query) => disc(s, { query: query ?? '' }),
   toggleInstalledOnly: s => disc(s, { installedOnly: !s.discover.installedOnly }),
-  openPlugin: (s, id) => disc(s, { drawer: id, upload: false }),
-  closeDrawer: s => disc(s, { drawer: null, upload: false }),
+  openPlugin: (s, id) => disc(s, { drawer: id, upload: false, asking: null }),
+  closeDrawer: s => disc(s, { drawer: null, upload: false, asking: null }),
+  // pressing "✓ Installed" offers uninstall: the card's key turns into the trash key (spec §7.3)
+  askUninstall: (s, id) => disc(s, { asking: id }),
   openUpload: s => disc(s, { upload: true, drawer: null }),
   dismissToast: s => (s.discover.toast ? disc(s, { toast: null }) : s),
 
@@ -32,7 +34,7 @@ export const reducers = {
 
   uninstall(s, id) {
     if (!s.plugins.installed.includes(id)) return s;
-    const next = { ...s, plugins: { ...s.plugins, installed: s.plugins.installed.filter(x => x !== id) } };
+    const next = disc({ ...s, plugins: { ...s.plugins, installed: s.plugins.installed.filter(x => x !== id) } }, { asking: null });
     return next.discover.drawer === id ? disc(next, { drawer: null }) : next;
   },
 
@@ -46,6 +48,6 @@ export const reducers = {
       needs: manifest.needs || '没有。', tools: manifest.tools ?? '', teach: `你好，这是你自己写的 ${name}。工具：${manifest.tools || '（没写）'}。`, at: now,
     };
     const s = { ...state, counters, plugins: { ...state.plugins, uploaded: [...state.plugins.uploaded, p], mine: [...state.plugins.mine, id], installed: [...state.plugins.installed, id] } };
-    return disc(s, { upload: false, toast: { text: `${name} 发布了 · ${p.visibility === 'private' ? '只有你的 Gravit 看得见' : '等过审'}`, action: null } });
+    return disc(s, { upload: false, toast: { text: `${name} 发布了 · ${p.visibility === 'private' ? 'Private' : 'Public · 等过审'}`, action: null } });
   },
 };

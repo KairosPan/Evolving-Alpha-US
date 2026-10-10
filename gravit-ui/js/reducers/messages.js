@@ -11,6 +11,22 @@ export function stampMessage(state, msg, at) {
   return { state: { ...state, counters }, msg: { ...msg, id, at } };
 }
 
+// the driver writes {ord} / {ledger} / {card}; each gets the next id from the counters, once per message
+function fillIds(counters, msg) {
+  const got = {};
+  let c = counters;
+  const fill = v => (typeof v === 'string' ? v.replace(/\{(ord|ledger|card)\}/g, (_, k) => {
+    if (!got[k]) { const r = nextId(c, k); c = r.counters; got[k] = r.id; }
+    return got[k];
+  }) : v);
+  const text = fill(msg.text);
+  const data = Object.fromEntries(Object.entries(msg.data ?? {}).map(([k, v]) => [k, fill(v)]));
+  return { counters: c, msg: { ...msg, text, data } };
+}
+
+// where a banner's message lands: the conversation on screen, else the first
+const targetConv = s => (s.route.screen === 'messages' && s.conversations.some(c => c.id === s.route.id) ? s.route.id : s.conversations[0]?.id ?? null);
+
 function newConversation(state, { title, kind, members, intentLimit, until, plugins, now }) {
   const c1 = nextId(state.counters, 'conv');
   const c2 = nextId(c1.counters, 'intent');
@@ -23,6 +39,10 @@ function newConversation(state, { title, kind, members, intentLimit, until, plug
 
 export const reducers = {
   nav(state, route) {
+    // a missing id, or new without a draft, opens the first conversation (Review Focus 3)
+    if (route.screen === 'messages' && !(route.id === 'new' && state.draft) && !state.conversations.some(c => c.id === route.id)) {
+      route = { screen: 'messages', id: state.conversations[0]?.id ?? null };
+    }
     let s = { ...state, route, detailsOpen: false, settingsOpen: false };
     if (route.screen === 'messages' && route.id && route.id !== 'new') s = upd(s, route.id, c => (c.unread ? { ...c, unread: false } : c));
     if (!(route.screen === 'messages' && route.id === 'new')) s.draft = null;
@@ -50,6 +70,11 @@ export const reducers = {
     if (!clean) return state;
     let s = state;
     let convId = s.route.screen === 'messages' ? s.route.id : null;
+    // the screen shows the first conversation for a missing id, so the words go there too
+    if (!s.draft && s.conversations.length && !s.conversations.some(c => c.id === convId)) {
+      convId = s.conversations[0].id;
+      s = { ...s, route: { screen: 'messages', id: convId } };
+    }
     if (s.draft || !s.conversations.some(c => c.id === convId)) {
       const d = s.draft ?? { title: '', attach: false, limit: null };
       const bots = d.group ? s.plugins.installed.filter(id => byId(id, s.plugins.uploaded)?.kind === 'Bots') : [];
@@ -68,8 +93,12 @@ export const reducers = {
   },
 
   append(state, { convId, msg, at }) {
-    if (!state.conversations.some(c => c.id === convId)) return state;
-    const st = stampMessage(state, msg, at);
+    const target = state.conversations.find(c => c.id === convId);
+    if (!target) return state;
+    // after Stop or Withdraw nothing more lands from Gravit or a bot, even replies already scheduled
+    if ((target.status === 'stopped' || target.status === 'withdrawn') && msg.from !== 'you') return state;
+    const filled = fillIds(state.counters, msg);
+    const st = stampMessage({ ...state, counters: filled.counters }, filled.msg, at);
     const open = state.route.screen === 'messages' && state.route.id === convId;
     return upd(st.state, convId, c => ({ ...c, unread: c.unread || (!open && msg.from !== 'you'), messages: [...c.messages, st.msg] }));
   },
@@ -102,15 +131,28 @@ export const reducers = {
   changeLimit: (s, { convId, limit }) => upd(s, convId, c => ({ ...c, intent: { ...c.intent, limit: { ...(c.intent.limit ?? { perOrder: 25, total: 100, spent: 0, venue: 'Stand-in Exchange' }), ...limit } } })),
 
   showBanner: (s, banner) => ({ ...s, banner }),
-  dismissBanner: s => (s.banner ? { ...s, banner: null } : s),
+  // the banner stays 5 s, then its red-edged message lands in the thread (spec §6, kind 13)
+  dismissBanner(s, { now } = {}) {
+    if (!s.banner) return s;
+    const b = s.banner;
+    const convId = targetConv(s);
+    let st = { ...s, banner: null };
+    if (convId) {
+      const r = stampMessage(st, { from: 'gravit', kind: 'breaking', text: b.headline, data: { headline: b.headline, body: b.body } }, now ?? b.at);
+      st = push(r.state, convId, r.msg);
+    }
+    return st;
+  },
   incomingCall: (s, call) => ({ ...s, call }),
+  // the call leaves a call card in the thread, answered or missed (spec §6, kind 14)
   answerCall(s, { accept, now }) {
     if (!s.call) return s;
-    const convId = s.conversations[0]?.id;
-    const text = accept ? `接了 Gravit 的电话：${s.call.about}。` : `没接。它想说：${s.call.about}。`;
+    const convId = targetConv(s);
+    const { from = 'gravit', about } = s.call;
+    const text = accept ? `接了：${about}` : `没接。它想说：${about}。`;
     let st = { ...s, call: null };
     if (convId) {
-      const r = stampMessage(st, { from: 'gravit', kind: 'text', text, data: {} }, now);
+      const r = stampMessage(st, { from, kind: 'call', text, data: { about }, answer: accept ? 'accepted' : 'missed' }, now);
       st = push(r.state, convId, r.msg);
     }
     return st;
