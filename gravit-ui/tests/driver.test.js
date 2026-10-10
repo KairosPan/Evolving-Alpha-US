@@ -71,3 +71,26 @@ test('the director hands out the brief, a K-line card, a breaking banner, a call
   assert.equal(director.call().from, 'gravit');
   assert.equal(director.bot().from, 'buffett');
 });
+
+test('the coin words match whole words only', () => {
+  assert.ok(replyTo('can you do something about NVDA', ctx).every(e => e.msg.kind === 'text'));
+  assert.ok(replyTo('the method matters', ctx).every(e => e.msg.kind === 'text'));
+  assert.equal(replyTo('买btc', ctx).at(-1).msg.kind, 'card');
+  assert.equal(replyTo('再看看 eth', ctx).at(-1).msg.kind, 'card');
+  assert.equal(replyTo('买一点 SOL', ctx).at(-1).msg.kind, 'card');
+});
+
+test('a grant asks for News sentiment only when it is not installed', () => {
+  const limit = message('gravit', 'limit', 'x', { from: 25, to: 50 });
+  assert.equal(followUp(limit, 'granted', { installed: ['news'], now: NOW }).length, 1);
+  assert.equal(followUp(limit, 'granted', { installed: [], now: NOW }).length, 2);
+});
+
+test('fills carry order, ledger and card placeholders for the store to number', () => {
+  const card = replyTo('小仓位买 BTC', ctx).at(-1).msg;
+  assert.equal(card.data.cardId, '{card}');
+  const receipt = followUp(message('gravit', 'card', 'x', {}), 'approved', ctx)[0].msg;
+  assert.match(receipt.text, /\{ord\} · 账本 \{ledger\}/);
+  const prop = replyTo('跟单 Pelosi', { ...ctx, installed: ['politician'] }).at(-1).msg;
+  assert.equal(prop.data.ord, '{ord}');
+});

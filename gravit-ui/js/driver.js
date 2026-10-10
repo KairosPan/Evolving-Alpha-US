@@ -15,17 +15,19 @@ export function replyTo(text, ctx = {}) {
   const t = (text ?? '').toLowerCase();
   const installed = ctx.installed ?? [];
   const now = ctx.now ?? Date.now();
-  if (/btc|比特币|eth|以太|sol\b/.test(t)) {
+  // whole words only: "something" and "method" are not ETH; JS \b treats Chinese as a boundary, so 买btc still matches
+  if (/\bbtc\b|比特币|\beth\b|以太|\bsol\b/.test(t)) {
     return [
       ev(1200, G('text', '收到。看了 Stand-in Exchange 和 Stand-in Wallet 的 DEX，交易所便宜。先建 $5 试水。')),
-      ev(2800, G('card', '要你答：买 0.00008 BTC', { title: '要你答：买 0.00008 BTC', venue: 'Stand-in Exchange', type: 'market', about: 'about $5.00', by: now + 26 * MIN })),
+      // {card} {ord} {ledger} are numbered by the store's counters when the message lands (reducers/messages.js append)
+      ev(2800, G('card', '要你答：买 0.00008 BTC', { title: '要你答：买 0.00008 BTC', venue: 'Stand-in Exchange', type: 'market', about: 'about $5.00', cardId: '{card}', by: now + 26 * MIN })),
     ];
   }
   if (/pelosi|跟单|政客/.test(t)) {
     if (!installed.includes('politician')) return [ev(1200, G('install', '跟单要装 美国政客 bot，Discover 里有。', { plugin: 'politician' }))];
     return [
       ev(1200, G('text', '好。美国政客 bot 在，披露一出来我就跟，在额度里的直接下单。')),
-      ev(3200, message('politician', 'proposal', '披露：Pelosi 买 NVDA。照它买 $20，在额度里，直接成交。', { status: 'filled', ord: 'ord-0004', venue: 'Stand-in Broker' })),
+      ev(3200, message('politician', 'proposal', '披露：Pelosi 买 NVDA。照它买 $20，在额度里，直接成交。', { status: 'filled', ord: '{ord}', venue: 'Stand-in Broker' })),
     ];
   }
   if (/0x[0-9a-f]{4,}|地址|骗子/.test(t)) {
@@ -43,13 +45,13 @@ export function followUp(msg, answer, ctx = {}) {
   if (!msg || msg.answer) return [];
   if (msg.kind === 'card') {
     return answer === 'approved'
-      ? [ev(1500, G('receipt', '0.00008 BTC @ 62,500 · ord-0001 · 账本 #41', { status: 'filled' })), ev(3400, G('limit', '想再加 $30，但你的每单上限是 $25。改到 $50？', { from: 25, to: 50 }))]
+      ? [ev(1500, G('receipt', '0.00008 BTC @ 62,500 · {ord} · 账本 {ledger}', { status: 'filled' })), ev(3400, G('limit', '想再加 $30，但你的每单上限是 $25。改到 $50？', { from: 25, to: 50 }))]
       : [ev(1200, G('text', '好，不买。有变化我再问。'))];
   }
   if (msg.kind === 'limit') {
-    return answer === 'granted'
-      ? [ev(1200, G('text', `改到 $${msg.data.to} 了。`)), ev(2800, G('install', 'Discover 里有个 News sentiment。装上我就能看情绪再加仓。', { plugin: 'news' }))]
-      : [ev(1200, G('text', `那就还是 $${msg.data.from}。`))];
+    if (answer !== 'granted') return [ev(1200, G('text', `那就还是 $${msg.data.from}。`))];
+    const ask = (ctx.installed ?? []).includes('news') ? [] : [ev(2800, G('install', 'Discover 里有个 News sentiment。装上我就能看情绪再加仓。', { plugin: 'news' }))];
+    return [ev(1200, G('text', `改到 $${msg.data.to} 了。`)), ...ask];
   }
   if (msg.kind === 'install') return answer === 'no' ? [ev(1000, G('text', '好，不装。'))] : [];
   return [];
