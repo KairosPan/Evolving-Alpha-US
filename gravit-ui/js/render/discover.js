@@ -1,16 +1,16 @@
-// gravit-ui/js/render/discover.js — Discover as an App Store (spec §7): shelves, cards with one key, the drawer that signs, Installed, upload
+// gravit-ui/js/render/discover.js — Discover as an App Store (spec §7): shelves, cards, the drawer that signs, 我的插件, the MCP connector
 import { esc, attrs, cls } from '../html.js';
 import { icon } from '../icons.js';
-import { PLUGINS, SHELVES, KINDS, byId, byline, search, likeFor } from '../data/plugins.js';
+import { PLUGINS, SHELVES, KINDS, byId, byline, search, likeFor, ICON_CHOICES, hostOf } from '../data/plugins.js';
 import { logo } from './avatars.js';
 import { chip } from './thread.js';
 import { kv, sec } from './controls.js';
 
-export function keyFor(p, state, view = 'shelf') {
-  const installed = state.plugins.installed.includes(p.id);
-  if (!installed) return `<button type="button"${attrs({ class: 'pkey install', 'data-action': 'install', 'data-id': p.id, 'aria-label': `Install ${p.name}` })}>${icon('plus', 14, 2.4)}</button>`;
-  if (view === 'installed' || state.discover.asking === p.id) return `<button type="button"${attrs({ class: 'pkey uninstall', 'data-action': 'uninstall', 'data-id': p.id, 'aria-label': `Uninstall ${p.name}` })}>${icon('trash', 15, 2.1)}</button>`;
-  return `<button type="button"${attrs({ class: 'pkey installed', 'data-action': 'uninstallAsk', 'data-id': p.id, 'aria-label': `Installed · uninstall ${p.name}` })}>${icon('check', 13, 2.4)}Installed</button>`;
+// not installed: the + key; installed: a ✓ beside the trash key, in every view
+export function keyFor(p, state) {
+  if (!state.plugins.installed.includes(p.id)) return `<button type="button"${attrs({ class: 'pkey install', 'data-action': 'install', 'data-id': p.id, 'aria-label': `Install ${p.name}` })}>${icon('plus', 14, 2.4)}</button>`;
+  return `<span class="pkeys"><span class="pkey-done" role="img" aria-label="已安装">${icon('check', 14, 2.4)}</span>` +
+    `<button type="button"${attrs({ class: 'pkey uninstall', 'data-action': 'uninstall', 'data-id': p.id, 'aria-label': `Uninstall ${p.name}` })}>${icon('trash', 15, 2.1)}</button></span>`;
 }
 
 export function card(p, state, { view = 'shelf', pressed = false, openIn = null } = {}) {
@@ -18,7 +18,7 @@ export function card(p, state, { view = 'shelf', pressed = false, openIn = null 
   const extra = openIn ? `<div class="pcard-extra">${chip('刚装好', 'up')}<a class="link" data-action="open" data-id="${esc(openIn)}" href="#/messages/${esc(openIn)}">Open in Messages ›</a></div>` : '';
   return `<div${attrs({ class: cls('pcard', pressed && 'pressed', view === 'grid' && 'grid'), 'data-action': 'openPlugin', 'data-id': p.id, role: 'button', tabindex: '0' })}>${logo(p, 44)}` +
     `<div class="pcard-body"><div class="pcard-name">${esc(p.name)}</div><div class="pcard-blurb">${esc(p.blurb)}</div><div class="pcard-by">${esc(byline(p))}</div>${extra}</div>` +
-    `<div class="pcard-side"><span class="pcard-kind">${esc(p.kind.toUpperCase())}</span>${keyFor(p, state, view === 'grid' && state.discover.installedOnly ? 'installed' : 'shelf')}</div></div>`;
+    `<div class="pcard-side"><span class="pcard-kind">${esc(p.kind.toUpperCase())}</span>${keyFor(p, state)}</div></div>`;
 }
 
 // the plugin whose teaching conversation is still unread, while it stays installed (spec §7.5)
@@ -52,8 +52,8 @@ function header(state) {
   const on = state.discover.installedOnly;
   return `<div class="disc-head"><h1 class="head-title">Discover</h1>` +
     `<div class="search"><label for="dq" class="sr-only">Search plugins</label>${icon('search', 18, 2)}<input id="dq" type="search" autocomplete="off" placeholder="Search plugins" data-action="query"${attrs({ value: state.discover.query })}></div><span class="spacer"></span>` +
-    `<button type="button"${attrs({ class: cls('pill', on && 'pressed'), 'data-action': 'toggleInstalledOnly', 'aria-pressed': on ? 'true' : 'false' })}>Installed · ${state.plugins.installed.length}</button>` +
-    `<button type="button" class="pill" data-action="openUpload">${icon('upload', 14, 2.2)}Upload a plugin</button></div>`;
+    `<button type="button"${attrs({ class: cls('pill', on && 'pressed'), 'data-action': 'toggleInstalledOnly', 'aria-pressed': on ? 'true' : 'false' })}>我的插件 · ${state.plugins.installed.length}</button>` +
+    `<button type="button" class="pill" data-action="openCreate">${icon('plus', 14, 2.2)}Create</button></div>`;
 }
 
 // the signature table: installing grants what MAY says until you uninstall; uninstalling signs only what and for
@@ -74,20 +74,41 @@ export function pluginDrawer(p, state) {
     `<div class="drawer-foot">${installed ? `<button type="button" class="btn-primary" data-action="uninstall" data-id="${esc(p.id)}">Uninstall</button>` : `<button type="button" class="btn-primary" data-action="install" data-id="${esc(p.id)}">Install</button>`}</div></div></aside>`;
 }
 
-const radios = (name, items, checked) => items.map(v => `<label class="radio-item"><input type="radio" name="${name}" value="${esc(v)}"${v === checked ? ' checked' : ''}><span>${esc(v)}</span></label>`).join('');
+// radios that write into the connector's form as they change (app.js: data-action mcpField)
+const radios = (name, items, checked, labels = {}) => items.map(v => `<label class="radio-item"><input type="radio" name="${name}" value="${esc(v)}" data-action="mcpField"${v === checked ? ' checked' : ''}><span>${esc(labels[v] ?? v)}</span></label>`).join('');
+const field = (id, label, input) => `<div class="field"><label class="field-label" for="${id}">${esc(label)}</label>${input}</div>`;
+const text = (id, name, value, extra = {}) => `<input${attrs({ id, class: 'input', name, type: extra.type ?? 'text', autocomplete: 'off', 'data-action': 'mcpField', placeholder: extra.placeholder ?? null, value, 'aria-invalid': extra.invalid ? 'true' : null })}>`;
 
-export function uploadDrawer() {
-  return `<aside class="drawer" aria-label="上传一个插件"><div class="drawer-head"><h2>上传一个插件</h2><button type="button" class="close-key" data-action="closeDrawer" aria-label="Close">×</button></div><div class="drawer-body">` +
-    `<form class="upload-form" data-action="publish">` +
-    `<div class="field"><label class="field-label" for="up-name">名字</label><input id="up-name" class="input" name="name" type="text" required placeholder="Pairs"></div>` +
-    `<div class="field"><label class="field-label" for="up-blurb">一句话</label><input id="up-blurb" class="input" name="blurb" type="text" placeholder="两只相关股的价差回归，给出配对信号"></div>` +
-    `<div class="field"><span class="field-label">类型</span><div class="radio-seg">${radios('kind', KINDS, 'Quant')}</div></div>` +
-    // spec §7.7: a 44 px slot, initials by default (app.js keeps it on the name's first letter)
-    `<div class="field"><span class="field-label">图标</span><div class="icon-pick"><span class="icon-slot" id="up-icon">P</span><button type="button" class="btn-sm">换一张图</button></div></div>` +
-    `<div class="field"><label class="field-label" for="up-tools">它暴露的工具</label><textarea id="up-tools" class="textarea" name="tools" rows="2" placeholder="pairs.scan(universe)\npairs.signal(a, b)"></textarea></div>` +
-    `<div class="field"><span class="field-label">要用户什么</span><div class="picks">${radios('needs', ['没有', 'Telegram 会话', '交易所 key', '钱包地址'], '没有')}</div></div>` +
-    `<div class="field"><span class="field-label">放哪</span><div class="radio-seg">${radios('visibility', ['private', 'public'], 'private').replace('>private<', '>只给我自己 · Private<').replace('>public<', '>放进 Public shop<')}</div></div>` +
-    `<div class="btn-row grow"><button type="button" class="btn" data-action="closeDrawer">Cancel</button><button type="submit" class="btn-primary">Publish</button></div></form></div></aside>`;
+// Create: the MCP connector dialog — a remote MCP server becomes your own plugin (spec §7.7, the shop's MCP face)
+export function renderCreate(state) {
+  const c = state.discover.create;
+  if (!c) return '';
+  const f = c.form;
+  const head = title => `<div class="modal-head"><h2 class="modal-title">${esc(title)}</h2><button type="button" class="close-key" data-action="closeCreate" aria-label="Close">×</button></div>`;
+  let inner;
+  if (c.step === 'tools') {
+    const rows = c.tools.map((t, i) => `<label class="tool-row"><input type="checkbox" data-action="toggleMcpTool" data-id="${i}"${t.on ? ' checked' : ''}><span class="mono">${esc(t.name)}</span></label>`).join('');
+    inner = head(`发现 ${c.tools.length} 个工具`) + `<div class="modal-body"><div class="dim">${esc(f.name.trim() || hostOf(f.url))} · ${esc(hostOf(f.url))}</div><div class="tool-list">${rows}</div>` +
+      `<div class="btn-row grow"><button type="button" class="btn" data-action="backToForm">返回</button><button type="button" class="btn-primary" data-action="addMcp">添加</button></div></div>`;
+  } else {
+    const glyph = ICON_CHOICES[f.icon];
+    const slot = glyph ? icon(glyph, 22, 2) : esc((f.name.trim()[0] ?? 'P').toUpperCase());
+    const auth = f.auth === 'API key' ? field('mcp-key', 'API key', text('mcp-key', 'key', f.key, { type: 'password', placeholder: 'sk-…' }))
+      : f.auth === 'OAuth' ? field('mcp-client-id', 'OAuth Client ID', text('mcp-client-id', 'clientId', f.clientId)) + field('mcp-client-secret', 'OAuth Client Secret', text('mcp-client-secret', 'clientSecret', f.clientSecret, { type: 'password' })) : '';
+    const foot = c.step === 'connecting'
+      ? `<div class="mcp-status">正在连接 ${esc(hostOf(f.url))}…</div>`
+      : `<div class="btn-row grow"><button type="button" class="btn" data-action="closeCreate">取消</button><button type="submit" class="btn-primary">连接</button></div>`;
+    inner = `<form class="mcp-form" data-action="connectMcp">${head('添加 MCP 连接器')}<div class="modal-body">` +
+      field('mcp-name', '名称', text('mcp-name', 'name', f.name, { placeholder: 'Pairs' })) +
+      field('mcp-url', 'MCP 服务器地址', text('mcp-url', 'url', f.url, { type: 'url', placeholder: 'https://example.com/mcp', invalid: !!c.error })) +
+      (c.error ? `<div class="field-error">${esc(c.error)}</div>` : '') +
+      `<div class="field"><span class="field-label">认证</span><div class="radio-seg">${radios('auth', ['无', 'API key', 'OAuth'], f.auth)}</div></div>` + auth +
+      `<div class="field"><span class="field-label">图标</span><div class="icon-pick"><span class="icon-slot" id="mcp-icon">${slot}</span><button type="button" class="btn-sm" data-action="cycleCreateIcon">换一张图</button></div></div>` +
+      `<div class="field"><span class="field-label">类型</span><div class="radio-seg">${radios('kind', KINDS, f.kind)}</div></div>` +
+      `<div class="field"><span class="field-label">放哪</span><div class="radio-seg">${radios('visibility', ['private', 'public'], f.visibility, { private: '只给我自己 · Private', public: '放进 Public shop' })}</div></div>` +
+      foot + `</div></form>`;
+  }
+  return `<div class="modal-scrim"><div class="modal" role="dialog" aria-label="添加 MCP 连接器">${inner}</div></div>`;
 }
 
 export function renderToast(t) {
@@ -105,7 +126,7 @@ export function renderDiscover(state) {
   } else if (d.installedOnly) {
     const mine = all.filter(p => state.plugins.mine.includes(p.id));
     const installed = all.filter(p => state.plugins.installed.includes(p.id) && !state.plugins.mine.includes(p.id));
-    body = grid('装了的', installed, state) + (mine.length ? grid('你上传的', mine, state) : '');
+    body = grid('装了的', installed, state) + (mine.length ? grid('你创建的', mine, state) : '');
   } else if (state.route.id) {
     const s = SHELVES.find(x => x.id === state.route.id);
     const ids = s ? (s.id === 'like' ? likeFor(state.memory) : s.ids) : [];
@@ -113,7 +134,7 @@ export function renderDiscover(state) {
   } else {
     body = SHELVES.map(s => shelf(s, state)).join('');
   }
-  const drawer = d.upload ? uploadDrawer() : d.drawer ? pluginDrawer(byId(d.drawer, state.plugins.uploaded) ?? { id: d.drawer, name: d.drawer, kind: '', blurb: '', by: '', installs: '', logo: { type: 'letter', text: '?' }, asks: [], writes: [], never: [], needs: '' }, state) : '';
+  const drawer = d.drawer ? pluginDrawer(byId(d.drawer, state.plugins.uploaded) ?? { id: d.drawer, name: d.drawer, kind: '', blurb: '', by: '', installs: '', logo: { type: 'letter', text: '?' }, asks: [], writes: [], never: [], needs: '' }, state) : '';
   const toast = d.toast ? renderToast(d.toast) : '';
-  return `<main class="${cls('main', 'disc', (d.upload || d.drawer) && 'with-drawer')}">${header(state)}${body}${drawer}${toast}</main>`;
+  return `<main class="${cls('main', 'disc', d.drawer && 'with-drawer')}">${header(state)}${body}${drawer}${toast}${renderCreate(state)}</main>`;
 }

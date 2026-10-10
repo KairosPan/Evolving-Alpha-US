@@ -152,11 +152,11 @@ test('watchToast dismisses a toast after a while, and never a newer one', async 
   assert.equal(store.get().discover.toast, null);
 });
 
-test('a saved state boots without the moment-only overlays: banner, call, drawer, ask and toast', () => {
+test('a saved state boots without the moment-only overlays: banner, call, drawer, connector and toast', () => {
   const s = seed(NOW);
-  const saved = { ...s, banner: { id: 'b', headline: 'h', body: 'b', at: NOW }, call: { from: 'gravit', about: 'x' }, discover: { ...s.discover, drawer: 'news', upload: true, asking: 'buffett', toast: { text: 't', action: null } } };
+  const saved = { ...s, banner: { id: 'b', headline: 'h', body: 'b', at: NOW }, call: { from: 'gravit', about: 'x' }, discover: { ...s.discover, drawer: 'news', create: { step: 'form', form: {}, tools: [], error: null }, toast: { text: 't', action: null } } };
   const st = initialState({ getItem: () => JSON.stringify(saved), setItem() {} }, NOW);
-  assert.deepEqual([st.banner, st.call, st.discover.drawer, st.discover.upload, st.discover.asking, st.discover.toast], [null, null, null, false, null, null]);
+  assert.deepEqual([st.banner, st.call, st.discover.drawer, st.discover.create, st.discover.toast], [null, null, null, null, null]);
   const store = makeStore({ getItem: () => JSON.stringify(saved), setItem() {} }, NOW);
   assert.equal(store.get().banner, null);
 });

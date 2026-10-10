@@ -1,20 +1,73 @@
-// gravit-ui/js/reducers/discover.js — the store: search, the Installed filter, the drawer, install/uninstall, upload
+// gravit-ui/js/reducers/discover.js — the store: search, 我的插件, the drawer, install/uninstall, the MCP connector
 import { nextId } from '../ids.js';
 import { DAY } from '../time.js';
-import { byId } from '../data/plugins.js';
+import { byId, ICON_CHOICES, hostOf } from '../data/plugins.js';
 import { stampMessage } from './messages.js';
 
 const disc = (s, patch) => ({ ...s, discover: { ...s.discover, ...patch } });
 
+// the MCP connector Create opens (a remote MCP server becomes your own plugin)
+const EMPTY_FORM = { name: '', url: '', auth: '无', key: '', clientId: '', clientSecret: '', kind: 'Quant', visibility: 'private', icon: 0 };
+const URL_OK = /^https?:\/\/[^\s/?#]+\.[^\s/?#]+(?:[/?#]\S*)?$/i;
+const nameFromHost = host => { const w = host.split('.')[0] ?? ''; return w ? w[0].toUpperCase() + w.slice(1) : 'Connector'; };
+const withCreate = (s, patch) => (s.discover.create ? disc(s, { create: { ...s.discover.create, ...patch } }) : s);
+
 export const reducers = {
   setQuery: (s, query) => disc(s, { query: query ?? '' }),
   toggleInstalledOnly: s => disc(s, { installedOnly: !s.discover.installedOnly }),
-  openPlugin: (s, id) => disc(s, { drawer: id, upload: false, asking: null }),
-  closeDrawer: s => disc(s, { drawer: null, upload: false, asking: null }),
-  // pressing "✓ Installed" offers uninstall: the card's key turns into the trash key (spec §7.3)
-  askUninstall: (s, id) => disc(s, { asking: id }),
-  openUpload: s => disc(s, { upload: true, drawer: null }),
+  openPlugin: (s, id) => disc(s, { drawer: id, create: null }),
+  closeDrawer: s => disc(s, { drawer: null }),
   dismissToast: s => (s.discover.toast ? disc(s, { toast: null }) : s),
+
+  openCreate: s => disc(s, { create: { step: 'form', form: { ...EMPTY_FORM }, tools: [], error: null }, drawer: null }),
+  closeCreate: s => (s.discover.create ? disc(s, { create: null }) : s),
+  setCreateField(s, { key, value }) {
+    const c = s.discover.create;
+    if (!c || !(key in EMPTY_FORM)) return s;
+    return withCreate(s, { form: { ...c.form, [key]: value }, error: key === 'url' ? null : c.error });
+  },
+  cycleCreateIcon: s => (s.discover.create ? withCreate(s, { form: { ...s.discover.create.form, icon: (s.discover.create.form.icon + 1) % ICON_CHOICES.length } }) : s),
+  connectMcp(s) {
+    const c = s.discover.create;
+    if (!c || c.step !== 'form') return s;
+    if (!URL_OK.test(c.form.url.trim())) return withCreate(s, { error: '地址要以 https:// 开头' });
+    return withCreate(s, { step: 'connecting', error: null });
+  },
+  // the scripted server answered with its tool list (app.js schedules it a moment after connectMcp)
+  mcpConnected(s, { tools }) {
+    const c = s.discover.create;
+    if (!c || c.step !== 'connecting') return s;
+    return withCreate(s, { step: 'tools', tools: tools.map(name => ({ name, on: true })) });
+  },
+  backToForm: s => withCreate(s, { step: 'form' }),
+  toggleMcpTool(s, i) {
+    const c = s.discover.create;
+    if (!c || !c.tools[i]) return s;
+    return withCreate(s, { tools: c.tools.map((t, k) => (k === i ? { ...t, on: !t.on } : t)) });
+  },
+  // the connected server becomes your own plugin: installed, with a conversation that teaches its tools
+  addMcp(state, { now }) {
+    const c = state.discover.create;
+    if (!c || c.step !== 'tools') return state;
+    const f = c.form;
+    const url = f.url.trim();
+    const host = hostOf(url);
+    const name = f.name.trim() || nameFromHost(host);
+    const tools = c.tools.filter(t => t.on).map(t => t.name);
+    const { id, counters } = nextId(state.counters, 'plugin');
+    const glyph = ICON_CHOICES[f.icon];
+    const p = {
+      id, kind: f.kind, name, blurb: host, by: '@you', visibility: f.visibility === 'public' ? 'public' : 'private', installs: '', url,
+      logo: glyph ? { type: 'glyph', icon: glyph } : { type: 'letter', text: name[0].toUpperCase() }, avatar: null,
+      asks: [], writes: tools.map(t => `${t} 的结果`), never: ['动钱', '付人', '改额度'],
+      needs: f.auth === 'API key' ? '一把 API key。' : f.auth === 'OAuth' ? 'OAuth 授权。' : '没有。',
+      tools: tools.join('\n'), teach: `你好，这是你接上的 ${name}。我有 ${tools.length} 个工具：${tools.join('、') || '（没选）'}。`, at: now,
+    };
+    let s = { ...state, counters, plugins: { ...state.plugins, uploaded: [...state.plugins.uploaded, p], mine: [...state.plugins.mine, id] } };
+    s = reducers.install(s, { id, now });
+    const convId = s.conversations[0].id;
+    return disc(s, { create: null, toast: { text: `${name} 已添加 · ${p.visibility === 'private' ? 'Private' : 'Public · 等过审'}`, action: { label: 'Open', route: { screen: 'messages', id: convId } } } });
+  },
 
   install(state, { id, now }) {
     const p = byId(id, state.plugins.uploaded);
@@ -43,20 +96,8 @@ export const reducers = {
 
   uninstall(s, id) {
     if (!s.plugins.installed.includes(id)) return s;
-    const next = disc({ ...s, plugins: { ...s.plugins, installed: s.plugins.installed.filter(x => x !== id) } }, { asking: null });
+    const next = { ...s, plugins: { ...s.plugins, installed: s.plugins.installed.filter(x => x !== id) } };
     return next.discover.drawer === id ? disc(next, { drawer: null }) : next;
   },
 
-  publish(state, { manifest, now }) {
-    const name = (manifest.name ?? '').trim();
-    if (!name) return state;
-    const { id, counters } = nextId(state.counters, 'plugin');
-    const p = {
-      id, kind: manifest.kind, name, blurb: (manifest.blurb ?? '').trim(), by: '@you', visibility: manifest.visibility === 'public' ? 'public' : 'private', installs: '',
-      logo: { type: 'letter', text: name[0].toUpperCase() }, avatar: null, asks: [], writes: ['你写的工具的输出'], never: ['动钱', '付人', '改额度'],
-      needs: manifest.needs || '没有。', tools: manifest.tools ?? '', teach: `你好，这是你自己写的 ${name}。工具：${manifest.tools || '（没写）'}。`, at: now,
-    };
-    const s = { ...state, counters, plugins: { ...state.plugins, uploaded: [...state.plugins.uploaded, p], mine: [...state.plugins.mine, id], installed: [...state.plugins.installed, id] } };
-    return disc(s, { upload: false, toast: { text: `${name} 发布了 · ${p.visibility === 'private' ? 'Private' : 'Public · 等过审'}`, action: null } });
-  },
 };

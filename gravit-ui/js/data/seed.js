@@ -73,7 +73,7 @@ export function seed(now = Date.now()) {
     settingsOpen: false,
     counters: { intent: 4, ord: 9, card: 1, pay: 7, ledger: 58, msg: n, conv: 4, plugin: 0, mem: 9 },
     conversations: [btc, pelosi, addr, group],
-    discover: { query: '', installedOnly: false, drawer: null, upload: false, toast: null },
+    discover: { query: '', installedOnly: false, drawer: null, create: null, toast: null },
     plugins: { installed: ['pricefeed', 'fraud', 'politician', 'buffett', 'pairs'], mine: ['pairs'], uploaded: [] },
     memory: {
       entries: [

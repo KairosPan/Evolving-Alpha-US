@@ -1,7 +1,7 @@
 // gravit-ui/js/driver.js — driver c, scripted: what Gravit says back, and the events a demo director can fire
 import { message } from './messages.js';
 import { MIN, fmtDate } from './time.js';
-import { byId } from './data/plugins.js';
+import { byId, hostOf } from './data/plugins.js';
 
 const G = (kind, text, data = {}) => message('gravit', kind, text, data);
 const ev = (delay, msg) => ({ delay, msg });
@@ -122,3 +122,10 @@ export const director = {
   refusal: () => G('refusal', '想下 $30，场所拒了：超过这份额度的每单上限 $25。', { code: 'E_MANDATE_PER_ORDER_CAP' }),
   done: now => G('done', `办完了：买了 0.00008 BTC，花了 $5，${fmtDate(now)} 收尾。`, { foot: '账本对上 · 额度还剩 $95' }),
 };
+
+// what a connected MCP server answers when asked for its tools (scripted: three tools named after it)
+export function toolsFor(name, url) {
+  const slug = v => (v ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const base = slug(name) || slug(hostOf(url).split('.')[0]) || 'tool';
+  return [`${base}.search`, `${base}.get`, `${base}.watch`];
+}

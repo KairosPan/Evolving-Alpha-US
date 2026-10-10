@@ -97,7 +97,7 @@ test('details, stop, withdraw, banner, call', () => {
   assert.match(s.conversations[0].messages.at(-1).text, /没接/);
 });
 
-test('discover: install adds the plugin, a teaching conversation and a toast; uninstall removes; publish adds a private plugin of yours', () => {
+test('discover: install adds the plugin, a teaching conversation and a toast; uninstall removes', () => {
   const s0 = R.openPlugin(fresh(), 'news');
   assert.equal(s0.discover.drawer, 'news');
   const s1 = R.install(s0, { id: 'news', now: NOW });
@@ -112,12 +112,7 @@ test('discover: install adds the plugin, a teaching conversation and a toast; un
   const s2 = R.uninstall(s1, 'news');
   assert.ok(!s2.plugins.installed.includes('news'));
   assert.equal(s2.conversations[0].title, 'News sentiment：怎么用我', 'the conversation stays');
-  const s3 = R.publish(R.openUpload(s2), { manifest: { name: 'Pairs 2', blurb: '价差', kind: 'Quant', tools: 'pairs2.scan', needs: '没有。', visibility: 'private' }, now: NOW });
-  assert.equal(s3.discover.upload, false);
-  assert.equal(s3.plugins.uploaded[0].id, 'p-1');
-  assert.ok(s3.plugins.mine.includes('p-1'));
-  assert.ok(s3.plugins.installed.includes('p-1'));
-  assert.equal(R.publish(s3, { manifest: { name: '  ', blurb: '', kind: 'Quant', tools: '', needs: '', visibility: 'private' }, now: NOW }), s3);
+  const s3 = s2;
   const s4 = R.setQuery(R.toggleInstalledOnly(s3), 'bot');
   assert.equal(s4.discover.installedOnly, true);
   assert.equal(s4.discover.query, 'bot');
@@ -188,16 +183,35 @@ test('a call leaves a call card; dismissing a banner leaves the breaking message
   assert.equal(R.dismissBanner(d, { now: NOW }), d);
 });
 
-test('publish toasts data only; pressing Installed asks before the trash key', () => {
-  const s = R.publish(fresh(), { manifest: { name: 'Pairs 2', blurb: '价差', kind: 'Quant', tools: '', needs: '没有。', visibility: 'private' }, now: NOW });
-  assert.equal(s.discover.toast.text, 'Pairs 2 发布了 · Private');
-  const pub = R.publish(fresh(), { manifest: { name: 'Pub', blurb: '', kind: 'Data', tools: '', needs: '没有。', visibility: 'public' }, now: NOW });
-  assert.equal(pub.discover.toast.text, 'Pub 发布了 · Public · 等过审');
-  const asked = R.askUninstall(fresh(), 'buffett');
-  assert.equal(asked.discover.asking, 'buffett');
-  assert.equal(R.uninstall(asked, 'buffett').discover.asking, null);
-  assert.equal(R.closeDrawer(asked).discover.asking, null);
-  assert.equal(R.openPlugin(asked, 'news').discover.asking, null);
+test('the MCP connector: a bad address is refused; a good one connects, lists its tools, and adding makes your own installed plugin', () => {
+  let s = R.openCreate(fresh());
+  assert.equal(s.discover.create.step, 'form');
+  assert.equal(R.connectMcp(s).discover.create.error, '地址要以 https:// 开头', 'an empty address');
+  s = R.setCreateField(s, { key: 'url', value: 'ftp://pairs.example.com' });
+  assert.equal(R.connectMcp(s).discover.create.step, 'form');
+  s = R.setCreateField(s, { key: 'url', value: 'https://pairs.example.com/mcp' });
+  assert.equal(s.discover.create.error, null, 'typing clears the error');
+  s = R.connectMcp(s);
+  assert.equal(s.discover.create.step, 'connecting');
+  assert.equal(R.mcpConnected(R.openCreate(fresh()), { tools: ['x'] }).discover.create.step, 'form', 'a late answer for a form not connecting changes nothing');
+  s = R.mcpConnected(s, { tools: ['pairs.search', 'pairs.get', 'pairs.watch'] });
+  assert.deepEqual(s.discover.create.tools.map(t => [t.name, t.on]), [['pairs.search', true], ['pairs.get', true], ['pairs.watch', true]]);
+  s = R.toggleMcpTool(s, 2);
+  assert.equal(s.discover.create.tools[2].on, false);
+  assert.equal(R.backToForm(s).discover.create.step, 'form');
+  s = R.cycleCreateIcon(s);
+  const done = R.addMcp(s, { now: NOW });
+  assert.equal(done.discover.create, null);
+  const p = done.plugins.uploaded[0];
+  assert.deepEqual([p.id, p.name, p.by, p.visibility, p.url], ['p-1', 'Pairs', '@you', 'private', 'https://pairs.example.com/mcp'], 'the name falls back to the host');
+  assert.equal(p.tools, 'pairs.search\npairs.get');
+  assert.equal(p.logo.type, 'glyph', 'the icon was changed once');
+  assert.ok(done.plugins.mine.includes('p-1') && done.plugins.installed.includes('p-1'));
+  assert.equal(done.conversations[0].teach, 'p-1');
+  assert.match(done.discover.toast.text, /^Pairs 已添加 · Private/);
+  const pub = R.addMcp(R.mcpConnected(R.connectMcp(R.setCreateField(R.setCreateField(R.setCreateField(R.openCreate(fresh()), { key: 'url', value: 'https://x.dev/mcp' }), { key: 'name', value: 'Zed' }), { key: 'visibility', value: 'public' })), { tools: ['zed.run'] }), { now: NOW });
+  assert.match(pub.discover.toast.text, /^Zed 已添加 · Public · 等过审/);
+  assert.equal(R.closeCreate(R.openCreate(fresh())).discover.create, null);
 });
 
 test('append fills order and ledger placeholders from the counters', () => {
@@ -237,9 +251,10 @@ test('installing answers every waiting ask for that plugin and tells the convers
 
 test('leaving Discover clears its drawer, ask and toast', () => {
   let s = R.install(R.nav(fresh(), { screen: 'discover', id: null }), { id: 'news', now: NOW });
-  s = R.askUninstall(R.openPlugin(s, 'buffett'), 'buffett');
-  const away = R.nav(s, { screen: 'messages', id: 'c-1' });
-  assert.deepEqual([away.discover.drawer, away.discover.asking, away.discover.toast, away.discover.upload], [null, null, null, false]);
+  s = R.openCreate(R.openPlugin(s, 'buffett'));
+  s = R.openPlugin(s, 'buffett');
+  const away = R.nav(R.openCreate(s), { screen: 'messages', id: 'c-1' });
+  assert.deepEqual([away.discover.drawer, away.discover.create, away.discover.toast], [null, null, null]);
   const stay = R.nav(s, { screen: 'discover', id: 'bots' });
   assert.equal(stay.discover.drawer, 'buffett', 'moving inside Discover keeps it');
 });

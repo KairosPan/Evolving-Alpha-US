@@ -72,3 +72,7 @@ export function likeFor(memory) {
   if (/量化/.test(text)) return ['quantteam', 'backtest', 'factor', 'pairs'];
   return ['buffett', 'research', 'politician', 'quantteam'];
 }
+
+// the icons a connector you create can wear; null = its initial (spec §7.7: initials by default)
+export const ICON_CHOICES = [null, 'book', 'bars', 'link', 'shield', 'wave', 'sigma', 'bolt', 'pairs'];
+export const hostOf = url => { try { return new URL(url).host; } catch { return ''; } };

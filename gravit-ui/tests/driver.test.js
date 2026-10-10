@@ -131,6 +131,13 @@ test('the director can show the door\'s refusal and the close', () => {
   assert.ok(done.data.foot);
 });
 
+test('a connected MCP server answers with three tools named after it', async () => {
+  const { toolsFor } = await import('../js/driver.js');
+  assert.deepEqual(toolsFor('Pairs', 'https://x.dev/mcp'), ['pairs.search', 'pairs.get', 'pairs.watch']);
+  assert.deepEqual(toolsFor('', 'https://alpha-feed.example.com/mcp'), ['alphafeed.search', 'alphafeed.get', 'alphafeed.watch']);
+  assert.deepEqual(toolsFor('我的数据', 'https://x.dev'), ['x.search', 'x.get', 'x.watch'], 'a name without latin letters falls back to the host');
+});
+
 test('a grant asks for News sentiment only when it is not installed', () => {
   const limit = message('gravit', 'limit', 'x', { from: 25, to: 50 });
   assert.equal(followUp(limit, 'granted', { installed: ['news'], now: NOW }).length, 1);

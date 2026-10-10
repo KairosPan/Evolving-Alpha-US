@@ -7,7 +7,7 @@ import { renderRail } from './render/rail.js';
 import { renderMessagesScreen, renderBanner, renderCall, renderStub, currentConversation } from './render/messages.js';
 import { renderDiscover } from './render/discover.js';
 import { renderAccount } from './render/account.js';
-import { replyTo, followUp, director } from './driver.js';
+import { replyTo, followUp, director, toolsFor } from './driver.js';
 import { DAY } from './time.js';
 
 export class Timers {
@@ -25,10 +25,11 @@ const KEY = 'gravit-ui.state';
 const BANNER_MS = 5000;
 const TOAST_MS = 6000;
 const REVOKE_MS = 1000;
+const CONNECT_MS = 1200;
 const usable = saved => !!saved && saved.v === SEED_VERSION && Array.isArray(saved.conversations);
 
 // a banner, a ringing call, an open drawer, a trash-key ask and a toast belong to their moment: a reload starts without them
-const withoutMoments = s => ({ ...s, banner: null, call: null, discover: { ...s.discover, drawer: null, upload: false, asking: null, toast: null } });
+const withoutMoments = s => ({ ...s, banner: null, call: null, discover: { ...s.discover, drawer: null, create: null, toast: null } });
 
 export function initialState(storage, now = Date.now()) {
   try {
@@ -106,9 +107,9 @@ function focusKey(el) {
 }
 
 // which overlay is up: focus moves into it when it opens and back to its opener when it closes
-const overlayOf = s => (s.call ? 'call' : s.detailsOpen || s.settingsOpen || s.discover.drawer || s.discover.upload ? 'drawer' : null);
+const overlayOf = s => (s.call ? 'call' : s.discover.create ? 'modal' : s.detailsOpen || s.settingsOpen || s.discover.drawer ? 'drawer' : null);
 const screenOf = s => `${s.route.screen}/${s.route.id ?? s.route.tab ?? ''}`;
-const drawerOf = s => s.discover.drawer ?? (s.discover.upload ? 'upload' : s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null);
+const drawerOf = s => s.discover.drawer ?? (s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null);
 
 export function boot(win) {
   const doc = win.document;
@@ -128,12 +129,6 @@ export function boot(win) {
     try { if (theme === 'cream' || theme === 'black') storage?.setItem('gravit-ui.theme', theme); else storage?.removeItem('gravit-ui.theme'); } catch { /* ignore */ }
   }
 
-  function syncIcon() {
-    const name = doc.getElementById('up-name');
-    const slot = doc.getElementById('up-icon');
-    if (name && slot) slot.textContent = (name.value.trim()[0] ?? 'P').toUpperCase();
-  }
-
   function find(key) {
     if (!key) return null;
     return key.id ? doc.getElementById(key.id) : root.querySelector(key.sel);
@@ -146,7 +141,6 @@ export function boot(win) {
     const activeKey = focusKey(active);
     const caret = active && typeof active.selectionStart === 'number' && active.id ? [active.selectionStart, active.selectionEnd] : null;
     const typed = new Map([...root.querySelectorAll('input[id]:not([type=radio]), textarea[id]')].map(el => [el.id, el.value]));
-    const picked = [...root.querySelectorAll('.upload-form input[type=radio]:checked')].map(el => [el.name, el.value]);
     const thread0 = doc.getElementById('thread');
     const threadAt = thread0 ? { top: thread0.scrollTop, bottom: thread0.scrollHeight - thread0.scrollTop - thread0.clientHeight < 40 } : null;
     const scrolls = { main: root.querySelector('main')?.scrollTop, rows: root.querySelector('.rail-rows')?.scrollTop, drawer: root.querySelector('.drawer-body')?.scrollTop, shelves: [...root.querySelectorAll('.shelf-row')].map(e => e.scrollLeft) };
@@ -157,10 +151,8 @@ export function boot(win) {
     root.innerHTML = renderRail(s, now()) + screen + overlays;
 
     for (const [id, value] of typed) { const el = doc.getElementById(id); if (el && id !== 'say') el.value = value; }
-    for (const [name, value] of picked) { const el = root.querySelector(`.upload-form input[type=radio][name="${name}"][value="${value}"]`); if (el) el.checked = true; }
     const say = doc.getElementById('say');
     if (say) say.value = composerText;
-    syncIcon();
 
     // scroll: the rail rows always keep theirs; the page and the shelves keep theirs on the same screen; a drawer while it stays the same drawer
     const sameScreen = last.screen === screenOf(s);
@@ -183,7 +175,7 @@ export function boot(win) {
     let target = find(activeKey);
     if (overlay && overlay !== last.overlay) {
       opener = activeKey;
-      target = overlay === 'call' ? root.querySelector('.call [data-accept="0"]') : root.querySelector('.drawer .close-key');
+      target = overlay === 'call' ? root.querySelector('.call [data-accept="0"]') : overlay === 'modal' ? doc.getElementById('mcp-name') : root.querySelector('.drawer .close-key');
     } else if (!overlay && last.overlay) {
       target = find(last.opener) ?? target;
       opener = null;
@@ -282,10 +274,13 @@ export function boot(win) {
     closeDrawer: () => store.dispatch('closeDrawer'),
     install: el => store.dispatch('install', { id: el.dataset.id, now: now() }),
     uninstall: el => store.dispatch('uninstall', el.dataset.id),
-    // pressing "✓ Installed" turns the key into the trash key (spec §7.3); the trash key uninstalls
-    uninstallAsk: el => store.dispatch('askUninstall', el.dataset.id),
     toggleInstalledOnly: () => store.dispatch('toggleInstalledOnly'),
-    openUpload: () => store.dispatch('openUpload'),
+    // Create: the MCP connector
+    openCreate: () => store.dispatch('openCreate'),
+    closeCreate: () => store.dispatch('closeCreate'),
+    cycleCreateIcon: () => store.dispatch('cycleCreateIcon'),
+    backToForm: () => store.dispatch('backToForm'),
+    addMcp: () => store.dispatch('addMcp', { now: now() }),
     dismissToast: () => store.dispatch('dismissToast'),
     // Account
     openSettings: () => store.dispatch('openSettings'),
@@ -350,10 +345,11 @@ export function boot(win) {
       if (after === before) { composerText = text; return; }
       if (after.route.id !== before.route.id) win.location.hash = toHash(after.route);
       replyFlow(store, timers, after.route.id, text, now);
-    } else if (action === 'publish') {
-      const f = new win.FormData(form);
-      form.reset();
-      store.dispatch('publish', { manifest: { name: f.get('name'), blurb: f.get('blurb'), kind: f.get('kind'), tools: f.get('tools'), needs: f.get('needs') === '没有' ? '没有。' : `你的${f.get('needs')}。`, visibility: f.get('visibility') }, now: now() });
+    } else if (action === 'connectMcp') {
+      // the scripted server answers a moment later with its tools; a closed or restarted connector ignores the answer
+      store.dispatch('connectMcp');
+      const c = store.get().discover.create;
+      if (c?.step === 'connecting') timers.after(CONNECT_MS, () => store.dispatch('mcpConnected', { tools: toolsFor(c.form.name, c.form.url) }));
     } else if (action === 'addMemory') {
       const f = new win.FormData(form);
       form.reset();
@@ -364,11 +360,17 @@ export function boot(win) {
   // typing: the composer keeps its words outside the store; the title and the search go through it
   function typed(el) {
     if (el.id === 'say') composerText = el.value;
-    else if (el.id === 'up-name') syncIcon();
+    else if (el.dataset?.action === 'mcpField' && el.type !== 'radio') store.dispatch('setCreateField', { key: el.name, value: el.value });
     else if (el.dataset?.action === 'draftTitle') store.dispatch('setDraftTitle', el.value);
     else if (el.dataset?.action === 'query') store.dispatch('setQuery', el.value);
   }
   root.addEventListener('input', ev => { if (!ev.isComposing && !composing) typed(ev.target); });
+  // radios and checkboxes report on change: the connector's auth, kind and visibility, and its tool checks
+  root.addEventListener('change', ev => {
+    const el = ev.target;
+    if (el.type === 'radio' && el.dataset?.action === 'mcpField') store.dispatch('setCreateField', { key: el.name, value: el.value });
+    else if (el.type === 'checkbox' && el.dataset?.action === 'toggleMcpTool') store.dispatch('toggleMcpTool', Number(el.dataset.id));
+  });
   root.addEventListener('compositionstart', () => { composing = true; });
   root.addEventListener('compositionend', ev => {
     composing = false;
@@ -383,7 +385,8 @@ export function boot(win) {
     if (ev.key === 'Escape') {
       const s = store.get();
       if (s.call) return;
-      if (s.discover.drawer || s.discover.upload || s.discover.asking) store.dispatch('closeDrawer');
+      if (s.discover.create) store.dispatch('closeCreate');
+      else if (s.discover.drawer) store.dispatch('closeDrawer');
       else if (s.detailsOpen) store.dispatch('toggleDetails');
       else if (s.settingsOpen) store.dispatch('closeSettings');
       else if (directorOpen) { directorOpen = false; render(); }

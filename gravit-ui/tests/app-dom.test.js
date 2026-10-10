@@ -54,7 +54,7 @@ test('a re-render keeps the scroll of the page, the rail rows, a drawer and each
   store.dispatch('openPlugin', 'news');
   assert.equal(drawer.scrollTop, 0, 'a drawer that just opened starts at its top');
   main.scrollTop = 300; rows.scrollTop = 40; drawer.scrollTop = 120; shelf.scrollLeft = 260;
-  store.dispatch('askUninstall', 'buffett'); // a re-render while the same drawer stays open
+  store.dispatch('setQuery', ''); store.dispatch('toggleInstalledOnly'); store.dispatch('toggleInstalledOnly'); // re-renders while the same drawer stays open
   assert.deepEqual([main.scrollTop, rows.scrollTop, drawer.scrollTop, shelf.scrollLeft], [300, 40, 120, 260]);
   store.timers.clear();
 });
@@ -121,6 +121,31 @@ test('the director opens the first-run state, the refusal and the close', async 
   await f.tick();
   assert.deepEqual(store.get().conversations, []);
   assert.equal(f.win.location.hash, '#/messages');
+  store.timers.clear();
+});
+
+test('Create: type a name and an address, Connect, wait for the tools, untick one, Add; Escape closes the dialog', async () => {
+  const f = fakeWindow({ hash: '#/discover' });
+  const store = boot(f.win);
+  const btn = action => f.element({ tagName: 'BUTTON', dataset: { action } });
+  f.click(btn('openCreate'));
+  assert.equal(store.get().discover.create.step, 'form');
+  const input = (name, value) => f.fire('root', 'input', { target: f.element({ tagName: 'INPUT', type: 'text', name, value, dataset: { action: 'mcpField' } }) });
+  input('name', 'Pairs');
+  input('url', 'https://pairs.example.com/mcp');
+  f.fire('root', 'change', { target: f.element({ tagName: 'INPUT', type: 'radio', name: 'visibility', value: 'public', dataset: { action: 'mcpField' } }) });
+  const form = { dataset: { action: 'connectMcp' } };
+  f.fire('root', 'submit', { target: { closest: () => form } });
+  assert.equal(store.get().discover.create.step, 'connecting');
+  await sleep(1300);
+  assert.deepEqual(store.get().discover.create.tools.map(t => t.name), ['pairs.search', 'pairs.get', 'pairs.watch']);
+  f.fire('root', 'change', { target: f.element({ tagName: 'INPUT', type: 'checkbox', dataset: { action: 'toggleMcpTool', id: '2' } }) });
+  f.click(btn('addMcp'));
+  const p = store.get().plugins.uploaded.at(-1);
+  assert.deepEqual([p.name, p.visibility, p.tools], ['Pairs', 'public', 'pairs.search\npairs.get']);
+  f.click(btn('openCreate'));
+  f.fire('doc', 'keydown', { key: 'Escape' });
+  assert.equal(store.get().discover.create, null);
   store.timers.clear();
 });
 

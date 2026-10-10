@@ -1,8 +1,8 @@
 // gravit-ui/tests/discover.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderDiscover, card, keyFor, pluginDrawer, uploadDrawer, renderToast } from '../js/render/discover.js';
-import { byId, SHELVES } from '../js/data/plugins.js';
+import { renderDiscover, card, keyFor, pluginDrawer, renderCreate, renderToast } from '../js/render/discover.js';
+import { byId } from '../js/data/plugins.js';
 import { reducers as R } from '../js/reducers/index.js';
 import { seed } from '../js/data/seed.js';
 
@@ -10,12 +10,14 @@ const NOW = new Date(2026, 9, 9, 14, 7).getTime();
 const count = (h, re) => (h.match(re) ?? []).length;
 const disc = (s = seed(NOW)) => R.nav(s, { screen: 'discover', id: null });
 
-test('the store page: header with search, Installed · n, Upload; six shelves, each with See all and its cards; no price, no subtitle', () => {
+test('the store page: header with search, 我的插件 · n, Create; six shelves, each with See all and its cards; no price, no subtitle', () => {
   const h = renderDiscover(disc());
   assert.match(h, /<h1 class="head-title">Discover<\/h1>/);
   assert.match(h, /id="dq"[^>]*placeholder="Search plugins"[^>]*data-action="query"/);
-  assert.match(h, /data-action="toggleInstalledOnly" aria-pressed="false">Installed · 5</);
-  assert.match(h, /data-action="openUpload"[^>]*>[\s\S]*Upload a plugin/);
+  assert.match(h, /data-action="toggleInstalledOnly" aria-pressed="false">我的插件 · 5</);
+  assert.doesNotMatch(h, /Installed ·/);
+  assert.match(h, /class="pill" data-action="openCreate">[\s\S]*?Create<\/button>/);
+  assert.doesNotMatch(h, /Upload a plugin/);
   assert.equal(count(h, /class="shelf"/g), 6);
   assert.equal(count(h, /See all ›/g), 6);
   assert.match(h, /class="shelf-title">Like</);
@@ -27,7 +29,7 @@ test('the store page: header with search, Installed · n, Upload; six shelves, e
   assert.match(like, /Buffett bot/);
 });
 
-test('a card: 44 px logo top-left, kind top-right, name, one line, author line, one key in three states', () => {
+test('a card: 44 px logo top-left, kind top-right, name, one line, author line; installed shows ✓ beside the trash key', () => {
   const s = disc();
   const h = card(byId('buffett'), s);
   assert.match(h, /^<div class="pcard" data-action="openPlugin" data-id="buffett" role="button" tabindex="0">/);
@@ -35,9 +37,11 @@ test('a card: 44 px logo top-left, kind top-right, name, one line, author line, 
   assert.match(h, /class="pcard-kind">BOTS</);
   assert.match(h, /class="pcard-name">Buffett bot</);
   assert.match(h, /class="pcard-by">Free · by Gravit</);
-  assert.match(keyFor(byId('buffett'), s), /class="pkey installed" data-action="uninstallAsk" data-id="buffett" aria-label="Installed · uninstall Buffett bot"/);
-  assert.match(keyFor(byId('news'), s), /class="pkey install" data-action="install" data-id="news" aria-label="Install News sentiment"/);
-  assert.match(keyFor(byId('buffett'), s, 'installed'), /class="pkey uninstall" data-action="uninstall" data-id="buffett"/);
+  const installed = keyFor(byId('buffett'), s);
+  assert.match(installed, /^<span class="pkeys"><span class="pkey-done" role="img" aria-label="已安装">/);
+  assert.match(installed, /<button type="button" class="pkey uninstall" data-action="uninstall" data-id="buffett" aria-label="Uninstall Buffett bot">/);
+  assert.doesNotMatch(installed, /Installed/);
+  assert.match(keyFor(byId('news'), s), /^<button type="button" class="pkey install" data-action="install" data-id="news" aria-label="Install News sentiment">/);
   assert.match(card(byId('pairs'), s), /Free · by @you · Private/);
   assert.match(card(byId('news'), s, { pressed: true }), /class="pcard pressed"/);
 });
@@ -65,16 +69,16 @@ test('the drawer: sections, the signature table inline, Install at the foot; ins
   assert.match(inst, /class="btn-primary" data-action="uninstall" data-id="buffett">Uninstall</);
 });
 
-test('Installed view: the pill pressed, every card with the trash key, 你上传的 for your own, the just-installed card links to its conversation', () => {
+test('我的插件 view: the pill pressed, every card with ✓ and the trash key, 你创建的 for your own, the just-installed card links to its conversation', () => {
   let s = R.install(disc(), { id: 'news', now: NOW });
   s = R.toggleInstalledOnly(s);
   const h = renderDiscover(s);
-  assert.match(h, /aria-pressed="true">Installed · 6</);
+  assert.match(h, /aria-pressed="true">我的插件 · 6</);
   assert.equal(count(h, /class="shelf"/g), 0);
-  assert.equal(count(h, /class="pkey uninstall"/g), 6, 'five installed that are not yours plus the private Pairs you uploaded');
-  assert.match(h, /class="grid-title">你上传的</);
+  assert.equal(count(h, /class="pkey uninstall"/g), 6, 'five installed that are not yours plus the private Pairs you made');
+  assert.equal(count(h, /class="pkey-done"/g), 6);
+  assert.match(h, /class="grid-title">你创建的</);
   assert.match(h, /刚装好/);
-  assert.match(h, /href="#\/messages\/c-5">Open in Messages ›/);
   assert.match(h, /class="toast" role="status">News sentiment 装好了/);
   assert.match(h, /class="toast-key" href="#\/messages\/c-5">Open</);
   assert.match(h, /data-action="open" data-id="c-5" href="#\/messages\/c-5">Open in Messages ›/, 'the link opens the conversation, not the card drawer');
@@ -99,13 +103,6 @@ test('the signature follows the plugin: only a bot may propose; uninstalling sig
   const bare = pluginDrawer(byId('onchain'), s);
   assert.doesNotMatch(bare, /它还没写/);
   assert.doesNotMatch(bare, /它能被问什么/);
-  assert.match(uploadDrawer(), /for="up-tools">它暴露的工具<\/label>/);
-});
-
-test('pressing Installed turns that key into the trash key', () => {
-  const asked = R.askUninstall(disc(), 'buffett');
-  assert.match(keyFor(byId('buffett'), asked), /class="pkey uninstall" data-action="uninstall" data-id="buffett"/);
-  assert.match(keyFor(byId('politician'), asked), /class="pkey installed"/, 'only the pressed one changes');
 });
 
 test('search shows a results grid; a shelf route shows that shelf as a grid with a way back', () => {
@@ -120,20 +117,47 @@ test('search shows a results grid; a shelf route shows that shelf as a grid with
   assert.match(bots, /class="back-link" href="#\/discover"/);
 });
 
-test('the upload drawer is a form with the fields of the spec and the private default', () => {
-  const h = renderDiscover(R.openUpload(disc()));
-  assert.match(h, /<aside class="drawer" aria-label="上传一个插件">/);
-  const u = uploadDrawer();
-  assert.match(u, /<form class="upload-form" data-action="publish">/);
-  assert.match(u, /name="name"/);
-  assert.match(u, /name="blurb"/);
-  assert.equal(count(u, /name="kind"/g), 5);
-  assert.match(u, /name="tools"/);
-  assert.equal(count(u, /name="needs"/g), 4);
-  assert.match(u, /type="radio" name="visibility" value="private" checked/);
-  assert.match(u, /type="radio" name="visibility" value="public"/);
-  assert.match(u, /type="submit" class="btn-primary">Publish</);
-  assert.doesNotMatch(u, /先过一次审/);
-  assert.match(u, /class="field-label">图标<\/span><div class="icon-pick"><span class="icon-slot" id="up-icon">P<\/span>/, 'the icon slot, initials by default');
+test('Create pops up the MCP connector: name, server address, auth, icon, kind, visibility, Cancel and Connect', () => {
+  const s = R.openCreate(disc());
+  const h = renderDiscover(s);
+  assert.match(h, /<div class="modal-scrim"><div class="modal" role="dialog" aria-label="添加 MCP 连接器">/);
+  const m = renderCreate(s);
+  assert.match(m, /<form class="mcp-form" data-action="connectMcp">/);
+  assert.match(m, /<input id="mcp-name"[^>]*name="name"/);
+  const url = m.match(/<input id="mcp-url"[^>]*>/)?.[0] ?? '';
+  for (const a of ['type="url"', 'name="url"', 'placeholder="https://example.com/mcp"']) assert.ok(url.includes(a), a);
+  assert.equal(count(m, /type="radio" name="auth"/g), 3);
+  assert.match(m, /type="radio" name="auth" value="无" data-action="mcpField" checked/);
+  assert.doesNotMatch(m, /id="mcp-key"/, 'no key field until API key is picked');
+  assert.match(m, /class="icon-slot" id="mcp-icon">P</);
+  assert.match(m, /data-action="cycleCreateIcon">换一张图</);
+  assert.equal(count(m, /type="radio" name="kind"/g), 5);
+  assert.match(m, /type="radio" name="visibility" value="private" data-action="mcpField" checked/);
+  assert.match(m, /data-action="closeCreate">取消</);
+  assert.match(m, /type="submit" class="btn-primary">连接</);
+  const key = renderCreate(R.setCreateField(s, { key: 'auth', value: 'API key' }));
+  assert.match(key, /<input id="mcp-key"[^>]*type="password"/);
+  const oauth = renderCreate(R.setCreateField(s, { key: 'auth', value: 'OAuth' }));
+  assert.match(oauth, /id="mcp-client-id"/);
+  assert.match(oauth, /id="mcp-client-secret"/);
+});
+
+test('the connector shows a bad address, then connecting, then the tools it found with a check each', () => {
+  let s = R.openCreate(disc());
+  s = R.connectMcp(R.setCreateField(s, { key: 'url', value: 'pairs.example.com' }));
+  const bad = renderCreate(s);
+  assert.match(bad, /id="mcp-url"[^>]*aria-invalid="true"/);
+  assert.match(bad, /class="field-error">地址要以 https:\/\/ 开头</);
+  s = R.connectMcp(R.setCreateField(s, { key: 'url', value: 'https://pairs.example.com/mcp' }));
+  assert.match(renderCreate(s), /class="mcp-status">正在连接 pairs.example.com…</);
+  s = R.mcpConnected(s, { tools: ['pairs.search', 'pairs.get', 'pairs.watch'] });
+  const found = renderCreate(s);
+  assert.match(found, /class="modal-title">发现 3 个工具</);
+  assert.equal(count(found, /type="checkbox"[^>]*data-action="toggleMcpTool"/g), 3);
+  assert.match(found, /data-action="addMcp">添加</);
+  assert.match(found, /data-action="backToForm">返回</);
+});
+
+test('renderToast', () => {
   assert.equal(renderToast({ text: 'x', action: null }), '<div class="toast" role="status">x<button type="button" class="toast-x" data-action="dismissToast" aria-label="Dismiss">×</button></div>');
 });

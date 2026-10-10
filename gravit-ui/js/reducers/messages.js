@@ -48,8 +48,8 @@ export const reducers = {
     }
     let s = { ...state, route, detailsOpen: false, settingsOpen: false };
     // Discover's drawer, trash-key ask and toast belong to Discover; they do not follow you out of it
-    if (route.screen !== 'discover' && (s.discover.drawer || s.discover.upload || s.discover.asking || s.discover.toast)) {
-      s = { ...s, discover: { ...s.discover, drawer: null, upload: false, asking: null, toast: null } };
+    if (route.screen !== 'discover' && (s.discover.drawer || s.discover.create || s.discover.toast)) {
+      s = { ...s, discover: { ...s.discover, drawer: null, create: null, toast: null } };
     }
     if (route.screen === 'messages' && route.id && route.id !== 'new') s = upd(s, route.id, c => (c.unread ? { ...c, unread: false } : c));
     if (!(route.screen === 'messages' && route.id === 'new')) s.draft = null;
