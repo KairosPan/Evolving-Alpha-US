@@ -40,7 +40,13 @@ export function fakeWindow({ hash = '#/messages/c-1', storage = null, prompt = (
       }
       doc.activeElement = body;
     },
-    querySelectorAll(sel) { return bySelector.get(sel) ?? (sel.includes('input[id]') ? [...byId.values()].filter(e => e.tagName === 'INPUT' || e.tagName === 'TEXTAREA') : []); },
+    // the typed-text query: inputs and textareas by id, minus the :not([type=…]) kinds the selector names
+    querySelectorAll(sel) {
+      if (bySelector.has(sel)) return bySelector.get(sel);
+      if (!sel.includes('input[id]')) return [];
+      const skip = [...sel.matchAll(/:not\(\[type=(\w+)\]\)/g)].map(m => m[1]);
+      return [...byId.values()].filter(e => (e.tagName === 'INPUT' && !skip.includes(e.type)) || e.tagName === 'TEXTAREA');
+    },
     querySelector(sel) { return (bySelector.get(sel) ?? [])[0] ?? null; },
     addEventListener(type, fn) { (listeners.root[type] ??= []).push(fn); },
   };

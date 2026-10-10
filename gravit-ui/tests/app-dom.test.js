@@ -224,6 +224,25 @@ test('+ opens the file picker; picked files join the tray; a send with only file
   store.timers.clear();
 });
 
+test('picking a file never writes a path back into the file input (browsers refuse it and the render would stop)', () => {
+  const f = fakeWindow(noDialogs);
+  const picker = f.withId('attach-input', { tagName: 'INPUT', type: 'file' });
+  let held = '';
+  Object.defineProperty(picker, 'value', {
+    get: () => held,
+    set: v => { if (v) throw new Error('InvalidStateError: a file input accepts only the empty string'); held = v; },
+  });
+  const say = f.withId('say', { tagName: 'INPUT' });
+  const store = boot(f.win);
+  held = 'C:\\fakepath\\q3.pdf';
+  picker.files = [{ name: 'q3.pdf', size: 1 }];
+  f.fire('root', 'change', { target: picker });
+  assert.deepEqual(store.get().compose.files.map(x => x.name), ['q3.pdf']);
+  assert.equal(held, '', 'the picker is emptied so the same file can be picked again');
+  assert.equal(say.value, '', 'the render ran to the end: the composer was restored');
+  store.timers.clear();
+});
+
 test('the mic listens, then writes what it heard into the composer; a second press stops it at once', async () => {
   const f = fakeWindow(noDialogs);
   const say = f.withId('say', { tagName: 'INPUT' });

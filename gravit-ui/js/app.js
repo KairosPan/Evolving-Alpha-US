@@ -156,7 +156,8 @@ export function boot(win) {
     const active = doc.activeElement;
     const activeKey = focusKey(active);
     const caret = active && typeof active.selectionStart === 'number' && active.id ? [active.selectionStart, active.selectionEnd] : null;
-    const typed = new Map([...root.querySelectorAll('input[id]:not([type=radio]), textarea[id]')].map(el => [el.id, el.value]));
+    // typed text only: a file input refuses a path written back, and radios and checkboxes carry state, not text
+    const typed = new Map([...root.querySelectorAll('input[id]:not([type=radio]):not([type=checkbox]):not([type=file]), textarea[id]')].map(el => [el.id, el.value]));
     const thread0 = doc.getElementById('thread');
     const threadAt = thread0 ? { top: thread0.scrollTop, bottom: thread0.scrollHeight - thread0.scrollTop - thread0.clientHeight < 40 } : null;
     const scrolls = { main: root.querySelector('main')?.scrollTop, rows: root.querySelector('.rail-rows')?.scrollTop, drawer: root.querySelector('.drawer-body')?.scrollTop, shelves: [...root.querySelectorAll('.shelf-row')].map(e => e.scrollLeft) };
@@ -440,8 +441,10 @@ export function boot(win) {
   root.addEventListener('change', ev => {
     const el = ev.target;
     if (el.id === 'attach-input') {
-      store.dispatch('addFiles', [...(el.files ?? [])].map(x => ({ name: x.name, size: x.size })));
+      // read the picked files, then empty the picker before the render (so the same file can be picked again)
+      const files = [...(el.files ?? [])].map(x => ({ name: x.name, size: x.size }));
       el.value = '';
+      store.dispatch('addFiles', files);
     } else if (el.type === 'radio' && el.dataset?.action === 'mcpField') store.dispatch('setCreateField', { key: el.name, value: el.value });
     else if (el.type === 'checkbox' && el.dataset?.action === 'toggleMcpTool') store.dispatch('toggleMcpTool', Number(el.dataset.id));
   });
