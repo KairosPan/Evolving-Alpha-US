@@ -135,3 +135,31 @@ Final: minor (deferred): below 1100 px the sticky toast's Open key can sit under
 Final: minor (deferred): the Memory editor shows four round keys, misaligned; file chips flow inline with the owner's words.
 Final: minor (deferred): the Receive QR is inverted in Black; the director opens under the connector's scrim.
 Final: minor (deferred): dead size rules (the 32 px chevron, the --rail token); mailbox rows have square hover grounds and back links two colours.
+
+## Round 3 — the operator's 2026-10-10 second requests (spec §14)
+Round 3: built on feat/gravit-ui in bda98c1..720871d (no author or price line and no 刚装好; My plugins with no count; Mail as a screen; Create as Discover's own MCP face; docs); branch kept, nothing merged or pushed.
+Round 3: design panel wf_c5725aeb-99a (three designers: spec-faithful, demo-story-first, developer-first; one judge) chose the story-first design with the spec-faithful signature grafted on.
+Round 3: Ruling: the mail letters sit in the second-level column, where Messages keeps its conversations, not inside the main column as the judge drew it — Mail and Messages then read alike and the narrow layout comes free — cost if wrong: one render function moves.
+Round 3: Ruling: the drawer's 怎么付 section went with the Free line — it said 免费 again, and the operator cut the price words — cost if wrong: one section to restore.
+Round 3: Ruling: My plugins is the English name — the literal English of 我的插件, and it covers both 装了的 and 你创建的; Installed is the word the operator already replaced — cost if wrong: one label.
+Round 3: Ruling: SEED_VERSION goes to 3, so a round-2 save is dropped once — the mailbox lost open/reading and the counters gained mail and run — cost if wrong: a viewer's saved demo state, Memory edits included, resets once.
+Round 3: Ruling: the scripted client starts only on 复制 or the director's 插件上传, never by itself — the presenter sets the pace — cost if wrong: a presenter who opens Create and waits sees 等待连接.
+Round 3: Ruling: a private upload is published and installed by one signature; a public one is published only, reviewed for 5 s, then installed by the drawer's usual signature — spec 7.7 reviews public plugins first and installing needs the owner's signature — cost if wrong: the author waits for review before using their own public plugin.
+Round 3: Ruling: your own private uploads lead their kind's public shelf in your view, as the seeded private Pairs already sits on Quant — cost if wrong: an outsider may read a private card as public; only the drawer says Private.
+Round 3: Ruling: the director moved above the dialog's scrim (z-index 49, below the call at 50) — 插件上传 now drives the dialog — cost if wrong: none.
+Round 3: found and fixed in passing: a stray closing brace left by the round-2 layout fix (df066f8) made browsers drop the .drawer-head rule, so every drawer head lost its row, padding and hairline — app.css is well formed: braces never close more than they opened RED→GREEN (4a6a6d0).
+Round 3: review wf_f3496c47-eb6, four lenses (requests, state, wiring, layout in a real browser) with three-lens verification of every Critical or Important finding; no Critical; all four lenses report the four requests met.
+Final: fixed the search box keeping old words after Publish or 插件上传 cleared the search — when Publish or 插件上传 clears the search, the search box is cleared too RED→GREEN, suite 167/167 (fdb5308)
+Final: fixed below 860 px the Mail inbox standing alone cut at 40vh — narrow windows, the toast under a drawer, and long words that wrap (new assertion) RED→GREEN, suite 167/167; checked at 800x900
+Final: fixed the Create dialog moving under the pointer as its height changed — the dialog body keeps its scroll while the same step changes, and starts at the top on a new step, plus the dialog hangs from the top (css assertion) RED→GREEN, suite 167/167; checked at 1280: top stays 64 px across a client switch
+Final: fixed 复制 reading as plain text on the code box — css assertion RED→GREEN, suite 167/167
+Final: Ruling: re-graded to Important and fixed — after 拒绝 the director's 插件上传 did nothing (found by all four lenses as Minor) — after 拒绝, the director's 插件上传 starts a fresh upload in a new dialog RED→GREEN, suite 167/167 — the director is the presenter's tool and a silent no-op breaks the story — cost if wrong: none.
+Final: Ruling: re-graded to Important and fixed — cards in My plugins, See all and search collapsed into one tall column because a grid card wore the container's class grid (layout lens, Minor; present since round 1) — search shows a results grid; a shelf route shows that shelf as a grid with a way back RED→GREEN, suite 167/167 (6f7d461) — every grid view a person opens was broken — cost if wrong: none.
+Final: Ruling: kept as not checked — Safari and Firefox, screen readers, and whether the Cursor and Codex config lines match those clients' current versions (the claude mcp add line is the real form) — cost if wrong: a pasted line needs a tweak; the stand-in address resolves nowhere anyway.
+Final: minor (deferred): after 复制 the client switch still takes a click for 1.5 s, so another client is highlighted beside the first client's line.
+Final: minor (deferred): Escape closes the dialog under the director instead of the director on top of it.
+Final: minor (deferred): Tab leaves the Discover MCP dialog for the page behind its scrim (no aria-modal, no focus trap).
+Final: minor (deferred): under about 778 px tall, Publish and 拒绝 of the first upload sit below the fold of the dialog's scrolling body.
+Final: minor (deferred): at about 700 to 803 px and 861 to 871 px wide, My plugins and Create split onto two rows.
+Final: minor (deferred): the Claude Code line wraps inside its address at stand- | in/mcp.
+Final: minor (deferred): an open letter's grey sender mark disappears into its row's grey highlight.
