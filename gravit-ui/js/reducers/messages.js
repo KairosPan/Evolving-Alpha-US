@@ -47,6 +47,8 @@ export const reducers = {
       route = { screen: 'messages', id: state.conversations[0]?.id ?? null };
     }
     let s = { ...state, route, detailsOpen: false, settingsOpen: false };
+    // the first level's Messages key returns to the conversation you last had open
+    if (route.screen === 'messages' && route.id && route.id !== 'new') s.lastConv = route.id;
     // Discover's drawer, trash-key ask and toast belong to Discover; they do not follow you out of it
     if (route.screen !== 'discover' && (s.discover.drawer || s.discover.create || s.discover.toast)) {
       s = { ...s, discover: { ...s.discover, drawer: null, create: null, toast: null } };

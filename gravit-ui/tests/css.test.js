@@ -42,7 +42,7 @@ test('every class the screens emit has a rule in app.css, and app.css names no c
   assert.match(css, /\.key\.no[^{]*\{[^}]*color: var\(--down\)/);
 });
 
-test('the layout: one screen tall, the thread scrolls under a pinned composer, the drawer and the toast are fixed (spec §3.3)', async () => {
+test('the layout: one screen tall, the thread scrolls under a pinned composer, the drawer is fixed and the toast sticks to the main column (spec §3.3)', async () => {
   const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
   const rule = sel => css.match(new RegExp(`^${sel.replace(/[.]/g, '\\.')} \\{([^}]*)\\}`, 'm'))?.[1] ?? '';
   assert.match(rule('.main'), /(?:^|;)\s*height: 100vh/, 'a real height, not a minimum');
@@ -52,16 +52,16 @@ test('the layout: one screen tall, the thread scrolls under a pinned composer, t
   assert.match(rule('.rail-rows'), /overflow-y: auto/);
   assert.match(rule('.director'), /bottom: 88px/, 'the director sits above the composer, clear of the send key');
   assert.match(rule('.drawer'), /position: fixed/);
-  assert.match(rule('.toast'), /position: fixed/);
+  assert.match(rule('.toast'), /position: sticky/, 'at the bottom of the main column, whatever the navigation is doing');
   assert.doesNotMatch(css, /\.main\.with-drawer \{ overflow: hidden/, 'the page behind a drawer stays usable');
 });
 
 test('narrow windows, the toast under a drawer, and long words that wrap', async () => {
   const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
   const narrow = css.match(/@media \(max-width: 860px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
-  assert.match(narrow, /\.rail \{[^}]*position: static/, 'below 860 px the rail stops being a sticky column');
+  assert.match(narrow, /\.rail, \.rail\.mini \{[^}]*position: static/, 'below 860 px the first level stops being a sticky column, collapsed or not');
   assert.match(narrow, /\.main \{[^}]*height: auto/);
-  assert.match(narrow, /\.toast \{[^}]*left: 50%/);
+  assert.match(narrow, /\.list \{[^}]*position: static/);
   const z = sel => Number(css.match(new RegExp(`^\\${sel} \\{[^}]*z-index: (\\d+)`, 'm'))?.[1]);
   assert.ok(z('.toast') < z('.drawer'), 'a toast never covers a drawer');
   assert.match(css, /\.bubble, \.card \{[^}]*overflow-wrap: anywhere/, 'a pasted address wraps inside its bubble');

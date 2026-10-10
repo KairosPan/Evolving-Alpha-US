@@ -34,40 +34,50 @@ test('previewOf: the last message in words, with the sender in a group', () => {
   assert.equal(previewOf(stopped.conversations[3]), 'Gravit 停了，这件事不再动。', 'a system line in a group has no sender');
 });
 
-test('renderRail: brand, Messages header with + and chevron, four rows, the current one, the unread dot, nav, phone/mail, Account', () => {
-  const s = seed(NOW);
-  const h = renderRail(s, NOW);
-  assert.match(h, /<nav class="rail"/);
-  assert.match(h, /Messages/);
-  assert.match(h, /data-action="startDraft"[^>]*aria-label="New message"/);
-  assert.match(h, /data-action="toggleRail"[^>]*aria-expanded="true"/);
+test('the first level: brand and its collapse key, Messages · Discover · Markets · Trade, phone and mail, Account; Messages carries the unread count', () => {
+  const h = renderRail(seed(NOW), NOW);
+  assert.match(h, /<nav class="rail" aria-label="Gravit">/);
+  assert.match(h, /data-action="toggleRail" aria-expanded="true" aria-label="收起导航"/);
+  assert.match(h, /class="nav-item current" aria-current="page" href="#\/messages\/c-1"[^>]*>[\s\S]*?<span class="nav-label">Messages<\/span><span class="nav-badge">1<\/span>/);
+  assert.match(h, /href="#\/discover"[^>]*>[\s\S]*?<span class="nav-label">Discover</);
+  assert.match(h, /href="#\/markets"/);
+  assert.match(h, /href="#\/trade"/);
+  assert.match(h, /data-action="phoneCall" aria-label="Phone"/);
+  assert.match(h, /data-action="openMail" aria-label="Email"/);
+  assert.match(h, /href="#\/account\/portfolio"[^>]*class="account"/);
+  assert.match(h, /\$12,480 · Guard/);
+  assert.doesNotMatch(h, /Trading on/);
+});
+
+test('the second level opens with Messages: its title, the new-message key, the rows, the current one, the unread dot', () => {
+  const h = renderRail(seed(NOW), NOW);
+  assert.match(h, /<aside class="list" aria-label="Messages"><div class="list-head"><h2 class="list-title">Messages<\/h2><button type="button" class="icon-key" data-action="startDraft" aria-label="New message">/);
   assert.equal(count(h, /class="row(?: current)?"/g), 4);
   assert.equal(count(h, /class="row current" aria-current="page" href="#\/messages\/c-1"/g), 1);
   assert.equal(count(h, /class="dot on"/g), 1, 'one unread conversation');
   assert.match(h, /row-time">14:07</);
   assert.match(h, /row-time">昨天</);
-  assert.match(h, /href="#\/discover"/);
-  assert.match(h, /href="#\/markets"/);
-  assert.match(h, /href="#\/trade"/);
-  assert.match(h, /aria-label="Phone"/);
-  assert.match(h, /aria-label="Email"/);
-  assert.match(h, /href="#\/account\/portfolio"[^>]*class="account"/);
-  assert.match(h, /\$12,480 · Guard/);
-  assert.doesNotMatch(h, /Trading on/);
-  assert.match(h, /<div class="rail-rows"><a class="row/, 'the rows scroll on their own, so Account stays pinned');
+  assert.match(h, /<div class="rail-rows"><a class="row/, 'the rows scroll on their own');
+  const d = renderRail(R.startDraft(seed(NOW), { now: NOW }), NOW);
+  assert.match(d, /class="row current draft"/);
+  assert.equal(count(d, /class="row(?: current)?(?: draft)?"/g), 5);
 });
 
-test('renderRail: a draft row leads the list; the discover nav is current on that screen; collapsed hides the rows', () => {
-  const d = R.startDraft(seed(NOW), { now: NOW });
-  const h = renderRail(d, NOW);
-  assert.match(h, /class="row current draft"/);
-  assert.match(h, /New message/);
-  assert.equal(count(h, /class="row(?: current)?(?: draft)?"/g), 5);
-  const disc = renderRail(R.nav(seed(NOW), { screen: 'discover' }), NOW);
+test('off Messages there is no second level; the first level marks its screen; Messages links back to the last conversation', () => {
+  const s = R.nav(R.nav(seed(NOW), { screen: 'messages', id: 'c-3' }), { screen: 'discover' });
+  const disc = renderRail(s, NOW);
+  assert.doesNotMatch(disc, /class="list"/);
   assert.match(disc, /class="nav-item current" aria-current="page" href="#\/discover"/);
+  assert.match(disc, /class="nav-item" href="#\/messages\/c-3"/);
   const acct = renderRail(R.nav(seed(NOW), { screen: 'account', tab: 'memory' }), NOW);
   assert.match(acct, /class="account current" aria-current="page"/);
-  const collapsed = renderRail(R.toggleRail(seed(NOW)), NOW);
-  assert.match(collapsed, /aria-expanded="false"/);
-  assert.equal(count(collapsed, /class="row/g), 0);
+});
+
+test('collapsed, the first level is a strip of icons: names stay for screen readers and as titles, the second level stays', () => {
+  const c = renderRail(R.toggleRail(seed(NOW)), NOW);
+  assert.match(c, /<nav class="rail mini" aria-label="Gravit">/);
+  assert.match(c, /data-action="toggleRail" aria-expanded="false" aria-label="展开导航"/);
+  assert.match(c, /class="nav-item current"[^>]*title="Messages"/);
+  assert.match(c, /<span class="nav-label">Discover<\/span>/);
+  assert.match(c, /class="list"/);
 });

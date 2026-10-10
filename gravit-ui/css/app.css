@@ -17,19 +17,26 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .ticker { display: inline-flex; align-items: center; gap: 2px; color: var(--alloc-equity); font-weight: 700; }
 .ticker-lead { font-size: 15px; }
 
-/* ---- the app frame: rail + main ---- */
-.app { display: flex; flex-wrap: wrap; min-height: 100vh; }
-.rail { position: sticky; top: 0; height: 100vh; overflow: hidden; flex: 0 0 var(--rail); min-width: 0; max-width: 100%; display: flex; flex-direction: column; gap: 18px; padding: 24px 16px; background: var(--rail-bg); border-right: 1px solid var(--border); }
-.main { flex: 999 1 560px; min-width: 0; position: relative; display: flex; flex-direction: column; height: 100vh; }
-.brand { display: flex; align-items: center; gap: 10px; padding: 0 12px; }
-.brand-name { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+/* ---- the app frame: the first level, the second level on Messages, the main column ---- */
+:root { --nav: 220px; --nav-mini: 68px; --list: 300px; }
+.app { display: flex; min-height: 100vh; }
+.rail { position: sticky; top: 0; height: 100vh; overflow: hidden; flex: 0 0 var(--nav); width: var(--nav); min-width: 0; display: flex; flex-direction: column; gap: 18px; padding: 20px 12px; background: var(--rail-bg); border-right: 1px solid var(--border); }
+.rail.mini { flex-basis: var(--nav-mini); width: var(--nav-mini); padding: 20px 10px; }
+.list { position: sticky; top: 0; height: 100vh; flex: 0 0 var(--list); width: var(--list); min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 20px 12px; background: var(--rail-bg); border-right: 1px solid var(--border); }
+.list-head { display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding-left: 10px; }
+.list-title { font-size: 20px; }
+.main { flex: 1 1 0; min-width: 0; position: relative; display: flex; flex-direction: column; height: 100vh; }
+.brand { display: flex; align-items: center; gap: 10px; min-height: 44px; padding-left: 8px; }
+.brand-name { flex: 1 1 auto; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.rail-toggle { width: 32px; min-height: 32px; }
+/* collapsed: a strip of icons; the names stay for screen readers */
+.rail.mini .brand { flex-direction: column; gap: 6px; padding-left: 0; }
+.rail.mini .brand-name, .rail.mini .nav-label, .rail.mini .account-body { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.rail.mini .nav-item, .rail.mini .account { justify-content: center; padding-left: 0; padding-right: 0; }
+.rail.mini .rail-lines { flex-direction: column; }
 .rail-group { display: flex; flex-direction: column; gap: 4px; }
-/* the conversation rows scroll on their own; the header, the nav and Account stay put (spec §4) */
-.rail-messages { flex: 0 1 auto; min-height: 0; }
-.rail-rows { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-y: auto; }
-.rail-head { display: flex; align-items: center; min-height: 44px; padding: 0 0 0 12px; gap: 12px; font-weight: 500; color: var(--dim); }
-.rail-head-label { flex: 1 1 auto; }
-.rail-head-keys { display: inline-flex; gap: 2px; }
+/* the conversation rows scroll on their own; the list's head stays put */
+.rail-rows { flex: 1 1 auto; display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-y: auto; }
 .icon-key { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; border: 0; background: transparent; border-radius: var(--radius-s); color: var(--dim); }
 .icon-key:hover { background: var(--hover); }
 .row { display: flex; align-items: center; gap: 10px; min-height: 64px; padding: 8px 10px; border-radius: var(--radius-s); color: var(--text); }
@@ -42,12 +49,16 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .row-title { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-time { font-size: 11px; color: var(--dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .row-preview { font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nav-item { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: var(--radius-s); color: var(--dim); font-weight: 500; }
+.nav-item { position: relative; display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: var(--radius-s); color: var(--dim); font-weight: 500; }
 .nav-item:hover { background: var(--hover); }
 .nav-item.current { background: var(--surface-2); color: var(--text); font-weight: 700; }
+.nav-label { flex: 1 1 auto; }
+.nav-badge { min-width: 18px; height: 18px; padding: 0 5px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-pill); background: var(--alloc-equity); color: var(--on-equity); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rail.mini .nav-badge, .line-key .nav-badge { position: absolute; top: 4px; right: 6px; }
 .rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 14px; }
 .rail-lines { display: flex; gap: 8px; }
-.line-key { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius-s); background: var(--surface); color: var(--dim); }
+.line-key { position: relative; flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius-s); background: var(--surface); color: var(--dim); }
+.line-key.on { border-color: var(--up); color: var(--up); }
 .account { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-s); background: var(--surface); color: var(--text); }
 .account.current { border-color: var(--rule); background: var(--surface-2); }
 .account-body { display: flex; flex-direction: column; line-height: 1.25; }
@@ -179,9 +190,11 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .drawer.details { width: min(400px, 100%); }
 /* the page behind a drawer stays usable (spec §3.3): on a wide screen it makes room instead of hiding under it */
 @media (min-width: 1100px) {
-  .main.with-drawer > .head, .main.with-drawer > .thread, .main.with-drawer > .composer { margin-right: 400px; }
   .disc.with-drawer, .acct.with-drawer { padding-right: 488px; }
-  .with-drawer .toast { left: calc(var(--rail) + (100vw - var(--rail) - 460px) / 2); }
+}
+/* Messages has the second level too, so the conversation makes room only on a wider screen */
+@media (min-width: 1400px) {
+  .main.with-drawer > .head, .main.with-drawer > .thread, .main.with-drawer > .composer { margin-right: 400px; }
 }
 .drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 14px 14px 24px; border-bottom: 1px solid var(--border); }
 .drawer-head h2 { font-size: 20px; }
@@ -207,7 +220,8 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .call-scrim { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--scrim); z-index: 50; }
 .call { display: flex; flex-direction: column; align-items: center; gap: 10px; width: min(320px, calc(100vw - 32px)); padding: 22px 18px; border-radius: var(--radius-l); background: var(--surface); border: 1px solid var(--down-edge); box-shadow: var(--shadow); text-align: center; }
 .call-keys { display: flex; gap: 16px; margin-top: 4px; }
-.toast { position: fixed; left: calc(var(--rail) + (100vw - var(--rail)) / 2); bottom: 28px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 12px; padding: 8px 8px 8px 18px; border-radius: var(--radius-pill); background: var(--primary); color: var(--on-primary); font-size: 13px; white-space: nowrap; box-shadow: var(--shadow-lift); z-index: 25; }
+/* the toast sits at the bottom-centre of the main column (spec §3.3), whatever the two levels' widths */
+.toast { position: sticky; bottom: 28px; align-self: center; margin-top: auto; display: inline-flex; align-items: center; gap: 12px; padding: 8px 8px 8px 18px; border-radius: var(--radius-pill); background: var(--primary); color: var(--on-primary); font-size: 13px; white-space: nowrap; box-shadow: var(--shadow-lift); z-index: 25; }
 .toast-key { min-height: 32px; padding: 0 14px; display: inline-flex; align-items: center; border-radius: var(--radius-pill); background: var(--surface); color: var(--text); font-weight: 600; }
 .toast-x { width: 28px; height: 28px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--on-primary); font-size: 14px; }
 
@@ -316,14 +330,22 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .director { position: fixed; right: 16px; bottom: 88px; display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: var(--radius-m); background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--shadow-lift); z-index: 45; }
 .director-key { min-height: 32px; padding: 0 12px; border: 0; border-radius: var(--radius-pill); background: var(--surface-2); color: var(--text); font-size: 13px; text-align: left; }
 
-/* narrow windows: the rail is a block on top and the page scrolls as one, so nothing sits behind the thread */
+/* narrow windows: the first level is a bar of icons on top, the list a block under it, and the page scrolls as one */
 @media (max-width: 860px) {
-  .app { flex-direction: column; flex-wrap: nowrap; }
-  .rail { position: static; height: auto; overflow: visible; flex: none; border-right: 0; border-bottom: 1px solid var(--border); }
+  .app { flex-direction: column; }
+  .rail, .rail.mini { position: static; height: auto; width: auto; flex: none; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; overflow: visible; border-right: 0; border-bottom: 1px solid var(--border); }
+  .rail .brand-name, .rail .nav-label, .rail .account-body { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .rail .rail-toggle { display: none; }
+  .rail .rail-group { flex-direction: row; }
+  .rail .nav-item, .rail .account { min-height: 40px; padding: 0 10px; }
+  .rail .nav-badge { position: absolute; top: 2px; right: 2px; }
+  .rail-foot { margin-top: 0; margin-left: auto; flex-direction: row; align-items: center; gap: 8px; }
+  .rail.mini .rail-lines { flex-direction: row; }
+  .line-key { min-height: 40px; padding: 0 10px; }
+  .list { position: static; height: auto; width: auto; flex: none; border-right: 0; border-bottom: 1px solid var(--border); }
   .rail-rows { max-height: 40vh; }
   .main { height: auto; min-height: 100vh; background: var(--bg); }
   .thread { overflow-y: visible; }
   .disc, .acct { overflow-y: visible; }
-  .toast { left: 50%; }
   .banner { width: calc(100vw - 32px); }
 }
