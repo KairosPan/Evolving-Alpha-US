@@ -151,9 +151,3 @@ export function renderCall(c, now = Date.now()) {
   }
   return `<div class="call-scrim"><div class="call" role="dialog" aria-label="${label}">${inner}</div></div>`;
 }
-
-export function renderStub(route) {
-  const title = route.screen === 'markets' ? 'Markets' : 'Trade';
-  const sub = route.screen === 'markets' && route.id ? `Markets › ${esc(route.id)}` : '';
-  return `<main class="main"><header class="head"><h1 class="head-title">${title}</h1></header><div class="stub">${sub ? `<div class="head-task">${sub}</div>` : ''}</div></main>`;
-}

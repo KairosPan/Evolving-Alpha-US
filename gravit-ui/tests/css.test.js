@@ -3,7 +3,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { renderRail } from '../js/render/rail.js';
-import { renderMessagesScreen, renderBanner, renderCall, renderStub } from '../js/render/messages.js';
+import { renderMessagesScreen, renderBanner, renderCall } from '../js/render/messages.js';
+import { renderMarkets } from '../js/render/markets.js';
+import { renderTrade } from '../js/render/trade.js';
 import { renderMailScreen } from '../js/render/mail.js';
 import { renderDiscover } from '../js/render/discover.js';
 import { renderAccount } from '../js/render/account.js';
@@ -38,15 +40,50 @@ function everyState() {
     ...['move', 'receive', 'statement', 'connect'].map(panel => R.openPanel(R.nav(s, { screen: 'account', tab: 'portfolio' }), panel)),
     R.moveFunds(R.openPanel(R.nav(s, { screen: 'account', tab: 'portfolio' }), 'move'), { from: 'Stand-in Wallet', to: 'Stand-in Wallet', asset: 'USDC', amount: '1', now: NOW }),
     R.nav(s, { screen: 'mail', id: null }), R.nav(s, { screen: 'mail', id: 'mail-1' }), { ...R.nav(s, { screen: 'mail', id: null }), railCollapsed: true },
+    ...marketStates(s), ...tradeStates(s),
+  ];
+}
+
+// Markets: every tab, a search and an empty one, each sort, connecting, after Polymarket, and the drawers
+function marketStates(s) {
+  const m = R.nav(s, { screen: 'markets', id: null });
+  const poly = R.venueConnected(m, 'Polymarket');
+  const drawer = (st, id) => R.nav(st, { screen: 'markets', id });
+  return [
+    m, ...['crypto', 'stocks', 'rwas', 'predictions', 'watching'].map(t => R.setMarketsTab(m, t)), R.setMarketsQuery(m, 'sol'), R.setMarketsQuery(m, 'zzz'),
+    R.setMarketsSort(m, 'movers'), R.setMarketsSort(m, 'closing'), R.connectVenue(m, 'Coinbase'), poly, R.setMarketsTab(poly, 'predictions'),
+    drawer(s, 'BTC'), R.askConfirm(drawer(s, 'KO'), { action: 'cancelOrder', id: 'ord-0008' }), drawer(s, 'FED-DEC'), drawer(poly, 'FED-DEC'), drawer(s, 'USDY'), drawer(s, 'USDC'),
+    drawer(s, 'DOGE'), R.connectVenue(drawer(s, 'DOGE'), 'Coinbase'), R.setMarketsInterval(drawer(s, 'BTC'), '5m'), R.setMarketsInterval(drawer(s, 'ETH'), '1d'),
+  ];
+}
+
+// Trade: at rest, each kind, a search, the ticket at each step, a prediction, a waiting card, and fills that add RWA and Predictions to the bar
+function tradeStates(s) {
+  const t = R.nav(s, { screen: 'trade' });
+  const set = (st, f) => Object.entries(f).reduce((x, [field, value]) => R.setTicket(x, { field, value, now: NOW }), st);
+  const ready = set(R.openTicket(t, { id: 'BTC', now: NOW }), { amount: '25' });
+  const placing = R.placeOrder(ready, { now: NOW });
+  const done = id => R.settleOrder(id, { id: id.trade.ticket.placing, now: NOW });
+  const poly = R.venueConnected(t, 'Polymarket');
+  const fed = set(R.openTicket(poly, { id: 'FED-DEC', now: NOW }), { amount: '10' });
+  const usdy = set(R.openTicket(t, { id: 'USDY', now: NOW }), { amount: '50' });
+  const poor = { ...ready, account: { ...ready.account, cash: { ...ready.account.cash, 'Stand-in Exchange': 0 } } };
+  return [
+    t, ...['stocks', 'rwas', 'predictions'].map(k => R.setTradeKind(t, k)), R.setTradeQuery(t, 'sol'), R.setTradeQuery(t, 'zzz'),
+    R.openTicket(t, { id: 'BTC', now: NOW }), ready, R.toggleSigns(ready), set(ready, { amount: '150' }), placing, done(placing),
+    done(R.placeOrder(poor, { now: NOW })), set(ready, { orderType: 'limit', limit: '60000' }), R.openTicket(t, { id: 'DOGE', now: NOW }), R.connectVenue(R.openTicket(t, { id: 'DOGE', now: NOW }), 'Coinbase'),
+    fed, R.toggleSigns(set(fed, { orderType: 'limit', limit: '60' })), R.ticketSide(fed, { side: 'sell', now: NOW }), done(R.placeOrder(fed, { now: NOW })), done(R.placeOrder(usdy, { now: NOW })),
+    R.append(t, { convId: 'c-1', msg: { from: 'gravit', kind: 'card', text: 'x', data: { title: 'x', by: NOW, rows: [] } }, at: NOW }),
+    R.nav(done(R.placeOrder(fed, { now: NOW })), { screen: 'account', tab: 'portfolio' }), R.nav(done(R.placeOrder(usdy, { now: NOW })), { screen: 'account', tab: 'portfolio' }),
   ];
 }
 
 test('every class the screens emit has a rule in app.css, and app.css names no colour by hex', async () => {
   const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
   assert.doesNotMatch(css, /#[0-9a-fA-F]{3,6}\b/, 'colours come from tokens.css');
-  const screen = st => st.route.screen === 'discover' ? renderDiscover(st) : st.route.screen === 'account' ? renderAccount(st) : st.route.screen === 'mail' ? renderMailScreen(st, NOW) : st.route.screen === 'messages' ? renderMessagesScreen(st, NOW) : renderStub(st.route);
+  const screen = st => ({ discover: () => renderDiscover(st), account: () => renderAccount(st), mail: () => renderMailScreen(st, NOW), markets: () => renderMarkets(st, NOW), trade: () => renderTrade(st, NOW) })[st.route.screen]?.() ?? renderMessagesScreen(st, NOW);
   const html = everyState().map(st => renderRail(st, NOW) + screen(st)).join('')
-    + renderBanner(director.breaking(NOW), seed(NOW)) + renderCall(director.call()) + renderStub({ screen: 'markets', id: 'NVDA' })
+    + renderBanner(director.breaking(NOW), seed(NOW)) + renderCall(director.call())
     + renderCall({ from: 'gravit', about: '', dir: 'out', status: 'ringing', since: NOW }, NOW) + renderCall({ from: 'gravit', about: 'x', dir: 'in', status: 'live', since: NOW, muted: true }, NOW)
     + renderRail(R.startCall(seed(NOW), { now: NOW }), NOW);
   const classes = new Set(html.match(/class="([^"]+)"/g).flatMap(m => m.slice(7, -1).split(/\s+/)));

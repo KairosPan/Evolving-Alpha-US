@@ -1,7 +1,7 @@
 // gravit-ui/tests/messages-screen.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { currentConversation, renderMessagesScreen, renderHead, renderComposer, renderDetails, renderBanner, renderCall, renderStub } from '../js/render/messages.js';
+import { currentConversation, renderMessagesScreen, renderHead, renderComposer, renderDetails, renderBanner, renderCall } from '../js/render/messages.js';
 import { seg, segLinks, kv, sec } from '../js/render/controls.js';
 import { reducers as R } from '../js/reducers/index.js';
 import { seed } from '../js/data/seed.js';
@@ -129,9 +129,6 @@ test('banner, call, stub and the controls', () => {
   assert.match(c, /class="call-scrim"/);
   assert.match(c, /class="key no big" data-action="answerCall" data-accept="0" aria-label="Decline"/);
   assert.match(c, /class="key yes big" data-action="answerCall" data-accept="1" aria-label="Accept"/);
-  assert.match(renderStub({ screen: 'markets', id: 'NVDA' }), /Markets › NVDA/);
-  assert.match(renderStub({ screen: 'trade' }), /<h1 class="head-title">Trade<\/h1>/);
-  assert.doesNotMatch(renderStub({ screen: 'trade' }), /Linqi/, 'no small print on a stub');
   const onC3 = R.nav(s, { screen: 'messages', id: 'c-3' });
   assert.match(renderBanner({ id: 'b', headline: 'H', body: 'B', at: NOW }, onC3), /href="#\/messages\/c-3"/, 'the banner leads to the thread it covers');
   assert.equal(seg(['A', 'B'], 'B', 'pick'), '<div class="seg"><button type="button" class="seg-item" aria-pressed="false" data-action="pick" data-value="A">A</button><button type="button" class="seg-item pressed" aria-pressed="true" data-action="pick" data-value="B">B</button></div>');

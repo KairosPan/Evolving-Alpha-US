@@ -32,7 +32,7 @@ test('icon returns an inline svg, aria-hidden, sized as asked', () => {
   assert.match(s, /aria-hidden="true"/);
   assert.match(s, /<path d="M5 12l5 5 9-10">/);
   assert.throws(() => icon('nope'), /unknown icon/);
-  for (const name of ['chat', 'plus', 'chevDown', 'chevRight', 'compass', 'markets', 'trade', 'phone', 'phoneOff', 'mail', 'wallet', 'search', 'mic', 'send', 'check', 'x', 'trash', 'shield', 'bars', 'book', 'link', 'plane', 'wave', 'calendar', 'columns', 'arrows', 'flame', 'fileCheck', 'team', 'rewind', 'filter', 'pairs', 'upload', 'pencil', 'bell', 'sigma', 'clock', 'bolt']) {
+  for (const name of ['star', 'plug', 'agent', 'coin', 'stock', 'rwa', 'prediction', 'chat', 'plus', 'chevDown', 'chevRight', 'compass', 'markets', 'trade', 'phone', 'phoneOff', 'mail', 'wallet', 'search', 'mic', 'send', 'check', 'x', 'trash', 'shield', 'bars', 'book', 'link', 'plane', 'wave', 'calendar', 'columns', 'arrows', 'flame', 'fileCheck', 'team', 'rewind', 'filter', 'pairs', 'upload', 'pencil', 'bell', 'sigma', 'clock', 'bolt']) {
     assert.ok(ICONS[name], name);
   }
 });

@@ -6,6 +6,7 @@ import { seed, SEED_VERSION } from '../js/data/seed.js';
 import { QUOTE_MS } from '../js/data/markets.js';
 import { prepare, revalue, legsOf, routeOf, handOver, mentions } from '../js/trade.js';
 import { instrument } from '../js/data/markets.js';
+import { renderTrade } from '../js/render/trade.js';
 
 const NOW = new Date(2026, 9, 9, 14, 7).getTime();
 const fresh = () => seed(NOW);
@@ -179,4 +180,88 @@ test('Hand to Gravit words the ticket for the composer; mentions keeps ETH apart
   assert.equal(mentions('小仓位 BTC，$70k 以下', 'BTC'), true);
   assert.equal(mentions('Will ETH-3K close', 'ETH'), false);
   assert.equal(mentions('Fill · 0.00008 BTC @ 62,500', 'BTC'), true);
+});
+
+// ---- the Trade screen
+
+const count = (h, re) => (h.match(re) ?? []).length;
+const onTrade = s => R.nav(s, { screen: 'trade' });
+
+test('Trade at rest: the head with the cap, the four kinds, the picker, Under way with Gravit\'s order, and the resting ticket', () => {
+  const h = renderTrade(onTrade(fresh()), NOW);
+  assert.match(h, /^<main class="main trade"><div class="tp"><div class="tp-cols">/);
+  assert.match(h, /<h1 class="head-title">Trade<\/h1><span class="chip up">Trading on · \$100 a move<\/span>/);
+  assert.equal(count(h, /data-action="tradeKind"/g), 4);
+  assert.match(h, /class="seg-item pressed" aria-pressed="true" data-action="tradeKind" data-value="crypto">[\s\S]*?Crypto<\/button>/);
+  assert.match(h, /<div class="tk-pg-h">You hold<\/div><ul class="tk-list"><li><button type="button" class="tk-row" data-action="pickMarket" data-id="BTC" data-venue="Stand-in Exchange">/);
+  const most = h.slice(h.indexOf('<div class="tk-pg-h">Most traded</div>'));
+  assert.equal(count(most.slice(0, most.indexOf('</ul>')), /class="tk-row"/g), 6);
+  assert.doesNotMatch(h, /tk-pg-h">Recent</);
+  assert.match(h, /<b>Buy 0\.4295 KO · limit 58\.2<\/b>[\s\S]*?by Gravit, approved by you · <a class="link" href="#\/messages\/c-4" data-action="open" data-id="c-4">/);
+  assert.match(h, /<span class="tk-st">Open<\/span><span class="tk-why">on Stand-in Broker&#39;s book at 58\.2<\/span>/);
+  assert.match(h, /data-action="cancelOrder" data-id="ord-0008">Cancel</);
+  assert.match(h, /<h2 class="tk-title">Pick a market<\/h2>/);
+  assert.match(h, /data-action="handToGravit">[\s\S]*?Hand to Gravit instead<\/button>/);
+  assert.doesNotMatch(h, /Sign and place/);
+});
+
+test('the BTC ticket: where with the best venue, Buy and Sell, Amount in dollars or BTC, Market or Limit; nothing to sign yet', () => {
+  const h = renderTrade(onTrade(R.openTicket(fresh(), { id: 'BTC', now: NOW })), NOW);
+  assert.match(h, /<h2 class="tk-title">Buy BTC<\/h2><\/div><button type="button" class="close-key" data-action="closeTicket" aria-label="Close the ticket">×<\/button>/);
+  assert.equal(count(h, /class="tk-at" data-action="ticketVenue"/g), 2);
+  assert.equal(count(h, /class="tk-at pub"/g), 1);
+  assert.match(h, /data-venue="Stand-in Exchange" aria-pressed="true"><span><b>Stand-in Exchange<\/b><span class="mk-tag up">Best<\/span><\/span><span class="tk-at-r">\$62,803\.60<\/span><\/button>/);
+  assert.match(h, /<span class="tk-at-r">\$62,861\.20<span class="tk-worse">0\.09% worse<\/span><\/span>/);
+  assert.match(h, /class="tk-path">Type an amount\.</);
+  assert.match(h, /<button type="submit" id="tk-go" class="btn-primary tk-go" disabled>Sign and place<\/button>/);
+  for (const id of ['tk-amount', 'tk-unit', 'tk-type']) assert.match(h, new RegExp(`id="${id}"`));
+  assert.match(h, /<option value="usd" selected>Dollars<\/option><option value="qty">BTC<\/option>/);
+  assert.doesNotMatch(h, /id="tk-limit"/);
+});
+
+test('a ready quote: what it buys and pays, the fee, the ten minutes, What you sign; refused, placing and done say so', () => {
+  const s = onTrade(ticket(fresh(), 'BTC', { amount: '25' }));
+  const h = renderTrade(s, NOW);
+  assert.match(h, /<div class="tk-big"><span>Buy 0\.00039 BTC<\/span><span>≈ \$24\.49<\/span><\/div>/);
+  assert.match(h, /<div class="tk-path">BTC\/USDT at 62,803\.6 · up to \$24\.98 if the price moves<\/div>/);
+  assert.match(h, /<div class="tk-path">fee about \$0\.02<\/div>/);
+  assert.match(h, /<div class="tk-left" data-left>Your signature is good for 10:00 more\.<\/div>/);
+  assert.match(h, /data-action="toggleSigns" aria-expanded="false">What you sign<\/button>/);
+  assert.match(h, /<button type="submit" id="tk-go" class="btn-primary tk-go">Sign and place<\/button>/);
+  assert.match(renderTrade(R.toggleSigns(s), NOW), /<pre class="tk-signs">venue: Stand-in Exchange\nsymbol: BTC\/USDT\nside: buy\norderType: market\nqty: 0\.00039\nlimitPrice: \nmaxNotional: 24\.98\n/);
+  const cap = renderTrade(R.setTicket(s, { field: 'amount', value: '150', now: NOW }), NOW);
+  assert.match(cap, /<div class="tk-msg no">\$152\.46 is more than the most one order may be \(\$100\.00\)\.<\/div>/);
+  assert.match(cap, /id="tk-go" class="btn-primary tk-go" disabled/);
+  const placing = R.placeOrder(s, { now: NOW });
+  assert.match(renderTrade(placing, NOW), /<div class="tk-msg wait" role="status">Placing it at Stand-in Exchange…<\/div>/);
+  assert.match(renderTrade(placing, NOW), /<span class="tk-st wait">On the way<\/span><span class="tk-why">Stand-in Exchange took it<\/span>/);
+  assert.match(renderTrade(filled(placing), NOW), /<div class="tk-msg ok" role="status">Bought: ord-0010 · filled at 62,803\.6 · fee \$0\.02<\/div>/);
+  assert.match(renderTrade(R.setTicket(s, { field: 'orderType', value: 'limit', now: NOW }), NOW), /<label class="field-label" for="tk-limit">Limit price<\/label><input id="tk-limit"[^>]*placeholder="62800"/);
+});
+
+test('a prediction ticket: Yes and No, a limit in cents, what the contracts pay; a public-only market waits for a venue', () => {
+  const poly = onTrade(R.venueConnected(fresh(), 'Polymarket'));
+  const h = renderTrade(ticket(poly, 'FED-DEC', { amount: '10' }), NOW);
+  assert.match(h, /<div class="tk-out"><button type="button" class="mk-yes pressed" data-action="ticketOutcome" data-value="0" aria-pressed="true">Yes 63¢<\/button><button type="button" class="mk-no" data-action="ticketOutcome" data-value="1" aria-pressed="false">No 39¢<\/button><\/div>/);
+  assert.match(h, /<b>15 contracts pay \$15\.00<\/b> if Yes · cost ≈ \$9\.45 · the market gives it 63%/);
+  assert.match(h, /<option value="qty">Contracts<\/option>/);
+  assert.match(renderTrade(ticket(poly, 'FED-DEC', { amount: '10', orderType: 'limit' }), NOW), /for="tk-limit">Limit \(¢\)<\/label><input id="tk-limit"[^>]*placeholder="63"/);
+  const doge = renderTrade(onTrade(R.openTicket(fresh(), { id: 'DOGE', now: NOW })), NOW);
+  assert.match(doge, /<div class="tk-at pub"><span><b>Coinbase<\/b><span class="mk-tag">Public<\/span><\/span><span class="tk-at-r">\$0\.1214<button type="button" class="link" data-action="connectVenue" data-name="Coinbase">Connect to trade<\/button><\/span><\/div>/);
+  assert.doesNotMatch(doge, /id="tk-amount"/, 'no order to type before a venue can take it');
+});
+
+test('Stocks: what you hold; a card Gravit is waiting on shows under Under way; a search narrows the picker; no small print', () => {
+  const st = renderTrade(onTrade(R.setTradeKind(fresh(), 'stocks')), NOW);
+  assert.match(st, /data-action="pickMarket" data-id="AAPL" data-venue="Stand-in Broker"/);
+  assert.match(st, /data-action="pickMarket" data-id="NVDA" data-venue="Stand-in Broker"/);
+  const asked = R.append(onTrade(fresh()), { convId: 'c-1', msg: { from: 'gravit', kind: 'card', text: '要你答：加 $25', data: { title: '要你答：加 $25', by: NOW + 600000, rows: [] } }, at: NOW });
+  const h = renderTrade(asked, NOW);
+  assert.match(h, /<b>Gravit asks: 要你答：加 \$25<\/b>/);
+  assert.match(h, /<span class="tk-st warn">Waiting for you<\/span>/);
+  assert.match(h, /<a class="btn-sm" href="#\/messages\/c-1" data-action="open" data-id="c-1">Review<\/a>/);
+  const q = renderTrade(onTrade(R.setTradeQuery(fresh(), 'sol')), NOW);
+  assert.match(q, /<div class="tk-pg-h">Results for “sol”<\/div>/);
+  assert.doesNotMatch(q, /tk-pg-h">You hold</);
+  assert.doesNotMatch(h + st, /Each contract pays|Becomes a stock perpetual|Its own signature|Your words go to the agent|trade from here/);
 });

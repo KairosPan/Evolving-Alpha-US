@@ -40,6 +40,14 @@ export const ICONS = {
   sigma: '<path d="M18 5H6l6 7-6 7h12"></path>',
   clock: '<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>',
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"></path>',
+  // Linqi's sprite (buyer-agent-demo account.html) for Markets and Trade; coin is his i-trade
+  star: '<path d="m12 4 2.4 5 5.6.8-4 3.9.9 5.5L12 16.6 7.1 19.2l.9-5.5-4-3.9 5.6-.8z"></path>',
+  plug: '<path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0z"></path><path d="M12 16v5"></path>',
+  agent: '<rect x="4" y="7" width="16" height="12" rx="3"></rect><path d="M12 3v4M9 12h.01M15 12h.01M9 16h6"></path>',
+  coin: '<path d="M7 4v16M7 4 4 7M7 4l3 3M17 20V4M17 20l-3-3M17 20l3-3"></path>',
+  stock: '<path d="M4 20h16"></path><path d="M6 17v-4M11 17V9M16 17v-6"></path><path d="m5 8 5-4 4 3 5-4"></path>',
+  rwa: '<path d="M9 11V4.5A1.5 1.5 0 0 1 10.5 3H19a1.5 1.5 0 0 1 1.5 1.5v10A1.5 1.5 0 0 1 19 16h-5"></path><path d="M13 7h4M13 10h4"></path><circle cx="8" cy="16" r="5"></circle><path d="M8 13.5v5M6.5 15h3"></path>',
+  prediction: '<circle cx="12" cy="12" r="9"></circle><path d="M12 12 16 8"></path><path d="M12 7v1M7 12h1M16.5 12h.5"></path>',
 };
 
 export function icon(name, size = 22, sw = 2) {

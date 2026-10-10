@@ -4,7 +4,13 @@ import { reducers } from './reducers/index.js';
 import { seed, firstRun, SEED_VERSION } from './data/seed.js';
 import { parseHash, toHash } from './router.js';
 import { renderRail } from './render/rail.js';
-import { renderMessagesScreen, renderBanner, renderCall, renderStub, currentConversation } from './render/messages.js';
+import { renderMessagesScreen, renderBanner, renderCall, currentConversation } from './render/messages.js';
+import { renderMarkets } from './render/markets.js';
+import { renderTrade } from './render/trade.js';
+import { QUOTE_MS } from './data/markets.js';
+import { closeIn, leftWords } from './market-fmt.js';
+import { handOver } from './trade.js';
+import { VENUES } from './data/seed.js';
 import { renderMailScreen } from './render/mail.js';
 import { renderDiscover } from './render/discover.js';
 import { renderAccount } from './render/account.js';
@@ -34,6 +40,9 @@ const COPIED_MS = 1500;
 // the scripted client on Discover's MCP face: it connects, then asks shop.publish a moment later
 const CLIENT_CONNECT_MS = 1500;
 const CLIENT_PUBLISH_MS = 1500;
+// a stand-in venue answers a signed order a moment later; countdowns tick each second
+const FILL_MS = 900;
+const CLOCK_MS = 1000;
 // what the scripted mic hears, in turn
 const HEARD = ['小仓位买 BTC，$70k 以下', 'Pelosi 最近买了什么', '查一下这个地址是不是骗子', '额度改到每单 $50'];
 const usable = saved => !!saved && saved.v === SEED_VERSION && Array.isArray(saved.conversations);
@@ -44,6 +53,7 @@ const withoutMoments = s => ({
   discover: { ...s.discover, drawer: null, create: null, toast: null },
   compose: { files: [], listening: false },
   account: { ...s.account, panel: null, connecting: null, copied: false, panelError: null },
+  trade: s.trade ? { ...s.trade, ticket: null } : s.trade,
 });
 
 export function initialState(storage, now = Date.now()) {
@@ -101,6 +111,14 @@ export function replyFlow(store, timers, convId, text, now = () => Date.now(), s
   schedule(store, timers, convId, replyTo(text, { ...context(store, c, now), files }), now);
 }
 
+// Sign and place: the order goes to the stand-in venue, which answers once, a moment later
+export function placeFlow(store, timers, now = () => Date.now(), ms = FILL_MS) {
+  const before = store.get().trade.ticket?.placing;
+  store.dispatch('placeOrder', { now: now() });
+  const id = store.get().trade.ticket?.placing;
+  if (id && id !== before) timers.after(ms, () => store.dispatch('settleOrder', { id, now: now() }));
+}
+
 // a toast leaves by itself after a while; a newer toast keeps its own time
 export function watchToast(store, timers, ms = TOAST_MS) {
   let last = store.get().discover.toast;
@@ -126,13 +144,16 @@ function focusKey(el) {
 }
 
 // which overlay is up: focus moves into it when it opens and back to its opener when it closes
-const overlayOf = s => (s.call ? 'call' : s.discover.create ? 'modal' : s.account.panel || s.detailsOpen || s.settingsOpen || s.discover.drawer ? 'drawer' : null);
-const screenOf = s => `${s.route.screen}/${s.route.id ?? s.route.tab ?? ''}`;
+// a market's drawer is its route (#/markets/<id>)
+const marketDrawer = s => s.route.screen === 'markets' && !!s.route.id;
+const overlayOf = s => (s.call ? 'call' : s.discover.create ? 'modal' : s.account.panel || s.detailsOpen || s.settingsOpen || s.discover.drawer || marketDrawer(s) ? 'drawer' : null);
+// Markets keeps its scroll while a drawer opens and closes over it
+const screenOf = s => (s.route.screen === 'markets' ? 'markets/' : `${s.route.screen}/${s.route.id ?? s.route.tab ?? ''}`);
 // which editor is open, by what it edits (its error may change; the editor stays the same)
 const editorOf = e => (e ? [e.kind, e.key, e.convId, e.id, e.dir].join('|') : null);
 // which dialog step is up: its body keeps its scroll only while the step stays the same
 const dialogOf = s => (s.discover.create ? `${s.discover.create.run}:${s.discover.create.step}` : null);
-const drawerOf = s => (s.account.panel ? `panel:${s.account.panel}` : null) ?? s.discover.drawer ?? (s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null);
+const drawerOf = s => (s.account.panel ? `panel:${s.account.panel}` : null) ?? s.discover.drawer ?? (s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null) ?? (marketDrawer(s) ? `market:${s.route.id}` : null);
 
 export function boot(win) {
   const doc = win.document;
@@ -147,6 +168,7 @@ export function boot(win) {
   let heard = 0;
   let ticking = false;
   let pending = false;
+  let clocking = false;
   let last = { overlay: null, opener: null, screen: null, drawer: null, thread: null };
 
   function applyTheme(theme) {
@@ -171,7 +193,8 @@ export function boot(win) {
     const threadAt = thread0 ? { top: thread0.scrollTop, bottom: thread0.scrollHeight - thread0.scrollTop - thread0.clientHeight < 40 } : null;
     const scrolls = { main: root.querySelector('main')?.scrollTop, rows: root.querySelector('.rail-rows')?.scrollTop, drawer: root.querySelector('.drawer-body')?.scrollTop, dialog: root.querySelector('.modal-body')?.scrollTop, shelves: [...root.querySelectorAll('.shelf-row')].map(e => e.scrollLeft) };
 
-    const screen = s.route.screen === 'discover' ? renderDiscover(s) : s.route.screen === 'account' ? renderAccount(s) : s.route.screen === 'mail' ? renderMailScreen(s, now()) : (s.route.screen === 'markets' || s.route.screen === 'trade') ? renderStub(s.route) : renderMessagesScreen(s, now());
+    const screen = s.route.screen === 'discover' ? renderDiscover(s) : s.route.screen === 'account' ? renderAccount(s) : s.route.screen === 'mail' ? renderMailScreen(s, now())
+      : s.route.screen === 'markets' ? renderMarkets(s, now()) : s.route.screen === 'trade' ? renderTrade(s, now()) : renderMessagesScreen(s, now());
     const overlays = (s.banner ? renderBanner(s.banner, s) : '') + (s.call ? renderCall(s.call, now()) : '') +
       (directorOpen ? `<div class="director" role="menu">${DIRECTOR.map(([l, k]) => `<button type="button" class="director-key" data-action="director" data-key="${k}">${l}</button>`).join('')}</div>` : '');
     root.innerHTML = renderRail(s, now()) + screen + overlays;
@@ -187,6 +210,13 @@ export function boot(win) {
     // the search box says what the store searches: Publish and 插件上传 clear it
     const dq = doc.getElementById('dq');
     if (dq) dq.value = s.discover.query;
+    // Markets' and Trade's boxes say what the store holds, so a fill clears the amount it used
+    const mq = doc.getElementById('mq');
+    if (mq) mq.value = s.markets.q;
+    const tq = doc.getElementById('tq');
+    if (tq) tq.value = s.trade.q;
+    const tk = s.trade.ticket;
+    if (tk) for (const [id, v] of [['tk-amount', tk.amount], ['tk-unit', tk.unit], ['tk-type', tk.orderType], ['tk-limit', tk.limit]]) { const el = doc.getElementById(id); if (el) el.value = v; }
 
     // scroll: the second level keeps its rows while it lists the same thing (conversations or letters); the page and the shelves keep theirs
     // on the same screen; a drawer while it stays the same drawer
@@ -232,6 +262,25 @@ export function boot(win) {
     }
     last = { overlay, opener, screen: screenOf(s), drawer: drawerOf(s), dialog: dialogOf(s), thread: threadSig, editor: editorOf(s.edit), confirm: s.confirm };
     if (s.call?.status === 'live' && !ticking) tick();
+    if ((s.route.screen === 'markets' || s.route.screen === 'trade') && !clocking) clock();
+  }
+
+  // Markets' and Trade's countdowns: only their text changes; a quote whose ten minutes ran out is prepared again
+  function clock() {
+    clocking = true;
+    timers.after(CLOCK_MS, () => {
+      clocking = false;
+      const s = store.get();
+      if (s.route.screen !== 'markets' && s.route.screen !== 'trade') return;
+      const t = now();
+      for (const el of root.querySelectorAll('.mk-close[data-close]')) { const w = closeIn(Date.parse(el.dataset.close) - t); if (el.textContent !== w) el.textContent = w; }
+      const tk = s.trade.ticket;
+      if (tk?.id && tk.preparedAt != null) {
+        if (t >= tk.preparedAt + QUOTE_MS) store.dispatch('requote', { now: t });
+        else { const el = root.querySelector('[data-left]'); if (el) el.textContent = leftWords(tk.preparedAt + QUOTE_MS - t); }
+      }
+      clock();
+    });
   }
 
   // a live call's timer: only its text changes each second; the page and the call's keys stay as they are
@@ -341,6 +390,7 @@ export function boot(win) {
     else if (c.action === 'endLimit') store.dispatch('endLimit', { convId: c.id });
     else if (c.action === 'forgetAll') store.dispatch('forgetAll');
     else if (c.action === 'resetDemo') reset();
+    else if (c.action === 'cancelOrder') store.dispatch('cancelOrder', { id: c.id, now: now() });
   }
 
   const actions = {
@@ -450,6 +500,52 @@ export function boot(win) {
       const rows = store.get().account.activity.map(x => [new Date(x.at).toISOString(), `"${x.text.replace(/"/g, '""')}"`, x.amount].join(','));
       download('gravit-statement.csv', 'text/csv', ['at,what,amount', ...rows].join('\n'));
     },
+    // Markets: tabs, sort, the chart interval, the watchlist; a market's drawer is its route
+    openMarket: el => go({ screen: 'markets', id: el.dataset.id }),
+    closeMarket: () => go({ screen: 'markets', id: null }),
+    mkTab: el => store.dispatch('setMarketsTab', el.dataset.value),
+    mkSort: el => store.dispatch('setMarketsSort', el.dataset.value),
+    mkInterval: el => store.dispatch('setMarketsInterval', el.dataset.value),
+    mkClear: () => store.dispatch('setMarketsQuery', ''),
+    toggleWatch: el => store.dispatch('toggleWatch', el.dataset.id),
+    // Trade: the ticket opened from a row, a drawer or the picker
+    tradeFrom: el => {
+      store.dispatch('openTicket', { id: el.dataset.id, side: el.dataset.side || 'buy', outcome: Number(el.dataset.outcome || 0), venue: el.dataset.venue || null, now: now() });
+      go({ screen: 'trade' });
+    },
+    pickMarket: el => store.dispatch('openTicket', { id: el.dataset.id, venue: el.dataset.venue || null, now: now() }),
+    tradeKind: el => store.dispatch('setTradeKind', el.dataset.value),
+    closeTicket: () => store.dispatch('closeTicket'),
+    ticketSide: el => store.dispatch('ticketSide', { side: el.dataset.value, now: now() }),
+    ticketOutcome: el => store.dispatch('ticketOutcome', { outcome: Number(el.dataset.value), now: now() }),
+    ticketVenue: el => store.dispatch('ticketVenue', { venue: el.dataset.venue, now: now() }),
+    toggleSigns: () => store.dispatch('toggleSigns'),
+    // your own order goes at once; Gravit's asks first
+    cancelOrder: el => {
+      const o = store.get().account.orders.find(x => x.id === el.dataset.id);
+      if (!o) return;
+      if (o.by === 'gravit') store.dispatch('askConfirm', { action: 'cancelOrder', id: o.id });
+      else store.dispatch('cancelOrder', { id: o.id, now: now() });
+    },
+    // Hand to Gravit instead: a new message with the ticket in words and the limit chips set where Gravit may trade
+    handToGravit: el => {
+      const s = store.get();
+      const h = handOver(s, el.dataset.id ? { id: el.dataset.id } : s.trade.ticket);
+      composerText = h.words;
+      store.dispatch('startDraft', { now: now() });
+      if (h.venue && VENUES.includes(h.venue)) store.dispatch('setDraftLimit', { key: 'venue', value: h.venue });
+      if (h.perOrder) {
+        store.dispatch('setDraftLimit', { key: 'perOrder', value: h.perOrder });
+        store.dispatch('setDraftLimit', { key: 'total', value: Math.max(100, h.perOrder) });
+      }
+      if (!h.attach && store.get().draft.attach) store.dispatch('toggleDraftAttach');
+      go({ screen: 'messages', id: 'new' });
+    },
+    openStatement: () => {
+      store.dispatch('nav', { screen: 'account', tab: 'portfolio' });
+      store.dispatch('openPanel', 'statement');
+      go({ screen: 'account', tab: 'portfolio' });
+    },
     // the director
     director: el => {
       const k = el.dataset.key;
@@ -493,6 +589,8 @@ export function boot(win) {
     } else if (action === 'moveFunds') {
       const f = new win.FormData(form);
       store.dispatch('moveFunds', { from: f.get('from'), to: f.get('to'), asset: f.get('asset'), amount: f.get('amount'), now: now() });
+    } else if (action === 'placeOrder') {
+      placeFlow(store, timers, now);
     } else if (action === 'addMemory') {
       const f = new win.FormData(form);
       form.reset();
@@ -505,6 +603,9 @@ export function boot(win) {
     if (el.id === 'say') composerText = el.value;
     else if (el.dataset?.action === 'draftTitle') store.dispatch('setDraftTitle', el.value);
     else if (el.dataset?.action === 'query') store.dispatch('setQuery', el.value);
+    else if (el.dataset?.action === 'mkQuery') store.dispatch('setMarketsQuery', el.value);
+    else if (el.dataset?.action === 'tradeQuery') store.dispatch('setTradeQuery', el.value);
+    else if (el.dataset?.action === 'ticketField' && el.tagName !== 'SELECT') store.dispatch('setTicket', { field: el.name, value: el.value, now: now() });
   }
   root.addEventListener('input', ev => { if (!ev.isComposing && !composing) typed(ev.target); });
   // radios report on change: Create's client and where an upload goes
@@ -517,6 +618,7 @@ export function boot(win) {
       store.dispatch('addFiles', files);
     } else if (el.type === 'radio' && el.dataset?.action === 'mcpClient') store.dispatch('setClient', el.value);
     else if (el.type === 'radio' && el.dataset?.action === 'uploadVisibility') store.dispatch('setUploadVisibility', el.value);
+    else if (el.tagName === 'SELECT' && el.dataset?.action === 'ticketField') store.dispatch('setTicket', { field: el.name, value: el.value, now: now() });
   });
   root.addEventListener('compositionstart', () => { composing = true; });
   root.addEventListener('compositionend', ev => {
@@ -535,6 +637,7 @@ export function boot(win) {
       if (s.edit) { store.dispatch('cancelEdit'); return; }
       if (s.account.panel) { store.dispatch('closePanel'); return; }
       if (s.confirm) { store.dispatch('cancelConfirm'); return; }
+      if (marketDrawer(s)) { go({ screen: 'markets', id: null }); return; }
       if (s.discover.create) store.dispatch('closeCreate');
       else if (s.discover.drawer) store.dispatch('closeDrawer');
       else if (s.detailsOpen) store.dispatch('toggleDetails');
@@ -562,6 +665,8 @@ export function boot(win) {
   follow();
   render();
   for (const p of store.get().plugins.uploaded) scheduleReview(p);
+  // an order a reload interrupted on its way still gets the venue's answer
+  for (const o of store.get().account.orders) if (o.status === 'pending') timers.after(FILL_MS, () => store.dispatch('settleOrder', { id: o.id, now: now() }));
   return Object.assign(store, { timers });
 }
 
