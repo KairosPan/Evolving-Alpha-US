@@ -275,7 +275,8 @@ button.toast-key { border: 0; font: inherit; font-size: 13px; }
 .shelf-row::-webkit-scrollbar { display: none; }
 .pcard { flex: 0 0 300px; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; background: var(--surface); border: 1px solid var(--card-border); border-radius: var(--radius-m); padding: 16px; box-shadow: var(--shadow-card); cursor: pointer; }
 .pcard.pressed { border-color: var(--rule); }
-.pcard.grid { flex: none; }
+/* a card in a grid: not "grid", which is the container's own class and would stack the card's columns */
+.pcard.in-grid { flex: none; }
 .pcard-body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .pcard-name { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pcard-blurb { font-size: 13px; line-height: 1.35; }

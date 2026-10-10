@@ -115,7 +115,8 @@ test('search shows a results grid; a shelf route shows that shelf as a grid with
   assert.match(none, /class="grid-title">0 个</);
   const bots = renderDiscover(R.nav(seed(NOW), { screen: 'discover', id: 'bots' }));
   assert.match(bots, /class="grid-title">Bots</);
-  assert.equal(count(bots, /class="pcard grid"/g), 4);
+  assert.equal(count(bots, /class="pcard in-grid"/g), 4);
+  assert.doesNotMatch(bots, /class="pcard(?: [^" ]+)* grid[ "]/, 'a card never wears the grid container\'s class, or the container\'s columns stack the card');
   assert.match(bots, /class="back-link" href="#\/discover"/);
 });
 
@@ -186,7 +187,7 @@ test('a private upload lands first on its shelf, installed, with Open in Message
   assert.match(pluginDrawer(moat, s), /class="dim">Data · Private</);
   assert.match(pluginDrawer(moat, s), /<div class="dsec-label">工具<\/div><div class="dsec-line"><span class="mono">moat\.score<\/span><\/div>/);
   assert.match(pluginDrawer(byId('pairs'), s), /class="dim">Quant · Private</, 'your own plugin says where it is, not who made it');
-  assert.match(renderDiscover(R.nav(s, { screen: 'discover', id: 'data' })), /<div class="grid"><div class="pcard grid" data-action="openPlugin" data-id="moat"/, 'and first in See all');
+  assert.match(renderDiscover(R.nav(s, { screen: 'discover', id: 'data' })), /<div class="grid"><div class="pcard in-grid" data-action="openPlugin" data-id="moat"/, 'and first in See all');
   s = R.publishUpload(R.setUploadVisibility(atSign(R.openCreate(s), nextUpload(s.plugins.uploaded)), 'public'), { now: NOW });
   const cpi = byId('cpi', s.plugins.uploaded);
   assert.match(keyFor(cpi, s), /^<span class="pkey-wait" role="img" aria-label="审核中">/);

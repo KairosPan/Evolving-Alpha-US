@@ -17,7 +17,7 @@ export function keyFor(p, state) {
 export function card(p, state, { view = 'shelf', pressed = false, openIn = null } = {}) {
   // the link carries its own action so a click opens the conversation, not the card's drawer
   const extra = openIn ? `<div class="pcard-extra"><a class="link" data-action="open" data-id="${esc(openIn)}" href="#/messages/${esc(openIn)}">Open in Messages ›</a></div>` : '';
-  return `<div${attrs({ class: cls('pcard', pressed && 'pressed', view === 'grid' && 'grid'), 'data-action': 'openPlugin', 'data-id': p.id, role: 'button', tabindex: '0' })}>${logo(p, 44)}` +
+  return `<div${attrs({ class: cls('pcard', pressed && 'pressed', view === 'grid' && 'in-grid'), 'data-action': 'openPlugin', 'data-id': p.id, role: 'button', tabindex: '0' })}>${logo(p, 44)}` +
     `<div class="pcard-body"><div class="pcard-name">${esc(p.name)}</div><div class="pcard-blurb">${esc(p.blurb)}</div>${extra}</div>` +
     `<div class="pcard-side"><span class="pcard-kind">${esc(p.kind.toUpperCase())}</span>${keyFor(p, state)}</div></div>`;
 }
