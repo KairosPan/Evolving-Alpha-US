@@ -65,6 +65,8 @@ test('narrow windows, the toast under a drawer, and long words that wrap', async
   const z = sel => Number(css.match(new RegExp(`^\\${sel} \\{[^}]*z-index: (\\d+)`, 'm'))?.[1]);
   assert.ok(z('.toast') < z('.drawer'), 'a toast never covers a drawer');
   assert.match(css, /\.bubble, \.card \{[^}]*overflow-wrap: anywhere/, 'a pasted address wraps inside its bubble');
+  assert.match(css, /^\.chip \{[^}]*white-space: nowrap/m, 'a chip never breaks one character per line');
+  assert.match(css, /^\.pcard-extra \{[^}]*flex-wrap: wrap/m, 'on a narrow shelf card the link drops under the chip');
 });
 
 test('the equity blue goes by Linqi\'s own name: no --blue, which his tokens use for the orange RWA colour', async () => {
