@@ -3,6 +3,9 @@ import { nextId } from '../ids.js';
 import { DAY } from '../time.js';
 import { byId } from '../data/plugins.js';
 
+// a stopped or withdrawn conversation is closed: no answers, no more replies
+export const closed = c => !!c && (c.status === 'stopped' || c.status === 'withdrawn');
+const installedBots = s => s.plugins.installed.filter(id => byId(id, s.plugins.uploaded)?.kind === 'Bots');
 const upd = (state, id, fn) => ({ ...state, conversations: state.conversations.map(c => (c.id === id ? fn(c) : c)) });
 const push = (state, convId, msg) => upd(state, convId, c => ({ ...c, messages: [...c.messages, msg] }));
 
@@ -44,6 +47,10 @@ export const reducers = {
       route = { screen: 'messages', id: state.conversations[0]?.id ?? null };
     }
     let s = { ...state, route, detailsOpen: false, settingsOpen: false };
+    // Discover's drawer, trash-key ask and toast belong to Discover; they do not follow you out of it
+    if (route.screen !== 'discover' && (s.discover.drawer || s.discover.upload || s.discover.asking || s.discover.toast)) {
+      s = { ...s, discover: { ...s.discover, drawer: null, upload: false, asking: null, toast: null } };
+    }
     if (route.screen === 'messages' && route.id && route.id !== 'new') s = upd(s, route.id, c => (c.unread ? { ...c, unread: false } : c));
     if (!(route.screen === 'messages' && route.id === 'new')) s.draft = null;
     return s;
@@ -52,13 +59,26 @@ export const reducers = {
   setTheme: (s, theme) => ({ ...s, theme }),
 
   startDraft(s, { now }) {
-    return { ...s, draft: { title: '', attach: true, limit: { perOrder: 25, total: 100, until: now + 6 * DAY, venue: 'Stand-in Exchange' } }, route: { screen: 'messages', id: 'new' }, detailsOpen: false };
+    return { ...s, draft: { title: '', attach: true, bots: [], group: false, picking: false, limit: { perOrder: 25, total: 100, until: now + 6 * DAY, venue: 'Stand-in Exchange' } }, route: { screen: 'messages', id: 'new' }, detailsOpen: false };
   },
   cancelDraft: s => ({ ...s, draft: null, route: { screen: 'messages', id: s.conversations[0]?.id } }),
   setDraftTitle: (s, title) => (s.draft ? { ...s, draft: { ...s.draft, title } } : s),
   setDraftLimit: (s, { key, value }) => (s.draft ? { ...s, draft: { ...s.draft, limit: { ...s.draft.limit, [key]: value } } } : s),
   toggleDraftAttach: s => (s.draft ? { ...s, draft: { ...s.draft, attach: !s.draft.attach } } : s),
-  toggleDraftGroup: s => (s.draft ? { ...s, draft: { ...s.draft, group: !s.draft.group } } : s),
+  // "+ 加个 bot" opens a picker of the installed bots; each one is picked on its own (spec §5.5)
+  toggleDraftPicker: s => (s.draft ? { ...s, draft: { ...s.draft, picking: !s.draft.picking } } : s),
+  toggleDraftBot(s, id) {
+    if (!s.draft) return s;
+    const had = s.draft.bots ?? [];
+    const bots = had.includes(id) ? had.filter(x => x !== id) : [...had, id];
+    return { ...s, draft: { ...s.draft, bots, group: bots.length > 0 } };
+  },
+  // all installed bots at once, or none
+  toggleDraftGroup(s) {
+    if (!s.draft) return s;
+    const bots = (s.draft.bots ?? []).length ? [] : installedBots(s);
+    return { ...s, draft: { ...s.draft, bots, group: bots.length > 0 } };
+  },
   rename(s, { convId, title }) {
     const t = (title ?? '').trim();
     if (!t) return s;
@@ -77,7 +97,7 @@ export const reducers = {
     }
     if (s.draft || !s.conversations.some(c => c.id === convId)) {
       const d = s.draft ?? { title: '', attach: false, limit: null };
-      const bots = d.group ? s.plugins.installed.filter(id => byId(id, s.plugins.uploaded)?.kind === 'Bots') : [];
+      const bots = d.bots ?? (d.group ? installedBots(s) : []);
       const members = ['gravit', ...bots];
       const made = newConversation(s, {
         title: d.title.trim() || (clean.length > 24 ? clean.slice(0, 24) + '…' : clean),
@@ -96,17 +116,22 @@ export const reducers = {
     const target = state.conversations.find(c => c.id === convId);
     if (!target) return state;
     // after Stop or Withdraw nothing more lands from Gravit or a bot, even replies already scheduled
-    if ((target.status === 'stopped' || target.status === 'withdrawn') && msg.from !== 'you') return state;
+    if (closed(target) && msg.from !== 'you') return state;
     const filled = fillIds(state.counters, msg);
     const st = stampMessage({ ...state, counters: filled.counters }, filled.msg, at);
     const open = state.route.screen === 'messages' && state.route.id === convId;
-    return upd(st.state, convId, c => ({ ...c, unread: c.unread || (!open && msg.from !== 'you'), messages: [...c.messages, st.msg] }));
+    // a fill counts against the limit: Details shows what is left
+    const spend = msg.kind === 'receipt' && msg.data?.status === 'filled' && Number(msg.data?.amount) > 0 ? Number(msg.data.amount) : 0;
+    return upd(st.state, convId, c => ({
+      ...c, unread: c.unread || (!open && msg.from !== 'you'), messages: [...c.messages, st.msg],
+      intent: spend && c.intent.limit ? { ...c.intent, limit: { ...c.intent.limit, spent: c.intent.limit.spent + spend } } : c.intent,
+    }));
   },
 
   answer(state, { convId, msgId, answer, now }) {
     const conv = state.conversations.find(c => c.id === convId);
     const msg = conv?.messages.find(m => m.id === msgId);
-    if (!msg || msg.answer) return state;
+    if (!msg || msg.answer || closed(conv)) return state;
     const word = { approved: 'Approved.', rejected: 'Rejected.', granted: 'Granted.', declined: 'Declined.', no: 'No.' }[answer];
     let s = upd(state, convId, c => ({ ...c, messages: c.messages.map(m => (m.id === msgId ? { ...m, answer } : m)) }));
     if (word) {
@@ -121,10 +146,12 @@ export const reducers = {
 
   toggleDetails: s => ({ ...s, detailsOpen: !s.detailsOpen }),
   stopGravit(s, { convId, now }) {
+    if (closed(s.conversations.find(c => c.id === convId))) return s;
     const st = stampMessage(s, { from: 'system', kind: 'text', text: 'Gravit 停了，这件事不再动。', data: {} }, now);
     return upd(push(st.state, convId, st.msg), convId, c => ({ ...c, status: 'stopped' }));
   },
   withdraw(s, { convId, now }) {
+    if (closed(s.conversations.find(c => c.id === convId))) return s;
     const st = stampMessage(s, { from: 'system', kind: 'text', text: '委托撤了。', data: {} }, now);
     return upd(push(st.state, convId, st.msg), convId, c => ({ ...c, status: 'withdrawn' }));
   },

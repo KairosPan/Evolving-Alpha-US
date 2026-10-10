@@ -25,10 +25,19 @@ export const reducers = {
     // the plugin opens a conversation that teaches its use (spec §7.5)
     const st = stampMessage(s, { from: id, kind: 'text', text: p.teach, data: {} }, now);
     const conv = {
-      id: c1.id, title: `${p.name}：怎么用我`, kind: 'bot', members: ['gravit', id], unread: true, status: 'working',
+      id: c1.id, title: `${p.name}：怎么用我`, kind: 'bot', members: ['gravit', id], unread: true, status: 'working', teach: id,
       intent: { id: c2.id, created: now, until: now + 6 * DAY, limit: null }, plugins: [id], messages: [st.msg],
     };
     s = { ...st.state, conversations: [conv, ...st.state.conversations] };
+    // every conversation that was waiting on this install gets its answer and a word from Gravit
+    for (const c of s.conversations) {
+      if (!c.messages.some(m => m.kind === 'install' && m.data?.plugin === id && !m.answer)) continue;
+      const said = stampMessage(s, { from: 'gravit', kind: 'text', text: `${p.name} 装好了，我接着看。`, data: {} }, now);
+      s = { ...said.state, conversations: said.state.conversations.map(x => (x.id !== c.id ? x : {
+        ...x, plugins: x.plugins.includes(id) ? x.plugins : [...x.plugins, id],
+        messages: [...x.messages.map(m => (m.kind === 'install' && m.data?.plugin === id && !m.answer ? { ...m, answer: 'installed' } : m)), said.msg],
+      })) };
+    }
     return disc(s, { drawer: null, toast: { text: `${p.name} 装好了 · Gravit 开了一个会话教你用`, action: { label: 'Open', route: { screen: 'messages', id: conv.id } } } });
   },
 

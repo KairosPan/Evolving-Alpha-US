@@ -209,3 +209,57 @@ test('append fills order and ledger placeholders from the counters', () => {
   const prop = { from: 'politician', kind: 'proposal', text: 'x', data: { status: 'filled', ord: '{ord}', venue: 'Stand-in Broker' } };
   assert.equal(conv(R.append(fresh(), { convId: 'c-2', msg: prop, at: NOW }), 'c-2').messages.at(-1).data.ord, 'ord-0010');
 });
+
+// final review fixes
+
+test('a stopped or withdrawn conversation is closed: answers are refused, a second Stop changes nothing', () => {
+  const stopped = R.stopGravit(fresh(), { convId: 'c-1', now: NOW });
+  const limit = conv(stopped, 'c-1').messages.find(m => m.kind === 'limit');
+  assert.equal(R.answer(stopped, { convId: 'c-1', msgId: limit.id, answer: 'granted', now: NOW }), stopped);
+  assert.equal(R.stopGravit(stopped, { convId: 'c-1', now: NOW }), stopped);
+  const withdrawn = R.withdraw(fresh(), { convId: 'c-2', now: NOW });
+  assert.equal(R.withdraw(withdrawn, { convId: 'c-2', now: NOW }), withdrawn);
+});
+
+test('a filled receipt with an amount adds to what the limit has spent', () => {
+  const r = { from: 'gravit', kind: 'receipt', text: 'x', data: { status: 'filled', amount: 5 } };
+  assert.equal(conv(R.append(fresh(), { convId: 'c-1', msg: r, at: NOW }), 'c-1').intent.limit.spent, 10);
+  assert.equal(conv(R.append(fresh(), { convId: 'c-3', msg: r, at: NOW }), 'c-3').intent.limit, null, 'no limit, nothing to add to');
+});
+
+test('installing answers every waiting ask for that plugin and tells the conversation', () => {
+  const s = R.install(fresh(), { id: 'news', now: NOW });
+  const c1 = conv(s, 'c-1');
+  assert.equal(c1.messages.find(m => m.kind === 'install' && m.data.plugin === 'news').answer, 'installed');
+  assert.equal(c1.messages.at(-1).from, 'gravit');
+  assert.match(c1.messages.at(-1).text, /News sentiment 装好了/);
+});
+
+test('leaving Discover clears its drawer, ask and toast', () => {
+  let s = R.install(R.nav(fresh(), { screen: 'discover', id: null }), { id: 'news', now: NOW });
+  s = R.askUninstall(R.openPlugin(s, 'buffett'), 'buffett');
+  const away = R.nav(s, { screen: 'messages', id: 'c-1' });
+  assert.deepEqual([away.discover.drawer, away.discover.asking, away.discover.toast, away.discover.upload], [null, null, null, false]);
+  const stay = R.nav(s, { screen: 'discover', id: 'bots' });
+  assert.equal(stay.discover.drawer, 'buffett', 'moving inside Discover keeps it');
+});
+
+test('the new-message draft picks bots one by one', () => {
+  let s = R.startDraft(fresh(), { now: NOW });
+  s = R.toggleDraftPicker(s);
+  assert.equal(s.draft.picking, true);
+  s = R.toggleDraftBot(s, 'buffett');
+  assert.deepEqual(s.draft.bots, ['buffett']);
+  const sent = R.send(s, { text: '看看 KO', now: NOW });
+  assert.equal(sent.conversations[0].kind, 'group');
+  assert.deepEqual(sent.conversations[0].members, ['gravit', 'buffett']);
+  assert.deepEqual(R.toggleDraftBot(s, 'buffett').draft.bots, []);
+  assert.deepEqual(R.toggleDraftGroup(R.startDraft(fresh(), { now: NOW })).draft.bots, ['politician', 'buffett'], 'the group toggle takes every installed bot');
+});
+
+test('an install conversation knows which plugin it teaches', () => {
+  const s0 = fresh();
+  assert.equal(R.install(s0, { id: 'no-such-plugin', now: NOW }), s0);
+  const t = R.install(R.uninstall(fresh(), 'buffett'), { id: 'buffett', now: NOW });
+  assert.equal(t.conversations[0].teach, 'buffett');
+});
