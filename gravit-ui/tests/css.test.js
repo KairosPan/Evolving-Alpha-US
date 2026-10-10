@@ -12,13 +12,16 @@ import { seed } from '../js/data/seed.js';
 
 const NOW = new Date(2026, 9, 9, 14, 7).getTime();
 
+const D = { screen: 'discover', id: null };
+
 function everyState() {
   const s = seed(NOW);
   const withEvents = ['brief', 'ta'].reduce((st, k) => R.append(st, { convId: 'c-1', msg: director[k](NOW), at: NOW }), s);
   const withMore = ['breaking', 'call'].reduce((st, k) => R.append(st, { convId: 'c-1', msg: { from: 'gravit', kind: k, text: 'x', data: k === 'breaking' ? director.breaking(NOW) : { about: 'x' }, answer: k === 'call' ? 'missed' : undefined }, at: NOW }), withEvents);
   return [
     withMore, R.toggleDetails(s), R.nav(s, { screen: 'messages', id: 'c-4' }), R.startDraft(s, { now: NOW }), R.toggleDraftGroup(R.startDraft(s, { now: NOW })), { ...s, conversations: [], route: { screen: 'messages', id: null } },
-    R.nav(s, { screen: 'discover', id: null }), R.openPlugin(R.nav(s, { screen: 'discover', id: null }), 'news'), R.openUpload(s), R.toggleInstalledOnly(R.install(s, { id: 'news', now: NOW })), R.setQuery(s, 'bot'), R.nav(s, { screen: 'discover', id: 'bots' }),
+    R.nav(s, { screen: 'discover', id: null }), R.openPlugin(R.nav(s, { screen: 'discover', id: null }), 'news'), R.nav(R.openUpload(s), D), R.nav(R.toggleInstalledOnly(R.install(s, { id: 'news', now: NOW })), D), R.nav(R.setQuery(s, 'bot'), D), R.nav(s, { screen: 'discover', id: 'bots' }), R.nav(R.askUninstall(s, 'buffett'), D),
+    R.nav(R.showBanner(s, director.breaking(NOW)), { screen: 'markets', id: 'NVDA' }), R.nav(s, { screen: 'trade' }),
     R.nav(s, { screen: 'account', tab: 'portfolio' }), R.nav(s, { screen: 'account', tab: 'venues' }), R.nav(s, { screen: 'account', tab: 'memory' }), R.openSettings(R.nav(s, { screen: 'account', tab: 'portfolio' })),
   ];
 }
@@ -26,7 +29,8 @@ function everyState() {
 test('every class the screens emit has a rule in app.css, and app.css names no colour by hex', async () => {
   const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
   assert.doesNotMatch(css, /#[0-9a-fA-F]{3,6}\b/, 'colours come from tokens.css');
-  const html = everyState().map(st => renderRail(st, NOW) + (st.route.screen === 'discover' ? renderDiscover(st) : st.route.screen === 'account' ? renderAccount(st) : renderMessagesScreen(st, NOW))).join('')
+  const screen = st => st.route.screen === 'discover' ? renderDiscover(st) : st.route.screen === 'account' ? renderAccount(st) : st.route.screen === 'messages' ? renderMessagesScreen(st, NOW) : renderStub(st.route);
+  const html = everyState().map(st => renderRail(st, NOW) + screen(st)).join('')
     + renderBanner(director.breaking(NOW), seed(NOW)) + renderCall(director.call()) + renderStub({ screen: 'markets', id: 'NVDA' });
   const classes = new Set(html.match(/class="([^"]+)"/g).flatMap(m => m.slice(7, -1).split(/\s+/)));
   const missing = [...classes].filter(c => c && !new RegExp(`\\.${c.replace(/[-]/g, '\\-')}(?![\\w-])`).test(css));
@@ -34,4 +38,13 @@ test('every class the screens emit has a rule in app.css, and app.css names no c
   assert.match(css, /--rail/);
   assert.match(css, /\.key\.yes[^{]*\{[^}]*color: var\(--up\)/);
   assert.match(css, /\.key\.no[^{]*\{[^}]*color: var\(--down\)/);
+});
+
+test('the equity blue goes by Linqi\'s own name: no --blue, which his tokens use for the orange RWA colour', async () => {
+  const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
+  const tokens = await readFile(new URL('../css/tokens.css', import.meta.url), 'utf8');
+  assert.doesNotMatch(css, /var\(--blue\)|var\(--on-blue\)/);
+  assert.doesNotMatch(tokens, /--blue:|--on-blue:/);
+  assert.match(css, /var\(--alloc-equity\)/);
+  assert.equal((tokens.match(/--on-equity: #ffffff;/g) ?? []).length, 3, 'white words on the blue, in all three theme blocks');
 });
