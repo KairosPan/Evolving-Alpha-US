@@ -5,8 +5,8 @@ const mem = (s, patch) => ({ ...s, memory: { ...s.memory, ...patch } });
 
 export const reducers = {
   setMode: (s, mode) => ({ ...s, account: { ...s.account, mode } }),
-  openSettings: s => ({ ...s, settingsOpen: true }),
-  closeSettings: s => ({ ...s, settingsOpen: false }),
+  openSettings: s => ({ ...s, settingsOpen: true, edit: null, confirm: null }),
+  closeSettings: s => ({ ...s, settingsOpen: false, edit: null, confirm: null }),
   addMemory(s, { text, now }) {
     const t = (text ?? '').trim();
     if (!t) return s;

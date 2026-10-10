@@ -149,6 +149,61 @@ test('Create: type a name and an address, Connect, wait for the tools, untick on
   store.timers.clear();
 });
 
+const noDialogs = { prompt: () => { throw new Error('prompt() is gone'); }, confirm: () => { throw new Error('confirm() is gone'); } };
+
+test('Change words edits in place: the editor takes focus, Enter commits, Escape cancels; no browser prompt', () => {
+  const f = fakeWindow(noDialogs);
+  const title = f.withSelector('.inline-edit [name]', { tagName: 'INPUT', name: 'title', closestMap: { '.inline-edit': {} } });
+  const store = boot(f.win);
+  store.dispatch('toggleDetails');
+  f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'changeWords', conv: 'c-1' } }));
+  assert.deepEqual(store.get().edit, { kind: 'rename', convId: 'c-1' });
+  assert.equal(f.doc.activeElement, title, 'the editor takes focus');
+  title.value = 'BTC 小仓';
+  f.fire('doc', 'keydown', { key: 'Enter' });
+  assert.equal(store.get().conversations[0].title, 'BTC 小仓');
+  assert.equal(store.get().edit, null);
+  f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'changeLimit', conv: 'c-1' } }));
+  f.fire('doc', 'keydown', { key: 'Escape' });
+  assert.equal(store.get().edit, null);
+  assert.equal(store.get().detailsOpen, true, 'Escape cancels the editor before it closes the drawer');
+  store.timers.clear();
+});
+
+test('Withdraw, Stop, End limit, Forget all and Reset ask in place and act on the second press; no browser confirm', () => {
+  const f = fakeWindow(noDialogs);
+  const store = boot(f.win);
+  const click = (action, conv) => f.click(f.element({ tagName: 'BUTTON', dataset: conv ? { action, conv } : { action } }));
+  click('withdraw', 'c-2');
+  assert.deepEqual(store.get().confirm, { action: 'withdraw', id: 'c-2' });
+  click('cancelConfirm');
+  assert.equal(store.get().confirm, null);
+  click('withdraw', 'c-2');
+  click('confirmYes');
+  assert.equal(store.get().conversations.find(c => c.id === 'c-2').status, 'withdrawn');
+  click('endLimit', 'c-1');
+  click('confirmYes');
+  assert.equal(store.get().conversations[0].intent.limit.total, 5);
+  click('forgetAll');
+  click('confirmYes');
+  assert.deepEqual(store.get().memory.entries, []);
+  click('resetDemo');
+  click('confirmYes');
+  assert.equal(store.get().memory.entries.length, 9, 'reset brings the seed back');
+  store.timers.clear();
+});
+
+test('Top up commits through its editor and shows in the wallet', () => {
+  const f = fakeWindow(noDialogs);
+  f.withSelector('.inline-edit [name]', { tagName: 'INPUT', name: 'amount', value: '20', rendered: '20' });
+  const store = boot(f.win);
+  store.dispatch('toggleDetails');
+  f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'topUp', conv: 'c-1' } }));
+  f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'commitEdit' } }));
+  assert.equal(store.get().account.wallet.usdc, 32.4);
+  store.timers.clear();
+});
+
 test('the draft picker keys reach the store', () => {
   const f = fakeWindow();
   const store = boot(f.win);

@@ -8,7 +8,6 @@ import { renderMessagesScreen, renderBanner, renderCall, renderStub, currentConv
 import { renderDiscover } from './render/discover.js';
 import { renderAccount } from './render/account.js';
 import { replyTo, followUp, director, toolsFor } from './driver.js';
-import { DAY } from './time.js';
 
 export class Timers {
   constructor() { this.set = new Set(); }
@@ -29,7 +28,13 @@ const CONNECT_MS = 1200;
 const usable = saved => !!saved && saved.v === SEED_VERSION && Array.isArray(saved.conversations);
 
 // a banner, a ringing call, an open drawer, a trash-key ask and a toast belong to their moment: a reload starts without them
-const withoutMoments = s => ({ ...s, banner: null, call: null, discover: { ...s.discover, drawer: null, create: null, toast: null } });
+const withoutMoments = s => ({
+  ...s, banner: null, call: null, edit: null, confirm: null,
+  discover: { ...s.discover, drawer: null, create: null, toast: null },
+  compose: { files: [], listening: false },
+  mail: s.mail ? { ...s.mail, open: false, reading: null } : s.mail,
+  account: { ...s.account, panel: null, connecting: null, copied: false, panelError: null },
+});
 
 export function initialState(storage, now = Date.now()) {
   try {
@@ -180,6 +185,8 @@ export function boot(win) {
     } else if (!overlay && last.overlay) {
       target = find(last.opener) ?? target;
       opener = null;
+    } else if (s.edit && s.edit !== last.edit) {
+      target = root.querySelector('.inline-edit [name]') ?? target; // an editor that just opened takes focus
     } else if (!target && activeKey) {
       target = say; // the pressed control went away, as an answered card's keys do: the composer is next
     }
@@ -187,7 +194,7 @@ export function boot(win) {
       target.focus();
       if (caret && target === find(activeKey) && typeof target.setSelectionRange === 'function') target.setSelectionRange(caret[0], caret[1]);
     }
-    last = { overlay, opener, screen: screenOf(s), drawer: drawerOf(s), thread: threadSig };
+    last = { overlay, opener, screen: screenOf(s), drawer: drawerOf(s), thread: threadSig, edit: s.edit };
   }
 
   // while an IME composes (pinyin), a render would replace the input and lose the composition: hold it until compositionend
@@ -216,6 +223,24 @@ export function boot(win) {
   }
   const reset = () => restart(seed(now()), { screen: 'messages', id: 'c-1' });
 
+  // commit the open editor with what its inputs hold
+  function commitEdit() {
+    const values = Object.fromEntries([...root.querySelectorAll('.inline-edit [name]')].map(el => [el.name, el.value]));
+    store.dispatch('commitEdit', { values, now: now() });
+  }
+
+  // the second press of a two-step confirm
+  function confirmYes() {
+    const c = store.get().confirm;
+    if (!c) return;
+    store.dispatch('cancelConfirm');
+    if (c.action === 'withdraw') store.dispatch('withdraw', { convId: c.id, now: now() });
+    else if (c.action === 'stopGravit') store.dispatch('stopGravit', { convId: c.id, now: now() });
+    else if (c.action === 'endLimit') store.dispatch('endLimit', { convId: c.id });
+    else if (c.action === 'forgetAll') store.dispatch('forgetAll');
+    else if (c.action === 'resetDemo') reset();
+  }
+
   const actions = {
     open: el => go({ screen: 'messages', id: el.dataset.id }),
     startDraft: () => { store.dispatch('startDraft', { now: now() }); go({ screen: 'messages', id: 'new' }); },
@@ -225,21 +250,23 @@ export function boot(win) {
     toggleDraftGroup: () => store.dispatch('toggleDraftGroup'),
     toggleDraftPicker: () => store.dispatch('toggleDraftPicker'),
     toggleDraftBot: el => store.dispatch('toggleDraftBot', el.dataset.id),
-    draftLimit: el => {
-      const key = el.dataset.key;
-      const d = store.get().draft;
-      if (!d) return;
-      if (key === 'venue') {
-        const venues = ['Stand-in Exchange', 'Stand-in Broker', 'Stand-in Wallet'];
-        store.dispatch('setDraftLimit', { key, value: venues[(venues.indexOf(d.limit.venue) + 1) % venues.length] });
-      } else if (key === 'until') {
-        const days = Number(win.prompt('几天后到期？', '6'));
-        if (days > 0) store.dispatch('setDraftLimit', { key, value: now() + days * DAY });
-      } else {
-        const v = Number(win.prompt(key === 'perOrder' ? '每单上限（$）' : '总额（$）', String(d.limit[key])));
-        if (v > 0) store.dispatch('setDraftLimit', { key, value: v });
-      }
-    },
+    // inline editors (they replaced prompt): a button starts one, ✓ or Enter commits it, × or Escape cancels it
+    draftLimit: el => store.dispatch('startEdit', { kind: 'draftLimit', key: el.dataset.key }),
+    changeWords: el => store.dispatch('startEdit', { kind: 'rename', convId: el.dataset.conv }),
+    changeLimit: el => store.dispatch('startEdit', { kind: 'limit', convId: el.dataset.conv }),
+    topUp: () => store.dispatch('startEdit', { kind: 'wallet', dir: 'in' }),
+    takeBack: () => store.dispatch('startEdit', { kind: 'wallet', dir: 'out' }),
+    editMemory: el => store.dispatch('startEdit', { kind: 'memory', id: el.dataset.id }),
+    commitEdit: () => commitEdit(),
+    cancelEdit: () => store.dispatch('cancelEdit'),
+    // two-step confirms (they replaced confirm): the first press asks in place, the second acts
+    withdraw: el => store.dispatch('askConfirm', { action: 'withdraw', id: el.dataset.conv }),
+    endLimit: el => store.dispatch('askConfirm', { action: 'endLimit', id: el.dataset.conv }),
+    stopGravit: el => store.dispatch('askConfirm', { action: 'stopGravit', id: el.dataset.conv }),
+    forgetAll: () => store.dispatch('askConfirm', { action: 'forgetAll' }),
+    resetDemo: () => store.dispatch('askConfirm', { action: 'resetDemo' }),
+    confirmYes: () => confirmYes(),
+    cancelConfirm: () => store.dispatch('cancelConfirm'),
     suggest: el => { composerText = el.dataset.text; render(); doc.getElementById('say')?.focus(); },
     answer: el => answerFlow(store, timers, el.dataset, now),
     // + on an install request opens the plugin's drawer; the request is answered when the install happens (reducers/discover.js)
@@ -248,24 +275,6 @@ export function boot(win) {
       go({ screen: 'discover', id: null });
     },
     toggleDetails: () => store.dispatch('toggleDetails'),
-    changeWords: el => {
-      const c = store.get().conversations.find(x => x.id === el.dataset.conv);
-      const title = win.prompt('这件事叫什么', c?.title ?? '');
-      if (title != null) store.dispatch('rename', { convId: el.dataset.conv, title });
-    },
-    withdraw: el => { if (win.confirm('撤回这条委托？')) store.dispatch('withdraw', { convId: el.dataset.conv, now: now() }); },
-    changeLimit: el => {
-      const c = store.get().conversations.find(x => x.id === el.dataset.conv);
-      const L = c?.intent.limit ?? { perOrder: 25, total: 100 };
-      const perOrder = Number(win.prompt('每单上限（$）', String(L.perOrder)));
-      const total = Number(win.prompt('总额（$）', String(L.total)));
-      if (perOrder > 0 && total > 0) store.dispatch('changeLimit', { convId: el.dataset.conv, limit: { perOrder, total } });
-    },
-    endLimit: el => {
-      const c = store.get().conversations.find(x => x.id === el.dataset.conv);
-      if (c?.intent.limit) store.dispatch('changeLimit', { convId: el.dataset.conv, limit: { total: c.intent.limit.spent } });
-    },
-    stopGravit: el => { if (win.confirm('停掉 Gravit？这件事不再动。')) store.dispatch('stopGravit', { convId: el.dataset.conv, now: now() }); },
     setMode: el => store.dispatch('setMode', el.dataset.value === 'Beast' ? 'beast' : 'guard'),
     // the banner's link dismisses it and still goes to the thread it names
     dismissBanner: el => { store.dispatch('dismissBanner', { now: now() }); if (el.tagName === 'A') go(parseHash(el.getAttribute('href'))); },
@@ -287,14 +296,7 @@ export function boot(win) {
     openSettings: () => store.dispatch('openSettings'),
     closeSettings: () => store.dispatch('closeSettings'),
     setTheme: el => { const t = el.dataset.value.toLowerCase(); store.dispatch('setTheme', t); applyTheme(t); },
-    resetDemo: () => { if (win.confirm('回到最初的样子？')) reset(); },
-    editMemory: el => {
-      const e = store.get().memory.entries.find(x => x.id === el.dataset.id);
-      const text = win.prompt('改成', e?.text ?? '');
-      if (text != null) store.dispatch('editMemory', { id: el.dataset.id, text });
-    },
     forgetMemory: el => store.dispatch('forgetMemory', el.dataset.id),
-    forgetAll: () => { if (win.confirm('全部忘掉？')) store.dispatch('forgetAll'); },
     memorySwitch: el => store.dispatch('setMemorySwitch', { key: el.dataset.key, value: el.getAttribute('aria-checked') !== 'true' }),
     exportMemory: () => {
       const blob = new win.Blob([JSON.stringify(store.get().memory, null, 2)], { type: 'application/json' });
@@ -386,6 +388,8 @@ export function boot(win) {
     if (ev.key === 'Escape') {
       const s = store.get();
       if (s.call) return;
+      if (s.edit) { store.dispatch('cancelEdit'); return; }
+      if (s.confirm) { store.dispatch('cancelConfirm'); return; }
       if (s.discover.create) store.dispatch('closeCreate');
       else if (s.discover.drawer) store.dispatch('closeDrawer');
       else if (s.detailsOpen) store.dispatch('toggleDetails');
@@ -393,8 +397,9 @@ export function boot(win) {
       else if (directorOpen) { directorOpen = false; render(); }
       return;
     }
-    // a card is a div with role=button: Enter and Space press it, as they would a real button
     const a = doc.activeElement;
+    if (ev.key === 'Enter' && store.get().edit && a?.closest?.('.inline-edit')) { ev.preventDefault(); commitEdit(); return; }
+    // a card is a div with role=button: Enter and Space press it, as they would a real button
     if ((ev.key === 'Enter' || ev.key === ' ') && a?.getAttribute?.('role') === 'button' && actions[a.dataset.action]) {
       ev.preventDefault();
       actions[a.dataset.action](a);

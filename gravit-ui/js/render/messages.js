@@ -6,7 +6,9 @@ import { byId } from '../data/plugins.js';
 import { avatar, cluster } from './avatars.js';
 import { renderThread, chip } from './thread.js';
 import { senderName } from './rail.js';
-import { seg, kv } from './controls.js';
+import { seg, kv, inlineEdit, confirmPair } from './controls.js';
+import { VENUES } from '../data/seed.js';
+import { DAY } from '../time.js';
 
 export function currentConversation(state) {
   const id = state.route.screen === 'messages' ? state.route.id : null;
@@ -50,17 +52,26 @@ function draftHead(state) {
     `<div class="to-line"><span class="to-label">To:</span>${toChips}<button type="button" class="to-add" data-action="toggleDraftPicker" aria-expanded="${d.picking ? 'true' : 'false'}">${icon('plus', 11, 2.4)}加个 bot，就成群聊</button></div>${picker}</header>`;
 }
 
-function limitRow(d) {
+// the limit chips over the new-message composer; the chip being edited turns into its editor
+function limitRow(d, state, now) {
+  const e = state.edit?.kind === 'draftLimit' ? state.edit : null;
+  const days = Math.max(1, Math.round((d.limit.until - now) / DAY));
   const chips = [['perOrder', `每单 $${d.limit.perOrder}`], ['total', `总 $${d.limit.total}`], ['until', `到 ${fmtDate(d.limit.until)}`], ['venue', `在 ${d.limit.venue}`]];
+  const editor = k => inlineEdit([{
+    perOrder: { name: 'value', value: d.limit.perOrder, type: 'number', label: '每单上限' },
+    total: { name: 'value', value: d.limit.total, type: 'number', label: '总额' },
+    until: { name: 'value', value: days, type: 'number', label: '几天后到期' },
+    venue: { name: 'value', value: d.limit.venue, label: '场所', options: VENUES },
+  }[k]], e.error);
   return `<div class="limit-row"><span class="limit-label">附一份额度</span>` +
-    (d.attach ? chips.map(([k, t]) => `<button type="button" class="chip white" data-action="draftLimit" data-key="${k}">${esc(t)} ▾</button>`).join('') : '') +
+    (d.attach ? chips.map(([k, t]) => (e?.key === k ? editor(k) : `<button type="button" class="chip white" data-action="draftLimit" data-key="${k}">${esc(t)} ▾</button>`)).join('') : '') +
     `<button type="button" class="limit-off" data-action="toggleDraftAttach">${d.attach ? '不附' : '附上'}</button></div>`;
 }
 
-function draftScreen(state) {
+function draftScreen(state, now) {
   const d = state.draft;
   const group = (d.bots ?? []).length > 0 || (!d.bots && d.group);
-  return `<main class="main">${draftHead(state)}<div class="thread" id="thread"></div>${renderComposer({ above: limitRow(d), placeholder: group ? 'Tell Gravit… 打 @ 点名一个 bot' : 'Tell Gravit…' })}</main>`;
+  return `<main class="main">${draftHead(state)}<div class="thread" id="thread"></div>${renderComposer({ above: limitRow(d, state, now), placeholder: group ? 'Tell Gravit… 打 @ 点名一个 bot' : 'Tell Gravit…' })}</main>`;
 }
 
 function emptyScreen() {
@@ -71,29 +82,35 @@ function emptyScreen() {
 
 export function renderDetails(conv, state) {
   const L = conv.intent.limit;
+  const e = state.edit;
+  const editing = (kind, match = {}) => !!e && e.kind === kind && Object.entries(match).every(([k, v]) => e[k] === v);
+  const asking = action => state.confirm?.action === action && state.confirm?.id === conv.id;
+  const btn = (action, label) => `<button type="button" class="btn-sm" data-action="${action}" data-conv="${conv.id}">${label}</button>`;
   const plugs = conv.plugins.map(id => byId(id, state.plugins.uploaded)?.name ?? id);
   const w = state.account.wallet;
-  const limit = L
-    ? kv([['每单', money(L.perOrder)], ['总额', money(L.total)], ['剩余', money(L.total - L.spent)], ['在', esc(L.venue)]])
-    : '<div class="dim">没附额度</div>';
+  const title = editing('rename', { convId: conv.id }) ? inlineEdit([{ name: 'title', value: conv.title, label: '这件事叫什么' }], e.error) : `<div class="dsec-title">${esc(conv.title)}</div>`;
+  const limit = editing('limit', { convId: conv.id })
+    ? inlineEdit([{ name: 'perOrder', value: L?.perOrder ?? 25, type: 'number', label: '每单上限' }, { name: 'total', value: L?.total ?? 100, type: 'number', label: '总额' }], e.error)
+    : L ? kv([['每单', money(L.perOrder)], ['总额', money(L.total)], ['剩余', money(L.total - L.spent)], ['在', esc(L.venue)]]) : '<div class="dim">没附额度</div>';
+  const wallet = editing('wallet') ? inlineEdit([{ name: 'amount', value: '', type: 'number', label: e.dir === 'in' ? 'Top up 多少' : 'Take back 多少' }], e.error) : '';
   return `<aside class="drawer details" aria-label="Details">
   <div class="drawer-head"><h2>Details</h2><button type="button" class="close-key" data-action="toggleDetails" aria-label="Close">×</button></div>
   <div class="drawer-body">
-    <section class="dsec"><div class="dsec-label">这件事</div><div class="dsec-title">${esc(conv.title)}</div><div class="dim">你委托于 ${fmtDate(conv.intent.created)} · 到 ${fmtDate(conv.intent.until)} · ${esc(conv.intent.id)}</div>
-      <div class="btn-row"><button type="button" class="btn-sm" data-action="changeWords" data-conv="${conv.id}">Change words</button><button type="button" class="btn-sm" data-action="withdraw" data-conv="${conv.id}">Withdraw</button></div></section>
+    <section class="dsec"><div class="dsec-label">这件事</div>${title}<div class="dim">你委托于 ${fmtDate(conv.intent.created)} · 到 ${fmtDate(conv.intent.until)} · ${esc(conv.intent.id)}</div>
+      <div class="btn-row">${asking('withdraw') ? confirmPair('确认撤回') : btn('changeWords', 'Change words') + btn('withdraw', 'Withdraw')}</div></section>
     <section class="dsec"><div class="dsec-label">额度</div>${limit}
-      <div class="btn-row"><button type="button" class="btn-sm" data-action="changeLimit" data-conv="${conv.id}">Change limit</button><button type="button" class="btn-sm" data-action="endLimit" data-conv="${conv.id}">End limit</button></div></section>
+      <div class="btn-row">${asking('endLimit') ? confirmPair('确认结束额度') : btn('changeLimit', 'Change limit') + btn('endLimit', 'End limit')}</div></section>
     <section class="dsec"><div class="dsec-label">插件</div>${plugs.length ? plugs.map(n => `<div class="dsec-line">${esc(n)}</div>`).join('') : '<div class="dim">没有</div>'}<a class="link" href="#/discover">Find more in Discover ›</a></section>
-    <section class="dsec"><div class="dsec-label">Gravit 的钱包</div>${kv([['USDC', money(w.usdc)], ['链', esc(w.chain)], ['地址', `<span class="mono">${esc(w.address)}</span>`]])}
-      <div class="btn-row"><button type="button" class="btn-sm">Top up…</button><button type="button" class="btn-sm">Take back…</button></div></section>
+    <section class="dsec"><div class="dsec-label">Gravit 的钱包</div>${kv([['USDC', money(w.usdc)], ['链', esc(w.chain)], ['地址', `<span class="mono">${esc(w.address)}</span>`]])}${wallet}
+      <div class="btn-row">${btn('topUp', 'Top up…')}${btn('takeBack', 'Take back…')}</div></section>
     <section class="dsec"><div class="dsec-label">模式</div>${seg(['Guard', 'Beast'], state.account.mode === 'beast' ? 'Beast' : 'Guard', 'setMode')}</section>
-    <section class="dsec"><button type="button" class="btn-danger" data-action="stopGravit" data-conv="${conv.id}">Stop Gravit</button></section>
+    <section class="dsec">${asking('stopGravit') ? confirmPair('确认停掉') : `<button type="button" class="btn-danger" data-action="stopGravit" data-conv="${conv.id}">Stop Gravit</button>`}</section>
   </div>
 </aside>`;
 }
 
 export function renderMessagesScreen(state, now) {
-  if (state.draft) return draftScreen(state);
+  if (state.draft) return draftScreen(state, now);
   const conv = currentConversation(state);
   if (!conv) return emptyScreen();
   const placeholder = conv.kind === 'group' ? 'Tell Gravit… 打 @ 点名一个 bot' : 'Tell Gravit…';

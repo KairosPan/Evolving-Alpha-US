@@ -24,6 +24,9 @@ function everyState() {
     R.nav(R.showBanner(s, director.breaking(NOW)), { screen: 'markets', id: 'NVDA' }), R.nav(s, { screen: 'trade' }),
     R.toggleDraftBot(R.toggleDraftPicker(R.startDraft(s, { now: NOW })), 'buffett'),
     ['refusal', 'done'].reduce((st, k) => R.append(st, { convId: 'c-1', msg: director[k](NOW), at: NOW }), s),
+    R.startEdit(R.toggleDetails(s), { kind: 'rename', convId: 'c-1' }), R.askConfirm(R.toggleDetails(s), { action: 'withdraw', id: 'c-1' }),
+    R.startEdit(R.startDraft(s, { now: NOW }), { kind: 'draftLimit', key: 'venue' }),
+    R.startEdit(R.nav(s, { screen: 'account', tab: 'memory' }), { kind: 'memory', id: 'mem-1' }), R.askConfirm(R.openSettings(R.nav(s, { screen: 'account', tab: 'portfolio' })), { action: 'resetDemo' }),
     R.nav(s, { screen: 'account', tab: 'portfolio' }), R.nav(s, { screen: 'account', tab: 'venues' }), R.nav(s, { screen: 'account', tab: 'memory' }), R.openSettings(R.nav(s, { screen: 'account', tab: 'portfolio' })),
   ];
 }

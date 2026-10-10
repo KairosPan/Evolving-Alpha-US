@@ -46,7 +46,7 @@ export const reducers = {
     if (route.screen === 'messages' && !(route.id === 'new' && state.draft) && !state.conversations.some(c => c.id === route.id)) {
       route = { screen: 'messages', id: state.conversations[0]?.id ?? null };
     }
-    let s = { ...state, route, detailsOpen: false, settingsOpen: false };
+    let s = { ...state, route, detailsOpen: false, settingsOpen: false, edit: null, confirm: null };
     // the first level's Messages key returns to the conversation you last had open
     if (route.screen === 'messages' && route.id && route.id !== 'new') s.lastConv = route.id;
     // Discover's drawer, trash-key ask and toast belong to Discover; they do not follow you out of it
@@ -146,7 +146,7 @@ export const reducers = {
     return s;
   },
 
-  toggleDetails: s => ({ ...s, detailsOpen: !s.detailsOpen }),
+  toggleDetails: s => ({ ...s, detailsOpen: !s.detailsOpen, edit: null, confirm: null }),
   stopGravit(s, { convId, now }) {
     if (closed(s.conversations.find(c => c.id === convId))) return s;
     const st = stampMessage(s, { from: 'system', kind: 'text', text: 'Gravit 停了，这件事不再动。', data: {} }, now);
