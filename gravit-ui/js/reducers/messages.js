@@ -1,6 +1,7 @@
 // gravit-ui/js/reducers/messages.js — the conversation side: routes, drafts, sending, answering, details, banners, calls
 import { nextId } from '../ids.js';
 import { DAY } from '../time.js';
+import { byId } from '../data/plugins.js';
 
 const upd = (state, id, fn) => ({ ...state, conversations: state.conversations.map(c => (c.id === id ? fn(c) : c)) });
 const push = (state, convId, msg) => upd(state, convId, c => ({ ...c, messages: [...c.messages, msg] }));
@@ -37,6 +38,12 @@ export const reducers = {
   setDraftTitle: (s, title) => (s.draft ? { ...s, draft: { ...s.draft, title } } : s),
   setDraftLimit: (s, { key, value }) => (s.draft ? { ...s, draft: { ...s.draft, limit: { ...s.draft.limit, [key]: value } } } : s),
   toggleDraftAttach: s => (s.draft ? { ...s, draft: { ...s.draft, attach: !s.draft.attach } } : s),
+  toggleDraftGroup: s => (s.draft ? { ...s, draft: { ...s.draft, group: !s.draft.group } } : s),
+  rename(s, { convId, title }) {
+    const t = (title ?? '').trim();
+    if (!t) return s;
+    return upd(s, convId, c => ({ ...c, title: t }));
+  },
 
   send(state, { text, now }) {
     const clean = (text ?? '').trim();
@@ -45,9 +52,11 @@ export const reducers = {
     let convId = s.route.screen === 'messages' ? s.route.id : null;
     if (s.draft || !s.conversations.some(c => c.id === convId)) {
       const d = s.draft ?? { title: '', attach: false, limit: null };
+      const bots = d.group ? s.plugins.installed.filter(id => byId(id, s.plugins.uploaded)?.kind === 'Bots') : [];
+      const members = ['gravit', ...bots];
       const made = newConversation(s, {
         title: d.title.trim() || (clean.length > 24 ? clean.slice(0, 24) + '…' : clean),
-        kind: 'gravit', members: ['gravit'], plugins: [], now,
+        kind: members.length > 1 ? 'group' : 'gravit', members, plugins: bots, now,
         until: d.limit?.until ?? now + 6 * DAY,
         intentLimit: d.attach && d.limit ? { perOrder: d.limit.perOrder, total: d.limit.total, spent: 0, venue: d.limit.venue } : null,
       });
