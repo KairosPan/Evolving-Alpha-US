@@ -3,7 +3,8 @@ import { MIN, DAY } from '../time.js';
 
 // 2: the controls round added edit, confirm, compose, mail, account activity and panels
 // 3: round 3 made the mailbox a screen and Create Discover's own MCP face
-export const SEED_VERSION = 3;
+// 4: Markets and Trade: holdings with quantities, cash at the venues, the account's orders, the watchlist, the ticket
+export const SEED_VERSION = 4;
 
 // the places Gravit may trade, as the draft's venue pick list and the Move form offer them
 export const VENUES = ['Stand-in Exchange', 'Stand-in Broker', 'Stand-in Wallet'];
@@ -82,6 +83,9 @@ export function seed(now = Date.now()) {
     counters: { intent: 4, ord: 9, card: 1, pay: 7, ledger: 58, msg: n, conv: 4, plugin: 0, mem: 9, mail: 3 },
     conversations: [btc, pelosi, addr, group],
     discover: { query: '', installedOnly: false, drawer: null, create: null, toast: null },
+    // Markets' view and watchlist, and Trade's kind, search and ticket (the ticket is moment-only)
+    markets: { tab: 'all', sort: 'volume', q: '', interval: '1h', watch: ['BTC', 'FED-DEC', 'DOGE'] },
+    trade: { kind: 'crypto', q: '', ticket: null },
     plugins: { installed: ['pricefeed', 'fraud', 'politician', 'buffett', 'pairs'], mine: ['pairs'], uploaded: [] },
     memory: {
       entries: [
@@ -94,7 +98,22 @@ export function seed(now = Date.now()) {
     account: {
       mode: 'guard', netWorth: 12480, today: 86, todayPct: 0.7,
       alloc: [{ name: 'Cash', pct: 30, token: 'cash' }, { name: 'Stablecoins', pct: 20, token: 'stable' }, { name: 'Crypto', pct: 30, token: 'crypto' }, { name: 'Stocks', pct: 20, token: 'equity' }],
-      holdings: [{ key: 'crypto:BTC', name: 'BTC', venue: 'Stand-in Exchange', value: 3740, chg: 1.2 }, { key: 'equity:AAPL', name: 'AAPL', venue: 'Stand-in Broker', value: 2510, chg: -0.4 }, { key: 'stable:USDC', name: 'USDC', venue: 'Stand-in Wallet', value: 2490, chg: null }],
+      // quantities at the stand-in quotes of js/data/markets.js; value = quantity × price
+      holdings: [
+        { key: 'crypto:BTC', name: 'BTC', venue: 'Stand-in Exchange', qty: 0.05955, value: 3739.74, chg: 1.2 },
+        { key: 'equity:AAPL', name: 'AAPL', venue: 'Stand-in Broker', qty: 10.99, value: 2510.12, chg: -0.4 },
+        { key: 'stable:USDC', name: 'USDC', venue: 'Stand-in Wallet', qty: 2490, value: 2490, chg: null },
+        { key: 'equity:NVDA', name: 'NVDA', venue: 'Stand-in Broker', qty: 0.2402, value: 45.01, chg: 1.9 },
+      ],
+      // dollars at the venues that hold cash; net worth = cash + holdings + Gravit's wallet
+      cash: { 'Stand-in Exchange': 1182.73, 'Stand-in Broker': 2500 },
+      // every order, by Gravit or by you, newest first (KO's limit is the one still on the book)
+      orders: [
+        { id: 'ord-0001', at: ago(2.5), inst: 'BTC', venue: 'Stand-in Exchange', symbol: 'BTC/USDT', side: 'buy', type: 'market', qty: 0.00008, limit: null, outcome: null, status: 'filled', price: 62500, usd: 5, fee: 0, by: 'gravit', how: 'approved', conv: 'c-1', note: 'filled at 62,500' },
+        { id: 'ord-0009', at: ago(20.5), inst: 'NVDA', venue: 'Stand-in Broker', symbol: 'NVDA', side: 'buy', type: 'market', qty: 0.1334, limit: null, outcome: null, status: 'filled', price: 187.4, usd: 25, fee: 0, by: 'gravit', how: 'approved', conv: 'c-4', note: 'filled at 187.4' },
+        { id: 'ord-0008', at: ago(20.5), inst: 'KO', venue: 'Stand-in Broker', symbol: 'KO', side: 'buy', type: 'limit', qty: 0.4295, limit: 58.2, outcome: null, status: 'open', price: null, usd: null, fee: 0, by: 'gravit', how: 'approved', conv: 'c-4', note: "on Stand-in Broker's book at 58.2" },
+        { id: 'ord-0004', at: ago(26), inst: 'NVDA', venue: 'Stand-in Broker', symbol: 'NVDA', side: 'buy', type: 'market', qty: 0.1068, limit: null, outcome: null, status: 'filled', price: 187.2, usd: 20, fee: 0, by: 'gravit', how: 'limit', conv: 'c-2', note: 'filled at 187.2' },
+      ],
       venues: [
         { name: 'Stand-in Exchange', line: 'Connected · key file · Gravit may trade', state: 'Healthy' },
         { name: 'Stand-in Broker', line: 'Connected · key file · Gravit may trade', state: 'Healthy' },
@@ -106,6 +125,7 @@ export function seed(now = Date.now()) {
       activity: [
         { at: ago(2.5), text: 'Fill · 0.00008 BTC @ 62,500 · ord-0001', amount: -5 },
         { at: ago(20.5), text: 'Fill · NVDA $25 @ 187.40 · ord-0009', amount: -25 },
+        { at: ago(26), text: 'Fill · NVDA $20 @ 187.20 · ord-0004', amount: -20 },
         { at: now - 2 * DAY, text: 'Deposit · USDC $500 · Stand-in Wallet', amount: 500 },
       ],
       panel: null, connecting: null, copied: false, panelError: null,

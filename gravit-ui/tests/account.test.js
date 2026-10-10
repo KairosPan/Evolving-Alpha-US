@@ -21,7 +21,7 @@ test('Portfolio: header with Guard|Beast, Trading on, Settings; the three tabs; 
   assert.match(h, /class="networth">\$12,480</);
   assert.match(h, /\+\$86 · 0\.7%/);
   assert.equal(count(h, /class="alloc-seg/g), 4);
-  assert.equal(count(h, /class="holding"/g), 3);
+  assert.equal(count(h, /class="holding"/g), 4);
   assert.match(h, /class="ticker" href="#\/markets\/BTC"/);
   assert.match(h, /class="up">\+1\.2%</);
   assert.match(h, /class="down">−0\.4%</);

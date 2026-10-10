@@ -12,7 +12,7 @@ const fresh = () => seed(NOW);
 const conv = (s, id) => s.conversations.find(c => c.id === id);
 
 test('the state shape grew, so the seed version moved on', () => {
-  assert.equal(SEED_VERSION, 3);
+  assert.equal(SEED_VERSION, 4);
   const s = fresh();
   assert.deepEqual([s.edit, s.confirm], [null, null]);
 });
@@ -233,7 +233,7 @@ test('Connect an account: a venue connects after a moment and joins the list; Re
   assert.match(receive, /data-action="copyAddress">复制地址</);
   assert.match(renderAccount(R.setCopied(R.openPanel(p, 'receive'), true)), />已复制</);
   const statement = renderAccount(R.openPanel(p, 'statement'));
-  assert.equal((statement.match(/class="activity-row"/g) ?? []).length, 3);
+  assert.equal((statement.match(/class="activity-row"/g) ?? []).length, 4);
   assert.match(statement, /data-action="exportStatement">Export CSV</);
 });
 

@@ -2,6 +2,7 @@
 import { nextId } from '../ids.js';
 import { DAY, fmtDuration } from '../time.js';
 import { byId } from '../data/plugins.js';
+import { instrument } from '../data/markets.js';
 import { isClosed } from '../messages.js';
 
 const closed = isClosed;
@@ -53,6 +54,8 @@ export const reducers = {
     if (route.screen === 'messages' && !(route.id === 'new' && state.draft) && !state.conversations.some(c => c.id === route.id)) {
       route = { screen: 'messages', id: state.conversations[0]?.id ?? null };
     }
+    // a market id is matched without case; one that is not a market opens Markets without a drawer
+    if (route.screen === 'markets' && route.id) route = { screen: 'markets', id: instrument(route.id)?.id ?? null };
     // a letter that is not in the mailbox opens the inbox
     if (route.screen === 'mail' && route.id && !state.mail.items.some(m => m.id === route.id)) route = { screen: 'mail', id: null };
     let s = { ...state, route, detailsOpen: false, settingsOpen: false, edit: null, confirm: null };

@@ -2,6 +2,8 @@
 import { DAY } from '../time.js';
 import { money } from '../html.js';
 import { reducers as messages, closeOverlays } from './messages.js';
+import { STANDIN_CASH, instrument } from '../data/markets.js';
+import { revalue, markOf, legsOf } from '../trade.js';
 import { reducers as account } from './account.js';
 import { VENUES, CONNECTABLE } from '../data/seed.js';
 
@@ -20,12 +22,12 @@ function walletMove(s, dir, amount, now) {
   const round = n => Math.round(n * 100) / 100;
   return { state: {
     ...s,
-    account: {
+    account: revalue({
       ...s.account,
       wallet: { ...w, usdc: round(w.usdc + sign * amount) },
-      holdings: s.account.holdings.map(h => (h.key === 'stable:USDC' ? { ...h, value: round(h.value - sign * amount) } : h)),
+      holdings: s.account.holdings.map(h => (h.key === 'stable:USDC' ? { ...h, qty: round((h.qty ?? h.value) - sign * amount), value: round(h.value - sign * amount) } : h)),
       activity: [{ at: now, text: `${dir === 'in' ? 'Top up' : 'Take back'} ${money(amount)} · Gravit 的钱包`, amount: -sign * amount }, ...s.account.activity],
-    },
+    }),
   } };
 }
 
@@ -92,18 +94,25 @@ export const reducers = {
     const src = s.account.holdings.find(h => h.name === asset && h.venue === from);
     if (!src) return err(`${from} 没有 ${asset}`);
     if (n > src.value) return err(`${from} 只有 ${money(src.value)}`);
-    const round = v => Math.round(v * 100) / 100;
-    let holdings = s.account.holdings.map(h => (h === src ? { ...h, value: round(h.value - n) } : h));
+    // dollars move as quantity at the holding's price; revalue then prints the values
+    const dq = n / (markOf(src) ?? 1);
+    const tidy = v => Number(v.toFixed(8));
+    let holdings = s.account.holdings.map(h => (h === src ? { ...h, qty: tidy((h.qty ?? h.value) - dq) } : h));
     const dst = holdings.find(h => h.name === asset && h.venue === to);
-    holdings = dst ? holdings.map(h => (h === dst ? { ...h, value: round(h.value + n) } : h)) : [...holdings, { ...src, key: `${src.key}@${to}`, venue: to, value: n }];
+    holdings = dst ? holdings.map(h => (h === dst ? { ...h, qty: tidy((h.qty ?? h.value) + dq) } : h)) : [...holdings, { ...src, key: `${src.key}@${to}`, venue: to, qty: tidy(dq) }];
     const activity = [{ at: now, text: `Move ${money(n)} ${asset} · ${from} → ${to}`, amount: 0 }, ...s.account.activity];
-    return { ...s, account: { ...s.account, holdings, activity, panel: null, panelError: null } };
+    return { ...s, account: revalue({ ...s.account, holdings, activity, panel: null, panelError: null }) };
   },
   // Connect an account: a stand-in venue answers a moment later (app.js schedules venueConnected)
   connectVenue: (s, name) => (CONNECTABLE.includes(name) && !s.account.venues.some(v => v.name === name) ? { ...s, account: { ...s.account, connecting: name } } : s),
+  // a stand-in account arrives with its own dollars; a ticket waiting on this venue takes it
   venueConnected(s, name) {
     if (s.account.venues.some(v => v.name === name)) return s;
-    return { ...s, account: { ...s.account, connecting: null, venues: [...s.account.venues, { name, line: 'Connected · stand-in · Gravit: read only', state: 'Healthy' }] } };
+    const cash = STANDIN_CASH[name] ? { ...s.account.cash, [name]: (s.account.cash?.[name] ?? 0) + STANDIN_CASH[name] } : s.account.cash;
+    const account = revalue({ ...s.account, connecting: null, cash, venues: [...s.account.venues, { name, line: 'Connected · stand-in · Gravit: read only', state: 'Healthy' }] });
+    const t = s.trade?.ticket;
+    const waits = t?.id && !t.venue && legsOf(instrument(t.id), account, t.outcome).some(l => l.state === 'able' && l.venue === name);
+    return { ...s, account, trade: waits ? { ...s.trade, ticket: { ...t, venue: name } } : s.trade };
   },
   setCopied: (s, on) => (s.account.copied === !!on ? s : { ...s, account: { ...s.account, copied: !!on } }),
 

@@ -76,7 +76,7 @@ test('seed: four conversations shaped as the boards, memory, account, counters',
   assert.deepEqual(s.plugins.installed, ['pricefeed', 'fraud', 'politician', 'buffett', 'pairs']);
   assert.deepEqual(s.plugins.mine, ['pairs']);
   assert.equal(s.account.netWorth, 12480);
-  assert.equal(s.account.holdings.length, 3);
+  assert.equal(s.account.holdings.length, 4);
   assert.equal(s.route.id, 'c-1');
   assert.equal(s.draft, null);
 });
