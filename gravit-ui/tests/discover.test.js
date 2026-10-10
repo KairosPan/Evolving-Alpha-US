@@ -77,6 +77,13 @@ test('Installed view: the pill pressed, every card with the trash key, 你上传
   assert.match(h, /href="#\/messages\/c-5">Open in Messages ›/);
   assert.match(h, /class="toast" role="status">News sentiment 装好了/);
   assert.match(h, /class="toast-key" href="#\/messages\/c-5">Open</);
+  assert.match(h, /data-action="open" data-id="c-5" href="#\/messages\/c-5">Open in Messages ›/, 'the link opens the conversation, not the card drawer');
+});
+
+test('pressing Installed turns that key into the trash key', () => {
+  const asked = R.askUninstall(disc(), 'buffett');
+  assert.match(keyFor(byId('buffett'), asked), /class="pkey uninstall" data-action="uninstall" data-id="buffett"/);
+  assert.match(keyFor(byId('politician'), asked), /class="pkey installed"/, 'only the pressed one changes');
 });
 
 test('search shows a results grid; a shelf route shows that shelf as a grid with a way back', () => {
@@ -105,5 +112,6 @@ test('the upload drawer is a form with the fields of the spec and the private de
   assert.match(u, /type="radio" name="visibility" value="public"/);
   assert.match(u, /type="submit" class="btn-primary">Publish</);
   assert.doesNotMatch(u, /先过一次审/);
+  assert.match(u, /class="field-label">图标<\/span><div class="icon-pick"><span class="icon-slot" id="up-icon">P<\/span>/, 'the icon slot, initials by default');
   assert.equal(renderToast({ text: 'x', action: null }), '<div class="toast" role="status">x<button type="button" class="toast-x" data-action="dismissToast" aria-label="Dismiss">×</button></div>');
 });

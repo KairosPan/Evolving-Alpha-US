@@ -95,7 +95,8 @@ export function renderMessagesScreen(state, now) {
 }
 
 export function renderBanner(b, state) {
-  const first = state.conversations[0]?.id ?? '';
+  // the thread the banner covers, where its message will land (reducers/messages.js dismissBanner)
+  const first = currentConversation(state)?.id ?? '';
   return `<div class="banner" role="status"><div class="banner-head">${chip('突发', 'down')}<span class="dim">${fmtClock(b.at)}</span><span class="spacer"></span><button type="button" class="close-key small" data-action="dismissBanner" aria-label="Dismiss">×</button></div>` +
     `<div class="card-title">${esc(b.headline)}</div><div class="dim">${esc(b.body)}</div><a class="link" href="#/messages/${esc(first)}" data-action="dismissBanner">去会话 ›</a></div>`;
 }
@@ -110,5 +111,5 @@ export function renderCall(c) {
 export function renderStub(route) {
   const title = route.screen === 'markets' ? 'Markets' : 'Trade';
   const sub = route.screen === 'markets' && route.id ? `Markets › ${esc(route.id)}` : '';
-  return `<main class="main"><header class="head"><h1 class="head-title">${title}</h1></header><div class="stub">${sub ? `<div class="head-task">${sub}</div>` : ''}<div class="dim">Linqi 的页面</div></div></main>`;
+  return `<main class="main"><header class="head"><h1 class="head-title">${title}</h1></header><div class="stub">${sub ? `<div class="head-task">${sub}</div>` : ''}</div></main>`;
 }

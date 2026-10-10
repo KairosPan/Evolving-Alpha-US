@@ -118,6 +118,9 @@ test('banner, call, stub and the controls', () => {
   assert.match(c, /class="key yes big" data-action="answerCall" data-accept="1" aria-label="Accept"/);
   assert.match(renderStub({ screen: 'markets', id: 'NVDA' }), /Markets › NVDA/);
   assert.match(renderStub({ screen: 'trade' }), /<h1 class="head-title">Trade<\/h1>/);
+  assert.doesNotMatch(renderStub({ screen: 'trade' }), /Linqi/, 'no small print on a stub');
+  const onC3 = R.nav(s, { screen: 'messages', id: 'c-3' });
+  assert.match(renderBanner({ id: 'b', headline: 'H', body: 'B', at: NOW }, onC3), /href="#\/messages\/c-3"/, 'the banner leads to the thread it covers');
   assert.equal(seg(['A', 'B'], 'B', 'pick'), '<div class="seg"><button type="button" class="seg-item" aria-pressed="false" data-action="pick" data-value="A">A</button><button type="button" class="seg-item pressed" aria-pressed="true" data-action="pick" data-value="B">B</button></div>');
   assert.match(segLinks([['Portfolio', '#/account/portfolio', 'portfolio'], ['Memory', '#/account/memory', 'memory']], 'memory'), /class="seg-item pressed" aria-current="page" href="#\/account\/memory"/);
   assert.equal(kv([['For', '<b>x</b>']]), '<div class="kv-list"><div class="kv"><span class="kv-k">For</span><span class="kv-v"><b>x</b></span></div></div>');

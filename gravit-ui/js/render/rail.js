@@ -16,7 +16,8 @@ export function previewOf(conv, state = null) {
   const body = {
     receipt: `${m.data.status} · ${m.text}`, brief: `早报 · ${m.data.date}`, ta: `${m.data.ticker} 技术面`, breaking: m.data.headline ?? m.text, call: 'Gravit 来电',
   }[m.kind] ?? m.text;
-  return conv.kind === 'group' && m.from !== 'you' ? `${senderName(m.from, state)}：${body}` : body;
+  const who = m.from === 'you' ? '' : senderName(m.from, state);
+  return conv.kind === 'group' && who ? `${who}：${body}` : body;
 }
 
 function rowMark(conv, state) {

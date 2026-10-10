@@ -9,12 +9,13 @@ import { kv, sec } from './controls.js';
 export function keyFor(p, state, view = 'shelf') {
   const installed = state.plugins.installed.includes(p.id);
   if (!installed) return `<button type="button"${attrs({ class: 'pkey install', 'data-action': 'install', 'data-id': p.id, 'aria-label': `Install ${p.name}` })}>${icon('plus', 14, 2.4)}</button>`;
-  if (view === 'installed') return `<button type="button"${attrs({ class: 'pkey uninstall', 'data-action': 'uninstall', 'data-id': p.id, 'aria-label': `Uninstall ${p.name}` })}>${icon('trash', 15, 2.1)}</button>`;
+  if (view === 'installed' || state.discover.asking === p.id) return `<button type="button"${attrs({ class: 'pkey uninstall', 'data-action': 'uninstall', 'data-id': p.id, 'aria-label': `Uninstall ${p.name}` })}>${icon('trash', 15, 2.1)}</button>`;
   return `<button type="button"${attrs({ class: 'pkey installed', 'data-action': 'uninstallAsk', 'data-id': p.id, 'aria-label': `Installed · uninstall ${p.name}` })}>${icon('check', 13, 2.4)}Installed</button>`;
 }
 
 export function card(p, state, { view = 'shelf', pressed = false, openIn = null } = {}) {
-  const extra = openIn ? `<div class="pcard-extra">${chip('刚装好', 'up')}<a class="link" href="#/messages/${esc(openIn)}">Open in Messages ›</a></div>` : '';
+  // the link carries its own action so a click opens the conversation, not the card's drawer
+  const extra = openIn ? `<div class="pcard-extra">${chip('刚装好', 'up')}<a class="link" data-action="open" data-id="${esc(openIn)}" href="#/messages/${esc(openIn)}">Open in Messages ›</a></div>` : '';
   return `<div${attrs({ class: cls('pcard', pressed && 'pressed', view === 'grid' && 'grid'), 'data-action': 'openPlugin', 'data-id': p.id, role: 'button', tabindex: '0' })}>${logo(p, 44)}` +
     `<div class="pcard-body"><div class="pcard-name">${esc(p.name)}</div><div class="pcard-blurb">${esc(p.blurb)}</div><div class="pcard-by">${esc(byline(p))}</div>${extra}</div>` +
     `<div class="pcard-side"><span class="pcard-kind">${esc(p.kind.toUpperCase())}</span>${keyFor(p, state, view === 'grid' && state.discover.installedOnly ? 'installed' : 'shelf')}</div></div>`;
@@ -65,6 +66,8 @@ export function uploadDrawer() {
     `<div class="field"><label class="field-label" for="up-name">名字</label><input id="up-name" class="input" name="name" type="text" required placeholder="Pairs"></div>` +
     `<div class="field"><label class="field-label" for="up-blurb">一句话</label><input id="up-blurb" class="input" name="blurb" type="text" placeholder="两只相关股的价差回归，给出配对信号"></div>` +
     `<div class="field"><span class="field-label">类型</span><div class="radio-seg">${radios('kind', KINDS, 'Quant')}</div></div>` +
+    // spec §7.7: a 44 px slot, initials by default (app.js keeps it on the name's first letter)
+    `<div class="field"><span class="field-label">图标</span><div class="icon-pick"><span class="icon-slot" id="up-icon">P</span><button type="button" class="btn-sm">换一张图</button></div></div>` +
     `<div class="field"><label class="field-label" for="up-tools">它暴露的工具 · 一个 MCP server</label><textarea id="up-tools" class="textarea" name="tools" rows="2" placeholder="pairs.scan(universe)\npairs.signal(a, b)"></textarea></div>` +
     `<div class="field"><span class="field-label">要用户什么</span><div class="picks">${radios('needs', ['没有', 'Telegram 会话', '交易所 key', '钱包地址'], '没有')}</div></div>` +
     `<div class="field"><span class="field-label">放哪</span><div class="radio-seg">${radios('visibility', ['private', 'public'], 'private').replace('>private<', '>只给我自己 · Private<').replace('>public<', '>放进 Public shop<')}</div></div>` +

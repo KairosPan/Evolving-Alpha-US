@@ -30,6 +30,8 @@ test('previewOf: the last message in words, with the sender in a group', () => {
   assert.equal(previewOf(s.conversations[1]), '披露：Pelosi 买 NVDA。照它买 $20，在额度里，直接成交。');
   assert.equal(previewOf(s.conversations[3]), 'Gravit：filled · NVDA $25 @ 187.40 · ord-0009 · 账本 #58');
   assert.equal(previewOf({ kind: 'gravit', messages: [] }), '');
+  const stopped = R.stopGravit(seed(NOW), { convId: 'c-4', now: NOW });
+  assert.equal(previewOf(stopped.conversations[3]), 'Gravit 停了，这件事不再动。', 'a system line in a group has no sender');
 });
 
 test('renderRail: brand, Messages header with + and chevron, four rows, the current one, the unread dot, nav, phone/mail, Account', () => {
