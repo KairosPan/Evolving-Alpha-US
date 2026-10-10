@@ -42,7 +42,8 @@ export function initialState(storage, now = Date.now()) {
 
 // the store boot uses: initialState already read and cleaned the save, so the store itself loads nothing (Review Focus 2)
 export function makeStore(storage, now = Date.now()) {
-  return createStore({ initial: initialState(storage, now), reducers, storage, key: KEY, accept: () => false });
+  // what is saved never holds a moment's overlay, and so never the connector's typed key or secret
+  return createStore({ initial: initialState(storage, now), reducers, storage, key: KEY, accept: () => false, persist: withoutMoments });
 }
 
 export function scheduleEvents(store, timers, convId, events, now = () => Date.now()) {
