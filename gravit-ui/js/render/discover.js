@@ -21,20 +21,30 @@ export function card(p, state, { view = 'shelf', pressed = false, openIn = null 
     `<div class="pcard-side"><span class="pcard-kind">${esc(p.kind.toUpperCase())}</span>${keyFor(p, state, view === 'grid' && state.discover.installedOnly ? 'installed' : 'shelf')}</div></div>`;
 }
 
+// the plugin whose teaching conversation is still unread, while it stays installed (spec §7.5)
 const justInstalled = state => {
-  const conv = state.conversations.find(c => c.kind === 'bot' && c.title.endsWith('：怎么用我') && c.unread);
-  return conv ? { id: conv.members[1], convId: conv.id } : null;
+  const conv = state.conversations.find(c => c.kind === 'bot' && c.teach && c.unread && state.plugins.installed.includes(c.teach));
+  return conv ? { id: conv.teach, convId: conv.id } : null;
+};
+const openInFor = (p, state) => { const ji = justInstalled(state); return ji && ji.id === p.id ? ji.convId : null; };
+
+// what the signature lets the plugin do: only a bot may propose; the rest read and write (spec §6 kind 7: a monitor never orders)
+const MAY = {
+  Bots: 'read Portfolio · propose in your limit',
+  Monitors: 'read what you point it at · write signals, never orders',
+  Data: 'answer when asked · write into the conversation',
+  Crypto: 'check what you ask about · write findings, never move money',
+  Quant: 'run on your idea · write reports, never orders',
 };
 
 function shelf(s, state) {
   const ids = s.id === 'like' ? likeFor(state.memory) : s.ids;
-  const cards = ids.map(id => byId(id, state.plugins.uploaded)).filter(Boolean).map(p => card(p, state, { pressed: state.discover.drawer === p.id })).join('');
+  const cards = ids.map(id => byId(id, state.plugins.uploaded)).filter(Boolean).map(p => card(p, state, { pressed: state.discover.drawer === p.id, openIn: openInFor(p, state) })).join('');
   return `<section class="shelf"><div class="shelf-head"><div class="shelf-title">${esc(s.title)}</div><a class="link" href="#/discover/${s.id}">See all ›</a></div><div class="shelf-row">${cards}</div></section>`;
 }
 
 function grid(title, plugins, state, back = false) {
-  const ji = justInstalled(state);
-  const cards = plugins.map(p => card(p, state, { view: 'grid', pressed: state.discover.drawer === p.id, openIn: ji && ji.id === p.id ? ji.convId : null })).join('');
+  const cards = plugins.map(p => card(p, state, { view: 'grid', pressed: state.discover.drawer === p.id, openIn: openInFor(p, state) })).join('');
   return `<section class="grid-sec">${back ? '<a class="back-link" href="#/discover">‹ Discover</a>' : ''}<div class="grid-title">${esc(title)}</div><div class="grid">${cards}</div></section>`;
 }
 
@@ -46,15 +56,21 @@ function header(state) {
     `<button type="button" class="pill" data-action="openUpload">${icon('upload', 14, 2.2)}Upload a plugin</button></div>`;
 }
 
+// the signature table: installing grants what MAY says until you uninstall; uninstalling signs only what and for
+function signRows(p, installed, state) {
+  const what = [['What you sign', `<b>${installed ? 'uninstall' : 'install'} ${esc(p.id)}</b>`], ['For', `Gravit · ${esc(state.account.wallet.address)}`]];
+  return installed ? what : [...what, ['May', esc(MAY[p.kind] ?? MAY.Data)], ['May not', 'pay anyone · move money'], ['Until', 'you uninstall']];
+}
+
 export function pluginDrawer(p, state) {
   const installed = state.plugins.installed.includes(p.id);
   const meta = [p.kind, `by ${p.by}`, 'Free', p.installs ? `${p.installs} 装了` : null].filter(Boolean).join(' · ');
   const writes = [...p.writes.map(esc), ...(p.never.length ? [`<span class="dim">不会：${esc(p.never.join('、'))}</span>`] : [])];
   return `<aside class="drawer"${attrs({ 'aria-label': p.name })}><div class="drawer-head"><h2>${esc(p.name)}</h2><button type="button" class="close-key" data-action="closeDrawer" aria-label="Close">×</button></div><div class="drawer-body">` +
     `<div class="plug-id">${logo(p, 56)}<div><div class="plug-name">${esc(p.name)}</div><div class="dim">${esc(meta)}</div></div></div><p class="plug-blurb">${esc(p.blurb)}。</p>` +
-    sec('它能被问什么', p.asks.length ? p.asks : ['（它还没写）']) + sec('它会写什么', writes.length ? writes : ['（它还没写）'], true) +
+    (p.asks.length ? sec('它能被问什么', p.asks) : '') + (writes.length ? sec('它会写什么', writes, true) : '') +
     sec('怎么付', ['免费。Gravit 只在模型调用和成交的单上抽成。']) + sec('要你什么', [p.needs]) +
-    `<div class="dsec"><div class="dsec-label">你签的是</div>${kv([['What you sign', `<b>${installed ? 'uninstall' : 'install'} ${esc(p.id)}</b>`], ['For', `Gravit · ${esc(state.account.wallet.address)}`], ['May', 'read Portfolio · propose in your limit'], ['May not', 'pay anyone · move money'], ['Until', 'you uninstall']])}</div>` +
+    `<div class="dsec"><div class="dsec-label">你签的是</div>${kv(signRows(p, installed, state))}</div>` +
     `<div class="drawer-foot">${installed ? `<button type="button" class="btn-primary" data-action="uninstall" data-id="${esc(p.id)}">Uninstall</button>` : `<button type="button" class="btn-primary" data-action="install" data-id="${esc(p.id)}">Install</button>`}</div></div></aside>`;
 }
 
@@ -68,7 +84,7 @@ export function uploadDrawer() {
     `<div class="field"><span class="field-label">类型</span><div class="radio-seg">${radios('kind', KINDS, 'Quant')}</div></div>` +
     // spec §7.7: a 44 px slot, initials by default (app.js keeps it on the name's first letter)
     `<div class="field"><span class="field-label">图标</span><div class="icon-pick"><span class="icon-slot" id="up-icon">P</span><button type="button" class="btn-sm">换一张图</button></div></div>` +
-    `<div class="field"><label class="field-label" for="up-tools">它暴露的工具 · 一个 MCP server</label><textarea id="up-tools" class="textarea" name="tools" rows="2" placeholder="pairs.scan(universe)\npairs.signal(a, b)"></textarea></div>` +
+    `<div class="field"><label class="field-label" for="up-tools">它暴露的工具</label><textarea id="up-tools" class="textarea" name="tools" rows="2" placeholder="pairs.scan(universe)\npairs.signal(a, b)"></textarea></div>` +
     `<div class="field"><span class="field-label">要用户什么</span><div class="picks">${radios('needs', ['没有', 'Telegram 会话', '交易所 key', '钱包地址'], '没有')}</div></div>` +
     `<div class="field"><span class="field-label">放哪</span><div class="radio-seg">${radios('visibility', ['private', 'public'], 'private').replace('>private<', '>只给我自己 · Private<').replace('>public<', '>放进 Public shop<')}</div></div>` +
     `<div class="btn-row grow"><button type="button" class="btn" data-action="closeDrawer">Cancel</button><button type="submit" class="btn-primary">Publish</button></div></form></div></aside>`;

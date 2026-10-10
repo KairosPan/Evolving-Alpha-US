@@ -53,7 +53,7 @@ test('F7: the draft head is avatar + title input + To line; the limit chips sit 
   assert.match(h, /id="nm-title"[^>]*data-action="draftTitle"[^>]*value="买一点 SOL"/);
   assert.match(h, /class="to-label">To:</);
   assert.match(h, /class="to-chip">[\s\S]*Gravit</);
-  assert.match(h, /data-action="toggleDraftGroup"/);
+  assert.match(h, /data-action="toggleDraftPicker"/);
   assert.match(h, /class="limit-label">附一份额度</);
   assert.match(h, /data-action="draftLimit" data-key="perOrder">每单 \$25/);
   assert.match(h, /data-key="until">到 Oct 15/);
@@ -69,6 +69,19 @@ test('F7: the draft head is avatar + title input + To line; the limit chips sit 
   const sent = R.send(g, { text: '两位看看 KO', now: NOW });
   assert.equal(sent.conversations[0].kind, 'group');
   assert.deepEqual(sent.conversations[0].members, ['gravit', 'politician', 'buffett']);
+});
+
+test('F7 picker: + 加个 bot lists the installed bots; picking one makes a group draft with the @ placeholder', () => {
+  let s = R.toggleDraftPicker(R.startDraft(seed(NOW), { now: NOW }));
+  const h = renderMessagesScreen(s, NOW);
+  assert.match(h, /data-action="toggleDraftBot" data-id="politician" aria-pressed="false"/);
+  assert.match(h, /data-action="toggleDraftBot" data-id="buffett" aria-pressed="false"/);
+  s = R.toggleDraftBot(s, 'buffett');
+  const g = renderMessagesScreen(s, NOW);
+  assert.match(g, /data-action="toggleDraftBot" data-id="buffett" aria-pressed="true"/);
+  assert.equal(count(g, /class="cluster-item"/g), 2, 'Gravit and Buffett bot');
+  assert.match(g, /class="to-chip">[\s\S]*?Buffett bot</);
+  assert.match(g, /placeholder="Tell Gravit… 打 @ 点名一个 bot"/);
 });
 
 test('F6: no conversations → the empty state with three suggestion chips', () => {

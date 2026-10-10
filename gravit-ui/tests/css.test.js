@@ -22,6 +22,8 @@ function everyState() {
     withMore, R.toggleDetails(s), R.nav(s, { screen: 'messages', id: 'c-4' }), R.startDraft(s, { now: NOW }), R.toggleDraftGroup(R.startDraft(s, { now: NOW })), { ...s, conversations: [], route: { screen: 'messages', id: null } },
     R.nav(s, { screen: 'discover', id: null }), R.openPlugin(R.nav(s, { screen: 'discover', id: null }), 'news'), R.nav(R.openUpload(s), D), R.nav(R.toggleInstalledOnly(R.install(s, { id: 'news', now: NOW })), D), R.nav(R.setQuery(s, 'bot'), D), R.nav(s, { screen: 'discover', id: 'bots' }), R.nav(R.askUninstall(s, 'buffett'), D),
     R.nav(R.showBanner(s, director.breaking(NOW)), { screen: 'markets', id: 'NVDA' }), R.nav(s, { screen: 'trade' }),
+    R.toggleDraftBot(R.toggleDraftPicker(R.startDraft(s, { now: NOW })), 'buffett'),
+    ['refusal', 'done'].reduce((st, k) => R.append(st, { convId: 'c-1', msg: director[k](NOW), at: NOW }), s),
     R.nav(s, { screen: 'account', tab: 'portfolio' }), R.nav(s, { screen: 'account', tab: 'venues' }), R.nav(s, { screen: 'account', tab: 'memory' }), R.openSettings(R.nav(s, { screen: 'account', tab: 'portfolio' })),
   ];
 }
@@ -52,6 +54,17 @@ test('the layout: one screen tall, the thread scrolls under a pinned composer, t
   assert.match(rule('.drawer'), /position: fixed/);
   assert.match(rule('.toast'), /position: fixed/);
   assert.doesNotMatch(css, /\.main\.with-drawer \{ overflow: hidden/, 'the page behind a drawer stays usable');
+});
+
+test('narrow windows, the toast under a drawer, and long words that wrap', async () => {
+  const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
+  const narrow = css.match(/@media \(max-width: 860px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+  assert.match(narrow, /\.rail \{[^}]*position: static/, 'below 860 px the rail stops being a sticky column');
+  assert.match(narrow, /\.main \{[^}]*height: auto/);
+  assert.match(narrow, /\.toast \{[^}]*left: 50%/);
+  const z = sel => Number(css.match(new RegExp(`^\\${sel} \\{[^}]*z-index: (\\d+)`, 'm'))?.[1]);
+  assert.ok(z('.toast') < z('.drawer'), 'a toast never covers a drawer');
+  assert.match(css, /\.bubble, \.card \{[^}]*overflow-wrap: anywhere/, 'a pasted address wraps inside its bubble');
 });
 
 test('the equity blue goes by Linqi\'s own name: no --blue, which his tokens use for the orange RWA colour', async () => {

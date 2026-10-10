@@ -10,6 +10,9 @@ export const levelOf = m => LEVELS[m.kind] ?? 'grey';
 
 export const needsAnswer = m => ['card', 'limit', 'install', 'call'].includes(m.kind) && !m.answer;
 
+// a stopped or withdrawn conversation is closed: no answers, no more replies
+export const isClosed = c => !!c && (c.status === 'stopped' || c.status === 'withdrawn');
+
 export function message(from, kind, text, data = {}) {
   return { from, kind, text, data };
 }

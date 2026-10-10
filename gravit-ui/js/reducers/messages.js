@@ -2,9 +2,9 @@
 import { nextId } from '../ids.js';
 import { DAY } from '../time.js';
 import { byId } from '../data/plugins.js';
+import { isClosed } from '../messages.js';
 
-// a stopped or withdrawn conversation is closed: no answers, no more replies
-export const closed = c => !!c && (c.status === 'stopped' || c.status === 'withdrawn');
+const closed = isClosed;
 const installedBots = s => s.plugins.installed.filter(id => byId(id, s.plugins.uploaded)?.kind === 'Bots');
 const upd = (state, id, fn) => ({ ...state, conversations: state.conversations.map(c => (c.id === id ? fn(c) : c)) });
 const push = (state, convId, msg) => upd(state, convId, c => ({ ...c, messages: [...c.messages, msg] }));

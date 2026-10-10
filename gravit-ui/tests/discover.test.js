@@ -80,6 +80,28 @@ test('Installed view: the pill pressed, every card with the trash key, 你上传
   assert.match(h, /data-action="open" data-id="c-5" href="#\/messages\/c-5">Open in Messages ›/, 'the link opens the conversation, not the card drawer');
 });
 
+test('the shelves show the just-installed card too, and only while it is installed', () => {
+  const s = R.install(disc(), { id: 'news', now: NOW });
+  const h = renderDiscover(s);
+  assert.match(h, /刚装好/);
+  assert.match(h, /data-action="open" data-id="c-5" href="#\/messages\/c-5">Open in Messages ›/);
+  assert.doesNotMatch(renderDiscover(R.uninstall(s, 'news')), /刚装好/);
+});
+
+test('the signature follows the plugin: only a bot may propose; uninstalling signs only what and for; empty sections are left out', () => {
+  const s = disc();
+  assert.match(pluginDrawer(byId('news'), s), /May<\/span><span class="kv-v">answer when asked · write into the conversation/);
+  assert.match(pluginDrawer(byId('telegram'), s), /May<\/span><span class="kv-v">read what you point it at · write signals, never orders/);
+  assert.match(pluginDrawer(byId('politician'), { ...s, plugins: { ...s.plugins, installed: [] } }), /May<\/span><span class="kv-v">read Portfolio · propose in your limit/);
+  const inst = pluginDrawer(byId('buffett'), s);
+  assert.match(inst, /uninstall buffett/);
+  assert.doesNotMatch(inst, />May</);
+  const bare = pluginDrawer(byId('onchain'), s);
+  assert.doesNotMatch(bare, /它还没写/);
+  assert.doesNotMatch(bare, /它能被问什么/);
+  assert.match(uploadDrawer(), /for="up-tools">它暴露的工具<\/label>/);
+});
+
 test('pressing Installed turns that key into the trash key', () => {
   const asked = R.askUninstall(disc(), 'buffett');
   assert.match(keyFor(byId('buffett'), asked), /class="pkey uninstall" data-action="uninstall" data-id="buffett"/);

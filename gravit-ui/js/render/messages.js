@@ -38,12 +38,16 @@ export function renderHead(conv, state) {
 
 function draftHead(state) {
   const d = state.draft;
-  const bots = d.group ? state.plugins.installed.filter(id => byId(id, state.plugins.uploaded)?.kind === 'Bots') : [];
-  const who = d.group && bots.length ? cluster(['gravit', ...bots], 44, state) : avatar('gravit', 44);
+  // the bots picked for this conversation; an older draft that only had group: true takes every installed bot
+  const installedBots = state.plugins.installed.filter(id => byId(id, state.plugins.uploaded)?.kind === 'Bots');
+  const bots = d.bots ?? (d.group ? installedBots : []);
+  const who = bots.length ? cluster(['gravit', ...bots], 44, state) : avatar('gravit', 44);
   const toChips = ['gravit', ...bots].map(m => `<span class="to-chip">${avatar(m, 20, state)}${esc(senderName(m, state))}</span>`).join('');
+  // "+ 加个 bot" opens the picker: each installed bot is a chip that joins or leaves the conversation (spec §5.5)
+  const picker = d.picking ? `<div class="to-picker">${installedBots.map(id => `<button type="button"${attrs({ class: cls('to-pick', bots.includes(id) && 'on'), 'data-action': 'toggleDraftBot', 'data-id': id, 'aria-pressed': bots.includes(id) ? 'true' : 'false' })}>${avatar(id, 20, state)}${esc(senderName(id, state))}</button>`).join('')}</div>` : '';
   return `<header class="head centered draft"><button type="button" class="btn-sm head-cancel" data-action="cancelDraft">Cancel</button>${who}` +
     `<label for="nm-title" class="sr-only">这件事叫什么</label><input id="nm-title" class="title-input" type="text" autocomplete="off" placeholder="这件事叫什么（不填就用你第一句话）" data-action="draftTitle"${attrs({ value: d.title })}>` +
-    `<div class="to-line"><span class="to-label">To:</span>${toChips}<button type="button" class="to-add" data-action="toggleDraftGroup" aria-pressed="${d.group ? 'true' : 'false'}">${icon('plus', 11, 2.4)}${d.group ? '只跟 Gravit' : '加个 bot，就成群聊'}</button></div></header>`;
+    `<div class="to-line"><span class="to-label">To:</span>${toChips}<button type="button" class="to-add" data-action="toggleDraftPicker" aria-expanded="${d.picking ? 'true' : 'false'}">${icon('plus', 11, 2.4)}加个 bot，就成群聊</button></div>${picker}</header>`;
 }
 
 function limitRow(d) {
@@ -54,7 +58,9 @@ function limitRow(d) {
 }
 
 function draftScreen(state) {
-  return `<main class="main">${draftHead(state)}<div class="thread" id="thread"></div>${renderComposer({ above: limitRow(state.draft) })}</main>`;
+  const d = state.draft;
+  const group = (d.bots ?? []).length > 0 || (!d.bots && d.group);
+  return `<main class="main">${draftHead(state)}<div class="thread" id="thread"></div>${renderComposer({ above: limitRow(d), placeholder: group ? 'Tell Gravit… 打 @ 点名一个 bot' : 'Tell Gravit…' })}</main>`;
 }
 
 function emptyScreen() {

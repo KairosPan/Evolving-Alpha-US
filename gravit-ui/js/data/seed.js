@@ -99,3 +99,8 @@ export function seed(now = Date.now()) {
     call: null,
   };
 }
+
+// the first-run state (F6): no conversations yet; Memory and the account as in the seed
+export function firstRun(now = Date.now()) {
+  return { ...seed(now), conversations: [], route: { screen: 'messages', id: null } };
+}

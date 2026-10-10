@@ -35,6 +35,16 @@ test('likeFor reads the style out of Memory', () => {
   assert.equal(likeFor({ entries: [] })[0], 'buffett');
 });
 
+test('firstRun: the seed with no conversations, for the F6 empty state', async () => {
+  const { firstRun } = await import('../js/data/seed.js');
+  const now = new Date(2026, 9, 9, 14, 7).getTime();
+  const s = firstRun(now);
+  assert.equal(s.v, SEED_VERSION);
+  assert.deepEqual(s.conversations, []);
+  assert.deepEqual(s.route, { screen: 'messages', id: null });
+  assert.equal(s.memory.entries.length, 9, 'Memory and the account stay');
+});
+
 test('seed: four conversations shaped as the boards, memory, account, counters', () => {
   const now = new Date(2026, 9, 9, 14, 7).getTime();
   const s = seed(now);

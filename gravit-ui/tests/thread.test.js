@@ -74,3 +74,10 @@ test('helpers: chip, key, ticker, candles', () => {
   assert.match(svg, /stroke="var\(--up\)"/);
   assert.match(svg, /fill="var\(--down\)"/);
 });
+
+test('a stopped conversation shows no answer keys', async () => {
+  const { reducers: R } = await import('../js/reducers/index.js');
+  const stopped = R.stopGravit(seed(NOW), { convId: 'c-1', now: NOW });
+  const h = renderThread(stopped.conversations[0], stopped, NOW);
+  assert.doesNotMatch(h, /class="key /);
+});

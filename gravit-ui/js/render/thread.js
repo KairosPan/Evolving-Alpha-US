@@ -2,7 +2,7 @@
 import { esc, attrs, cls } from '../html.js';
 import { icon } from '../icons.js';
 import { divider, fmtClock } from '../time.js';
-import { levelOf, needsAnswer } from '../messages.js';
+import { levelOf, needsAnswer, isClosed } from '../messages.js';
 import { avatar } from './avatars.js';
 import { senderName } from './rail.js';
 
@@ -28,8 +28,10 @@ export function candles(data) {
     `<line x1="0" y1="56" x2="300" y2="56" class="kline-rule"></line><text x="298" y="66" class="kline-label" text-anchor="end">支撑 ${esc(data.support)}</text>${bars}</svg>`;
 }
 
-const keysFor = (m, convId) => {
-  if (!needsAnswer(m)) return '';
+const keysFor = (m, conv) => {
+  // a stopped or withdrawn conversation takes no answers, so its cards show no keys
+  if (!needsAnswer(m) || isClosed(conv)) return '';
+  const convId = conv.id;
   const d = { 'data-action': 'answer', 'data-conv': convId, 'data-msg': m.id };
   if (m.kind === 'card') return `<div class="keys right">${key('no', 'Reject', { ...d, 'data-answer': 'rejected' })}${key('yes', 'Approve', { ...d, 'data-answer': 'approved' })}</div>`;
   if (m.kind === 'limit') return `<div class="keys">${key('yes', 'Grant', { ...d, 'data-answer': 'granted' })}${key('no', 'Decline', { ...d, 'data-answer': 'declined' })}</div>`;
@@ -37,17 +39,17 @@ const keysFor = (m, convId) => {
   return '';
 };
 
-function body(m, convId) {
+function body(m, conv) {
   const d = m.data ?? {};
   switch (m.kind) {
     case 'card':
       return `<div class="card orange"><div class="card-head"><div class="card-title">${esc(d.title ?? m.text)}</div>${d.by ? chip(`answer by ${fmtClock(d.by)}`, 'warn') : ''}</div>` +
         (d.venue ? `<div class="dim">${esc([d.venue, d.type, d.about, d.cardId].filter(Boolean).join(' · '))}</div>` : '') +
         (d.rows ? `<div class="orders">${d.rows.map(r => `<div class="order-row"><span class="order-t">${esc(r.t)}</span><span class="dim">${esc(r.why)}</span><span class="num">${esc(r.amt)}</span></div>`).join('')}</div>` : '') +
-        (d.note ? `<div class="dim">${esc(d.note)}</div>` : '') + keysFor(m, convId) + `</div>`;
+        (d.note ? `<div class="dim">${esc(d.note)}</div>` : '') + keysFor(m, conv) + `</div>`;
     case 'limit':
     case 'install':
-      return `<div class="card orange"><div>${esc(m.text)}</div>${keysFor(m, convId)}</div>`;
+      return `<div class="card orange"><div>${esc(m.text)}</div>${keysFor(m, conv)}</div>`;
     case 'signal':
       return `<div class="card white"><div class="dim">${esc(d.source ?? '')}</div><div class="quote">${esc(m.text)}</div></div>`;
     case 'ta':
@@ -80,7 +82,7 @@ export function renderMessage(m, conv, state) {
   if (m.from === 'you') return `<div class="msg you"><div class="bubble you">${esc(m.text)}</div>${avatar('you', 28)}</div>`;
   const name = conv.kind === 'group' ? `<div class="sender-name">${esc(senderName(m.from, state))}</div>` : '';
   const wide = ['card', 'ta', 'brief', 'breaking', 'signal'].includes(m.kind);
-  return `<div class="msg left">${name}<div class="msg-row">${avatar(m.from, 28, state)}<div class="${cls('msg-body', wide && 'wide')}">${body(m, conv.id)}</div></div></div>`;
+  return `<div class="msg left">${name}<div class="msg-row">${avatar(m.from, 28, state)}<div class="${cls('msg-body', wide && 'wide')}">${body(m, conv)}</div></div></div>`;
 }
 
 export function renderThread(conv, state, now) {
