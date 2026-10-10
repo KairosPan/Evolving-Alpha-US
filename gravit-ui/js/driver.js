@@ -44,6 +44,11 @@ export function replyTo(text, ctx = {}) {
   const installed = ctx.installed ?? [];
   const now = ctx.now ?? Date.now();
   const conv = ctx.conv ?? null;
+  // files with no task in the words: Gravit reads them first
+  const files = ctx.files ?? [];
+  if (files.length && !/\bbtc\b|比特币|\beth\b|以太|\bsol\b|pelosi|跟单|政客|0x[0-9a-f]{4,}|地址|骗子|额度|上限/.test(t)) {
+    return [ev(1000, G('text', `收到 ${files.join('、')}，我先看看里面有什么。`)), ev(2600, G('text', '看完了，没有要动的。要我按里面的做什么，说一声。'))];
+  }
   if (conv?.teach) {
     const say = TEACH_REPLIES[conv.teach] ?? (() => '好，记下了。有新的我在这里说。');
     return [ev(1200, message(conv.teach, 'text', say((text ?? '').trim())))];

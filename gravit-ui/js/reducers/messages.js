@@ -89,7 +89,9 @@ export const reducers = {
 
   send(state, { text, now }) {
     const clean = (text ?? '').trim();
-    if (!clean) return state;
+    // the composer's picked files go with the words; files alone are a message too
+    const files = (state.compose?.files ?? []).map(f => f.name);
+    if (!clean && !files.length) return state;
     let s = state;
     let convId = s.route.screen === 'messages' ? s.route.id : null;
     // the screen shows the first conversation for a missing id, so the words go there too
@@ -102,7 +104,7 @@ export const reducers = {
       const bots = d.bots ?? (d.group ? installedBots(s) : []);
       const members = ['gravit', ...bots];
       const made = newConversation(s, {
-        title: d.title.trim() || (clean.length > 24 ? clean.slice(0, 24) + '…' : clean),
+        title: d.title.trim() || (clean.length > 24 ? clean.slice(0, 24) + '…' : clean) || files[0],
         kind: members.length > 1 ? 'group' : 'gravit', members, plugins: bots, now,
         until: d.limit?.until ?? now + 6 * DAY,
         intentLimit: d.attach && d.limit ? { perOrder: d.limit.perOrder, total: d.limit.total, spent: 0, venue: d.limit.venue } : null,
@@ -110,8 +112,9 @@ export const reducers = {
       s = { ...made.state, draft: null, route: { screen: 'messages', id: made.conv.id } };
       convId = made.conv.id;
     }
-    const st = stampMessage(s, { from: 'you', kind: 'text', text: clean, data: {} }, now);
-    return push(st.state, convId, st.msg);
+    const st = stampMessage(s, { from: 'you', kind: 'text', text: clean, data: files.length ? { files } : {} }, now);
+    const sent = push(st.state, convId, st.msg);
+    return files.length ? { ...sent, compose: { ...sent.compose, files: [] } } : sent;
   },
 
   append(state, { convId, msg, at }) {

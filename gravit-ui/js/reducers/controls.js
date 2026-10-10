@@ -67,6 +67,15 @@ export const reducers = {
     }
   },
 
+  // the composer's tray of picked files (names and sizes only: this front end never reads them) and the mic
+  addFiles(s, files) {
+    const had = s.compose?.files ?? [];
+    const fresh = (files ?? []).filter(f => f?.name && !had.some(h => h.name === f.name)).map(f => ({ name: String(f.name), size: Number(f.size) || 0 }));
+    return fresh.length ? { ...s, compose: { ...s.compose, files: [...had, ...fresh] } } : s;
+  },
+  removeFile: (s, i) => (s.compose?.files?.[i] ? { ...s, compose: { ...s.compose, files: s.compose.files.filter((_, k) => k !== i) } } : s),
+  setListening: (s, on) => (!!s.compose?.listening === !!on ? s : { ...s, compose: { ...s.compose, listening: !!on } }),
+
   askConfirm: (s, spec) => ({ ...s, confirm: spec, edit: null }),
   cancelConfirm: s => (s.confirm ? { ...s, confirm: null } : s),
 

@@ -86,7 +86,10 @@ function body(m, conv) {
 
 export function renderMessage(m, conv, state) {
   if (m.from === 'system') return `<div class="sysline">${esc(m.text)}</div>`;
-  if (m.from === 'you') return `<div class="msg you"><div class="bubble you">${esc(m.text)}</div>${avatar('you', 28)}</div>`;
+  if (m.from === 'you') {
+    const files = (m.data?.files ?? []).map(n => `<span class="file-chip">${icon('file', 13, 2)}${esc(n)}</span>`).join('');
+    return `<div class="msg you"><div class="bubble you">${files}${m.text ? esc(m.text) : ''}</div>${avatar('you', 28)}</div>`;
+  }
   const name = conv.kind === 'group' ? `<div class="sender-name">${esc(senderName(m.from, state))}</div>` : '';
   const wide = ['card', 'ta', 'brief', 'breaking', 'signal'].includes(m.kind);
   return `<div class="msg left">${name}<div class="msg-row">${avatar(m.from, 28, state)}<div class="${cls('msg-body', wide && 'wide')}">${body(m, conv)}</div></div></div>`;

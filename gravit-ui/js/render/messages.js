@@ -15,11 +15,16 @@ export function currentConversation(state) {
   return state.conversations.find(c => c.id === id) ?? state.conversations[0] ?? null;
 }
 
-export function renderComposer({ placeholder = 'Tell Gravit…', above = '' } = {}) {
-  return `<form class="composer" data-action="send">${above}<div class="composer-pill">` +
-    `<button type="button" class="round-key" aria-label="Add a file">${icon('plus', 14, 2.4)}</button>` +
-    `<label for="say" class="sr-only">Tell Gravit</label><input id="say" class="composer-input" type="text" autocomplete="off"${attrs({ placeholder })}>` +
-    `<button type="button" class="round-key" aria-label="Voice input">${icon('mic', 14, 2.2)}</button>` +
+export function renderComposer({ placeholder = 'Tell Gravit…', above = '', compose = null } = {}) {
+  const files = compose?.files ?? [];
+  const listening = !!compose?.listening;
+  // the tray of picked files over the pill; the + opens the hidden file input (app.js: pickFile)
+  const tray = files.length ? `<div class="files">${files.map((f, i) => `<span class="file-chip">${icon('file', 13, 2)}${esc(f.name)}<button type="button" class="file-x" data-action="removeFile" data-id="${i}" aria-label="移除 ${esc(f.name)}">×</button></span>`).join('')}</div>` : '';
+  return `<form class="composer" data-action="send">${above}${tray}<div class="composer-pill">` +
+    `<input id="attach-input" class="sr-only" type="file" multiple data-action="attachFiles" tabindex="-1">` +
+    `<button type="button" class="round-key" data-action="pickFile" aria-label="Add a file">${icon('plus', 14, 2.4)}</button>` +
+    `<label for="say" class="sr-only">Tell Gravit</label><input id="say" class="composer-input" type="text" autocomplete="off"${attrs({ placeholder: listening ? '正在听…' : placeholder })}>` +
+    `<button type="button" class="${cls('round-key', 'mic', listening && 'on')}" data-action="toggleMic" aria-pressed="${listening ? 'true' : 'false'}" aria-label="Voice input">${icon('mic', 14, 2.2)}</button>` +
     `<button type="submit" class="send-key" aria-label="Sign and send">${icon('send', 18, 2.4)}</button></div></form>`;
 }
 
@@ -71,13 +76,13 @@ function limitRow(d, state, now) {
 function draftScreen(state, now) {
   const d = state.draft;
   const group = (d.bots ?? []).length > 0 || (!d.bots && d.group);
-  return `<main class="main">${draftHead(state)}<div class="thread" id="thread"></div>${renderComposer({ above: limitRow(d, state, now), placeholder: group ? 'Tell Gravit… 打 @ 点名一个 bot' : 'Tell Gravit…' })}</main>`;
+  return `<main class="main">${draftHead(state)}<div class="thread" id="thread"></div>${renderComposer({ above: limitRow(d, state, now), placeholder: group ? 'Tell Gravit… 打 @ 点名一个 bot' : 'Tell Gravit…', compose: state.compose })}</main>`;
 }
 
-function emptyScreen() {
+function emptyScreen(state) {
   const chips = ['小仓位买 BTC', '跟单 Pelosi', '查一个地址'].map(t => `<button type="button" class="btn-sm" data-action="suggest"${attrs({ 'data-text': t })}>${esc(t)}</button>`).join('');
   return `<main class="main"><header class="head"><h1 class="head-title">Gravit</h1></header><div class="empty">${avatar('gravit', 56)}` +
-    `<div class="empty-title">还没有交给 Gravit 的事</div><div class="empty-line">在下面说一句你想让它做的事，或者点左上角的 + 先起个名。</div><div class="suggest">${chips}</div></div>${renderComposer()}</main>`;
+    `<div class="empty-title">还没有交给 Gravit 的事</div><div class="empty-line">在下面说一句你想让它做的事，或者点左上角的 + 先起个名。</div><div class="suggest">${chips}</div></div>${renderComposer({ compose: state.compose })}</main>`;
 }
 
 export function renderDetails(conv, state) {
@@ -112,9 +117,9 @@ export function renderDetails(conv, state) {
 export function renderMessagesScreen(state, now) {
   if (state.draft) return draftScreen(state, now);
   const conv = currentConversation(state);
-  if (!conv) return emptyScreen();
+  if (!conv) return emptyScreen(state);
   const placeholder = conv.kind === 'group' ? 'Tell Gravit… 打 @ 点名一个 bot' : 'Tell Gravit…';
-  return `<main class="${cls('main', state.detailsOpen && 'with-drawer')}">${renderHead(conv, state)}<div class="thread" id="thread">${renderThread(conv, state, now)}</div>${renderComposer({ placeholder })}${state.detailsOpen ? renderDetails(conv, state) : ''}</main>`;
+  return `<main class="${cls('main', state.detailsOpen && 'with-drawer')}">${renderHead(conv, state)}<div class="thread" id="thread">${renderThread(conv, state, now)}</div>${renderComposer({ placeholder, compose: state.compose })}${state.detailsOpen ? renderDetails(conv, state) : ''}</main>`;
 }
 
 export function renderBanner(b, state) {

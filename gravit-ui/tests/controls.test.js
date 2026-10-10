@@ -107,6 +107,36 @@ test('the draft limit chip turns into its editor; the venue is a pick list', () 
   assert.match(venue, /<select id="edit-value" class="input small" name="value" aria-label="场所"><option value="Stand-in Exchange" selected>/);
 });
 
+test('the composer holds picked files; a send carries them, even with no words, and empties the tray', async () => {
+  const { renderComposer } = await import('../js/render/messages.js');
+  const { renderMessage } = await import('../js/render/thread.js');
+  let s = R.addFiles(fresh(), [{ name: 'q3.pdf', size: 120000 }, { name: 'chart.png', size: 4000 }]);
+  assert.deepEqual(s.compose.files.map(f => f.name), ['q3.pdf', 'chart.png']);
+  assert.deepEqual(R.addFiles(s, [{ name: 'q3.pdf', size: 1 }]).compose.files.length, 2, 'the same name twice is one file');
+  assert.deepEqual(R.removeFile(s, 0).compose.files.map(f => f.name), ['chart.png']);
+  const c = renderComposer({ compose: s.compose });
+  assert.match(c, /<input id="attach-input" class="sr-only" type="file" multiple data-action="attachFiles" tabindex="-1">/);
+  assert.match(c, /data-action="pickFile" aria-label="Add a file"/);
+  assert.match(c, /<span class="file-chip">[\s\S]*?q3.pdf<button type="button" class="file-x" data-action="removeFile" data-id="0" aria-label="移除 q3.pdf">/);
+  const sent = R.send(s, { text: '  ', now: NOW });
+  const last = conv(sent, 'c-1').messages.at(-1);
+  assert.deepEqual([last.from, last.text, last.data.files], ['you', '', ['q3.pdf', 'chart.png']]);
+  assert.deepEqual(sent.compose.files, []);
+  assert.match(renderMessage(last, conv(sent, 'c-1'), sent), /<div class="bubble you"><span class="file-chip">[\s\S]*?q3.pdf<\/span>/);
+  const f = fresh();
+  assert.equal(R.send(f, { text: ' ', now: NOW }), f, 'no words and no files: nothing is sent');
+});
+
+test('the mic key shows it is listening and the placeholder says so', async () => {
+  const { renderComposer } = await import('../js/render/messages.js');
+  const on = R.setListening(fresh(), true);
+  assert.equal(on.compose.listening, true);
+  const c = renderComposer({ compose: on.compose });
+  assert.match(c, /class="round-key mic on" data-action="toggleMic" aria-pressed="true" aria-label="Voice input"/);
+  assert.match(c, /placeholder="正在听…"/);
+  assert.match(renderComposer({ compose: fresh().compose }), /class="round-key mic" data-action="toggleMic" aria-pressed="false"/);
+});
+
 test('Memory edits in place, Forget all asks first, and Reset demo asks first', () => {
   const s = R.nav(fresh(), { screen: 'account', tab: 'memory' });
   assert.match(renderMemory(R.startEdit(s, { kind: 'memory', id: 'mem-1' })), /<span class="inline-edit"><input id="edit-text" class="input small" name="text" type="text" value="偏价值，不追热点" aria-label="改成">/);

@@ -204,6 +204,43 @@ test('Top up commits through its editor and shows in the wallet', () => {
   store.timers.clear();
 });
 
+test('+ opens the file picker; picked files join the tray; a send with only files goes out and Gravit reads them', async () => {
+  const f = fakeWindow(noDialogs);
+  const picker = f.withId('attach-input', { tagName: 'INPUT', type: 'file' });
+  f.withId('say', { tagName: 'INPUT' });
+  const store = boot(f.win);
+  f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'pickFile' } }));
+  assert.equal(picker.clicks, 1);
+  picker.files = [{ name: 'q3.pdf', size: 1200 }];
+  f.fire('root', 'change', { target: picker });
+  assert.deepEqual(store.get().compose.files.map(x => x.name), ['q3.pdf']);
+  const form = { dataset: { action: 'send' } };
+  f.fire('root', 'submit', { target: { closest: () => form } });
+  const c1 = () => store.get().conversations.find(c => c.id === 'c-1');
+  assert.deepEqual(c1().messages.at(-1).data.files, ['q3.pdf']);
+  assert.deepEqual(store.get().compose.files, []);
+  await sleep(1100);
+  assert.match(c1().messages.at(-1).text, /q3.pdf/);
+  store.timers.clear();
+});
+
+test('the mic listens, then writes what it heard into the composer; a second press stops it at once', async () => {
+  const f = fakeWindow(noDialogs);
+  const say = f.withId('say', { tagName: 'INPUT' });
+  const store = boot(f.win);
+  const mic = () => f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'toggleMic' } }));
+  mic();
+  assert.equal(store.get().compose.listening, true);
+  await sleep(2000);
+  assert.equal(store.get().compose.listening, false);
+  assert.ok(say.value.length > 0, 'the transcript is in the composer');
+  const first = say.value;
+  mic(); mic();
+  assert.equal(store.get().compose.listening, false);
+  assert.ok(say.value.length > first.length, 'the second sentence is added after the first');
+  store.timers.clear();
+});
+
 test('the draft picker keys reach the store', () => {
   const f = fakeWindow();
   const store = boot(f.win);

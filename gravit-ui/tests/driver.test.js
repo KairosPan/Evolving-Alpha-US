@@ -138,6 +138,13 @@ test('a connected MCP server answers with three tools named after it', async () 
   assert.deepEqual(toolsFor('我的数据', 'https://x.dev'), ['x.search', 'x.get', 'x.watch'], 'a name without latin letters falls back to the host');
 });
 
+test('files sent without a task get Gravit reading them', () => {
+  const r = replyTo('', { ...ctx, files: ['q3.pdf'] });
+  assert.equal(r.length, 2);
+  assert.match(r[0].msg.text, /q3.pdf/);
+  assert.equal(replyTo('买 BTC', { ...ctx, files: ['q3.pdf'] }).at(-1).msg.kind, 'card', 'words with a task still lead');
+});
+
 test('a grant asks for News sentiment only when it is not installed', () => {
   const limit = message('gravit', 'limit', 'x', { from: 25, to: 50 });
   assert.equal(followUp(limit, 'granted', { installed: ['news'], now: NOW }).length, 1);

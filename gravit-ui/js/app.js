@@ -25,6 +25,9 @@ const BANNER_MS = 5000;
 const TOAST_MS = 6000;
 const REVOKE_MS = 1000;
 const CONNECT_MS = 1200;
+const LISTEN_MS = 1800;
+// what the scripted mic hears, in turn
+const HEARD = ['小仓位买 BTC，$70k 以下', 'Pelosi 最近买了什么', '查一下这个地址是不是骗子', '额度改到每单 $50'];
 const usable = saved => !!saved && saved.v === SEED_VERSION && Array.isArray(saved.conversations);
 
 // a banner, a ringing call, an open drawer, a trash-key ask and a toast belong to their moment: a reload starts without them
@@ -86,9 +89,9 @@ export function answerFlow(store, timers, { conv, msg, answer }, now = () => Dat
 }
 
 // the scripted reply to what the owner just sent into a conversation
-export function replyFlow(store, timers, convId, text, now = () => Date.now(), schedule = scheduleEvents) {
+export function replyFlow(store, timers, convId, text, now = () => Date.now(), schedule = scheduleEvents, files = []) {
   const c = store.get().conversations.find(x => x.id === convId);
-  schedule(store, timers, convId, replyTo(text, context(store, c, now)), now);
+  schedule(store, timers, convId, replyTo(text, { ...context(store, c, now), files }), now);
 }
 
 // a toast leaves by itself after a while; a newer toast keeps its own time
@@ -127,6 +130,7 @@ export function boot(win) {
   let directorOpen = false;
   let composerText = '';
   let composing = false;
+  let heard = 0;
   let pending = false;
   let last = { overlay: null, opener: null, screen: null, drawer: null, thread: null };
 
@@ -223,6 +227,14 @@ export function boot(win) {
   }
   const reset = () => restart(seed(now()), { screen: 'messages', id: 'c-1' });
 
+  // the scripted mic: what it heard joins what is already in the composer
+  function stopMic() {
+    if (!store.get().compose.listening) return;
+    const words = HEARD[heard++ % HEARD.length];
+    composerText = composerText.trim() ? `${composerText.trim()} ${words}` : words;
+    store.dispatch('setListening', false);
+  }
+
   // commit the open editor with what its inputs hold
   function commitEdit() {
     const values = Object.fromEntries([...root.querySelectorAll('.inline-edit [name]')].map(el => [el.name, el.value]));
@@ -258,6 +270,14 @@ export function boot(win) {
     takeBack: () => store.dispatch('startEdit', { kind: 'wallet', dir: 'out' }),
     editMemory: el => store.dispatch('startEdit', { kind: 'memory', id: el.dataset.id }),
     commitEdit: () => commitEdit(),
+    // the composer: + opens the hidden file input; the mic listens a moment, then writes what it heard
+    pickFile: () => doc.getElementById('attach-input')?.click(),
+    removeFile: el => store.dispatch('removeFile', Number(el.dataset.id)),
+    toggleMic: () => {
+      if (store.get().compose.listening) return stopMic();
+      store.dispatch('setListening', true);
+      timers.after(LISTEN_MS, stopMic);
+    },
     cancelEdit: () => store.dispatch('cancelEdit'),
     // two-step confirms (they replaced confirm): the first press asks in place, the second acts
     withdraw: el => store.dispatch('askConfirm', { action: 'withdraw', id: el.dataset.conv }),
@@ -340,14 +360,15 @@ export function boot(win) {
     const action = form.dataset.action;
     if (action === 'send') {
       const text = composerText.trim();
-      if (!text) return;
+      const files = store.get().compose.files.map(x => x.name);
+      if (!text && !files.length) return;
       const before = store.get();
       // empty the composer before the render the send causes, so the box is clear the moment the bubble appears
       composerText = '';
       const after = store.dispatch('send', { text, now: now() });
       if (after === before) { composerText = text; return; }
       if (after.route.id !== before.route.id) win.location.hash = toHash(after.route);
-      replyFlow(store, timers, after.route.id, text, now);
+      replyFlow(store, timers, after.route.id, text, now, scheduleEvents, files);
     } else if (action === 'connectMcp') {
       // the scripted server answers a moment later with its tools; a closed or restarted connector ignores the answer
       store.dispatch('connectMcp');
@@ -371,7 +392,10 @@ export function boot(win) {
   // radios and checkboxes report on change: the connector's auth, kind and visibility, and its tool checks
   root.addEventListener('change', ev => {
     const el = ev.target;
-    if (el.type === 'radio' && el.dataset?.action === 'mcpField') store.dispatch('setCreateField', { key: el.name, value: el.value });
+    if (el.id === 'attach-input') {
+      store.dispatch('addFiles', [...(el.files ?? [])].map(x => ({ name: x.name, size: x.size })));
+      el.value = '';
+    } else if (el.type === 'radio' && el.dataset?.action === 'mcpField') store.dispatch('setCreateField', { key: el.name, value: el.value });
     else if (el.type === 'checkbox' && el.dataset?.action === 'toggleMcpTool') store.dispatch('toggleMcpTool', Number(el.dataset.id));
   });
   root.addEventListener('compositionstart', () => { composing = true; });
