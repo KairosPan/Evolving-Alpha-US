@@ -8,7 +8,7 @@ import { renderThread, chip } from './thread.js';
 import { senderName } from './rail.js';
 import { seg, kv, inlineEdit, confirmPair } from './controls.js';
 import { VENUES } from '../data/seed.js';
-import { DAY } from '../time.js';
+import { DAY, fmtDuration, rowTime } from '../time.js';
 
 export function currentConversation(state) {
   const id = state.route.screen === 'messages' ? state.route.id : null;
@@ -129,10 +129,37 @@ export function renderBanner(b, state) {
     `<div class="card-title">${esc(b.headline)}</div><div class="dim">${esc(b.body)}</div><a class="link" href="#/messages/${esc(first)}" data-action="dismissBanner">去会话 ›</a></div>`;
 }
 
-export function renderCall(c) {
-  return `<div class="call-scrim"><div class="call" role="dialog" aria-label="Gravit 来电">${avatar('gravit', 44)}<div class="card-title">Gravit 来电</div><div class="dim">${esc(c.about)}</div>` +
-    `<div class="call-keys"><button type="button" class="key no big" data-action="answerCall" data-accept="0" aria-label="Decline">${icon('phoneOff', 18, 2.1)}</button>` +
-    `<button type="button" class="key yes big" data-action="answerCall" data-accept="1" aria-label="Accept">${icon('phone', 18, 2.1)}</button></div></div></div>`;
+// the call over the page: ringing in (decline, accept), ringing out (hang up), live (a timer, mute, hang up)
+export function renderCall(c, now = Date.now()) {
+  const hang = `<button type="button" class="key no big" data-action="hangUp" aria-label="Hang up">${icon('phoneOff', 18, 2.1)}</button>`;
+  let label;
+  let inner;
+  if (c.status === 'live') {
+    label = '通话';
+    const line = c.dir === 'out' ? 'Gravit：在。BTC 现在 62.8k，要我看着吗？' : `Gravit：${c.about}`;
+    inner = `${avatar('gravit', 44)}<div class="card-title">Gravit</div><div class="call-timer">${fmtDuration(now - c.since)}</div><div class="dim">${esc(line)}</div>` +
+      `<div class="call-keys"><button type="button" class="${cls('key', 'big', 'mute', c.muted && 'on')}" data-action="toggleMute" aria-pressed="${c.muted ? 'true' : 'false'}" aria-label="Mute">${icon('mic', 18, 2.1)}</button>${hang}</div>`;
+  } else if (c.dir === 'out') {
+    label = '呼叫 Gravit';
+    inner = `${avatar('gravit', 44)}<div class="card-title">正在呼叫 Gravit…</div><div class="call-keys">${hang}</div>`;
+  } else {
+    label = 'Gravit 来电';
+    inner = `${avatar('gravit', 44)}<div class="card-title">Gravit 来电</div><div class="dim">${esc(c.about)}</div>` +
+      `<div class="call-keys"><button type="button" class="key no big" data-action="answerCall" data-accept="0" aria-label="Decline">${icon('phoneOff', 18, 2.1)}</button>` +
+      `<button type="button" class="key yes big" data-action="answerCall" data-accept="1" aria-label="Accept">${icon('phone', 18, 2.1)}</button></div>`;
+  }
+  return `<div class="call-scrim"><div class="call" role="dialog" aria-label="${label}">${inner}</div></div>`;
+}
+
+// Gravit's own mailbox, from the rail's mail key: the list, or one message
+export function renderMail(state, now) {
+  const m = state.mail;
+  if (!m?.open) return '';
+  const reading = m.reading ? m.items.find(x => x.id === m.reading) : null;
+  const body = reading
+    ? `<button type="button" class="back-link" data-action="backToInbox">‹ 收件箱</button><div class="mail-subject">${esc(reading.subject)}</div><div class="dim">${esc(reading.from)} · ${rowTime(reading.at, now)}</div><p class="mail-body">${esc(reading.body)}</p>`
+    : `<div class="mail-list">${m.items.map(x => `<button type="button" class="${cls('mail-row', !x.read && 'unread')}" data-action="readMail" data-id="${esc(x.id)}"><span class="mail-top"><span class="mail-from">${esc(x.from)}</span><span class="row-time">${rowTime(x.at, now)}</span></span><span class="mail-line">${esc(x.subject)}</span></button>`).join('')}</div>`;
+  return `<aside class="drawer" aria-label="Gravit 的邮箱"><div class="drawer-head"><div><h2>Gravit 的邮箱</h2><div class="dim mono">${esc(m.address)}</div></div><button type="button" class="close-key" data-action="closeMail" aria-label="Close">×</button></div><div class="drawer-body">${body}</div></aside>`;
 }
 
 // Markets and Trade are Linqi's pages; this pure front end only shows where a ticker would land

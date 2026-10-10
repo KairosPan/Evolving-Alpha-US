@@ -173,7 +173,8 @@ test('a call leaves a call card; dismissing a banner leaves the breaking message
   assert.equal(missed.answer, 'missed');
   assert.equal(missed.data.about, '想说 BTC 的事');
   const took = R.answerCall(R.incomingCall(fresh(), { from: 'gravit', about: 'x' }), { accept: true, now: NOW });
-  assert.equal(took.conversations[0].messages.at(-1).answer, 'accepted');
+  assert.equal(took.call.status, 'live', 'an accepted call goes live; its card comes when it ends');
+  assert.equal(R.hangUp(took, { now: NOW + 5000 }).conversations[0].messages.at(-1).answer, 'accepted');
   const b = R.showBanner(fresh(), { id: 'b1', headline: 'H', body: 'B', at: NOW });
   const d = R.dismissBanner(b, { now: NOW });
   assert.equal(d.banner, null);

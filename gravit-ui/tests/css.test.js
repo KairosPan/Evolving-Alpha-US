@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { renderRail } from '../js/render/rail.js';
-import { renderMessagesScreen, renderBanner, renderCall, renderStub } from '../js/render/messages.js';
+import { renderMessagesScreen, renderBanner, renderCall, renderMail, renderStub } from '../js/render/messages.js';
 import { renderDiscover } from '../js/render/discover.js';
 import { renderAccount } from '../js/render/account.js';
 import { director } from '../js/driver.js';
@@ -37,7 +37,9 @@ test('every class the screens emit has a rule in app.css, and app.css names no c
   assert.doesNotMatch(css, /#[0-9a-fA-F]{3,6}\b/, 'colours come from tokens.css');
   const screen = st => st.route.screen === 'discover' ? renderDiscover(st) : st.route.screen === 'account' ? renderAccount(st) : st.route.screen === 'messages' ? renderMessagesScreen(st, NOW) : renderStub(st.route);
   const html = everyState().map(st => renderRail(st, NOW) + screen(st)).join('')
-    + renderBanner(director.breaking(NOW), seed(NOW)) + renderCall(director.call()) + renderStub({ screen: 'markets', id: 'NVDA' });
+    + renderBanner(director.breaking(NOW), seed(NOW)) + renderCall(director.call()) + renderStub({ screen: 'markets', id: 'NVDA' })
+    + renderCall({ from: 'gravit', about: '', dir: 'out', status: 'ringing', since: NOW }, NOW) + renderCall({ from: 'gravit', about: 'x', dir: 'in', status: 'live', since: NOW, muted: true }, NOW)
+    + renderMail(R.openMail(seed(NOW)), NOW) + renderMail(R.readMail(R.openMail(seed(NOW)), 'mail-1'), NOW) + renderRail(R.startCall(seed(NOW), { now: NOW }), NOW);
   const classes = new Set(html.match(/class="([^"]+)"/g).flatMap(m => m.slice(7, -1).split(/\s+/)));
   const missing = [...classes].filter(c => c && !new RegExp(`\\.${c.replace(/[-]/g, '\\-')}(?![\\w-])`).test(css));
   assert.deepEqual(missing, [], 'classes without a rule');

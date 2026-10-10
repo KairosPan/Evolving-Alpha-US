@@ -4,7 +4,7 @@ import { reducers } from './reducers/index.js';
 import { seed, firstRun, SEED_VERSION } from './data/seed.js';
 import { parseHash, toHash } from './router.js';
 import { renderRail } from './render/rail.js';
-import { renderMessagesScreen, renderBanner, renderCall, renderStub, currentConversation } from './render/messages.js';
+import { renderMessagesScreen, renderBanner, renderCall, renderMail, renderStub, currentConversation } from './render/messages.js';
 import { renderDiscover } from './render/discover.js';
 import { renderAccount } from './render/account.js';
 import { replyTo, followUp, director, toolsFor } from './driver.js';
@@ -26,6 +26,7 @@ const TOAST_MS = 6000;
 const REVOKE_MS = 1000;
 const CONNECT_MS = 1200;
 const LISTEN_MS = 1800;
+const PICKUP_MS = 1500;
 // what the scripted mic hears, in turn
 const HEARD = ['小仓位买 BTC，$70k 以下', 'Pelosi 最近买了什么', '查一下这个地址是不是骗子', '额度改到每单 $50'];
 const usable = saved => !!saved && saved.v === SEED_VERSION && Array.isArray(saved.conversations);
@@ -116,9 +117,9 @@ function focusKey(el) {
 }
 
 // which overlay is up: focus moves into it when it opens and back to its opener when it closes
-const overlayOf = s => (s.call ? 'call' : s.discover.create ? 'modal' : s.detailsOpen || s.settingsOpen || s.discover.drawer ? 'drawer' : null);
+const overlayOf = s => (s.call ? 'call' : s.discover.create ? 'modal' : s.mail?.open || s.detailsOpen || s.settingsOpen || s.discover.drawer ? 'drawer' : null);
 const screenOf = s => `${s.route.screen}/${s.route.id ?? s.route.tab ?? ''}`;
-const drawerOf = s => s.discover.drawer ?? (s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null);
+const drawerOf = s => (s.mail?.open ? `mail:${s.mail.reading ?? ''}` : null) ?? s.discover.drawer ?? (s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null);
 
 export function boot(win) {
   const doc = win.document;
@@ -131,6 +132,7 @@ export function boot(win) {
   let composerText = '';
   let composing = false;
   let heard = 0;
+  let ticking = false;
   let pending = false;
   let last = { overlay: null, opener: null, screen: null, drawer: null, thread: null };
 
@@ -156,7 +158,7 @@ export function boot(win) {
     const scrolls = { main: root.querySelector('main')?.scrollTop, rows: root.querySelector('.rail-rows')?.scrollTop, drawer: root.querySelector('.drawer-body')?.scrollTop, shelves: [...root.querySelectorAll('.shelf-row')].map(e => e.scrollLeft) };
 
     const screen = s.route.screen === 'discover' ? renderDiscover(s) : s.route.screen === 'account' ? renderAccount(s) : (s.route.screen === 'markets' || s.route.screen === 'trade') ? renderStub(s.route) : renderMessagesScreen(s, now());
-    const overlays = (s.banner ? renderBanner(s.banner, s) : '') + (s.call ? renderCall(s.call) : '') +
+    const overlays = (s.banner ? renderBanner(s.banner, s) : '') + renderMail(s, now()) + (s.call ? renderCall(s.call, now()) : '') +
       (directorOpen ? `<div class="director" role="menu">${DIRECTOR.map(([l, k]) => `<button type="button" class="director-key" data-action="director" data-key="${k}">${l}</button>`).join('')}</div>` : '');
     root.innerHTML = renderRail(s, now()) + screen + overlays;
 
@@ -185,7 +187,7 @@ export function boot(win) {
     let target = find(activeKey);
     if (overlay && overlay !== last.overlay) {
       opener = activeKey;
-      target = overlay === 'call' ? root.querySelector('.call [data-accept="0"]') : overlay === 'modal' ? doc.getElementById('mcp-name') : root.querySelector('.drawer .close-key');
+      target = overlay === 'call' ? root.querySelector('.call [data-accept="0"]') ?? root.querySelector('.call [data-action="hangUp"]') : overlay === 'modal' ? doc.getElementById('mcp-name') : root.querySelector('.drawer .close-key');
     } else if (!overlay && last.overlay) {
       target = find(last.opener) ?? target;
       opener = null;
@@ -199,6 +201,11 @@ export function boot(win) {
       if (caret && target === find(activeKey) && typeof target.setSelectionRange === 'function') target.setSelectionRange(caret[0], caret[1]);
     }
     last = { overlay, opener, screen: screenOf(s), drawer: drawerOf(s), thread: threadSig, edit: s.edit };
+    // a live call re-renders each second, for its timer
+    if (s.call?.status === 'live' && !ticking) {
+      ticking = true;
+      timers.after(1000, () => { ticking = false; if (store.get().call?.status === 'live') render(); });
+    }
   }
 
   // while an IME composes (pinyin), a render would replace the input and lose the composition: hold it until compositionend
@@ -299,6 +306,19 @@ export function boot(win) {
     // the banner's link dismisses it and still goes to the thread it names
     dismissBanner: el => { store.dispatch('dismissBanner', { now: now() }); if (el.tagName === 'A') go(parseHash(el.getAttribute('href'))); },
     answerCall: el => store.dispatch('answerCall', { accept: el.dataset.accept === '1', now: now() }),
+    // the rail's phone key rings Gravit; it picks up a moment later
+    phoneCall: () => {
+      if (store.get().call) return;
+      store.dispatch('startCall', { now: now() });
+      timers.after(PICKUP_MS, () => store.dispatch('connectCall', { now: now() }));
+    },
+    hangUp: () => store.dispatch('hangUp', { now: now() }),
+    toggleMute: () => store.dispatch('toggleMute'),
+    // the rail's mail key: Gravit's own mailbox
+    openMail: () => store.dispatch('openMail'),
+    closeMail: () => store.dispatch('closeMail'),
+    readMail: el => store.dispatch('readMail', el.dataset.id),
+    backToInbox: () => store.dispatch('backToInbox'),
     // Discover
     openPlugin: el => store.dispatch('openPlugin', el.dataset.id),
     closeDrawer: () => store.dispatch('closeDrawer'),
@@ -413,6 +433,7 @@ export function boot(win) {
       const s = store.get();
       if (s.call) return;
       if (s.edit) { store.dispatch('cancelEdit'); return; }
+      if (s.mail?.open) { store.dispatch('closeMail'); return; }
       if (s.confirm) { store.dispatch('cancelConfirm'); return; }
       if (s.discover.create) store.dispatch('closeCreate');
       else if (s.discover.drawer) store.dispatch('closeDrawer');

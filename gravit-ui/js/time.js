@@ -36,3 +36,9 @@ export function fmtDate(ts) {
   const d = new Date(ts);
   return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
+
+// a call's length as mm:ss
+export function fmtDuration(ms) {
+  const t = Math.max(0, Math.floor(ms / 1000));
+  return `${pad(Math.floor(t / 60))}:${pad(t % 60)}`;
+}

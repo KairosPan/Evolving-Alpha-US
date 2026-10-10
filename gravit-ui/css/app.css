@@ -228,6 +228,21 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .call-scrim { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--scrim); z-index: 50; }
 .call { display: flex; flex-direction: column; align-items: center; gap: 10px; width: min(320px, calc(100vw - 32px)); padding: 22px 18px; border-radius: var(--radius-l); background: var(--surface); border: 1px solid var(--down-edge); box-shadow: var(--shadow); text-align: center; }
 .call-keys { display: flex; gap: 16px; margin-top: 4px; }
+.call-timer { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.key.mute { color: var(--dim); }
+.key.mute.on { background: var(--surface-2); color: var(--text); }
+/* Gravit's mailbox */
+.mail-list { display: flex; flex-direction: column; }
+.mail-row { display: flex; flex-direction: column; gap: 2px; padding: 10px 4px; border: 0; border-bottom: 1px solid var(--border); background: transparent; text-align: left; color: var(--text); }
+.mail-row:hover { background: var(--hover); }
+.mail-row.unread .mail-from::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: var(--radius-pill); background: var(--alloc-equity); }
+.mail-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.mail-from { font-size: 14px; font-weight: 700; }
+.mail-row.unread .mail-line { color: var(--text); font-weight: 600; }
+.mail-line { font-size: 13px; color: var(--dim); }
+.mail-subject { font-size: 17px; font-weight: 700; }
+.mail-body { margin: 0; font-size: 14px; line-height: 1.6; }
+button.back-link { align-self: flex-start; border: 0; background: transparent; padding: 0; color: var(--alloc-equity); font-size: 13px; font-weight: 600; }
 /* the toast sits at the bottom-centre of the main column (spec §3.3), whatever the two levels' widths */
 .toast { position: sticky; bottom: 28px; align-self: center; margin-top: auto; display: inline-flex; align-items: center; gap: 12px; padding: 8px 8px 8px 18px; border-radius: var(--radius-pill); background: var(--primary); color: var(--on-primary); font-size: 13px; white-space: nowrap; box-shadow: var(--shadow-lift); z-index: 25; }
 .toast-key { min-height: 32px; padding: 0 14px; display: inline-flex; align-items: center; border-radius: var(--radius-pill); background: var(--surface); color: var(--text); font-weight: 600; }

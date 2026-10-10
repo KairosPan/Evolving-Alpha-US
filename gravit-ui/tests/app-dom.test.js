@@ -241,6 +241,40 @@ test('the mic listens, then writes what it heard into the composer; a second pre
   store.timers.clear();
 });
 
+test('the phone key rings Gravit, it picks up, the timer runs, hang up leaves the card', async () => {
+  const f = fakeWindow(noDialogs);
+  const hang = f.withSelector('.call [data-action="hangUp"]', { tagName: 'BUTTON' });
+  const store = boot(f.win);
+  f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'phoneCall' } }));
+  assert.deepEqual([store.get().call.dir, store.get().call.status], ['out', 'ringing']);
+  assert.equal(f.doc.activeElement, hang, 'the call takes focus on its hang-up key');
+  await sleep(1600);
+  assert.equal(store.get().call.status, 'live');
+  const writes = f.writes;
+  await sleep(1100);
+  assert.ok(f.writes > writes, 'the live call re-renders each second for its timer');
+  f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'hangUp' } }));
+  assert.equal(store.get().call, null);
+  const card = store.get().conversations[0].messages.at(-1);
+  assert.deepEqual([card.kind, card.answer, card.data.dir], ['call', 'accepted', 'out']);
+  store.timers.clear();
+});
+
+test('the mail key opens the mailbox; a message opens and reads; Escape closes it', () => {
+  const f = fakeWindow(noDialogs);
+  const store = boot(f.win);
+  const click = (action, id) => f.click(f.element({ tagName: 'BUTTON', dataset: id ? { action, id } : { action } }));
+  click('openMail');
+  assert.equal(store.get().mail.open, true);
+  click('readMail', 'mail-2');
+  assert.equal(store.get().mail.reading, 'mail-2');
+  click('backToInbox');
+  assert.equal(store.get().mail.reading, null);
+  f.fire('doc', 'keydown', { key: 'Escape' });
+  assert.equal(store.get().mail.open, false);
+  store.timers.clear();
+});
+
 test('the draft picker keys reach the store', () => {
   const f = fakeWindow();
   const store = boot(f.win);

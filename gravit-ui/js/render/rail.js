@@ -64,7 +64,7 @@ export function renderNav(state) {
     ${navItem('#/trade', 'trade', 'Trade', screen === 'trade', mini)}
   </div>
   <div class="rail-foot">
-    <div class="rail-lines"><button type="button" class="line-key" data-action="phoneCall" aria-label="Phone">${icon('phone', 20, 2)}</button>` +
+    <div class="rail-lines"><button type="button" class="${cls('line-key', state.call && 'on')}" data-action="phoneCall" aria-label="Phone">${icon('phone', 20, 2)}</button>` +
       `<button type="button" class="line-key" data-action="openMail" aria-label="Email">${icon('mail', 20, 2)}${mailUnread ? `<span class="nav-badge">${mailUnread}</span>` : ''}</button></div>
     <a${attrs({ href: '#/account/portfolio', class: cls('account', accountCurrent && 'current'), 'aria-current': accountCurrent ? 'page' : null, title: mini ? 'Account' : null })}>${icon('wallet', 22, accountCurrent ? 2.1 : 2)}<span class="account-body"><span class="account-title">Account</span><span class="account-line">$${state.account.netWorth.toLocaleString('en-US')} · ${state.account.mode === 'beast' ? 'Beast' : 'Guard'}</span></span></a>
   </div>

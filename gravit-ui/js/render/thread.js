@@ -1,7 +1,7 @@
 // gravit-ui/js/render/thread.js — the conversation body: bubbles, cards by level, icon-only keys, centred dividers (spec §5.2–5.3, §6)
 import { esc, attrs, cls } from '../html.js';
 import { icon } from '../icons.js';
-import { divider, fmtClock } from '../time.js';
+import { divider, fmtClock, fmtDuration } from '../time.js';
 import { levelOf, needsAnswer, isClosed } from '../messages.js';
 import { avatar } from './avatars.js';
 import { senderName } from './rail.js';
@@ -71,8 +71,12 @@ function body(m, conv) {
       return `<div class="card red">${esc(m.text)}</div>`;
     case 'breaking':
       return `<div class="card red"><div class="card-head">${chip('突发', 'down')}<span class="dim">${fmtClock(m.at)}</span></div><div class="card-title">${esc(d.headline ?? m.text)}</div>${d.body ? `<div class="dim">${withTickers(d.body)}</div>` : ''}</div>`;
-    case 'call':
-      return `<div class="card red"><div class="card-head"><div class="card-title">Gravit 来电</div>${chip(m.answer === 'accepted' ? '接了' : '没接', m.answer === 'accepted' ? 'up' : 'down')}</div><div class="dim">${esc(d.about ?? m.text)}</div></div>`;
+    case 'call': {
+      // how the call went: connected and for how long, missed, or never got through
+      const title = d.dir === 'out' ? '打给 Gravit' : 'Gravit 来电';
+      const [label, tone] = { accepted: [`接通 · ${fmtDuration(d.duration ?? 0)}`, 'up'], cancelled: ['没打通', 'grey'] }[m.answer] ?? ['没接', 'down'];
+      return `<div class="card red"><div class="card-head"><div class="card-title">${title}</div>${chip(label, tone)}</div>${d.about ? `<div class="dim">${esc(d.about)}</div>` : ''}</div>`;
+    }
     case 'receipt':
       return `<div class="bubble green"><div class="line">${chip(d.status ?? 'filled', 'up')}<span>${esc(m.text)}</span></div>${d.more ? `<div>${esc(d.more)}</div>` : ''}</div>`;
     case 'proposal':

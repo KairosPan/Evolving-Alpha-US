@@ -137,6 +137,59 @@ test('the mic key shows it is listening and the placeholder says so', async () =
   assert.match(renderComposer({ compose: fresh().compose }), /class="round-key mic" data-action="toggleMic" aria-pressed="false"/);
 });
 
+test('calls: you ring Gravit, it picks up, you hang up and a card stays; an accepted incoming call goes live the same way', async () => {
+  const { renderCall } = await import('../js/render/messages.js');
+  let s = R.startCall(fresh(), { now: NOW });
+  assert.deepEqual([s.call.dir, s.call.status], ['out', 'ringing']);
+  assert.equal(R.startCall(s, { now: NOW }), s, 'one call at a time');
+  assert.match(renderCall(s.call, NOW), /正在呼叫 Gravit…[\s\S]*data-action="hangUp" aria-label="Hang up"/);
+  s = R.connectCall(s, { now: NOW });
+  assert.deepEqual([s.call.status, s.call.since], ['live', NOW]);
+  const live = renderCall(s.call, NOW + 75_000);
+  assert.match(live, /class="call-timer">01:15</);
+  assert.match(live, /data-action="toggleMute" aria-pressed="false" aria-label="Mute"/);
+  assert.equal(R.toggleMute(s).call.muted, true);
+  const ended = R.hangUp(s, { now: NOW + 75_000 });
+  assert.equal(ended.call, null);
+  const card = conv(ended, 'c-1').messages.at(-1);
+  assert.deepEqual([card.kind, card.answer, card.data.duration, card.data.dir], ['call', 'accepted', 75_000, 'out']);
+  const cancelled = R.hangUp(R.startCall(fresh(), { now: NOW }), { now: NOW + 2000 });
+  assert.equal(conv(cancelled, 'c-1').messages.at(-1).answer, 'cancelled');
+  let inc = R.answerCall(R.incomingCall(fresh(), { from: 'gravit', about: '想说 BTC 的事' }), { accept: true, now: NOW });
+  assert.deepEqual([inc.call.status, inc.call.dir], ['live', 'in']);
+  inc = R.hangUp(inc, { now: NOW + 8000 });
+  assert.deepEqual([conv(inc, 'c-1').messages.at(-1).answer, conv(inc, 'c-1').messages.at(-1).data.about], ['accepted', '想说 BTC 的事']);
+});
+
+test('the call card says how it went', async () => {
+  const { renderMessage } = await import('../js/render/thread.js');
+  const s = fresh();
+  const r = m => renderMessage({ id: 'm-x', at: NOW, from: 'gravit', kind: 'call', text: '', ...m }, s.conversations[0], s);
+  assert.match(r({ answer: 'accepted', data: { dir: 'out', duration: 75_000 } }), /打给 Gravit[\s\S]*class="chip up">接通 · 01:15</);
+  assert.match(r({ answer: 'missed', data: { dir: 'in', about: 'x' } }), /Gravit 来电[\s\S]*>没接</);
+  assert.match(r({ answer: 'cancelled', data: { dir: 'out' } }), />没打通</);
+});
+
+test('mail: the mailbox opens, a message is read and marked read, back goes to the list', async () => {
+  const { renderMail } = await import('../js/render/messages.js');
+  let s = R.openMail(R.toggleDetails(fresh()));
+  assert.deepEqual([s.mail.open, s.detailsOpen], [true, false], 'one drawer at a time');
+  const list = renderMail(s, NOW);
+  assert.match(list, /<aside class="drawer" aria-label="Gravit 的邮箱">/);
+  assert.match(list, /gravit@mail.stand-in/);
+  assert.equal((list.match(/class="mail-row unread"/g) ?? []).length, 2);
+  assert.match(list, /data-action="readMail" data-id="mail-1"/);
+  s = R.readMail(s, 'mail-1');
+  assert.equal(s.mail.reading, 'mail-1');
+  assert.equal(s.mail.items[0].read, true);
+  const one = renderMail(s, NOW);
+  assert.match(one, /data-action="backToInbox">‹ 收件箱</);
+  assert.match(one, /class="mail-subject">10 月对账单</);
+  assert.match(one, /本月成交 2 笔/);
+  assert.equal(R.backToInbox(s).mail.reading, null);
+  assert.equal(R.closeMail(s).mail.open, false);
+});
+
 test('Memory edits in place, Forget all asks first, and Reset demo asks first', () => {
   const s = R.nav(fresh(), { screen: 'account', tab: 'memory' });
   assert.match(renderMemory(R.startEdit(s, { kind: 'memory', id: 'mem-1' })), /<span class="inline-edit"><input id="edit-text" class="input small" name="text" type="text" value="偏价值，不追热点" aria-label="改成">/);

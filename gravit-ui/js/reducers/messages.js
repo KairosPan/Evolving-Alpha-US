@@ -1,6 +1,6 @@
 // gravit-ui/js/reducers/messages.js — the conversation side: routes, drafts, sending, answering, details, banners, calls
 import { nextId } from '../ids.js';
-import { DAY } from '../time.js';
+import { DAY, fmtDuration } from '../time.js';
 import { byId } from '../data/plugins.js';
 import { isClosed } from '../messages.js';
 
@@ -47,6 +47,7 @@ export const reducers = {
       route = { screen: 'messages', id: state.conversations[0]?.id ?? null };
     }
     let s = { ...state, route, detailsOpen: false, settingsOpen: false, edit: null, confirm: null };
+    if (s.mail?.open) s.mail = { ...s.mail, open: false, reading: null };
     // the first level's Messages key returns to the conversation you last had open
     if (route.screen === 'messages' && route.id && route.id !== 'new') s.lastConv = route.id;
     // Discover's drawer, trash-key ask and toast belong to Discover; they do not follow you out of it
@@ -175,18 +176,32 @@ export const reducers = {
     }
     return st;
   },
-  incomingCall: (s, call) => ({ ...s, call }),
-  // the call leaves a call card in the thread, answered or missed (spec §6, kind 14)
+  // calls (spec §6, kind 14): an incoming one rings; you ring Gravit from the rail's phone key; one call at a time
+  incomingCall: (s, call) => (s.call ? s : { ...s, call: { ...call, dir: 'in', status: 'ringing' } }),
+  startCall: (s, { now }) => (s.call ? s : { ...s, call: { from: 'gravit', about: '', dir: 'out', status: 'ringing', since: now, muted: false } }),
+  connectCall: (s, { now }) => (s.call?.dir === 'out' && s.call.status === 'ringing' ? { ...s, call: { ...s.call, status: 'live', since: now } } : s),
+  toggleMute: s => (s.call?.status === 'live' ? { ...s, call: { ...s.call, muted: !s.call.muted } } : s),
+  // accepting an incoming call puts it live; declining leaves a missed-call card
   answerCall(s, { accept, now }) {
-    if (!s.call) return s;
-    const convId = targetConv(s);
-    const { from = 'gravit', about } = s.call;
-    const text = accept ? `接了：${about}` : `没接。它想说：${about}。`;
-    let st = { ...s, call: null };
-    if (convId) {
-      const r = stampMessage(st, { from, kind: 'call', text, data: { about }, answer: accept ? 'accepted' : 'missed' }, now);
-      st = push(r.state, convId, r.msg);
-    }
-    return st;
+    if (!s.call || s.call.status === 'live' || s.call.dir === 'out') return s;
+    if (accept) return { ...s, call: { ...s.call, dir: 'in', status: 'live', since: now, muted: false } };
+    return callCard({ ...s, call: null }, s.call, { text: `没接。它想说：${s.call.about}。`, answer: 'missed', duration: 0 }, now);
+  },
+  // hanging up leaves a card: how long it lasted, or that it never connected
+  hangUp(s, { now }) {
+    const c = s.call;
+    if (!c) return s;
+    const live = c.status === 'live';
+    const duration = live ? Math.max(0, now - c.since) : 0;
+    const answer = live ? 'accepted' : c.dir === 'out' ? 'cancelled' : 'missed';
+    return callCard({ ...s, call: null }, c, { text: live ? `通话 ${fmtDuration(duration)}` : '没打通', answer, duration }, now);
   },
 };
+
+// the call card lands in the conversation on screen, else the first (spec §6, kind 14)
+function callCard(s, call, { text, answer, duration }, now) {
+  const convId = targetConv(s);
+  if (!convId) return s;
+  const r = stampMessage(s, { from: call.from ?? 'gravit', kind: 'call', text, data: { about: call.about ?? '', dir: call.dir ?? 'in', duration }, answer }, now);
+  return push(r.state, convId, r.msg);
+}
