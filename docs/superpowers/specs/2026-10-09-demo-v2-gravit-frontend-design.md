@@ -477,3 +477,36 @@ wins.
    its files, the body) or, with none open, 没选中邮件. Opening a letter reads it; an unknown letter opens
    the inbox. Below 860 px the letters stand alone until one is open.
 5. **The director** gains 插件上传 and sits above the dialog's scrim.
+
+## 15. Amendment, 2026-10-10 (round 4): Markets and Trade after Linqi's
+
+The operator's words: "Markets和trade的前端借鉴Linqi的buyer-agent-demo" — the Markets and Trade screens follow
+Linqi's own pages (buyer-agent-demo @ 0ef5131, `src/portfolio/public/ui/markets.js` and `ui/trade.js`), ported into
+gravit-ui's render functions on his tokens, with stand-in data. Nothing is imported from `demo/`.
+
+1. **Markets.** His category tabs, shown only for kinds that have markets (All · Crypto · Stocks · RWAs ·
+   Predictions; Watching once something is starred; All results while searching), his sort (Most traded ·
+   Biggest moves · Closing soonest), one table with one key per row — Trade where the account trades it,
+   Connect to trade at a public venue (the same stand-in connect as Account) — and predictions as cards with
+   Yes and No at the ask. The search sits in the head, as on Discover.
+2. **The market drawer** is the route `#/markets/<id>` (ids match without case; an unknown one opens Markets):
+   price, 24h change and facts (bid, ask, volume; a prediction's close), a chart in 5m · 1h · 1d, Across venues
+   with the best price marked and the public listings, You hold with the orders on it (Gravit's cancel after
+   an in-place confirm and leave a line in their conversation), Gravit on it (the conversations about it and
+   any card it waits on), and On the statement (with Open the Statement). Buy, Sell where it is held, Hand to
+   Gravit and Watch. A chat or Portfolio ticker opens it.
+3. **Trade.** His kind seg (Crypto · Stocks · RWAs · Predictions), a picker (You hold · Recent · Most traded, a
+   search), Under way (orders on their way or on a book, by you or by Gravit, and the cards Gravit waits on),
+   and his ticket: Where (the account's venues with the best price and the others' distance; public ones with
+   Connect to trade), Buy or Sell, Amount in dollars or units, Market or Limit (cents for a prediction), the
+   quote prepared from the fields, What you sign, a signature good for ten minutes, and Sign and place.
+4. **The owner trades by hand.** A hand order is the owner's, capped at the account's $100 a move; it never
+   draws on a conversation's limit. Here the press stands in for Linqi's device-key signature; a stand-in
+   venue answers 0.9 s later. A fill moves the holding (holdings now carry quantities), the cash at the venue
+   (the stand-in wallet pays in USDC), the Statement, net worth and the allocation bar (with RWA and Predictions
+   in his colours). Hand to Gravit instead opens a new message with the ticket in words and the limit chips set
+   where Gravit may trade; only the owner's send gives Gravit room.
+5. **Kept out.** Perps and Pre-IPO (no margin model; Memory says 不碰杠杆), stop orders, time in force,
+   amend, Cancel all, wallet sends, live price ticks (quotes hold still, so a resting limit stays open), his
+   top-bar search, lens and statement modal, and his explanatory sentences (kept for F16 and the onboarding
+   guide). The back end of §9 gains the venues' real quotes and order endpoints behind the same ticket.

@@ -20,7 +20,8 @@ Google Fonts and fall back to the system.
 A first level on the left holds Messages · Discover · Markets · Trade, the phone and mail keys and
 Account; its chevron collapses it to a strip of icons. Opening Messages shows the second level, the
 conversation list with the new-message key; the mail key opens Mail, whose second level lists Gravit's
-letters. Below 860 px the first level is a bar of icons on top.
+letters. Markets and Trade follow Linqi's buyer-agent-demo pages. Below 860 px the first level is a bar of
+icons on top.
 
 ## What is scripted (driver c)
 
@@ -55,6 +56,19 @@ letters. Below 860 px the first level is a bar of icons on top.
 - The rail's **phone** key rings Gravit: it picks up, the call shows a timer, mute and hang up, and a
   call card stays. The **mail** key switches to Mail: Gravit's letters in the second level, the open
   letter in the main column (`#/mail/<id>`); opening a letter reads it.
+- **Markets** (after Linqi's `ui/markets.js`): tabs for the kinds that have markets (All · Crypto · Stocks ·
+  RWAs · Predictions, Watching once something is starred), Most traded · Biggest moves · Closing soonest, one
+  table with one key per row (**Trade** where the account trades it, **Connect to trade** at a public venue),
+  prediction cards with Yes and No at the ask, and a drawer per market at `#/markets/<id>`: price and facts, a
+  chart in 5m · 1h · 1d, across venues with the best marked, what you hold and the orders on it, Gravit on it,
+  and the statement lines about it. Quotes are stand-ins held still, so what is shown is what fills.
+- **Trade** (after Linqi's `ui/trade.js`): the kind seg, a picker (You hold · Recent · Most traded, a search),
+  Under way (orders on their way or on a book, and the cards Gravit waits on), and the ticket: Where, Buy or
+  Sell, Amount (dollars or units) and Order (Market or Limit), the quote prepared from the fields, What you
+  sign, a signature good for ten minutes and **Sign and place**. The press stands in for Linqi's device-key
+  signature; a stand-in venue answers 0.9 s later and the fill moves holdings, cash, the Statement and net
+  worth. One order is $100 at most. Gravit's orders on a book cancel after asking; **Hand to Gravit instead**
+  opens a new message with the ticket in words and the limit set where Gravit may trade.
 - Account: Portfolio's **Move** shifts an asset between venues, **Receive** shows the deposit address with
   a QR stand-in and copies it, **Statement** lists the activity and exports a CSV; Venues' **Connect an
   account** connects stand-in venues. Memory: add, edit in place, forget, the three switches, Export,
