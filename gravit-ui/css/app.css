@@ -380,3 +380,11 @@ button.back-link { align-self: flex-start; border: 0; background: transparent; p
   .disc, .acct { overflow-y: visible; }
   .banner { width: calc(100vw - 32px); }
 }
+
+/* ---- Account's panels: Move, Receive, Statement, Connect an account ---- */
+.move-form { display: flex; flex-direction: column; gap: 16px; }
+.receive { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.qr { width: 184px; height: 184px; padding: 8px; border-radius: var(--radius-s); background: var(--surface); border: 1px solid var(--border); fill: var(--text); }
+.activity { display: flex; flex-direction: column; }
+.activity-row { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.activity-text { min-width: 0; overflow-wrap: anywhere; }

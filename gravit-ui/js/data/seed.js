@@ -6,6 +6,8 @@ export const SEED_VERSION = 2;
 
 // the places Gravit may trade, as the draft's venue pick list and the Move form offer them
 export const VENUES = ['Stand-in Exchange', 'Stand-in Broker', 'Stand-in Wallet'];
+// the accounts Connect an account offers (stand-ins: connecting one asks nothing real)
+export const CONNECTABLE = ['Coinbase', 'Interactive Brokers', 'Polymarket', 'Hyperliquid'];
 
 const msg = (from, kind, text, data = {}, extra = {}) => ({ from, kind, text, data, ...extra });
 
@@ -98,7 +100,7 @@ export function seed(now = Date.now()) {
         { name: 'Stand-in Wallet', line: 'Connected · address proved · Gravit: read only', state: 'Healthy' },
         { name: 'Kalshi', line: 'Asked it first, without a key', state: 'Not served here' },
       ],
-      wallet: { usdc: 12.4, chain: 'Base', address: '0xec4c…16c1' },
+      wallet: { usdc: 12.4, chain: 'Base', address: '0xec4c…16c1', full: '0xec4c3e9d5b7a2f1c8e6d4b2a9f7c5e3d1b8a16c1' },
       // the statement, newest first: fills, moves, top-ups
       activity: [
         { at: ago(2.5), text: 'Fill · 0.00008 BTC @ 62,500 · ord-0001', amount: -5 },

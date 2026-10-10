@@ -33,7 +33,7 @@ test('Venues: four venues with their state chips and Connect an account', () => 
   assert.equal(count(h, /class="venue"/g), 4);
   assert.equal(count(h, /class="chip up">Healthy</g), 3);
   assert.match(h, /class="chip grey">Not served here</);
-  assert.match(h, /class="btn-primary">Connect an account</);
+  assert.match(h, /class="btn-primary" data-action="openPanel" data-panel="connect">Connect an account</);
 });
 
 test('Memory: entries grouped with their source and two keys, the add box, where it is used, three switches, Export and Forget all', () => {

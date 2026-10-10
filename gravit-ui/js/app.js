@@ -27,6 +27,7 @@ const REVOKE_MS = 1000;
 const CONNECT_MS = 1200;
 const LISTEN_MS = 1800;
 const PICKUP_MS = 1500;
+const COPIED_MS = 1500;
 // what the scripted mic hears, in turn
 const HEARD = ['小仓位买 BTC，$70k 以下', 'Pelosi 最近买了什么', '查一下这个地址是不是骗子', '额度改到每单 $50'];
 const usable = saved => !!saved && saved.v === SEED_VERSION && Array.isArray(saved.conversations);
@@ -117,9 +118,9 @@ function focusKey(el) {
 }
 
 // which overlay is up: focus moves into it when it opens and back to its opener when it closes
-const overlayOf = s => (s.call ? 'call' : s.discover.create ? 'modal' : s.mail?.open || s.detailsOpen || s.settingsOpen || s.discover.drawer ? 'drawer' : null);
+const overlayOf = s => (s.call ? 'call' : s.discover.create ? 'modal' : s.mail?.open || s.account.panel || s.detailsOpen || s.settingsOpen || s.discover.drawer ? 'drawer' : null);
 const screenOf = s => `${s.route.screen}/${s.route.id ?? s.route.tab ?? ''}`;
-const drawerOf = s => (s.mail?.open ? `mail:${s.mail.reading ?? ''}` : null) ?? s.discover.drawer ?? (s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null);
+const drawerOf = s => (s.mail?.open ? `mail:${s.mail.reading ?? ''}` : null) ?? (s.account.panel ? `panel:${s.account.panel}` : null) ?? s.discover.drawer ?? (s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null);
 
 export function boot(win) {
   const doc = win.document;
@@ -242,6 +243,19 @@ export function boot(win) {
     store.dispatch('setListening', false);
   }
 
+  // save a file the page made: Safari and Firefox start the download after the click returns, so the link is revoked a moment later
+  function download(name, type, text) {
+    const blob = new win.Blob([text], { type });
+    const a = doc.createElement('a');
+    const href = win.URL.createObjectURL(blob);
+    a.href = href;
+    a.download = name;
+    doc.body?.appendChild(a);
+    a.click();
+    a.remove?.();
+    setTimeout(() => win.URL.revokeObjectURL(href), REVOKE_MS);
+  }
+
   // commit the open editor with what its inputs hold
   function commitEdit() {
     const values = Object.fromEntries([...root.querySelectorAll('.inline-edit [name]')].map(el => [el.name, el.value]));
@@ -338,17 +352,24 @@ export function boot(win) {
     setTheme: el => { const t = el.dataset.value.toLowerCase(); store.dispatch('setTheme', t); applyTheme(t); },
     forgetMemory: el => store.dispatch('forgetMemory', el.dataset.id),
     memorySwitch: el => store.dispatch('setMemorySwitch', { key: el.dataset.key, value: el.getAttribute('aria-checked') !== 'true' }),
-    exportMemory: () => {
-      const blob = new win.Blob([JSON.stringify(store.get().memory, null, 2)], { type: 'application/json' });
-      const a = doc.createElement('a');
-      const href = win.URL.createObjectURL(blob);
-      a.href = href;
-      a.download = 'gravit-memory.json';
-      doc.body?.appendChild(a);
-      a.click();
-      a.remove?.();
-      // Safari and Firefox start the download after the click returns: revoke the link a moment later
-      setTimeout(() => win.URL.revokeObjectURL(href), REVOKE_MS);
+    exportMemory: () => download('gravit-memory.json', 'application/json', JSON.stringify(store.get().memory, null, 2)),
+    // Account's panels
+    openPanel: el => store.dispatch('openPanel', el.dataset.panel),
+    closePanel: () => store.dispatch('closePanel'),
+    connectVenue: el => {
+      const name = el.dataset.name;
+      store.dispatch('connectVenue', name);
+      if (store.get().account.connecting === name) timers.after(CONNECT_MS, () => store.dispatch('venueConnected', name));
+    },
+    copyAddress: () => {
+      const w = store.get().account.wallet;
+      try { win.navigator?.clipboard?.writeText(w.full ?? w.address); } catch { /* the label still says copied: the demo has no clipboard to fail loudly */ }
+      store.dispatch('setCopied', true);
+      timers.after(COPIED_MS, () => store.dispatch('setCopied', false));
+    },
+    exportStatement: () => {
+      const rows = store.get().account.activity.map(x => [new Date(x.at).toISOString(), `"${x.text.replace(/"/g, '""')}"`, x.amount].join(','));
+      download('gravit-statement.csv', 'text/csv', ['at,what,amount', ...rows].join('\n'));
     },
     // the director
     director: el => {
@@ -389,6 +410,9 @@ export function boot(win) {
       if (after === before) { composerText = text; return; }
       if (after.route.id !== before.route.id) win.location.hash = toHash(after.route);
       replyFlow(store, timers, after.route.id, text, now, scheduleEvents, files);
+    } else if (action === 'moveFunds') {
+      const f = new win.FormData(form);
+      store.dispatch('moveFunds', { from: f.get('from'), to: f.get('to'), asset: f.get('asset'), amount: f.get('amount'), now: now() });
     } else if (action === 'connectMcp') {
       // the scripted server answers a moment later with its tools; a closed or restarted connector ignores the answer
       store.dispatch('connectMcp');
@@ -434,6 +458,7 @@ export function boot(win) {
       if (s.call) return;
       if (s.edit) { store.dispatch('cancelEdit'); return; }
       if (s.mail?.open) { store.dispatch('closeMail'); return; }
+      if (s.account.panel) { store.dispatch('closePanel'); return; }
       if (s.confirm) { store.dispatch('cancelConfirm'); return; }
       if (s.discover.create) store.dispatch('closeCreate');
       else if (s.discover.drawer) store.dispatch('closeDrawer');

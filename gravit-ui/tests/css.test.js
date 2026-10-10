@@ -29,6 +29,8 @@ function everyState() {
     R.startEdit(R.startDraft(s, { now: NOW }), { kind: 'draftLimit', key: 'venue' }),
     R.startEdit(R.nav(s, { screen: 'account', tab: 'memory' }), { kind: 'memory', id: 'mem-1' }), R.askConfirm(R.openSettings(R.nav(s, { screen: 'account', tab: 'portfolio' })), { action: 'resetDemo' }),
     R.nav(s, { screen: 'account', tab: 'portfolio' }), R.nav(s, { screen: 'account', tab: 'venues' }), R.nav(s, { screen: 'account', tab: 'memory' }), R.openSettings(R.nav(s, { screen: 'account', tab: 'portfolio' })),
+    ...['move', 'receive', 'statement', 'connect'].map(panel => R.openPanel(R.nav(s, { screen: 'account', tab: 'portfolio' }), panel)),
+    R.moveFunds(R.openPanel(R.nav(s, { screen: 'account', tab: 'portfolio' }), 'move'), { from: 'Stand-in Wallet', to: 'Stand-in Wallet', asset: 'USDC', amount: '1', now: NOW }),
   ];
 }
 

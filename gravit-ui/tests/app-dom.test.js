@@ -275,6 +275,34 @@ test('the mail key opens the mailbox; a message opens and reads; Escape closes i
   store.timers.clear();
 });
 
+test('Account panels: Move submits its form; Connect connects after a moment; Receive copies the full address; Statement exports; Escape closes', async () => {
+  const f = fakeWindow({ ...noDialogs, hash: '#/account/portfolio' });
+  let copied = null;
+  f.win.navigator = { clipboard: { writeText: t => { copied = t; return Promise.resolve(); } } };
+  const store = boot(f.win);
+  const click = (action, extra = {}) => f.click(f.element({ tagName: 'BUTTON', dataset: { action, ...extra } }));
+  click('openPanel', { panel: 'move' });
+  assert.equal(store.get().account.panel, 'move');
+  const form = { dataset: { action: 'moveFunds' }, fields: { from: 'Stand-in Wallet', asset: 'USDC', to: 'Stand-in Exchange', amount: '100' } };
+  f.fire('root', 'submit', { target: { closest: () => form } });
+  assert.equal(store.get().account.holdings.find(h => h.venue === 'Stand-in Exchange' && h.name === 'USDC').value, 100);
+  click('openPanel', { panel: 'connect' });
+  click('connectVenue', { name: 'Polymarket' });
+  assert.equal(store.get().account.connecting, 'Polymarket');
+  await sleep(1300);
+  assert.equal(store.get().account.venues.at(-1).name, 'Polymarket');
+  click('openPanel', { panel: 'receive' });
+  click('copyAddress');
+  assert.equal(copied, '0xec4c3e9d5b7a2f1c8e6d4b2a9f7c5e3d1b8a16c1');
+  assert.equal(store.get().account.copied, true);
+  click('openPanel', { panel: 'statement' });
+  click('exportStatement');
+  assert.equal(f.revoked.length, 0);
+  f.fire('doc', 'keydown', { key: 'Escape' });
+  assert.equal(store.get().account.panel, null);
+  store.timers.clear();
+});
+
 test('the draft picker keys reach the store', () => {
   const f = fakeWindow();
   const store = boot(f.win);

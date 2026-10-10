@@ -190,6 +190,52 @@ test('mail: the mailbox opens, a message is read and marked read, back goes to t
   assert.equal(R.closeMail(s).mail.open, false);
 });
 
+test('Account panels: Move shifts a holding between venues and logs it; bad moves are refused in the panel', () => {
+  let s = R.openPanel(R.openSettings(R.nav(fresh(), { screen: 'account', tab: 'portfolio' })), 'move');
+  assert.deepEqual([s.account.panel, s.settingsOpen], ['move', false], 'one drawer at a time');
+  const moved = R.moveFunds(s, { from: 'Stand-in Wallet', to: 'Stand-in Exchange', asset: 'USDC', amount: '200', now: NOW });
+  assert.equal(moved.account.panel, null);
+  assert.equal(moved.account.holdings.find(h => h.name === 'USDC' && h.venue === 'Stand-in Wallet').value, 2290);
+  assert.equal(moved.account.holdings.find(h => h.name === 'USDC' && h.venue === 'Stand-in Exchange').value, 200);
+  assert.match(moved.account.activity[0].text, /Move \$200 USDC · Stand-in Wallet → Stand-in Exchange/);
+  assert.equal(moved.account.netWorth, 12480, 'a move does not change what you own');
+  const again = R.moveFunds(R.openPanel(moved, 'move'), { from: 'Stand-in Wallet', to: 'Stand-in Exchange', asset: 'USDC', amount: '10', now: NOW });
+  assert.equal(again.account.holdings.find(h => h.name === 'USDC' && h.venue === 'Stand-in Exchange').value, 210, 'a second move adds to the same holding');
+  const err = (from, to, asset, amount) => R.moveFunds(s, { from, to, asset, amount, now: NOW }).account.panelError;
+  assert.equal(err('Stand-in Wallet', 'Stand-in Exchange', 'USDC', '0'), '要一个大于 0 的数');
+  assert.equal(err('Stand-in Wallet', 'Stand-in Wallet', 'USDC', '5'), '换一个去处');
+  assert.equal(err('Stand-in Exchange', 'Stand-in Broker', 'AAPL', '5'), 'Stand-in Exchange 没有 AAPL');
+  assert.equal(err('Stand-in Wallet', 'Stand-in Exchange', 'USDC', '9999'), 'Stand-in Wallet 只有 $2,490');
+});
+
+test('Connect an account: a venue connects after a moment and joins the list; Receive copies; panels render', async () => {
+  const { renderAccount } = await import('../js/render/account.js');
+  let s = R.openPanel(R.nav(fresh(), { screen: 'account', tab: 'venues' }), 'connect');
+  s = R.connectVenue(s, 'Coinbase');
+  assert.equal(s.account.connecting, 'Coinbase');
+  assert.match(renderAccount(s), /连接中…/);
+  s = R.venueConnected(s, 'Coinbase');
+  assert.equal(s.account.connecting, null);
+  assert.deepEqual(s.account.venues.at(-1), { name: 'Coinbase', line: 'Connected · stand-in · Gravit: read only', state: 'Healthy' });
+  assert.match(renderAccount(s), /data-name="Coinbase"[^>]*disabled>已连接</);
+  assert.equal(R.venueConnected(s, 'Coinbase'), s, 'connecting twice is one venue');
+  const p = R.nav(fresh(), { screen: 'account', tab: 'portfolio' });
+  const page = renderAccount(p);
+  for (const name of ['move', 'receive', 'statement']) assert.match(page, new RegExp(`data-action="openPanel" data-panel="${name}"`), name);
+  assert.match(renderAccount(R.nav(fresh(), { screen: 'account', tab: 'venues' })), /data-action="openPanel" data-panel="connect"/);
+  const move = renderAccount(R.openPanel(p, 'move'));
+  assert.match(move, /<form class="move-form" data-action="moveFunds">/);
+  for (const n of ['from', 'asset', 'to', 'amount']) assert.match(move, new RegExp(`name="${n}"`), n);
+  const receive = renderAccount(R.openPanel(p, 'receive'));
+  assert.match(receive, /<svg class="qr"/);
+  assert.match(receive, /0xec4c…16c1/);
+  assert.match(receive, /data-action="copyAddress">复制地址</);
+  assert.match(renderAccount(R.setCopied(R.openPanel(p, 'receive'), true)), />已复制</);
+  const statement = renderAccount(R.openPanel(p, 'statement'));
+  assert.equal((statement.match(/class="activity-row"/g) ?? []).length, 3);
+  assert.match(statement, /data-action="exportStatement">Export CSV</);
+});
+
 test('Memory edits in place, Forget all asks first, and Reset demo asks first', () => {
   const s = R.nav(fresh(), { screen: 'account', tab: 'memory' });
   assert.match(renderMemory(R.startEdit(s, { kind: 'memory', id: 'mem-1' })), /<span class="inline-edit"><input id="edit-text" class="input small" name="text" type="text" value="偏价值，不追热点" aria-label="改成">/);

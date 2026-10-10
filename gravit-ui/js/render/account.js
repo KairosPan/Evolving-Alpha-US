@@ -1,11 +1,62 @@
 // gravit-ui/js/render/account.js — Account (spec §8): Linqi's Portfolio and Venues, and Memory as the third segment; the Settings drawer
 import { esc, attrs, cls, money } from '../html.js';
 import { icon } from '../icons.js';
-import { fmtDate } from '../time.js';
+import { fmtDate, fmtClock } from '../time.js';
+import { VENUES, CONNECTABLE } from '../data/seed.js';
 import { chip, ticker } from './thread.js';
 import { seg, segLinks, inlineEdit, confirmPair } from './controls.js';
 
 const box = (inner, extra = '') => `<section class="${cls('cardbox', extra)}">${inner}</section>`;
+const panelKey = (panel, label) => `<button type="button" class="btn-sm" data-action="openPanel" data-panel="${panel}">${label}</button>`;
+const opt = (v, selected) => `<option${attrs({ value: v, selected: v === selected })}>${esc(v)}</option>`;
+
+// a square of modules derived from the address, with the three corner marks: a stand-in for a real QR code
+function qr(text) {
+  const n = 21;
+  let h = 2166136261;
+  const bits = [];
+  for (let i = 0; i < n * n; i++) { h ^= text.charCodeAt(i % text.length) + i; h = Math.imul(h, 16777619); bits.push((h >>> 7) & 1); }
+  const finder = (x, y) => [[0, 0], [n - 7, 0], [0, n - 7]].some(([fx, fy]) => x >= fx && x < fx + 7 && y >= fy && y < fy + 7);
+  const ring = (x, y) => [[0, 0], [n - 7, 0], [0, n - 7]].some(([fx, fy]) => { const dx = x - fx, dy = y - fy; return dx >= 0 && dx < 7 && dy >= 0 && dy < 7 && (dx === 0 || dx === 6 || dy === 0 || dy === 6 || (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4)); });
+  let cells = '';
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (finder(x, y) ? ring(x, y) : bits[y * n + x]) cells += `<rect x="${x}" y="${y}" width="1" height="1"></rect>`;
+  return `<svg class="qr" viewBox="-1 -1 ${n + 2} ${n + 2}" role="img" aria-label="收款二维码">${cells}</svg>`;
+}
+
+// Account's panels as drawers: Move, Receive, Statement, Connect an account
+export function renderPanel(state) {
+  const a = state.account;
+  if (!a.panel) return '';
+  const drawer = (label, inner) => `<aside class="drawer" aria-label="${label}"><div class="drawer-head"><h2>${label}</h2><button type="button" class="close-key" data-action="closePanel" aria-label="Close">×</button></div><div class="drawer-body">${inner}</div></aside>`;
+  const error = a.panelError ? `<div class="field-error">${esc(a.panelError)}</div>` : '';
+  if (a.panel === 'move') {
+    const froms = [...new Set(a.holdings.map(h => h.venue))];
+    const assets = [...new Set(a.holdings.map(h => h.name))];
+    const tos = [...new Set([...VENUES, ...a.venues.filter(v => v.state === 'Healthy').map(v => v.name)])];
+    return drawer('Move', `<form class="move-form" data-action="moveFunds">` +
+      `<div class="field"><label class="field-label" for="mv-from">从</label><select id="mv-from" class="input" name="from">${froms.map(v => opt(v, 'Stand-in Wallet')).join('')}</select></div>` +
+      `<div class="field"><label class="field-label" for="mv-asset">资产</label><select id="mv-asset" class="input" name="asset">${assets.map(v => opt(v, 'USDC')).join('')}</select></div>` +
+      `<div class="field"><label class="field-label" for="mv-to">到</label><select id="mv-to" class="input" name="to">${tos.map(v => opt(v, 'Stand-in Exchange')).join('')}</select></div>` +
+      `<div class="field"><label class="field-label" for="mv-amount">金额（$）</label><input id="mv-amount" class="input" name="amount" type="number" min="0" step="any"></div>${error}` +
+      `<div class="btn-row grow"><button type="button" class="btn" data-action="closePanel">Cancel</button><button type="submit" class="btn-primary">Move</button></div></form>`);
+  }
+  if (a.panel === 'receive') {
+    const w = a.wallet;
+    return drawer('Receive', `<div class="receive">${qr(w.full ?? w.address)}<div class="mono">${esc(w.address)}</div><div class="dim">USDC · ${esc(w.chain)}</div>` +
+      `<button type="button" class="btn-sm" data-action="copyAddress">${a.copied ? '已复制' : '复制地址'}</button></div>`);
+  }
+  if (a.panel === 'statement') {
+    const rows = a.activity.map(x => `<div class="activity-row"><span class="dim">${fmtDate(x.at)} ${fmtClock(x.at)}</span><span class="activity-text">${esc(x.text)}</span>` +
+      `<span class="${cls('num', x.amount > 0 && 'up', x.amount < 0 && 'down')}">${x.amount ? (x.amount > 0 ? '+' : '−') + money(Math.abs(x.amount)) : ''}</span></div>`).join('');
+    return drawer('Statement', `<div class="activity">${rows}</div><button type="button" class="btn-sm" data-action="exportStatement">Export CSV</button>`);
+  }
+  const rows = CONNECTABLE.map(name => {
+    const done = a.venues.some(v => v.name === name);
+    const busy = a.connecting === name;
+    return `<div class="venue"><span><b>${esc(name)}</b></span><button type="button"${attrs({ class: 'btn-sm', 'data-action': 'connectVenue', 'data-name': name, disabled: done || busy })}>${done ? '已连接' : busy ? '连接中…' : 'Connect'}</button></div>`;
+  }).join('');
+  return drawer('Connect an account', `<div class="venues">${rows}</div>`);
+}
 
 function portfolio(a) {
   const alloc = a.alloc.map(x => `<span class="alloc-seg alloc-${x.token}" style="flex:${x.pct}"></span>`).join('');
@@ -14,12 +65,12 @@ function portfolio(a) {
     `<span class="${h.chg == null ? 'dim' : h.chg >= 0 ? 'up' : 'down'}">${h.chg == null ? '—' : (h.chg >= 0 ? '+' : '−') + Math.abs(h.chg).toFixed(1) + '%'}</span></div>`).join('');
   return `<div class="cards">` + box(`<div class="dim">Net worth</div><div class="networth">${money(a.netWorth)}</div><div class="delta"><span class="up">+${money(a.today)} · ${a.todayPct}%</span><span class="dim">today</span></div>` +
     `<div class="spark"></div><div class="alloc-bar">${alloc}</div><div class="alloc-legend">${legend}</div><div class="holdings">${rows}</div>` +
-    `<div class="btn-row"><button type="button" class="btn-sm">Move</button><button type="button" class="btn-sm">Receive</button><button type="button" class="btn-sm">Statement</button></div>`) + `</div>`;
+    `<div class="btn-row">${panelKey('move', 'Move')}${panelKey('receive', 'Receive')}${panelKey('statement', 'Statement')}</div>`) + `</div>`;
 }
 
 function venues(a) {
   const rows = a.venues.map(v => `<div class="venue"><span><b>${esc(v.name)}</b><br><span class="dim">${esc(v.line)}</span></span>${chip(v.state, v.state === 'Healthy' ? 'up' : 'grey')}</div>`).join('');
-  return `<div class="cards">` + box(`<div class="card-head"><div class="cardbox-title">Venues</div></div><div class="venues">${rows}</div><button type="button" class="btn-primary">Connect an account</button>`) + `</div>`;
+  return `<div class="cards">` + box(`<div class="card-head"><div class="cardbox-title">Venues</div></div><div class="venues">${rows}</div><button type="button" class="btn-primary" data-action="openPanel" data-panel="connect">Connect an account</button>`) + `</div>`;
 }
 
 const switchRow = (label, key, on) => `<div class="switch-row"><div class="switch-label">${esc(label)}</div>` +
@@ -55,5 +106,5 @@ export function renderAccount(state) {
   const head = `<div class="acct-head"><h1 class="head-title">Account</h1><span class="spacer"></span>${seg(['Guard', 'Beast'], a.mode === 'beast' ? 'Beast' : 'Guard', 'setMode')}${chip('Trading on · $100 a move', 'up')}<button type="button" class="pill" data-action="openSettings">Settings</button></div>`;
   const tabs = segLinks([['Portfolio', '#/account/portfolio', 'portfolio'], ['Venues', '#/account/venues', 'venues'], ['Memory', '#/account/memory', 'memory']], tab);
   const body = tab === 'venues' ? venues(a) : tab === 'memory' ? renderMemory(state) : portfolio(a);
-  return `<main class="${cls('main', 'acct', state.settingsOpen && 'with-drawer')}">${head}${tabs}${body}${state.settingsOpen ? renderSettings(state) : ''}</main>`;
+  return `<main class="${cls('main', 'acct', (state.settingsOpen || a.panel) && 'with-drawer')}">${head}${tabs}${body}${state.settingsOpen ? renderSettings(state) : renderPanel(state)}</main>`;
 }

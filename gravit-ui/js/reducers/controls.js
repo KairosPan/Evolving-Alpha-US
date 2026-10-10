@@ -3,7 +3,7 @@ import { DAY } from '../time.js';
 import { money } from '../html.js';
 import { reducers as messages } from './messages.js';
 import { reducers as account } from './account.js';
-import { VENUES } from '../data/seed.js';
+import { VENUES, CONNECTABLE } from '../data/seed.js';
 
 const num = v => { const n = Number(String(v ?? '').trim()); return Number.isFinite(n) && n > 0 ? n : null; };
 const fail = (s, error) => ({ ...s, edit: { ...s.edit, error } });
@@ -81,6 +81,33 @@ export const reducers = {
   closeMail: s => (s.mail?.open ? { ...s, mail: { ...s.mail, open: false, reading: null } } : s),
   readMail: (s, id) => (s.mail?.items.some(m => m.id === id) ? { ...s, mail: { ...s.mail, reading: id, items: s.mail.items.map(m => (m.id === id ? { ...m, read: true } : m)) } } : s),
   backToInbox: s => (s.mail?.reading ? { ...s, mail: { ...s.mail, reading: null } } : s),
+
+  // Account's panels (Move, Receive, Statement, Connect): drawers, one at a time
+  openPanel: (s, panel) => ({ ...s, account: { ...s.account, panel, panelError: null, copied: false }, settingsOpen: false, mail: s.mail ? { ...s.mail, open: false, reading: null } : s.mail }),
+  closePanel: s => (s.account.panel ? { ...s, account: { ...s.account, panel: null, panelError: null } } : s),
+  // Move: an asset from one venue to another; what you own stays the same
+  moveFunds(s, { from, to, asset, amount, now }) {
+    const n = num(amount);
+    const err = panelError => ({ ...s, account: { ...s.account, panelError } });
+    if (!n) return err('要一个大于 0 的数');
+    if (from === to) return err('换一个去处');
+    const src = s.account.holdings.find(h => h.name === asset && h.venue === from);
+    if (!src) return err(`${from} 没有 ${asset}`);
+    if (n > src.value) return err(`${from} 只有 ${money(src.value)}`);
+    const round = v => Math.round(v * 100) / 100;
+    let holdings = s.account.holdings.map(h => (h === src ? { ...h, value: round(h.value - n) } : h));
+    const dst = holdings.find(h => h.name === asset && h.venue === to);
+    holdings = dst ? holdings.map(h => (h === dst ? { ...h, value: round(h.value + n) } : h)) : [...holdings, { ...src, key: `${src.key}@${to}`, venue: to, value: n }];
+    const activity = [{ at: now, text: `Move ${money(n)} ${asset} · ${from} → ${to}`, amount: 0 }, ...s.account.activity];
+    return { ...s, account: { ...s.account, holdings, activity, panel: null, panelError: null } };
+  },
+  // Connect an account: a stand-in venue answers a moment later (app.js schedules venueConnected)
+  connectVenue: (s, name) => (CONNECTABLE.includes(name) && !s.account.venues.some(v => v.name === name) ? { ...s, account: { ...s.account, connecting: name } } : s),
+  venueConnected(s, name) {
+    if (s.account.venues.some(v => v.name === name)) return s;
+    return { ...s, account: { ...s.account, connecting: null, venues: [...s.account.venues, { name, line: 'Connected · stand-in · Gravit: read only', state: 'Healthy' }] } };
+  },
+  setCopied: (s, on) => (s.account.copied === !!on ? s : { ...s, account: { ...s.account, copied: !!on } }),
 
   askConfirm: (s, spec) => ({ ...s, confirm: spec, edit: null }),
   cancelConfirm: s => (s.confirm ? { ...s, confirm: null } : s),
