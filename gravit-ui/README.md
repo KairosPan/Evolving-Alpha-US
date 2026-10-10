@@ -20,7 +20,11 @@ Google Fonts and fall back to the system.
   that coin; ✓ brings a receipt and a limit request; Grant brings an install request unless one is
   already waiting). **Pelosi / 跟单** asks for the politician bot or, once it is installed, posts its
   proposal. **0x… / 地址** runs the fraud check. **额度** asks to raise the limit. Anything else gets two
-  grey replies. Order, ledger and card numbers continue from the seed's counters.
+  grey replies. Order, ledger and card numbers continue from the seed's counters, and a limit ask reads
+  the conversation's real cap.
+- In a group, a bot named after **@** (`@Buffett`, `@政客`) answers; only Gravit proposes, as a card. In a
+  plugin's teaching conversation the plugin answers. New message: **+ 加个 bot** opens a picker of the
+  installed bots.
 - Discover: Install opens the plugin's teaching conversation and a toast; pressing "✓ Installed"
   turns that key into the trash key; Installed · n filters; Upload a plugin publishes a private plugin
   of yours; search is live.
@@ -31,9 +35,18 @@ Google Fonts and fall back to the system.
 
 ## The director (keyboard)
 
-Press **d** (outside an input) for the demo director: 早报 · 技术分析 · 突发 · 来电 · bot 插话 · 重置 demo.
-突发 shows the banner for 5 s, then leaves its red-edged message in the thread; a declined call leaves
-a call card. Esc closes drawers and the director.
+Press **d** (outside an input) for the demo director: 早报 · 技术分析 · 突发 · 来电 · bot 插话 · 拒单 · 收尾 ·
+空白开始 · 重置 demo. 突发 shows the banner for 5 s, then leaves its red-edged message in the thread; a
+declined call leaves a call card; 空白开始 opens the first-run screen with no conversations. Esc closes
+drawers and the director.
+
+Below 860 px the rail sits above the page. A toast leaves after 6 s; a reload starts without banners,
+calls, drawers or toasts.
+
+## Tests
+
+`npm test` runs the node:test suite: render functions are asserted as strings, and `tests/helpers/fake-dom.js`
+runs `boot()` against a fake window to check the composer, scroll, focus and IME handling.
 
 ## Layout of the code
 
