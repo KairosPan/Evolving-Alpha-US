@@ -1,4 +1,4 @@
-// gravit-ui/js/reducers/discover.js — the store: search, 我的插件, the drawer, install/uninstall, the MCP connector
+// gravit-ui/js/reducers/discover.js — the store: search, My plugins, the drawer, install/uninstall, the MCP connector
 import { nextId } from '../ids.js';
 import { DAY } from '../time.js';
 import { byId, ICON_CHOICES, hostOf } from '../data/plugins.js';

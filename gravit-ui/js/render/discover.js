@@ -1,4 +1,4 @@
-// gravit-ui/js/render/discover.js — Discover as an App Store (spec §7): shelves, cards, the drawer that signs, 我的插件, the MCP connector
+// gravit-ui/js/render/discover.js — Discover as an App Store (spec §7): shelves, cards, the drawer that signs, My plugins, the MCP connector
 import { esc, attrs, cls } from '../html.js';
 import { icon } from '../icons.js';
 import { PLUGINS, SHELVES, KINDS, byId, search, likeFor, ICON_CHOICES, hostOf } from '../data/plugins.js';
@@ -51,7 +51,7 @@ function header(state) {
   const on = state.discover.installedOnly;
   return `<div class="disc-head"><h1 class="head-title">Discover</h1>` +
     `<div class="search"><label for="dq" class="sr-only">Search plugins</label>${icon('search', 18, 2)}<input id="dq" type="search" autocomplete="off" placeholder="Search plugins" data-action="query"${attrs({ value: state.discover.query })}></div><span class="spacer"></span>` +
-    `<button type="button"${attrs({ class: cls('pill', on && 'pressed'), 'data-action': 'toggleInstalledOnly', 'aria-pressed': on ? 'true' : 'false' })}>我的插件 · ${state.plugins.installed.length}</button>` +
+    `<button type="button"${attrs({ class: cls('pill', on && 'pressed'), 'data-action': 'toggleInstalledOnly', 'aria-pressed': on ? 'true' : 'false' })}>My plugins</button>` +
     `<button type="button" class="pill" data-action="openCreate">${icon('plus', 14, 2.2)}Create</button></div>`;
 }
 

@@ -91,6 +91,18 @@ test('Details never covers the conversation: it makes room, folding the list awa
   assert.match(css, /^\.head\.centered \{[^}]*padding: 16px 200px 12px/m, 'the group head keeps clear of Working and Details');
 });
 
+test('app.css is well formed: braces never close more than they opened, so no rule is swallowed', async () => {
+  const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
+  let depth = 0;
+  css.split('\n').forEach((line, i) => {
+    for (const ch of line) {
+      if (ch === '{') depth++;
+      else if (ch === '}') { depth--; assert.ok(depth >= 0, `a stray } on line ${i + 1}`); }
+    }
+  });
+  assert.equal(depth, 0);
+});
+
 test('the equity blue goes by Linqi\'s own name: no --blue, which his tokens use for the orange RWA colour', async () => {
   const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
   const tokens = await readFile(new URL('../css/tokens.css', import.meta.url), 'utf8');

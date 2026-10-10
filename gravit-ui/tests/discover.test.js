@@ -10,11 +10,12 @@ const NOW = new Date(2026, 9, 9, 14, 7).getTime();
 const count = (h, re) => (h.match(re) ?? []).length;
 const disc = (s = seed(NOW)) => R.nav(s, { screen: 'discover', id: null });
 
-test('the store page: header with search, 我的插件 · n, Create; six shelves, each with See all and its cards; no price, no subtitle', () => {
+test('the store page: header with search, My plugins with no count, Create; six shelves, each with See all and its cards; no price, no subtitle', () => {
   const h = renderDiscover(disc());
   assert.match(h, /<h1 class="head-title">Discover<\/h1>/);
   assert.match(h, /id="dq"[^>]*placeholder="Search plugins"[^>]*data-action="query"/);
-  assert.match(h, /data-action="toggleInstalledOnly" aria-pressed="false">我的插件 · 5</);
+  assert.match(h, /data-action="toggleInstalledOnly" aria-pressed="false">My plugins</);
+  assert.doesNotMatch(h, /我的插件|My plugins · \d/);
   assert.doesNotMatch(h, /Installed ·/);
   assert.match(h, /class="pill" data-action="openCreate">[\s\S]*?Create<\/button>/);
   assert.doesNotMatch(h, /Upload a plugin/);
@@ -69,11 +70,11 @@ test('the drawer: sections, the signature table inline, Install at the foot; ins
   assert.match(inst, /class="btn-primary" data-action="uninstall" data-id="buffett">Uninstall</);
 });
 
-test('我的插件 view: the pill pressed, every card with ✓ and the trash key, 你创建的 for your own, the just-installed card links to its conversation', () => {
+test('My plugins view: the pill pressed, every card with ✓ and the trash key, 你创建的 for your own, the just-installed card links to its conversation', () => {
   let s = R.install(disc(), { id: 'news', now: NOW });
   s = R.toggleInstalledOnly(s);
   const h = renderDiscover(s);
-  assert.match(h, /aria-pressed="true">我的插件 · 6</);
+  assert.match(h, /aria-pressed="true">My plugins</);
   assert.equal(count(h, /class="shelf"/g), 0);
   assert.equal(count(h, /class="pkey uninstall"/g), 6, 'five installed that are not yours plus the private Pairs you made');
   assert.equal(count(h, /class="pkey-done"/g), 6);
