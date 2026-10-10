@@ -94,3 +94,44 @@ Final: minor (deferred): the banner is centred on the viewport and overlaps the 
 Final: minor (deferred): composer text follows you between conversations.
 Final: minor (deferred): Portfolio shows an empty sparkline box.
 Final: minor (deferred): render tests pin attribute order.
+
+## Round 2 — the operator's 2026-10-10 requests (spec §13)
+Round 2: built on feat/gravit-ui in 7abea67..5359a9d (Discover keys + 我的插件 + Create connector, connector secrets kept out of localStorage, two-level navigation, in-page controls, files + mic, phone + mailbox, Account panels, two focus/file fixes, docs); branch kept as it is, nothing merged or pushed.
+Round 2: Ruling: SEED_VERSION goes to 2, so a round-1 save is dropped once and the new seed (mailbox, venues, activity, lastConv) loads — the new state shapes would crash render on an old save — cost if wrong: the operator's round-1 demo state is reset once.
+Round 2: Ruling: the new controls are scripted stand-ins with no network: 连接 answers after 1.2 s with tools named from the address, the mic writes a sample sentence after 1.8 s, Gravit picks up a call after 1.5 s, a venue connects after 1.2 s, the mailbox holds three seeded letters — spec 13 says the front end is pure — cost if wrong: these need a back end later, as spec 9 already says.
+Round 2: review — workflow wf_309acf71-657, four lenses (requests, state, wiring, layout) with three-lens adversarial verification on default Opus; eleven distinct Important defects survived (A–K below), all fixed in df066f8.
+Final: Ruling: kept Top up Important where one verifier graded it Minor — the USDC holding went negative, money from nothing on a money screen — cost if wrong: none, the guard is one line.
+Final: fixed A, switching editors carried the last editor's text into the next (Memory overwritten, draft limit changed) — opening another editor starts from its own value, not the text left in the last one RED→GREEN, suite 156/156
+Final: fixed B, Details kept offering Withdraw, Stop and End limit where their second press did nothing — Details offers only what still works: no Withdraw or Stop once closed, no End limit without a limit RED→GREEN, suite 156/156
+Final: fixed C, Top up had no ceiling — Top up cannot take more than your USDC holding RED→GREEN, suite 156/156
+Final: fixed D, drawers stacked (mailbox over a plugin, panel over Settings) and an Account panel followed you off Account — one drawer at a time: each opener closes the others, and an Account panel does not follow you off Account RED→GREEN, suite 156/156
+Final: fixed E and F, Details covered the send key between 1100 and 1399 px, and at 1024 px the column was 504 px with the group head colliding — Details never covers the conversation: it makes room, folding the list away on a medium window; the first level folds to icons below 1180 px RED→GREEN, suite 156/156; checked in the browser at 1280 (thread 660 px, send key 847 vs drawer 880), 1024 (group head clear; with Details send 591 vs drawer 624) and 800 (Working and Details back in the flow)
+Final: Ruling: the list folds away under 1400 px while Details is open, not under 1280 — at 1280 with the list the conversation was 360 px — cost if wrong: one number.
+Final: Ruling: between 861 and 1180 px the first level folds to icons by itself and its chevron hides — at 1024 the open first level left the conversation too narrow — cost if wrong: the operator's open choice is overridden at medium widths.
+Final: Ruling: the group head reserves 200 px each side for Working and Details — the task line stays centred and never runs under them — cost if wrong: long task lines shorten sooner.
+Final: fixed G, the Move pickers reset on every render — the Move pickers keep their choice across a render, such as an error RED→GREEN, suite 156/156
+Final: fixed H, Enter on an editor's × saved — Enter on an editor's × key does not save RED→GREEN, suite 156/156; the same guard skips Enter while an IME is composing (isComposing or keyCode 229)
+Final: fixed I, focus fell behind an overlay when the pressed key went away — focus goes to what replaced the pressed key: the confirm, or the drawer, never the page behind an overlay RED→GREEN, suite 156/156
+Final: fixed J, focus jumped to the wrong Account panel key — focus returns to the same panel key, told apart by every data attribute RED→GREEN, suite 156/156
+Final: fixed K, a live call redrew the page each second and dropped presses — a live call updates only its timer each second; the page is not redrawn under the keys RED→GREEN, suite 156/156
+Final: fixed in passing by the same changes — the IME Enter minor, the mailbox over an Account panel, a hidden editor taking the first Escape; and two round-1 minors, the rail's Phone and Email keys doing nothing and Details covering the send key between 808 and 1099 px.
+Final: Ruling: kept as not checked — a real IME, Safari and Firefox (clipboard, downloads, rendering), screen readers, phone widths under 700 px and fidelity to the canvas boards were outside what automation could drive — cost if wrong: platform polish found later by hand.
+Final: minor (deferred): the connector's address field is type=url, so the browser's own bubble pre-empts the in-page error; https://localhost is refused with the wrong reason and http:// is accepted.
+Final: minor (deferred): the collapsed strip's phone key, mail key and expand chevron have no title.
+Final: minor (deferred): inline editors show bare boxes with no visible label; Top up and Take back look the same.
+Final: minor (deferred): uninstalling within 6 s of an install leaves the 装好了 toast up.
+Final: minor (deferred): a closed connector's tool list can land in the next connector; stale pickup and mic timers act on the next call or listen; resetting during a live call freezes the next call's timer at 00:00.
+Final: minor (deferred): amounts under a cent create or destroy money; Change limit accepts a total below what is spent; draft limit chips skip per-order ≤ total and 'until' has no upper bound.
+Final: minor (deferred): one venue finishing its connection clears the connecting state of another.
+Final: minor (deferred): after you call Gravit, the row preview still says Gravit 来电.
+Final: minor (deferred): Copy address says 已复制 even when the copy failed; the Statement CSV has no BOM and opens garbled in Excel.
+Final: minor (deferred): field errors are not announced to screen readers; keyboard focus on the connector's radios is invisible.
+Final: minor (deferred): credentials typed inside a server address are saved with the plugin.
+Final: minor (deferred): collapsed rail under 860 px has 22 px keys and a badge over the icon; small white-on-blue text in Black is 3.67:1.
+Final: minor (deferred): the connector's radio segments stretch full width, and 取消 and 连接 scroll out of view at 800 px tall.
+Final: minor (deferred): selects render in Arial and UA white; disabled Connect buttons look clickable.
+Final: minor (deferred): calls you place and live calls wear the urgent red edge; muted and unmuted look almost the same in Black.
+Final: minor (deferred): below 1100 px the sticky toast's Open key can sit under a drawer.
+Final: minor (deferred): the Memory editor shows four round keys, misaligned; file chips flow inline with the owner's words.
+Final: minor (deferred): the Receive QR is inverted in Black; the director opens under the connector's scrim.
+Final: minor (deferred): dead size rules (the 32 px chevron, the --rail token); mailbox rows have square hover grounds and back links two colours.

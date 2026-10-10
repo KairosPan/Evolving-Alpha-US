@@ -42,7 +42,10 @@ conversation list with the new-message key. Below 860 px the first level is a ba
   secret is never written to `localStorage`.
 - Details: Change words, Change limit, Top up and Take back edit in place (✓ or Enter saves, × or Esc
   cancels); Withdraw, End limit and Stop Gravit ask in place and act on the second press. After Stop or
-  Withdraw nothing more lands in that conversation.
+  Withdraw nothing more lands in that conversation, and Details stops offering them. Top up stops at the
+  USDC you hold. Details makes room instead of covering the conversation: below 1400 px the list folds
+  away while it is open, and below 1180 px the first level folds to icons by itself. One drawer is open
+  at a time.
 - The rail's **phone** key rings Gravit: it picks up, the call shows a timer, mute and hang up, and a
   call card stays. The **mail** key opens Gravit's mailbox.
 - Account: Portfolio's **Move** shifts an asset between venues, **Receive** shows the deposit address with

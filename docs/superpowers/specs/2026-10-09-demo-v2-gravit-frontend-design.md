@@ -400,14 +400,19 @@ The operator's words, after seeing the pure front end in `gravit-ui/`: keep the 
 "✓ Installed" becomes a ✓ beside the delete key; "Installed · 6" becomes 我的插件; Upload becomes Create,
 which pops up an MCP connector; Messages, Discover, Markets and Trade go in a first-level column that
 collapses to small icons, and opening Messages shows the second level; and the controls get built.
-Where this section and §4, §7.3, §7.5 or §7.7 disagree, this section wins.
+Where this section and §4, §7.1, §7.3, §7.5, §7.7 or §12 disagree, this section wins. In §7.1 the
+header now reads 我的插件 · n and + Create; in §12 the rail's 248 gives way to the widths in item 1.
 
 1. **Two levels (replaces the single rail of §4).** The first level: the brand with a collapse chevron,
    Messages (with the unread count) · Discover · Markets · Trade, the phone and mail keys, Account at the
    foot. Collapsed, it is a strip of icons; the names stay as titles and for screen readers. The second
    level appears on Messages only: the title "Messages", the new-message +, and the conversation rows of
-   §4.3. Messages returns to the last open conversation. The rows' own collapse chevron is gone. Below
-   860 px the first level is a bar of icons on top and the list a block under it.
+   §4.3. Messages returns to the last open conversation. The rows' own collapse chevron is gone. Widths:
+   the first level 220 px, 68 px collapsed; the second level 300 px. Between 861 and 1180 px the first
+   level folds to its icons by itself. Details never lies over the conversation: the thread and the
+   composer make room for it, and below 1400 px the second level folds away while Details is open. One
+   drawer at a time: opening Details, a plugin, Create, the mailbox, Settings or an Account panel closes
+   whichever was open. Below 860 px the first level is a bar of icons on top and the list a block under it.
 2. **The installed key (replaces the three states of §7.3).** Not installed: the + key. Installed: a ✓
    mark beside a trash key, in every view; the trash key uninstalls at once. There is no "✓ Installed"
    word key and no ask step.
@@ -420,9 +425,11 @@ Where this section and §4, §7.3, §7.5 or §7.7 disagree, this section wins.
    teaches its tools. A typed key or secret never leaves the page; the front end stores nothing of it.
 5. **The controls.** No browser prompt or confirm remains. Editors open in place with ✓ and × (Enter and
    Esc): the draft's limit chips, Change words, Change limit, Top up and Take back (USDC between you and
-   Gravit's wallet), Memory entries. Withdraw, End limit, Stop Gravit, Forget all and Reset demo ask in
-   place and act on the second press. The composer's + picks files that send as chips; the mic listens
-   and fills the composer (scripted here). The phone key calls Gravit: ringing, a live call with a timer,
+   Gravit's wallet; Top up stops at the USDC you hold, Take back at what the wallet holds), Memory
+   entries. Withdraw, End limit, Stop Gravit, Forget all and Reset demo ask in place and act on the
+   second press; a closed conversation offers no Withdraw or Stop, and End limit shows only while a
+   limit exists. The composer's + picks files that send as chips; the mic listens and fills the
+   composer (scripted here). The phone key calls Gravit: ringing, a live call with a timer,
    mute and hang up, then a call card; an accepted incoming call goes live the same way. The mail key
    opens Gravit's own mailbox. Account's Move, Receive (address, QR, copy), Statement (activity, CSV) and
    Connect an account work as drawers.
