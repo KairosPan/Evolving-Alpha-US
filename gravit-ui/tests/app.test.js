@@ -156,18 +156,13 @@ test('watchToast dismisses a toast after a while, and never a newer one', async 
   assert.equal(store.get().discover.toast, null);
 });
 
-test('a key typed into the connector is never written to localStorage', () => {
+test('Create has nothing to type, and what is saved never holds the dialog', () => {
   const box = saving(null);
   const store = makeStore(box, NOW);
   store.dispatch('nav', { screen: 'discover', id: null });
   store.dispatch('openCreate');
-  store.dispatch('setCreateField', { key: 'auth', value: 'API key' });
-  store.dispatch('setCreateField', { key: 'key', value: 'sk-live-123' });
-  store.dispatch('setCreateField', { key: 'clientSecret', value: 'oauth-secret-456' });
-  assert.equal(store.get().discover.create.form.key, 'sk-live-123', 'the page still has it while the dialog is open');
-  const saved = box.getItem('gravit-ui.state');
-  assert.ok(saved && !saved.includes('sk-live-123') && !saved.includes('oauth-secret-456'));
-  assert.equal(JSON.parse(saved).discover.create, null);
+  assert.ok(store.get().discover.create);
+  assert.equal(JSON.parse(box.getItem('gravit-ui.state')).discover.create, null);
 });
 
 test('a saved state boots without the moment-only overlays: banner, call, drawer, connector and toast', () => {

@@ -118,6 +118,7 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .btn-sm, .pill { min-height: 36px; padding: 0 14px; background: var(--surface-2); color: var(--text); }
 .btn-sm.pressed, .pill.pressed { background: var(--primary); color: var(--on-primary); }
 .btn-primary { min-height: 44px; padding: 0 18px; background: var(--primary); color: var(--on-primary); font-size: 15px; font-weight: 600; }
+.btn-primary:disabled { background: var(--surface-2); color: var(--dim); cursor: default; }
 .btn-primary.small { min-height: 40px; padding: 0 16px; font-size: 14px; }
 .btn-danger { min-height: 36px; padding: 0 14px; background: var(--down-fill); color: var(--down); font-weight: 600; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -257,6 +258,7 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .mail-none { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--dim); }
 /* the toast sits at the bottom-centre of the main column (spec §3.3), whatever the two levels' widths */
 .toast { position: sticky; bottom: 28px; align-self: center; margin-top: auto; display: inline-flex; align-items: center; gap: 12px; padding: 8px 8px 8px 18px; border-radius: var(--radius-pill); background: var(--primary); color: var(--on-primary); font-size: 13px; white-space: nowrap; box-shadow: var(--shadow-lift); z-index: 25; }
+button.toast-key { border: 0; font: inherit; font-size: 13px; }
 .toast-key { min-height: 32px; padding: 0 14px; display: inline-flex; align-items: center; border-radius: var(--radius-pill); background: var(--surface); color: var(--text); font-weight: 600; }
 .toast-x { width: 28px; height: 28px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--on-primary); font-size: 14px; }
 
@@ -285,6 +287,7 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 /* installed: a ✓ beside the trash key */
 .pkeys { display: inline-flex; align-items: center; gap: 6px; }
 .pkey-done { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 36px; color: var(--up); }
+.pkey-wait { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; color: var(--dim); }
 .pkey.uninstall { width: 36px; height: 36px; border: 1px solid var(--border); background: var(--surface); color: var(--down); }
 .grid-sec { display: flex; flex-direction: column; gap: 10px; }
 .grid-title { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
@@ -293,7 +296,6 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .plug-id { display: flex; align-items: center; gap: 14px; }
 .plug-name { font-size: 17px; font-weight: 700; }
 .plug-blurb { margin: 0; font-size: 14px; color: var(--dim); }
-.upload-form { display: flex; flex-direction: column; gap: 14px; flex: 1 1 auto; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-size: 12px; font-weight: 600; color: var(--dim); }
 .input, .textarea { width: 100%; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-s); background: var(--surface); font-size: 14px; outline: none; }
@@ -308,29 +310,36 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .btn-danger.small { min-height: 32px; font-size: 13px; }
 .textarea { padding: 10px 12px; resize: vertical; font-family: var(--font-mono); font-size: 12px; }
 .input:focus, .textarea:focus { border-color: var(--rule); }
-.input[aria-invalid="true"] { border-color: var(--down); }
 .field-error { margin-top: -8px; font-size: 12px; color: var(--down); }
 /* Create: the MCP connector, a dialog over a light scrim */
 .modal-scrim { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--scrim); z-index: 48; }
 .modal { width: min(480px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; border-radius: var(--radius-l); background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--shadow); overflow: hidden; }
-.mcp-form { display: flex; flex-direction: column; min-height: 0; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 14px 14px 24px; border-bottom: 1px solid var(--border); }
 .modal-title { font-size: 20px; }
+/* Create: Discover's MCP face — its tools, the line a client takes, the client's calls, the manifest the owner signs */
+.modal.wide { width: min(560px, 100%); }
+.tool-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.snippet { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-s); background: var(--surface-2); }
+.snippet-file { font-size: 12px; color: var(--dim); }
+.snippet-code { margin: 0; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.snippet .btn-sm { align-self: flex-end; }
+.tool-state { display: inline-flex; align-items: center; font-weight: 700; }
+.tool-state.ok { color: var(--up); }
+.tool-state.wait { color: var(--dim); }
+.tool-state.no { color: var(--down); }
+.manifest { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px 6px; border: 1px solid var(--warn-edge); border-radius: var(--radius-m); background: var(--surface); }
+.manifest-top { display: flex; align-items: flex-start; gap: 12px; }
+.manifest-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .modal-body { display: flex; flex-direction: column; gap: 16px; padding: 20px 24px 24px; overflow-y: auto; }
-.mcp-status { min-height: 40px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-pill); background: var(--surface-2); color: var(--dim); font-size: 13px; font-weight: 600; }
 .tool-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-s); }
 .tool-row { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; font-size: 13px; }
 .tool-row + .tool-row { border-top: 1px solid var(--border); }
 .radio-seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--radius-pill); background: var(--surface-2); flex-wrap: wrap; }
+.field > .radio-seg, .modal-body > .status { align-self: flex-start; }
 .radio-item { display: inline-flex; }
 .radio-item input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .radio-item span { display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border-radius: var(--radius-pill); color: var(--dim); font-size: 13px; font-weight: 600; cursor: pointer; }
 .radio-item input:checked + span { background: var(--surface); color: var(--text); font-weight: 700; box-shadow: var(--shadow-card); }
-.picks { display: flex; gap: 8px; flex-wrap: wrap; }
-.picks .radio-item span { border: 1px solid var(--border); background: var(--surface); }
-.picks .radio-item input:checked + span { border-color: var(--rule); box-shadow: none; }
-.icon-pick { display: flex; align-items: center; gap: 12px; }
-.icon-slot { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: var(--radius-s); background: var(--surface-2); color: var(--dim); font-size: 18px; font-weight: 700; }
 
 /* ---- Account ---- */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 16px; align-items: start; }
@@ -369,7 +378,7 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .switch.on .knob { left: 18px; }
 
 /* ---- the demo director (keyboard d) ---- */
-.director { position: fixed; right: 16px; bottom: 88px; display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: var(--radius-m); background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--shadow-lift); z-index: 45; }
+.director { position: fixed; right: 16px; bottom: 88px; display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: var(--radius-m); background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--shadow-lift); z-index: 49; }
 .director-key { min-height: 32px; padding: 0 12px; border: 0; border-radius: var(--radius-pill); background: var(--surface-2); color: var(--text); font-size: 13px; text-align: left; }
 
 /* narrow windows: the first level is a bar of icons on top, the list a block under it, and the page scrolls as one */

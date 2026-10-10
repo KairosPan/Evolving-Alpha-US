@@ -131,11 +131,19 @@ test('the director can show the door\'s refusal and the close', () => {
   assert.ok(done.data.foot);
 });
 
-test('a connected MCP server answers with three tools named after it', async () => {
-  const { toolsFor } = await import('../js/driver.js');
-  assert.deepEqual(toolsFor('Pairs', 'https://x.dev/mcp'), ['pairs.search', 'pairs.get', 'pairs.watch']);
-  assert.deepEqual(toolsFor('', 'https://alpha-feed.example.com/mcp'), ['alphafeed.search', 'alphafeed.get', 'alphafeed.watch']);
-  assert.deepEqual(toolsFor('我的数据', 'https://x.dev'), ['x.search', 'x.get', 'x.watch'], 'a name without latin letters falls back to the host');
+test('the scripted client uploads in turn: Moat score (private), CPI 速读 (public), then the same again with a number', async () => {
+  const drv = await import('../js/driver.js');
+  assert.equal(drv.toolsFor, undefined, 'the round-2 connector script is gone');
+  assert.deepEqual(drv.nextUpload([]), { id: 'moat', name: 'Moat score', kind: 'Data', blurb: '护城河打分，按 ticker 问', icon: null, tools: ['moat.score', 'moat.compare'], writes: ['message'], needs: 'none', visibility: 'private' });
+  const second = drv.nextUpload([{ id: 'moat' }]);
+  assert.deepEqual([second.id, second.name, second.visibility, second.icon], ['cpi', 'CPI 速读', 'public', 'bell']);
+  const third = drv.nextUpload([{ id: 'moat' }, { id: 'cpi' }]);
+  assert.deepEqual([third.id, third.name], ['moat-2', 'Moat score 2']);
+  assert.equal(drv.nextUpload([{ id: 'moat' }]).visibility, 'public');
+  const say = t => replyTo('KO', { installed: [], now: NOW, conv: { kind: 'bot', members: ['gravit', t], teach: t } })[0].msg.text;
+  assert.equal(say('moat'), '「KO」：护城河 8/10 · 品牌、渠道、定价权。');
+  assert.equal(say('moat-2'), '「KO」：护城河 8/10 · 品牌、渠道、定价权。', 'a numbered upload answers like its first');
+  assert.equal(say('cpi'), '记下了。下一次 CPI 一出来，我在这里三句话讲清。');
 });
 
 test('files sent without a task get Gravit reading them', () => {

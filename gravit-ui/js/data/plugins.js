@@ -37,18 +37,18 @@ export const PLUGINS = [
   P('audit', 'Crypto', '合约体检', '买之前看合约：能不能卖、税多少', { by: 'community', logo: { type: 'glyph', icon: 'fileCheck' } }),
   P('backtest', 'Quant', 'Backtest', '一个想法在过去两年跑一遍', { logo: { type: 'glyph', icon: 'rewind' } }),
   P('factor', 'Quant', 'Factor screen', '按因子筛一遍股票池', { by: 'community', logo: { type: 'glyph', icon: 'filter' } }),
-  P('pairs', 'Quant', 'Pairs', '两只相关股的价差回归，配对信号', { by: '@you', visibility: 'private', logo: { type: 'glyph', icon: 'pairs' } }),
+  P('pairs', 'Quant', 'Pairs', '两只相关股的价差回归，配对信号', { by: '@you', visibility: 'private', logo: { type: 'glyph', icon: 'pairs' }, tools: ['pairs.scan', 'pairs.signal'] }),
   P('latency', 'Data', 'Low-latency feed', '毫秒级的报价流，给高频用', { logo: { type: 'glyph', icon: 'bolt' } }),
   P('hft', 'Quant', 'HFT strategies', '几套做市和套利的模板，自己调参', { by: 'community', logo: { type: 'glyph', icon: 'sigma' } }),
 ];
 
 export const SHELVES = [
   { id: 'like', title: 'Like' },
-  { id: 'data', title: 'Data', ids: ['pricefeed', 'news', 'research', 'onchain', 'latency'] },
-  { id: 'monitors', title: 'Monitors', ids: ['telegram', 'xmon', 'whale', 'earnings'] },
-  { id: 'bots', title: 'Bots', ids: ['politician', 'kol', 'buffett', 'serenity'] },
-  { id: 'crypto', title: 'Crypto', ids: ['fraud', 'spread', 'gas', 'audit'] },
-  { id: 'quant', title: 'Quant', ids: ['quantteam', 'backtest', 'factor', 'pairs', 'hft'] },
+  { id: 'data', title: 'Data', kind: 'Data', ids: ['pricefeed', 'news', 'research', 'onchain', 'latency'] },
+  { id: 'monitors', title: 'Monitors', kind: 'Monitors', ids: ['telegram', 'xmon', 'whale', 'earnings'] },
+  { id: 'bots', title: 'Bots', kind: 'Bots', ids: ['politician', 'kol', 'buffett', 'serenity'] },
+  { id: 'crypto', title: 'Crypto', kind: 'Crypto', ids: ['fraud', 'spread', 'gas', 'audit'] },
+  { id: 'quant', title: 'Quant', kind: 'Quant', ids: ['quantteam', 'backtest', 'factor', 'pairs', 'hft'] },
 ];
 
 export function byId(id, extra = []) {
@@ -69,6 +69,29 @@ export function likeFor(memory) {
   return ['buffett', 'research', 'politician', 'quantteam'];
 }
 
-// the icons a connector you create can wear; null = its initial (spec §7.7: initials by default)
-export const ICON_CHOICES = [null, 'book', 'bars', 'link', 'shield', 'wave', 'sigma', 'bolt', 'pairs'];
-export const hostOf = url => { try { return new URL(url).host; } catch { return ''; } };
+// Discover is itself an MCP server (spec §7.7): the page, Gravit and your own agent use the same face
+const SHOP_URL = 'https://discover.stand-in/mcp';
+export const SHOP_MCP = {
+  url: SHOP_URL,
+  tools: ['shop.search', 'shop.get', 'shop.install', 'shop.uninstall', 'shop.publish', 'shop.mine', 'plugin.call'],
+  // the line each client takes to add Discover as a server
+  clients: {
+    'Claude Code': { file: null, code: `claude mcp add --transport http discover ${SHOP_URL}` },
+    Cursor: { file: '~/.cursor/mcp.json', code: JSON.stringify({ mcpServers: { discover: { url: SHOP_URL } } }, null, 2) },
+    Codex: { file: '~/.codex/config.toml', code: `[mcp_servers.discover]\nurl = "${SHOP_URL}"` },
+  },
+};
+
+// what a manifest's writes and needs say in the drawer
+const WRITES = { message: '消息，发进会话', proposal: '提议：在你额度里的直接成交，超出的发一张卡' };
+const NEEDS = { none: '没有。', 'exchange key': '一把交易所 key。', 'telegram session': '你的 Telegram 会话。', 'wallet address': '一个钱包地址。' };
+
+// a manifest that came in through shop.publish, made into your own plugin; the shop stamps the author from the signature
+export function fromManifest(m, visibility, now) {
+  return {
+    id: m.id, kind: m.kind, name: m.name, blurb: m.blurb, by: '@you', visibility, installs: '',
+    logo: m.icon ? { type: 'glyph', icon: m.icon } : { type: 'letter', text: m.name[0].toUpperCase() }, avatar: null,
+    asks: [], writes: m.writes.map(w => WRITES[w] ?? w), never: ['动钱', '付人', '改额度'], needs: NEEDS[m.needs] ?? '没有。',
+    tools: [...m.tools], teach: `你好，我是 ${m.name}。${m.blurb}。我有 ${m.tools.length} 个工具：${m.tools.join('、')}。`, review: null, at: now,
+  };
+}

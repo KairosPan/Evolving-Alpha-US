@@ -8,7 +8,8 @@ import { renderMessagesScreen, renderBanner, renderCall, renderStub, currentConv
 import { renderMailScreen } from './render/mail.js';
 import { renderDiscover } from './render/discover.js';
 import { renderAccount } from './render/account.js';
-import { replyTo, followUp, director, toolsFor } from './driver.js';
+import { replyTo, followUp, director, nextUpload } from './driver.js';
+import { SHOP_MCP } from './data/plugins.js';
 import { fmtDuration } from './time.js';
 
 export class Timers {
@@ -30,6 +31,9 @@ const CONNECT_MS = 1200;
 const LISTEN_MS = 1800;
 const PICKUP_MS = 1500;
 const COPIED_MS = 1500;
+// the scripted client on Discover's MCP face: it connects, then asks shop.publish a moment later
+const CLIENT_CONNECT_MS = 1500;
+const CLIENT_PUBLISH_MS = 1500;
 // what the scripted mic hears, in turn
 const HEARD = ['小仓位买 BTC，$70k 以下', 'Pelosi 最近买了什么', '查一下这个地址是不是骗子', '额度改到每单 $50'];
 const usable = saved => !!saved && saved.v === SEED_VERSION && Array.isArray(saved.conversations);
@@ -107,7 +111,7 @@ export function watchToast(store, timers, ms = TOAST_MS) {
   });
 }
 
-const DIRECTOR = [['早报', 'brief'], ['技术分析', 'ta'], ['突发', 'breaking'], ['来电', 'call'], ['bot 插话', 'bot'], ['拒单', 'refusal'], ['收尾', 'done'], ['空白开始', 'firstRun'], ['重置 demo', 'reset']];
+const DIRECTOR = [['早报', 'brief'], ['技术分析', 'ta'], ['突发', 'breaking'], ['来电', 'call'], ['bot 插话', 'bot'], ['拒单', 'refusal'], ['收尾', 'done'], ['插件上传', 'upload'], ['空白开始', 'firstRun'], ['重置 demo', 'reset']];
 
 // a key that finds "the same control" after a re-render: its id, or every data-* attribute it carries
 function focusKey(el) {
@@ -201,7 +205,7 @@ export function boot(win) {
     let target = find(activeKey);
     if (overlay && overlay !== last.overlay) {
       opener = activeKey;
-      target = overlay === 'call' ? root.querySelector('.call [data-accept="0"]') ?? root.querySelector('.call [data-action="hangUp"]') : overlay === 'modal' ? doc.getElementById('mcp-name') : root.querySelector('.drawer .close-key');
+      target = overlay === 'call' ? root.querySelector('.call [data-accept="0"]') ?? root.querySelector('.call [data-action="hangUp"]') : overlay === 'modal' ? doc.getElementById('mcp-copy') ?? root.querySelector('.modal .close-key') : root.querySelector('.drawer .close-key');
     } else if (!overlay && last.overlay) {
       target = find(last.opener) ?? target;
       opener = null;
@@ -283,6 +287,35 @@ export function boot(win) {
     setTimeout(() => win.URL.revokeObjectURL(href), REVOKE_MS);
   }
 
+  // the scripted client on Discover's MCP face: it connects a moment after its line is used, calls shop.mine, then asks shop.publish
+  function runClient() {
+    const c = store.get().discover.create;
+    if (!c || c.step !== 'wait' || c.started) return;
+    const { run } = c;
+    store.dispatch('startClient', { run });
+    timers.after(CLIENT_CONNECT_MS, () => store.dispatch('clientConnected', { run }));
+    timers.after(CLIENT_CONNECT_MS + CLIENT_PUBLISH_MS, () => store.dispatch('clientPublishes', { run, manifest: nextUpload(store.get().plugins.uploaded) }));
+  }
+
+  // a public upload passes review when its time is up; boot picks up the ones a reload left waiting
+  function scheduleReview(p) {
+    if (!p?.review) return;
+    timers.after(Math.max(0, p.review.until - now()), () => store.dispatch('reviewPassed', { id: p.id, now: now() }));
+  }
+
+  // the director's 插件上传: Discover on its shelves, Create open, the scripted client started without the clipboard
+  function startUpload() {
+    directorOpen = false;
+    const c = store.get().discover.create;
+    if (c && (c.step !== 'wait' || c.started)) { render(); return; }
+    store.dispatch('nav', { screen: 'discover', id: null });
+    go({ screen: 'discover', id: null });
+    if (store.get().discover.query) store.dispatch('setQuery', '');
+    if (store.get().discover.installedOnly) store.dispatch('toggleInstalledOnly');
+    if (!store.get().discover.create) store.dispatch('openCreate');
+    runClient();
+  }
+
   // commit the open editor with what its inputs hold
   function commitEdit() {
     const values = Object.fromEntries([...root.querySelectorAll('.inline-edit [name]')].map(el => [el.name, el.value]));
@@ -361,12 +394,27 @@ export function boot(win) {
     install: el => store.dispatch('install', { id: el.dataset.id, now: now() }),
     uninstall: el => store.dispatch('uninstall', el.dataset.id),
     toggleInstalledOnly: () => store.dispatch('toggleInstalledOnly'),
-    // Create: the MCP connector
+    // Create: Discover's own MCP face; copying a client's line starts the scripted client
     openCreate: () => store.dispatch('openCreate'),
     closeCreate: () => store.dispatch('closeCreate'),
-    cycleCreateIcon: () => store.dispatch('cycleCreateIcon'),
-    backToForm: () => store.dispatch('backToForm'),
-    addMcp: () => store.dispatch('addMcp', { now: now() }),
+    copyMcp: () => {
+      const c = store.get().discover.create;
+      if (!c) return;
+      try { win.navigator?.clipboard?.writeText(SHOP_MCP.clients[c.client].code)?.catch?.(() => {}); } catch { /* the demo has no clipboard to fail loudly */ }
+      store.dispatch('setCreateCopied', true);
+      timers.after(COPIED_MS, () => store.dispatch('setCreateCopied', false));
+      runClient();
+    },
+    rejectUpload: () => store.dispatch('rejectUpload'),
+    // the owner's signature: the shop takes the plugin, and the page shows the shelves it landed on
+    publishUpload: () => {
+      const before = store.get().plugins.uploaded.length;
+      store.dispatch('publishUpload', { now: now() });
+      const s = store.get();
+      if (s.plugins.uploaded.length === before) return;
+      go({ screen: 'discover', id: null });
+      scheduleReview(s.plugins.uploaded.at(-1));
+    },
     dismissToast: () => store.dispatch('dismissToast'),
     // Account
     openSettings: () => store.dispatch('openSettings'),
@@ -399,6 +447,7 @@ export function boot(win) {
       const s = store.get();
       const convId = currentConversation(s)?.id ?? s.conversations[0]?.id;
       if (k === 'reset') return reset();
+      if (k === 'upload') return startUpload();
       if (k === 'firstRun') return restart(firstRun(now()), { screen: 'messages', id: null });
       if (k === 'breaking') return showBreaking(store, timers, director.breaking(now()), now);
       if (k === 'call') return store.dispatch('incomingCall', director.call());
@@ -435,11 +484,6 @@ export function boot(win) {
     } else if (action === 'moveFunds') {
       const f = new win.FormData(form);
       store.dispatch('moveFunds', { from: f.get('from'), to: f.get('to'), asset: f.get('asset'), amount: f.get('amount'), now: now() });
-    } else if (action === 'connectMcp') {
-      // the scripted server answers a moment later with its tools; a closed or restarted connector ignores the answer
-      store.dispatch('connectMcp');
-      const c = store.get().discover.create;
-      if (c?.step === 'connecting') timers.after(CONNECT_MS, () => store.dispatch('mcpConnected', { tools: toolsFor(c.form.name, c.form.url) }));
     } else if (action === 'addMemory') {
       const f = new win.FormData(form);
       form.reset();
@@ -450,12 +494,11 @@ export function boot(win) {
   // typing: the composer keeps its words outside the store; the title and the search go through it
   function typed(el) {
     if (el.id === 'say') composerText = el.value;
-    else if (el.dataset?.action === 'mcpField' && el.type !== 'radio') store.dispatch('setCreateField', { key: el.name, value: el.value });
     else if (el.dataset?.action === 'draftTitle') store.dispatch('setDraftTitle', el.value);
     else if (el.dataset?.action === 'query') store.dispatch('setQuery', el.value);
   }
   root.addEventListener('input', ev => { if (!ev.isComposing && !composing) typed(ev.target); });
-  // radios and checkboxes report on change: the connector's auth, kind and visibility, and its tool checks
+  // radios report on change: Create's client and where an upload goes
   root.addEventListener('change', ev => {
     const el = ev.target;
     if (el.id === 'attach-input') {
@@ -463,8 +506,8 @@ export function boot(win) {
       const files = [...(el.files ?? [])].map(x => ({ name: x.name, size: x.size }));
       el.value = '';
       store.dispatch('addFiles', files);
-    } else if (el.type === 'radio' && el.dataset?.action === 'mcpField') store.dispatch('setCreateField', { key: el.name, value: el.value });
-    else if (el.type === 'checkbox' && el.dataset?.action === 'toggleMcpTool') store.dispatch('toggleMcpTool', Number(el.dataset.id));
+    } else if (el.type === 'radio' && el.dataset?.action === 'mcpClient') store.dispatch('setClient', el.value);
+    else if (el.type === 'radio' && el.dataset?.action === 'uploadVisibility') store.dispatch('setUploadVisibility', el.value);
   });
   root.addEventListener('compositionstart', () => { composing = true; });
   root.addEventListener('compositionend', ev => {
@@ -509,6 +552,7 @@ export function boot(win) {
   if (!win.location.hash) win.history.replaceState(null, '', toHash(store.get().route));
   follow();
   render();
+  for (const p of store.get().plugins.uploaded) scheduleReview(p);
   return Object.assign(store, { timers });
 }
 

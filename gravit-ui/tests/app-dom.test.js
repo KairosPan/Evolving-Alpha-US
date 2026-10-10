@@ -3,6 +3,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { boot } from '../js/app.js';
 import { fakeWindow } from './helpers/fake-dom.js';
+import { seed } from '../js/data/seed.js';
+import { fromManifest } from '../js/data/plugins.js';
+import { nextUpload } from '../js/driver.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const send = (f, el) => { const form = { dataset: { action: 'send' } }; f.fire('root', 'submit', { target: { closest: () => form } }); };
@@ -121,31 +124,6 @@ test('the director opens the first-run state, the refusal and the close', async 
   await f.tick();
   assert.deepEqual(store.get().conversations, []);
   assert.equal(f.win.location.hash, '#/messages');
-  store.timers.clear();
-});
-
-test('Create: type a name and an address, Connect, wait for the tools, untick one, Add; Escape closes the dialog', async () => {
-  const f = fakeWindow({ hash: '#/discover' });
-  const store = boot(f.win);
-  const btn = action => f.element({ tagName: 'BUTTON', dataset: { action } });
-  f.click(btn('openCreate'));
-  assert.equal(store.get().discover.create.step, 'form');
-  const input = (name, value) => f.fire('root', 'input', { target: f.element({ tagName: 'INPUT', type: 'text', name, value, dataset: { action: 'mcpField' } }) });
-  input('name', 'Pairs');
-  input('url', 'https://pairs.example.com/mcp');
-  f.fire('root', 'change', { target: f.element({ tagName: 'INPUT', type: 'radio', name: 'visibility', value: 'public', dataset: { action: 'mcpField' } }) });
-  const form = { dataset: { action: 'connectMcp' } };
-  f.fire('root', 'submit', { target: { closest: () => form } });
-  assert.equal(store.get().discover.create.step, 'connecting');
-  await sleep(1300);
-  assert.deepEqual(store.get().discover.create.tools.map(t => t.name), ['pairs.search', 'pairs.get', 'pairs.watch']);
-  f.fire('root', 'change', { target: f.element({ tagName: 'INPUT', type: 'checkbox', dataset: { action: 'toggleMcpTool', id: '2' } }) });
-  f.click(btn('addMcp'));
-  const p = store.get().plugins.uploaded.at(-1);
-  assert.deepEqual([p.name, p.visibility, p.tools], ['Pairs', 'public', 'pairs.search\npairs.get']);
-  f.click(btn('openCreate'));
-  f.fire('doc', 'keydown', { key: 'Escape' });
-  assert.equal(store.get().discover.create, null);
   store.timers.clear();
 });
 
@@ -327,17 +305,113 @@ test('Account panels: Move submits its form; Connect connects after a moment; Re
   store.timers.clear();
 });
 
-test('focus stays on the radio that was picked, not on the first field sharing its action', () => {
+test('focus stays on the radio that was picked, not on the first radio sharing its action', () => {
   const f = fakeWindow({ ...noDialogs, hash: '#/discover' });
-  f.withSelector('[data-action="mcpField"]', { tagName: 'INPUT', type: 'text', name: 'name', dataset: { action: 'mcpField' } });
-  const radio = f.withSelector('[data-action="mcpField"][name="auth"][value="API key"]', { tagName: 'INPUT', type: 'radio', name: 'auth', value: 'API key', rendered: 'API key', dataset: { action: 'mcpField' } });
+  f.withSelector('[data-action="mcpClient"]', { tagName: 'INPUT', type: 'radio', name: 'client', value: 'Claude Code', rendered: 'Claude Code', dataset: { action: 'mcpClient' } });
+  const radio = f.withSelector('[data-action="mcpClient"][name="client"][value="Codex"]', { tagName: 'INPUT', type: 'radio', name: 'client', value: 'Codex', rendered: 'Codex', dataset: { action: 'mcpClient' } });
   const store = boot(f.win);
   store.dispatch('openCreate');
   radio.focus();
   f.fire('root', 'change', { target: radio });
-  assert.equal(store.get().discover.create.form.auth, 'API key');
+  assert.equal(store.get().discover.create.client, 'Codex');
   assert.equal(f.doc.activeElement, radio);
   store.timers.clear();
+});
+
+// round three: Create is Discover's own MCP face
+
+test('Create: copy the client line, the scripted client connects and asks to publish; Publish lands it; focus never sits on Publish', async () => {
+  const f = fakeWindow({ ...noDialogs, hash: '#/discover' });
+  let copied = null;
+  f.win.navigator = { clipboard: { writeText: t => { copied = t; return Promise.resolve(); } } };
+  const copyKey = f.withId('mcp-copy', { tagName: 'BUTTON', dataset: { action: 'copyMcp' }, presentIf: /id="mcp-copy"/ });
+  const close = f.withSelector('.modal .close-key', { tagName: 'BUTTON', presentIf: /class="modal/ });
+  const store = boot(f.win);
+  const btn = action => f.element({ tagName: 'BUTTON', dataset: { action } });
+  const radio = (name, value, action) => f.fire('root', 'change', { target: f.element({ tagName: 'INPUT', type: 'radio', name, value, dataset: { action } }) });
+  try {
+    f.click(btn('openCreate'));
+    assert.equal(f.doc.activeElement, copyKey, 'the copy key takes focus');
+    radio('client', 'Cursor', 'mcpClient');
+    assert.equal(store.get().discover.create.client, 'Cursor');
+    f.click(copyKey);
+    assert.match(copied, /"mcpServers"/, 'the Cursor line went to the clipboard');
+    assert.deepEqual([store.get().discover.create.copied, store.get().discover.create.started], [true, true]);
+    await sleep(1600);
+    assert.equal(store.get().discover.create.step, 'connected');
+    assert.equal(f.doc.activeElement, close, 'the copy key went away: focus stays in the dialog');
+    await sleep(1600);
+    assert.deepEqual([store.get().discover.create.step, store.get().discover.create.manifest.id], ['sign', 'moat']);
+    assert.notEqual(f.doc.activeElement?.dataset?.action, 'publishUpload', 'a stray Enter cannot sign');
+    radio('visibility', 'public', 'uploadVisibility');
+    assert.equal(store.get().discover.create.visibility, 'public');
+    radio('visibility', 'private', 'uploadVisibility');
+    f.click(btn('publishUpload'));
+    const s = store.get();
+    assert.equal(s.discover.create, null);
+    assert.ok(s.plugins.installed.includes('moat'));
+    assert.equal(f.win.location.hash, '#/discover');
+  } finally {
+    store.timers.clear();
+  }
+});
+
+test('Create: Escape mid-run leaves the late client nothing to move, even in a dialog opened again', async () => {
+  const f = fakeWindow({ ...noDialogs, hash: '#/discover' });
+  f.win.navigator = { clipboard: { writeText: () => Promise.resolve() } };
+  const store = boot(f.win);
+  const btn = action => f.element({ tagName: 'BUTTON', dataset: { action } });
+  try {
+    f.click(btn('openCreate'));
+    f.click(btn('copyMcp'));
+    f.fire('doc', 'keydown', { key: 'Escape' });
+    assert.equal(store.get().discover.create, null);
+    f.click(btn('openCreate'));
+    await sleep(1700);
+    assert.deepEqual([store.get().discover.create.step, store.get().discover.create.started], ['wait', false]);
+    assert.equal(store.get().plugins.uploaded.length, 0);
+  } finally {
+    store.timers.clear();
+  }
+});
+
+test('the director\'s 插件上传 starts an upload from anywhere; a public one passes review and its letter comes', async () => {
+  const f = fakeWindow(noDialogs);
+  const store = boot(f.win);
+  try {
+    f.fire('doc', 'keydown', { key: 'd' });
+    f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'director', key: 'upload' } }));
+    await f.tick();
+    assert.equal(store.get().route.screen, 'discover');
+    assert.equal(store.get().discover.create.started, true);
+    await sleep(3100);
+    assert.equal(store.get().discover.create.step, 'sign');
+    store.dispatch('setUploadVisibility', 'public');
+    f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'publishUpload' } }));
+    assert.ok(store.get().plugins.uploaded[0].review);
+    await sleep(5100);
+    const s = store.get();
+    assert.equal(s.plugins.uploaded[0].review, null);
+    assert.deepEqual([s.mail.items[0].from, s.mail.items[0].subject, s.mail.items[0].read], ['Discover', 'Moat score 过审了', false]);
+    assert.equal(s.discover.toast.text, 'Moat score 过审了 · Public');
+  } finally {
+    store.timers.clear();
+  }
+});
+
+test('a review still pending in a save is finished after boot', async () => {
+  const s = seed(Date.now());
+  const p = { ...fromManifest(nextUpload([]), 'public', Date.now()), review: { until: Date.now() - 1 } };
+  const saved = { ...s, plugins: { ...s.plugins, uploaded: [p], mine: [...s.plugins.mine, p.id] } };
+  const f = fakeWindow({ storage: { getItem: () => JSON.stringify(saved), setItem() {}, removeItem() {} } });
+  const store = boot(f.win);
+  try {
+    await sleep(10);
+    assert.equal(store.get().plugins.uploaded[0].review, null);
+    assert.equal(store.get().mail.items[0].from, 'Discover');
+  } finally {
+    store.timers.clear();
+  }
 });
 
 // round-two review fixes

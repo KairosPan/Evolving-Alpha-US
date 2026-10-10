@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as plugins from '../js/data/plugins.js';
-import { PLUGINS, KINDS, SHELVES, byId, search, likeFor } from '../js/data/plugins.js';
+import { PLUGINS, KINDS, SHELVES, SHOP_MCP, byId, search, likeFor, fromManifest } from '../js/data/plugins.js';
 import { seed, SEED_VERSION } from '../js/data/seed.js';
 import { MIN, DAY } from '../js/time.js';
 
@@ -79,4 +79,24 @@ test('seed: four conversations shaped as the boards, memory, account, counters',
   assert.equal(s.account.holdings.length, 3);
   assert.equal(s.route.id, 'c-1');
   assert.equal(s.draft, null);
+});
+
+test('Discover is itself an MCP server: its address, its seven tools, a line for each client; a manifest becomes your plugin', () => {
+  assert.equal(SHOP_MCP.url, 'https://discover.stand-in/mcp');
+  assert.deepEqual(SHOP_MCP.tools, ['shop.search', 'shop.get', 'shop.install', 'shop.uninstall', 'shop.publish', 'shop.mine', 'plugin.call']);
+  assert.deepEqual(Object.keys(SHOP_MCP.clients), ['Claude Code', 'Cursor', 'Codex']);
+  assert.deepEqual(SHOP_MCP.clients['Claude Code'], { file: null, code: 'claude mcp add --transport http discover https://discover.stand-in/mcp' });
+  assert.equal(SHOP_MCP.clients.Cursor.file, '~/.cursor/mcp.json');
+  assert.deepEqual(JSON.parse(SHOP_MCP.clients.Cursor.code), { mcpServers: { discover: { url: 'https://discover.stand-in/mcp' } } });
+  assert.deepEqual(SHOP_MCP.clients.Codex, { file: '~/.codex/config.toml', code: '[mcp_servers.discover]\nurl = "https://discover.stand-in/mcp"' });
+  for (const sh of SHELVES.filter(x => x.id !== 'like')) assert.ok(KINDS.includes(sh.kind), sh.id);
+  const m = { id: 'moat', name: 'Moat score', kind: 'Data', blurb: '护城河打分，按 ticker 问', icon: null, tools: ['moat.score', 'moat.compare'], writes: ['message'], needs: 'none', visibility: 'private' };
+  const p = fromManifest(m, 'public', 1000);
+  assert.deepEqual([p.id, p.kind, p.by, p.visibility, p.logo, p.needs, p.writes, p.tools, p.review, p.at], ['moat', 'Data', '@you', 'public', { type: 'letter', text: 'M' }, '没有。', ['消息，发进会话'], ['moat.score', 'moat.compare'], null, 1000]);
+  assert.equal(p.teach, '你好，我是 Moat score。护城河打分，按 ticker 问。我有 2 个工具：moat.score、moat.compare。');
+  assert.deepEqual(fromManifest({ ...m, icon: 'bell', needs: 'exchange key' }, 'private', 1000).logo, { type: 'glyph', icon: 'bell' });
+  assert.equal(fromManifest({ ...m, needs: 'exchange key' }, 'private', 1000).needs, '一把交易所 key。');
+  assert.equal(plugins.ICON_CHOICES, undefined, 'the round-2 connector form is gone');
+  assert.equal(plugins.hostOf, undefined);
+  assert.equal(seed(1000).counters.mail, 3);
 });

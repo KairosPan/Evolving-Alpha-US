@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderDiscover, card, keyFor, pluginDrawer, renderCreate, renderToast } from '../js/render/discover.js';
 import { byId } from '../js/data/plugins.js';
+import { nextUpload } from '../js/driver.js';
 import { reducers as R } from '../js/reducers/index.js';
 import { seed } from '../js/data/seed.js';
 
@@ -118,45 +119,87 @@ test('search shows a results grid; a shelf route shows that shelf as a grid with
   assert.match(bots, /class="back-link" href="#\/discover"/);
 });
 
-test('Create pops up the MCP connector: name, server address, auth, icon, kind, visibility, Cancel and Connect', () => {
+const atSign = (s, manifest) => { const r = s.discover.create.run; return R.clientPublishes(R.clientConnected(R.startClient(s, { run: r }), { run: r }), { run: r, manifest }); };
+
+test('Create opens Discover\'s own MCP face: its address, its seven tools, a line per client to copy, a status; nothing to type in', () => {
   const s = R.openCreate(disc());
-  const h = renderDiscover(s);
-  assert.match(h, /<div class="modal-scrim"><div class="modal" role="dialog" aria-label="添加 MCP 连接器">/);
+  assert.match(renderDiscover(s), /<div class="modal-scrim"><div class="modal wide" role="dialog" aria-label="Discover MCP">/);
   const m = renderCreate(s);
-  assert.match(m, /<form class="mcp-form" data-action="connectMcp">/);
-  assert.match(m, /<input id="mcp-name"[^>]*name="name"/);
-  const url = m.match(/<input id="mcp-url"[^>]*>/)?.[0] ?? '';
-  for (const a of ['type="url"', 'name="url"', 'placeholder="https://example.com/mcp"']) assert.ok(url.includes(a), a);
-  assert.equal(count(m, /type="radio" name="auth"/g), 3);
-  assert.match(m, /type="radio" name="auth" value="无" data-action="mcpField" checked/);
-  assert.doesNotMatch(m, /id="mcp-key"/, 'no key field until API key is picked');
-  assert.match(m, /class="icon-slot" id="mcp-icon">P</);
-  assert.match(m, /data-action="cycleCreateIcon">换一张图</);
-  assert.equal(count(m, /type="radio" name="kind"/g), 5);
-  assert.match(m, /type="radio" name="visibility" value="private" data-action="mcpField" checked/);
-  assert.match(m, /data-action="closeCreate">取消</);
-  assert.match(m, /type="submit" class="btn-primary">连接</);
-  const key = renderCreate(R.setCreateField(s, { key: 'auth', value: 'API key' }));
-  assert.match(key, /<input id="mcp-key"[^>]*type="password"/);
-  const oauth = renderCreate(R.setCreateField(s, { key: 'auth', value: 'OAuth' }));
-  assert.match(oauth, /id="mcp-client-id"/);
-  assert.match(oauth, /id="mcp-client-secret"/);
+  assert.match(m, /<h2 class="modal-title">Discover MCP<\/h2>/);
+  assert.match(m, /<div class="field"><span class="field-label">地址<\/span><span class="mono">https:\/\/discover\.stand-in\/mcp<\/span><\/div>/);
+  assert.equal(count(m, /class="chip grey mono"/g), 7);
+  for (const t of ['shop.search', 'shop.get', 'shop.install', 'shop.uninstall', 'shop.publish', 'shop.mine', 'plugin.call']) assert.ok(m.includes(`class="chip grey mono">${t}<`), t);
+  assert.equal(count(m, /type="radio" name="client" value="[^"]+" data-action="mcpClient"/g), 3);
+  assert.match(m, /type="radio" name="client" value="Claude Code" data-action="mcpClient" checked/);
+  assert.match(m, /<pre class="snippet-code mono">claude mcp add --transport http discover https:\/\/discover\.stand-in\/mcp<\/pre>/);
+  assert.doesNotMatch(m, /snippet-file/);
+  assert.match(m, /<button type="button" id="mcp-copy" class="btn-sm" data-action="copyMcp">复制<\/button>/);
+  assert.match(m, /<span class="status grey"><span class="status-dot"><\/span>等待连接<\/span>/);
+  assert.doesNotMatch(m, /type="(?:text|url|password)"|<textarea|<form/, 'nothing to type, so no secret can be typed');
+  assert.doesNotMatch(m, /添加 MCP 连接器|认证|API key|OAuth|换一张图|服务器地址/);
+  const cursor = renderCreate(R.setClient(s, 'Cursor'));
+  assert.match(cursor, /<div class="snippet-file mono">~\/\.cursor\/mcp\.json<\/div><pre class="snippet-code mono">\{[\s\S]*?&quot;mcpServers&quot;/);
+  assert.match(cursor, /value="Cursor" data-action="mcpClient" checked/);
+  assert.match(renderCreate(R.setClient(s, 'Codex')), /<div class="snippet-file mono">~\/\.codex\/config\.toml<\/div><pre class="snippet-code mono">\[mcp_servers\.discover\]\nurl = &quot;https:\/\/discover\.stand-in\/mcp&quot;<\/pre>/);
+  assert.match(renderCreate(R.setCreateCopied(s, true)), /data-action="copyMcp">已复制<\/button>/);
 });
 
-test('the connector shows a bad address, then connecting, then the tools it found with a check each', () => {
-  let s = R.openCreate(disc());
-  s = R.connectMcp(R.setCreateField(s, { key: 'url', value: 'pairs.example.com' }));
-  const bad = renderCreate(s);
-  assert.match(bad, /id="mcp-url"[^>]*aria-invalid="true"/);
-  assert.match(bad, /class="field-error">地址要以 https:\/\/ 开头</);
-  s = R.connectMcp(R.setCreateField(s, { key: 'url', value: 'https://pairs.example.com/mcp' }));
-  assert.match(renderCreate(s), /class="mcp-status">正在连接 pairs.example.com…</);
-  s = R.mcpConnected(s, { tools: ['pairs.search', 'pairs.get', 'pairs.watch'] });
-  const found = renderCreate(s);
-  assert.match(found, /class="modal-title">发现 3 个工具</);
-  assert.equal(count(found, /type="checkbox"[^>]*data-action="toggleMcpTool"/g), 3);
-  assert.match(found, /data-action="addMcp">添加</);
-  assert.match(found, /data-action="backToForm">返回</);
+test('the client connects and calls shop.mine, then asks shop.publish: the owner sees the manifest and signs, or refuses', () => {
+  const s0 = R.openCreate(disc());
+  const r = s0.discover.create.run;
+  const connected = R.clientConnected(R.startClient(s0, { run: r }), { run: r });
+  const c = renderCreate(connected);
+  assert.match(c, /<span class="status up"><span class="status-dot"><\/span>Claude Code 已连接<\/span>/);
+  assert.doesNotMatch(c, /name="client"|mcp-copy/, 'the line to copy has done its job');
+  assert.match(c, /<div class="tool-row"><span class="mono">shop\.mine\(\)<\/span><span class="spacer"><\/span><span class="tool-state ok">/);
+  const sign = R.clientPublishes(connected, { run: r, manifest: nextUpload([]) });
+  const m = renderCreate(sign);
+  assert.match(m, /<span class="mono">shop\.publish\(moat, private\)<\/span><span class="spacer"><\/span><span class="tool-state wait">…<\/span>/);
+  assert.match(m, /<div class="manifest">[\s\S]*?class="pcard-name">Moat score<[\s\S]*?class="pcard-blurb">护城河打分，按 ticker 问<[\s\S]*?class="pcard-kind">DATA</);
+  assert.match(m, /<span class="kv-k">工具<\/span><span class="kv-v"><span class="mono">moat\.score · moat\.compare<\/span>/);
+  assert.match(m, /<span class="kv-k">要你什么<\/span><span class="kv-v">没有。/);
+  assert.match(m, /type="radio" name="visibility" value="private" data-action="uploadVisibility" checked><span>只给我自己 · Private<\/span>/);
+  assert.match(m, /value="public" data-action="uploadVisibility"><span>放进 Public shop<\/span>/);
+  assert.match(m, /<span class="kv-k">What you sign<\/span><span class="kv-v"><b>publish moat · private<\/b>/);
+  assert.match(m, /<span class="kv-k">For<\/span><span class="kv-v">Gravit · 0xec4c…16c1/);
+  assert.match(m, /<span class="kv-k">May<\/span><span class="kv-v">answer when asked · write into the conversation/);
+  assert.match(m, /<span class="kv-k">Until<\/span><span class="kv-v">you uninstall/);
+  assert.match(m, /data-action="rejectUpload">拒绝<\/button><button type="button" class="btn-primary" data-action="publishUpload">Publish<\/button>/);
+  const pub = renderCreate(R.setUploadVisibility(sign, 'public'));
+  assert.match(pub, /shop\.publish\(moat, public\)/);
+  assert.match(pub, /<b>publish moat · public<\/b>/);
+  assert.match(pub, /<span class="kv-k">For<\/span><span class="kv-v">Public shop/);
+  assert.doesNotMatch(pub, /Until/);
+  const no = renderCreate(R.rejectUpload(sign));
+  assert.match(no, /shop\.publish\(moat, private\)<\/span><span class="spacer"><\/span><span class="tool-state no">/);
+  assert.doesNotMatch(no, /publishUpload|manifest/);
+});
+
+test('a private upload lands first on its shelf, installed, with Open in Messages; a public one waits for review behind a clock key', () => {
+  let s = R.publishUpload(atSign(R.openCreate(disc()), nextUpload([])), { now: NOW });
+  const h = renderDiscover(s);
+  const data = h.slice(h.indexOf('shelf-title">Data'), h.indexOf('shelf-title">Monitors'));
+  assert.match(data, /<div class="shelf-row"><div class="pcard" data-action="openPlugin" data-id="moat"/, 'first on the Data shelf');
+  assert.match(data, /data-id="moat"[\s\S]*?Open in Messages ›[\s\S]*?class="pkey uninstall" data-action="uninstall" data-id="moat"/);
+  assert.match(h, /class="toast" role="status">Moat score 已上传 · Private<a class="toast-key" href="#\/messages\/c-5">Open<\/a>/);
+  const moat = byId('moat', s.plugins.uploaded);
+  assert.match(pluginDrawer(moat, s), /class="dim">Data · Private</);
+  assert.match(pluginDrawer(moat, s), /<div class="dsec-label">工具<\/div><div class="dsec-line"><span class="mono">moat\.score<\/span><\/div>/);
+  assert.match(pluginDrawer(byId('pairs'), s), /class="dim">Quant · Private</, 'your own plugin says where it is, not who made it');
+  assert.match(renderDiscover(R.nav(s, { screen: 'discover', id: 'data' })), /<div class="grid"><div class="pcard grid" data-action="openPlugin" data-id="moat"/, 'and first in See all');
+  s = R.publishUpload(R.setUploadVisibility(atSign(R.openCreate(s), nextUpload(s.plugins.uploaded)), 'public'), { now: NOW });
+  const cpi = byId('cpi', s.plugins.uploaded);
+  assert.match(keyFor(cpi, s), /^<span class="pkey-wait" role="img" aria-label="审核中">/);
+  const d = pluginDrawer(cpi, s);
+  assert.match(d, /class="dim">Data · 审核中</);
+  assert.match(d, /<button type="button" class="btn-primary" disabled>审核中<\/button>/);
+  assert.doesNotMatch(d, /你签的是/);
+  assert.match(renderDiscover(s), /class="toast" role="status">CPI 速读 已上传 · 审核中<button type="button" class="toast-x"/);
+  const passed = R.reviewPassed(s, { id: 'cpi', now: NOW });
+  assert.match(keyFor(byId('cpi', passed.plugins.uploaded), passed), /class="pkey install" data-action="install" data-id="cpi"/);
+  assert.match(pluginDrawer(byId('cpi', passed.plugins.uploaded), passed), /class="dim">Data · Public</);
+  assert.match(renderToast(passed.discover.toast), /<button type="button" class="toast-key" data-action="openPlugin" data-id="cpi">Open<\/button>/);
+  for (const st of [s, passed]) assert.doesNotMatch(renderDiscover(R.toggleInstalledOnly(st)) + renderDiscover(st), /Free|by @|by Gravit|by community|刚装好/);
 });
 
 test('renderToast', () => {

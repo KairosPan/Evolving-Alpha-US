@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { reducers as R } from '../js/reducers/index.js';
 import { seed } from '../js/data/seed.js';
 import { MIN } from '../js/time.js';
+import { REVIEW_MS } from '../js/reducers/discover.js';
+import { nextUpload } from '../js/driver.js';
 
 const NOW = new Date(2026, 9, 9, 14, 7).getTime();
 const fresh = () => seed(NOW);
@@ -184,35 +186,63 @@ test('a call leaves a call card; dismissing a banner leaves the breaking message
   assert.equal(R.dismissBanner(d, { now: NOW }), d);
 });
 
-test('the MCP connector: a bad address is refused; a good one connects, lists its tools, and adding makes your own installed plugin', () => {
-  let s = R.openCreate(fresh());
-  assert.equal(s.discover.create.step, 'form');
-  assert.equal(R.connectMcp(s).discover.create.error, '地址要以 https:// 开头', 'an empty address');
-  s = R.setCreateField(s, { key: 'url', value: 'ftp://pairs.example.com' });
-  assert.equal(R.connectMcp(s).discover.create.step, 'form');
-  s = R.setCreateField(s, { key: 'url', value: 'https://pairs.example.com/mcp' });
-  assert.equal(s.discover.create.error, null, 'typing clears the error');
-  s = R.connectMcp(s);
-  assert.equal(s.discover.create.step, 'connecting');
-  assert.equal(R.mcpConnected(R.openCreate(fresh()), { tools: ['x'] }).discover.create.step, 'form', 'a late answer for a form not connecting changes nothing');
-  s = R.mcpConnected(s, { tools: ['pairs.search', 'pairs.get', 'pairs.watch'] });
-  assert.deepEqual(s.discover.create.tools.map(t => [t.name, t.on]), [['pairs.search', true], ['pairs.get', true], ['pairs.watch', true]]);
-  s = R.toggleMcpTool(s, 2);
-  assert.equal(s.discover.create.tools[2].on, false);
-  assert.equal(R.backToForm(s).discover.create.step, 'form');
-  s = R.cycleCreateIcon(s);
-  const done = R.addMcp(s, { now: NOW });
-  assert.equal(done.discover.create, null);
-  const p = done.plugins.uploaded[0];
-  assert.deepEqual([p.id, p.name, p.by, p.visibility, p.url], ['p-1', 'Pairs', '@you', 'private', 'https://pairs.example.com/mcp'], 'the name falls back to the host');
-  assert.equal(p.tools, 'pairs.search\npairs.get');
-  assert.equal(p.logo.type, 'glyph', 'the icon was changed once');
-  assert.ok(done.plugins.mine.includes('p-1') && done.plugins.installed.includes('p-1'));
-  assert.equal(done.conversations[0].teach, 'p-1');
-  assert.match(done.discover.toast.text, /^Pairs 已添加 · Private/);
-  const pub = R.addMcp(R.mcpConnected(R.connectMcp(R.setCreateField(R.setCreateField(R.setCreateField(R.openCreate(fresh()), { key: 'url', value: 'https://x.dev/mcp' }), { key: 'name', value: 'Zed' }), { key: 'visibility', value: 'public' })), { tools: ['zed.run'] }), { now: NOW });
-  assert.match(pub.discover.toast.text, /^Zed 已添加 · Public · 等过审/);
-  assert.equal(R.closeCreate(R.openCreate(fresh())).discover.create, null);
+// the scripted client against Discover's MCP face: start, connect, ask to publish
+const atSign = (s, manifest) => { const r = s.discover.create.run; return R.clientPublishes(R.clientConnected(R.startClient(s, { run: r }), { run: r }), { run: r, manifest }); };
+
+test('Create runs a scripted client against Discover\'s MCP face: every step checks its run and the step it expects', () => {
+  let s = R.openCreate(R.openPlugin(fresh(), 'news'));
+  assert.equal(s.discover.drawer, null, 'one dialog at a time');
+  assert.deepEqual(s.discover.create, { run: 'run-1', step: 'wait', client: 'Claude Code', started: false, copied: false, manifest: null, visibility: 'private' });
+  assert.equal(R.setClient(s, 'Cursor').discover.create.client, 'Cursor');
+  assert.equal(R.setClient(s, 'Vim'), s, 'an unknown client is refused');
+  assert.equal(R.clientConnected(s, { run: 'run-1' }), s, 'nothing connects before the line is used');
+  s = R.startClient(s, { run: 'run-1' });
+  assert.equal(s.discover.create.started, true);
+  assert.equal(R.startClient(s, { run: 'run-1' }), s);
+  assert.equal(R.setClient(s, 'Codex'), s, 'the client is fixed once it started');
+  assert.equal(R.clientConnected(s, { run: 'run-9' }), s, 'a timer from another run changes nothing');
+  s = R.clientConnected(s, { run: 'run-1' });
+  assert.equal(s.discover.create.step, 'connected');
+  assert.equal(R.setUploadVisibility(s, 'public'), s, 'nothing to place before the request');
+  s = R.clientPublishes(s, { run: 'run-1', manifest: { ...nextUpload([]), visibility: 'public' } });
+  assert.deepEqual([s.discover.create.step, s.discover.create.visibility, s.discover.create.manifest.id], ['sign', 'public', 'moat']);
+  assert.equal(R.setUploadVisibility(s, 'everyone'), s);
+  assert.equal(R.setUploadVisibility(s, 'private').discover.create.visibility, 'private');
+  assert.deepEqual([R.setCreateCopied(s, true).discover.create.copied, R.setCreateCopied(R.closeCreate(s), true).discover.create], [true, null]);
+  const no = R.rejectUpload(s);
+  assert.equal(no.discover.create.step, 'refused');
+  assert.equal(R.publishUpload(no, { now: NOW }), no, 'a refused request cannot be published');
+  assert.equal(R.clientConnected(R.closeCreate(s), { run: 'run-1' }).discover.create, null, 'a closed dialog ignores late timers');
+  const again = R.openCreate(R.closeCreate(s));
+  assert.equal(again.discover.create.run, 'run-2');
+  assert.equal(R.clientConnected(R.startClient(again, { run: 'run-2' }), { run: 'run-1' }).discover.create.step, 'wait', 'the old run cannot move the new one');
+});
+
+test('publishing: a private plugin is installed at once with its teaching conversation; a public one waits for review, then a letter comes', () => {
+  let s = R.toggleInstalledOnly(R.setQuery(R.nav(fresh(), { screen: 'discover', id: null }), 'bot'));
+  s = R.publishUpload(atSign(R.openCreate(s), nextUpload([])), { now: NOW });
+  const p = s.plugins.uploaded.at(-1);
+  assert.deepEqual([p.id, p.name, p.kind, p.by, p.visibility, p.review], ['moat', 'Moat score', 'Data', '@you', 'private', null]);
+  assert.deepEqual(p.tools, ['moat.score', 'moat.compare']);
+  assert.ok(s.plugins.mine.includes('moat') && s.plugins.installed.includes('moat'));
+  assert.deepEqual([s.conversations[0].teach, s.conversations[0].title, s.conversations[0].unread], ['moat', 'Moat score：怎么用我', true]);
+  assert.deepEqual([s.discover.create, s.discover.query, s.discover.installedOnly], [null, '', false], 'the shop is back on its shelves');
+  assert.deepEqual(s.discover.toast, { text: 'Moat score 已上传 · Private', action: { label: 'Open', route: { screen: 'messages', id: s.conversations[0].id } } });
+  s = R.publishUpload(R.setUploadVisibility(atSign(R.openCreate(s), nextUpload(s.plugins.uploaded)), 'public'), { now: NOW });
+  const q = s.plugins.uploaded.at(-1);
+  assert.deepEqual([q.id, q.visibility, q.review], ['cpi', 'public', { until: NOW + REVIEW_MS }]);
+  assert.equal(s.plugins.installed.includes('cpi'), false, 'the owner signed publish, not install');
+  assert.equal(R.install(s, { id: 'cpi', now: NOW }), s, 'no install while it is reviewed');
+  assert.deepEqual(s.discover.toast, { text: 'CPI 速读 已上传 · 审核中', action: null });
+  const passed = R.reviewPassed(s, { id: 'cpi', now: NOW + REVIEW_MS });
+  assert.equal(passed.plugins.uploaded.at(-1).review, null);
+  assert.deepEqual(passed.mail.items[0], { id: 'mail-4', from: 'Discover', subject: 'CPI 速读 过审了', at: NOW + REVIEW_MS, read: false, body: '已上架 Data · Public。sandbox 跑过；不会动钱、付人、改额度。' });
+  assert.deepEqual(passed.discover.toast, { text: 'CPI 速读 过审了 · Public', action: { label: 'Open', plugin: 'cpi' } });
+  assert.equal(R.reviewPassed(passed, { id: 'cpi', now: NOW }), passed, 'it passes once');
+  const away = R.reviewPassed(R.nav(s, { screen: 'messages', id: 'c-1' }), { id: 'cpi', now: NOW });
+  assert.equal(away.discover.toast, null, 'off Discover the letter carries the news');
+  assert.equal(away.mail.items[0].id, 'mail-4');
+  assert.ok(R.install(passed, { id: 'cpi', now: NOW }).plugins.installed.includes('cpi'));
 });
 
 test('append fills order and ledger placeholders from the counters', () => {

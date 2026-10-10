@@ -1,16 +1,17 @@
-// gravit-ui/js/reducers/discover.js — the store: search, My plugins, the drawer, install/uninstall, the MCP connector
+// gravit-ui/js/reducers/discover.js — the store: search, My plugins, the drawer, install/uninstall, and Create: Discover's own MCP face
 import { nextId } from '../ids.js';
 import { DAY } from '../time.js';
-import { byId, ICON_CHOICES, hostOf } from '../data/plugins.js';
+import { byId, SHOP_MCP, fromManifest } from '../data/plugins.js';
 import { stampMessage, closeOverlays } from './messages.js';
 
 const disc = (s, patch) => ({ ...s, discover: { ...s.discover, ...patch } });
 
-// the MCP connector Create opens (a remote MCP server becomes your own plugin)
-const EMPTY_FORM = { name: '', url: '', auth: '无', key: '', clientId: '', clientSecret: '', kind: 'Quant', visibility: 'private', icon: 0 };
-const URL_OK = /^https?:\/\/[^\s/?#]+\.[^\s/?#]+(?:[/?#]\S*)?$/i;
-const nameFromHost = host => { const w = host.split('.')[0] ?? ''; return w ? w[0].toUpperCase() + w.slice(1) : 'Connector'; };
-const withCreate = (s, patch) => (s.discover.create ? disc(s, { create: { ...s.discover.create, ...patch } }) : s);
+// a public upload is reviewed this long (run in a sandbox, its permissions and author read) before the shop lists it
+export const REVIEW_MS = 5000;
+
+// Create's dialog moves only on its own run and only from the step it expects, so a closed or reopened dialog ignores late timers
+const inRun = (s, run, step) => s.discover.create?.run === run && s.discover.create.step === step;
+const withCreate = (s, patch) => disc(s, { create: { ...s.discover.create, ...patch } });
 
 export const reducers = {
   setQuery: (s, query) => disc(s, { query: query ?? '' }),
@@ -19,59 +20,54 @@ export const reducers = {
   closeDrawer: s => disc(s, { drawer: null }),
   dismissToast: s => (s.discover.toast ? disc(s, { toast: null }) : s),
 
-  openCreate: s => disc(closeOverlays(s), { create: { step: 'form', form: { ...EMPTY_FORM }, tools: [], error: null } }),
+  // Create: Discover's MCP face, waiting for a client to connect
+  openCreate(s) {
+    const { id, counters } = nextId(s.counters, 'run');
+    return disc({ ...closeOverlays(s), counters }, { create: { run: id, step: 'wait', client: 'Claude Code', started: false, copied: false, manifest: null, visibility: 'private' } });
+  },
   closeCreate: s => (s.discover.create ? disc(s, { create: null }) : s),
-  setCreateField(s, { key, value }) {
+  // which client's line to show; fixed once the scripted client started
+  setClient(s, name) {
     const c = s.discover.create;
-    if (!c || !(key in EMPTY_FORM)) return s;
-    return withCreate(s, { form: { ...c.form, [key]: value }, error: key === 'url' ? null : c.error });
+    return c && c.step === 'wait' && !c.started && name in SHOP_MCP.clients && name !== c.client ? withCreate(s, { client: name }) : s;
   },
-  cycleCreateIcon: s => (s.discover.create ? withCreate(s, { form: { ...s.discover.create.form, icon: (s.discover.create.form.icon + 1) % ICON_CHOICES.length } }) : s),
-  connectMcp(s) {
+  setCreateCopied: (s, on) => (s.discover.create ? withCreate(s, { copied: !!on }) : s),
+  // the scripted client (app.js): started by the copy key or the director, then it connects, calls shop.mine and asks shop.publish
+  startClient: (s, { run }) => (inRun(s, run, 'wait') && !s.discover.create.started ? withCreate(s, { started: true }) : s),
+  clientConnected: (s, { run }) => (inRun(s, run, 'wait') && s.discover.create.started ? withCreate(s, { step: 'connected' }) : s),
+  clientPublishes: (s, { run, manifest }) => (inRun(s, run, 'connected') ? withCreate(s, { step: 'sign', manifest, visibility: manifest.visibility === 'public' ? 'public' : 'private' }) : s),
+  setUploadVisibility(s, v) {
     const c = s.discover.create;
-    if (!c || c.step !== 'form') return s;
-    if (!URL_OK.test(c.form.url.trim())) return withCreate(s, { error: '地址要以 https:// 开头' });
-    return withCreate(s, { step: 'connecting', error: null });
+    return c?.step === 'sign' && (v === 'private' || v === 'public') && v !== c.visibility ? withCreate(s, { visibility: v }) : s;
   },
-  // the scripted server answered with its tool list (app.js schedules it a moment after connectMcp)
-  mcpConnected(s, { tools }) {
-    const c = s.discover.create;
-    if (!c || c.step !== 'connecting') return s;
-    return withCreate(s, { step: 'tools', tools: tools.map(name => ({ name, on: true })) });
-  },
-  backToForm: s => withCreate(s, { step: 'form' }),
-  toggleMcpTool(s, i) {
-    const c = s.discover.create;
-    if (!c || !c.tools[i]) return s;
-    return withCreate(s, { tools: c.tools.map((t, k) => (k === i ? { ...t, on: !t.on } : t)) });
-  },
-  // the connected server becomes your own plugin: installed, with a conversation that teaches its tools
-  addMcp(state, { now }) {
+  rejectUpload: s => (s.discover.create?.step === 'sign' ? withCreate(s, { step: 'refused' }) : s),
+  // the owner's one signature for shop.publish: a private plugin is published and installed; a public one goes to review first
+  publishUpload(state, { now }) {
     const c = state.discover.create;
-    if (!c || c.step !== 'tools') return state;
-    const f = c.form;
-    const url = f.url.trim();
-    const host = hostOf(url);
-    const name = f.name.trim() || nameFromHost(host);
-    const tools = c.tools.filter(t => t.on).map(t => t.name);
-    const { id, counters } = nextId(state.counters, 'plugin');
-    const glyph = ICON_CHOICES[f.icon];
-    const p = {
-      id, kind: f.kind, name, blurb: host, by: '@you', visibility: f.visibility === 'public' ? 'public' : 'private', installs: '', url,
-      logo: glyph ? { type: 'glyph', icon: glyph } : { type: 'letter', text: name[0].toUpperCase() }, avatar: null,
-      asks: [], writes: tools.map(t => `${t} 的结果`), never: ['动钱', '付人', '改额度'],
-      needs: f.auth === 'API key' ? '一把 API key。' : f.auth === 'OAuth' ? 'OAuth 授权。' : '没有。',
-      tools: tools.join('\n'), teach: `你好，这是你接上的 ${name}。我有 ${tools.length} 个工具：${tools.join('、') || '（没选）'}。`, at: now,
+    if (!c || c.step !== 'sign') return state;
+    const p = { ...fromManifest(c.manifest, c.visibility, now), review: c.visibility === 'public' ? { until: now + REVIEW_MS } : null };
+    let s = disc({ ...state, plugins: { ...state.plugins, uploaded: [...state.plugins.uploaded, p], mine: [...state.plugins.mine, p.id] } }, { create: null, query: '', installedOnly: false });
+    if (p.review) return disc(s, { toast: { text: `${p.name} 已上传 · 审核中`, action: null } });
+    s = reducers.install(s, { id: p.id, now });
+    return disc(s, { toast: { text: `${p.name} 已上传 · Private`, action: { label: 'Open', route: { screen: 'messages', id: s.conversations[0].id } } } });
+  },
+  // the review passed: the shop lists it, and Discover writes to Gravit's mailbox
+  reviewPassed(state, { id, now }) {
+    const p = state.plugins.uploaded.find(x => x.id === id);
+    if (!p?.review) return state;
+    const { id: mailId, counters } = nextId(state.counters, 'mail');
+    const letter = { id: mailId, from: 'Discover', subject: `${p.name} 过审了`, at: now, read: false, body: `已上架 ${p.kind} · Public。sandbox 跑过；不会动钱、付人、改额度。` };
+    const s = {
+      ...state, counters, mail: { ...state.mail, items: [letter, ...state.mail.items] },
+      plugins: { ...state.plugins, uploaded: state.plugins.uploaded.map(x => (x.id === id ? { ...x, review: null } : x)) },
     };
-    let s = { ...state, counters, plugins: { ...state.plugins, uploaded: [...state.plugins.uploaded, p], mine: [...state.plugins.mine, id] } };
-    s = reducers.install(s, { id, now });
-    const convId = s.conversations[0].id;
-    return disc(s, { create: null, toast: { text: `${name} 已添加 · ${p.visibility === 'private' ? 'Private' : 'Public · 等过审'}`, action: { label: 'Open', route: { screen: 'messages', id: convId } } } });
+    // a toast only where it can be seen; elsewhere the letter carries the news
+    return s.route.screen === 'discover' ? disc(s, { toast: { text: `${p.name} 过审了 · Public`, action: { label: 'Open', plugin: id } } }) : s;
   },
 
   install(state, { id, now }) {
     const p = byId(id, state.plugins.uploaded);
-    if (!p || state.plugins.installed.includes(id)) return state;
+    if (!p || p.review || state.plugins.installed.includes(id)) return state;
     const c1 = nextId(state.counters, 'conv');
     const c2 = nextId(c1.counters, 'intent');
     let s = { ...state, counters: c2.counters, plugins: { ...state.plugins, installed: [...state.plugins.installed, id] } };

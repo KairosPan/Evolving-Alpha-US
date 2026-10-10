@@ -2,6 +2,7 @@
 // It does not parse HTML. Elements are registered by id or by selector and persist across renders; each
 // innerHTML write behaves like the browser replacing the nodes: scroll positions go to 0, typed values go
 // back to what the markup says, and focus falls to <body>. That is what the app has to repair after a render.
+// An element registered with presentIf (a RegExp) is found only while the last render's markup matches it.
 
 export function fakeWindow({ hash = '#/messages/c-1', storage = null, prompt = () => null, confirm = () => true } = {}) {
   const byId = new Map();
@@ -27,6 +28,8 @@ export function fakeWindow({ hash = '#/messages/c-1', storage = null, prompt = (
     return el;
   }
 
+  const present = el => !el.presentIf || el.presentIf.test(html);
+
   const root = {
     id: 'app',
     get innerHTML() { return html; },
@@ -47,14 +50,14 @@ export function fakeWindow({ hash = '#/messages/c-1', storage = null, prompt = (
       const skip = [...sel.matchAll(/:not\(\[type=(\w+)\]\)/g)].map(m => m[1]);
       return [...byId.values()].filter(e => (e.tagName === 'INPUT' && !skip.includes(e.type)) || e.tagName === 'TEXTAREA' || (e.tagName === 'SELECT' && sel.includes('select[id]')));
     },
-    querySelector(sel) { return (bySelector.get(sel) ?? [])[0] ?? null; },
+    querySelector(sel) { return (bySelector.get(sel) ?? []).find(present) ?? null; },
     addEventListener(type, fn) { (listeners.root[type] ??= []).push(fn); },
   };
 
   const doc = {
     activeElement: body,
     documentElement: { dataset: {} },
-    getElementById(id) { return id === 'app' ? root : byId.get(id) ?? null; },
+    getElementById(id) { return id === 'app' ? root : [byId.get(id)].find(el => el && present(el)) ?? null; },
     addEventListener(type, fn) { (listeners.doc[type] ??= []).push(fn); },
     createElement() { return element({ tagName: 'A' }); },
   };

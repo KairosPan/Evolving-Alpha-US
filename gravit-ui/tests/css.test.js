@@ -10,10 +10,14 @@ import { renderAccount } from '../js/render/account.js';
 import { director } from '../js/driver.js';
 import { reducers as R } from '../js/reducers/index.js';
 import { seed } from '../js/data/seed.js';
+import { nextUpload } from '../js/driver.js';
 
 const NOW = new Date(2026, 9, 9, 14, 7).getTime();
 
 const D = { screen: 'discover', id: null };
+const run = st => st.discover.create.run;
+const conn = st => R.clientConnected(R.startClient(st, { run: run(st) }), { run: run(st) });
+const atSign = st => R.clientPublishes(conn(st), { run: run(st), manifest: nextUpload(st.plugins.uploaded) });
 
 function everyState() {
   const s = seed(NOW);
@@ -21,7 +25,8 @@ function everyState() {
   const withMore = ['breaking', 'call'].reduce((st, k) => R.append(st, { convId: 'c-1', msg: { from: 'gravit', kind: k, text: 'x', data: k === 'breaking' ? director.breaking(NOW) : { about: 'x' }, answer: k === 'call' ? 'missed' : undefined }, at: NOW }), withEvents);
   return [
     withMore, R.toggleDetails(s), R.nav(s, { screen: 'messages', id: 'c-4' }), R.startDraft(s, { now: NOW }), R.toggleDraftGroup(R.startDraft(s, { now: NOW })), { ...s, conversations: [], route: { screen: 'messages', id: null } },
-    R.nav(s, { screen: 'discover', id: null }), R.openPlugin(R.nav(s, { screen: 'discover', id: null }), 'news'), R.openCreate(R.nav(s, D)), R.setCreateField(R.openCreate(R.nav(s, D)), { key: 'auth', value: 'OAuth' }), R.connectMcp(R.setCreateField(R.openCreate(R.nav(s, D)), { key: 'url', value: 'bad' })), R.mcpConnected(R.connectMcp(R.setCreateField(R.openCreate(R.nav(s, D)), { key: 'url', value: 'https://a.dev/mcp' })), { tools: ['a.run'] }), R.connectMcp(R.setCreateField(R.openCreate(R.nav(s, D)), { key: 'url', value: 'https://a.dev/mcp' })), R.nav(R.toggleInstalledOnly(R.install(s, { id: 'news', now: NOW })), D), R.nav(R.setQuery(s, 'bot'), D), R.nav(s, { screen: 'discover', id: 'bots' }),
+    R.nav(s, { screen: 'discover', id: null }), R.openPlugin(R.nav(s, { screen: 'discover', id: null }), 'news'), R.openCreate(R.nav(s, D)), R.setClient(R.openCreate(R.nav(s, D)), 'Cursor'), R.setClient(R.openCreate(R.nav(s, D)), 'Codex'), R.setCreateCopied(R.openCreate(R.nav(s, D)), true), conn(R.openCreate(R.nav(s, D))), atSign(R.openCreate(R.nav(s, D))), R.setUploadVisibility(atSign(R.openCreate(R.nav(s, D))), 'public'), R.rejectUpload(atSign(R.openCreate(R.nav(s, D)))),
+    ...(() => { const mine = R.publishUpload(atSign(R.openCreate(R.nav(s, D))), { now: NOW }); const pub = R.publishUpload(R.setUploadVisibility(atSign(R.openCreate(mine)), 'public'), { now: NOW }); return [mine, pub, R.openPlugin(pub, 'cpi'), R.reviewPassed(pub, { id: 'cpi', now: NOW }), R.openPlugin(mine, 'moat')]; })(), R.nav(R.toggleInstalledOnly(R.install(s, { id: 'news', now: NOW })), D), R.nav(R.setQuery(s, 'bot'), D), R.nav(s, { screen: 'discover', id: 'bots' }),
     R.nav(R.showBanner(s, director.breaking(NOW)), { screen: 'markets', id: 'NVDA' }), R.nav(s, { screen: 'trade' }),
     R.toggleDraftBot(R.toggleDraftPicker(R.startDraft(s, { now: NOW })), 'buffett'),
     ['refusal', 'done'].reduce((st, k) => R.append(st, { convId: 'c-1', msg: director[k](NOW), at: NOW }), s),
@@ -77,6 +82,7 @@ test('narrow windows, the toast under a drawer, and long words that wrap', async
   assert.match(css, /\.bubble, \.card \{[^}]*overflow-wrap: anywhere/, 'a pasted address wraps inside its bubble');
   assert.match(css, /^\.chip \{[^}]*white-space: nowrap/m, 'a chip never breaks one character per line');
   assert.match(css, /^\.pcard-extra \{[^}]*flex-wrap: wrap/m, 'on a narrow shelf card the link drops under the chip');
+  assert.match(css, /^\.field > \.radio-seg, \.modal-body > \.status \{ align-self: flex-start; \}/m, 'the client switcher and the status pill keep their own width in the dialog');
 });
 
 test('Details never covers the conversation: it makes room, folding the list away on a medium window; the first level folds to icons below 1180 px', async () => {

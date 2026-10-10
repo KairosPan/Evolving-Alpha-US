@@ -1,7 +1,7 @@
 // gravit-ui/js/driver.js — driver c, scripted: what Gravit says back, and the events a demo director can fire
 import { message } from './messages.js';
 import { MIN, fmtDate } from './time.js';
-import { byId, hostOf } from './data/plugins.js';
+import { byId } from './data/plugins.js';
 
 const G = (kind, text, data = {}) => message('gravit', kind, text, data);
 const ev = (delay, msg) => ({ delay, msg });
@@ -27,6 +27,8 @@ const BOT_LINES = {
 const TEACH_REPLIES = {
   buffett: t => `好，能拿「${t}」，我就照这个挑：看得懂、便宜、拿得住。每周一我在这里点评你的仓。`,
   politician: t => `好，记下了：「${t}」。下一条披露一出来，我就在这里说；跟不跟按你的额度。`,
+  moat: t => `「${t}」：护城河 8/10 · 品牌、渠道、定价权。`,
+  cpi: () => '记下了。下一次 CPI 一出来，我在这里三句话讲清。',
 };
 // the names a bot answers to after @: its id, its name, the name without "bot", and without "美国" (政客)
 const names = id => {
@@ -50,7 +52,8 @@ export function replyTo(text, ctx = {}) {
     return [ev(1000, G('text', `收到 ${files.join('、')}，我先看看里面有什么。`)), ev(2600, G('text', '看完了，没有要动的。要我按里面的做什么，说一声。'))];
   }
   if (conv?.teach) {
-    const say = TEACH_REPLIES[conv.teach] ?? (() => '好，记下了。有新的我在这里说。');
+    // a numbered upload (moat-2) answers like its first
+    const say = TEACH_REPLIES[conv.teach] ?? TEACH_REPLIES[conv.teach.replace(/-\d+$/, '')] ?? (() => '好，记下了。有新的我在这里说。');
     return [ev(1200, message(conv.teach, 'text', say((text ?? '').trim())))];
   }
   if (conv?.kind === 'group') {
@@ -128,9 +131,19 @@ export const director = {
   done: now => G('done', `办完了：买了 0.00008 BTC，花了 $5，${fmtDate(now)} 收尾。`, { foot: '账本对上 · 额度还剩 $95' }),
 };
 
-// what a connected MCP server answers when asked for its tools (scripted: three tools named after it)
-export function toolsFor(name, url) {
-  const slug = v => (v ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-  const base = slug(name) || slug(hostOf(url).split('.')[0]) || 'tool';
-  return [`${base}.search`, `${base}.get`, `${base}.watch`];
+// the plugins the scripted client uploads through shop.publish, in turn: one private, one public
+const UPLOADS = [
+  { id: 'moat', name: 'Moat score', kind: 'Data', blurb: '护城河打分，按 ticker 问', icon: null, tools: ['moat.score', 'moat.compare'], writes: ['message'], needs: 'none', visibility: 'private' },
+  { id: 'cpi', name: 'CPI 速读', kind: 'Data', blurb: 'CPI 一出来，三句话讲清对你仓位的影响', icon: 'bell', tools: ['cpi.latest', 'cpi.impact'], writes: ['message'], needs: 'none', visibility: 'public' },
+];
+
+// the next manifest not uploaded yet; after both, the same again with a number
+export function nextUpload(uploaded = []) {
+  const have = new Set(uploaded.map(p => p.id));
+  for (let n = 1; ; n++) {
+    for (const m of UPLOADS) {
+      const id = n === 1 ? m.id : `${m.id}-${n}`;
+      if (!have.has(id)) return { ...m, id, name: n === 1 ? m.name : `${m.name} ${n}`, tools: [...m.tools], writes: [...m.writes] };
+    }
+  }
 }
