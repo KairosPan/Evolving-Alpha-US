@@ -39,11 +39,18 @@ const keysFor = (m, conv) => {
   return '';
 };
 
+// a card still waiting carries its deadline (spec §6, warn-fill); once answered it carries the answer instead
+const ANSWERED = { approved: ['Approved', 'up'], rejected: ['Rejected', 'grey'] };
+function cardChip(m) {
+  if (m.answer) { const [label, tone] = ANSWERED[m.answer] ?? [m.answer, 'grey']; return chip(label, tone); }
+  return m.data?.by ? chip(`answer by ${fmtClock(m.data.by)}`, 'warn') : '';
+}
+
 function body(m, conv) {
   const d = m.data ?? {};
   switch (m.kind) {
     case 'card':
-      return `<div class="card orange"><div class="card-head"><div class="card-title">${esc(d.title ?? m.text)}</div>${d.by ? chip(`answer by ${fmtClock(d.by)}`, 'warn') : ''}</div>` +
+      return `<div class="card orange"><div class="card-head"><div class="card-title">${esc(d.title ?? m.text)}</div>${cardChip(m)}</div>` +
         (d.venue ? `<div class="dim">${esc([d.venue, d.type, d.about, d.cardId].filter(Boolean).join(' · '))}</div>` : '') +
         (d.rows ? `<div class="orders">${d.rows.map(r => `<div class="order-row"><span class="order-t">${esc(r.t)}</span><span class="dim">${esc(r.why)}</span><span class="num">${esc(r.amt)}</span></div>`).join('')}</div>` : '') +
         (d.note ? `<div class="dim">${esc(d.note)}</div>` : '') + keysFor(m, conv) + `</div>`;

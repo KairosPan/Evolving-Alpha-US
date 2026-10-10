@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseHash, toHash } from '../js/router.js';
-import { Timers, initialState, scheduleEvents, makeStore, settle, showBreaking, answerFlow } from '../js/app.js';
+import { Timers, initialState, scheduleEvents, makeStore, settle, showBreaking, answerFlow, replyFlow, watchToast } from '../js/app.js';
 import { createStore } from '../js/store.js';
 import { reducers } from '../js/reducers/index.js';
 import { seed, SEED_VERSION } from '../js/data/seed.js';
@@ -114,4 +114,49 @@ test('answerFlow: a double click answers once and schedules the follow-up once',
   assert.equal(texts.filter(t => t === '改到 $50 了。').length, 1);
   const asks = store.get().conversations[0].messages.filter(m => m.kind === 'install' && m.data.plugin === 'news');
   assert.equal(asks.length, 1, 'the seed already asks for News sentiment; the grant does not ask again');
+});
+
+const fast = (store, t, convId, events, now) => scheduleEvents(store, t, convId, events.map(e => ({ ...e, delay: 1 })), now);
+
+test('answerFlow hands the driver the real limit: a $50 cap gets no ask for the $30 add', async () => {
+  const store = makeStore(null, NOW);
+  const timers = new Timers();
+  store.dispatch('changeLimit', { convId: 'c-1', limit: { perOrder: 50 } });
+  store.dispatch('append', { convId: 'c-1', msg: { from: 'gravit', kind: 'card', text: '要你答', data: { title: '要你答' } }, at: NOW });
+  const card = store.get().conversations[0].messages.at(-1);
+  answerFlow(store, timers, { conv: 'c-1', msg: card.id, answer: 'approved' }, () => NOW, fast);
+  await sleep(15);
+  const after = store.get().conversations[0].messages.slice(-2);
+  assert.deepEqual(after.map(m => m.kind), ['text', 'receipt']);
+  assert.equal(store.get().conversations[0].intent.limit.spent, 10);
+});
+
+test('replyFlow hands the driver the conversation: in the group the @named bot answers', async () => {
+  const store = makeStore(null, NOW);
+  const timers = new Timers();
+  replyFlow(store, timers, 'c-4', '@Buffett 你怎么看 KO', () => NOW, fast);
+  await sleep(15);
+  assert.equal(store.get().conversations.find(c => c.id === 'c-4').messages.at(-1).from, 'buffett');
+});
+
+test('watchToast dismisses a toast after a while, and never a newer one', async () => {
+  const store = makeStore(null, NOW);
+  const timers = new Timers();
+  watchToast(store, timers, 10);
+  store.dispatch('install', { id: 'news', now: NOW });
+  await sleep(5);
+  store.dispatch('install', { id: 'serenity', now: NOW });
+  await sleep(8);
+  assert.match(store.get().discover.toast?.text ?? '', /Serenity/, 'the first timer fired but the newer toast stays');
+  await sleep(10);
+  assert.equal(store.get().discover.toast, null);
+});
+
+test('a saved state boots without the moment-only overlays: banner, call, drawer, ask and toast', () => {
+  const s = seed(NOW);
+  const saved = { ...s, banner: { id: 'b', headline: 'h', body: 'b', at: NOW }, call: { from: 'gravit', about: 'x' }, discover: { ...s.discover, drawer: 'news', upload: true, asking: 'buffett', toast: { text: 't', action: null } } };
+  const st = initialState({ getItem: () => JSON.stringify(saved), setItem() {} }, NOW);
+  assert.deepEqual([st.banner, st.call, st.discover.drawer, st.discover.upload, st.discover.asking, st.discover.toast], [null, null, null, false, null, null]);
+  const store = makeStore({ getItem: () => JSON.stringify(saved), setItem() {} }, NOW);
+  assert.equal(store.get().banner, null);
 });

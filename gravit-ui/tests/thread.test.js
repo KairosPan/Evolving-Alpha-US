@@ -21,7 +21,10 @@ test('the BTC thread: dividers, owner bubbles right, Gravit left, an answered ca
   assert.equal(count(h, /class="msg left"/g), 5);
   assert.match(h, /class="bubble you">小仓位买 BTC/);
   assert.match(h, /class="card orange"/);
-  assert.match(h, /answer by 14:33/);
+  assert.doesNotMatch(h, /answer by/, 'the seeded card is answered: no deadline left to meet');
+  assert.match(h, /class="card orange"><div class="card-head"><div class="card-title">要你答：买 0.00008 BTC<\/div><span class="chip up">Approved<\/span>/);
+  const live = renderMessage({ id: 'm-x', at: NOW, ...message('gravit', 'card', '要你答', { title: '要你答', by: NOW + 26 * 60_000 }) }, ctx, s);
+  assert.match(live, /<span class="chip warn">answer by 14:33<\/span>/, 'a card still waiting carries its deadline');
   const cardPart = h.slice(h.indexOf('card orange'), h.indexOf('class="msg you">', h.indexOf('card orange')));
   assert.doesNotMatch(cardPart, /class="key/, 'an answered card has no keys');
   assert.match(h, /class="bubble green"[\s\S]*?filled/);

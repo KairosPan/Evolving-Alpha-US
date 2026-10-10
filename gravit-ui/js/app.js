@@ -1,7 +1,7 @@
 // gravit-ui/js/app.js — boot: the store, the hash router, one render per change, event delegation on data-action, the driver's timers, the director
 import { createStore } from './store.js';
 import { reducers } from './reducers/index.js';
-import { seed, SEED_VERSION } from './data/seed.js';
+import { seed, firstRun, SEED_VERSION } from './data/seed.js';
 import { parseHash, toHash } from './router.js';
 import { renderRail } from './render/rail.js';
 import { renderMessagesScreen, renderBanner, renderCall, renderStub, currentConversation } from './render/messages.js';
@@ -23,20 +23,25 @@ export class Timers {
 
 const KEY = 'gravit-ui.state';
 const BANNER_MS = 5000;
+const TOAST_MS = 6000;
+const REVOKE_MS = 1000;
 const usable = saved => !!saved && saved.v === SEED_VERSION && Array.isArray(saved.conversations);
+
+// a banner, a ringing call, an open drawer, a trash-key ask and a toast belong to their moment: a reload starts without them
+const withoutMoments = s => ({ ...s, banner: null, call: null, discover: { ...s.discover, drawer: null, upload: false, asking: null, toast: null } });
 
 export function initialState(storage, now = Date.now()) {
   try {
     const raw = storage?.getItem(KEY);
     const saved = raw ? JSON.parse(raw) : null;
-    if (usable(saved)) return saved;
+    if (usable(saved)) return withoutMoments(saved);
   } catch { /* fall through to the seed */ }
   return seed(now);
 }
 
-// the store boot uses: the same version check, so createStore cannot load a stale save on its own (Review Focus 2)
+// the store boot uses: initialState already read and cleaned the save, so the store itself loads nothing (Review Focus 2)
 export function makeStore(storage, now = Date.now()) {
-  return createStore({ initial: initialState(storage, now), reducers, storage, key: KEY, accept: usable });
+  return createStore({ initial: initialState(storage, now), reducers, storage, key: KEY, accept: () => false });
 }
 
 export function scheduleEvents(store, timers, convId, events, now = () => Date.now()) {
@@ -56,18 +61,54 @@ export function showBreaking(store, timers, banner, now = () => Date.now(), ms =
   timers.after(ms, () => { if (store.get().banner?.id === banner.id) store.dispatch('dismissBanner', { now: now() }); });
 }
 
+// what the driver needs to know about a conversation: who is in it, which plugin it teaches, its real limit
+const context = (store, conv, now) => ({
+  installed: store.get().plugins.installed, now: now(), limit: conv?.intent.limit ?? null,
+  conv: conv ? { kind: conv.kind, members: conv.members, teach: conv.teach ?? null } : null,
+});
+
 // answer a card once; the follow-up is scheduled only for the first answer (Review Focus 4)
 export function answerFlow(store, timers, { conv, msg, answer }, now = () => Date.now(), schedule = scheduleEvents) {
   const c = store.get().conversations.find(x => x.id === conv);
   const before = c?.messages.find(m => m.id === msg);
   if (!before || before.answer) return;
   const pending = c.messages.filter(m => m.kind === 'install' && !m.answer).map(m => m.data.plugin);
-  const events = followUp(before, answer, { installed: store.get().plugins.installed, pending, now: now() });
+  const events = followUp(before, answer, { ...context(store, c, now), pending });
   store.dispatch('answer', { convId: conv, msgId: msg, answer, now: now() });
   schedule(store, timers, conv, events, now);
 }
 
-const DIRECTOR = [['早报', 'brief'], ['技术分析', 'ta'], ['突发', 'breaking'], ['来电', 'call'], ['bot 插话', 'bot'], ['重置 demo', 'reset']];
+// the scripted reply to what the owner just sent into a conversation
+export function replyFlow(store, timers, convId, text, now = () => Date.now(), schedule = scheduleEvents) {
+  const c = store.get().conversations.find(x => x.id === convId);
+  schedule(store, timers, convId, replyTo(text, context(store, c, now)), now);
+}
+
+// a toast leaves by itself after a while; a newer toast keeps its own time
+export function watchToast(store, timers, ms = TOAST_MS) {
+  let last = store.get().discover.toast;
+  return store.subscribe(s => {
+    const t = s.discover.toast;
+    if (t && t !== last) timers.after(ms, () => { if (store.get().discover.toast === t) store.dispatch('dismissToast'); });
+    last = t;
+  });
+}
+
+const DIRECTOR = [['早报', 'brief'], ['技术分析', 'ta'], ['突发', 'breaking'], ['来电', 'call'], ['bot 插话', 'bot'], ['拒单', 'refusal'], ['收尾', 'done'], ['空白开始', 'firstRun'], ['重置 demo', 'reset']];
+
+// a key that finds "the same control" after a re-render: its id, or its data-* attributes
+const FOCUS_ATTRS = ['action', 'id', 'conv', 'msg', 'key', 'value', 'answer', 'accept', 'plugin'];
+function focusKey(el) {
+  if (!el || el.tagName === 'BODY') return null;
+  if (el.id) return { id: el.id };
+  if (!el.dataset?.action) return null;
+  return { sel: FOCUS_ATTRS.filter(a => el.dataset[a] != null).map(a => `[data-${a}="${String(el.dataset[a]).replace(/"/g, '\\"')}"]`).join('') };
+}
+
+// which overlay is up: focus moves into it when it opens and back to its opener when it closes
+const overlayOf = s => (s.call ? 'call' : s.detailsOpen || s.settingsOpen || s.discover.drawer || s.discover.upload ? 'drawer' : null);
+const screenOf = s => `${s.route.screen}/${s.route.id ?? s.route.tab ?? ''}`;
+const drawerOf = s => s.discover.drawer ?? (s.discover.upload ? 'upload' : s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null);
 
 export function boot(win) {
   const doc = win.document;
@@ -78,6 +119,9 @@ export function boot(win) {
   const now = () => Date.now();
   let directorOpen = false;
   let composerText = '';
+  let composing = false;
+  let pending = false;
+  let last = { overlay: null, opener: null, screen: null, drawer: null, thread: null };
 
   function applyTheme(theme) {
     if (theme === 'cream' || theme === 'black') doc.documentElement.dataset.theme = theme; else delete doc.documentElement.dataset.theme;
@@ -90,27 +134,73 @@ export function boot(win) {
     if (name && slot) slot.textContent = (name.value.trim()[0] ?? 'P').toUpperCase();
   }
 
+  function find(key) {
+    if (!key) return null;
+    return key.id ? doc.getElementById(key.id) : root.querySelector(key.sel);
+  }
+
   function render() {
     const s = store.get();
+    // what the person had: focus and caret, typed text, picked radios, and where each scrolling box stood
     const active = doc.activeElement;
-    const activeId = active?.id;
-    const caret = activeId && typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null;
-    // what the person is typing survives a re-render (an arriving reply, a toast): text fields by id, picked radios by name
+    const activeKey = focusKey(active);
+    const caret = active && typeof active.selectionStart === 'number' && active.id ? [active.selectionStart, active.selectionEnd] : null;
     const typed = new Map([...root.querySelectorAll('input[id]:not([type=radio]), textarea[id]')].map(el => [el.id, el.value]));
     const picked = [...root.querySelectorAll('.upload-form input[type=radio]:checked')].map(el => [el.name, el.value]);
+    const thread0 = doc.getElementById('thread');
+    const threadAt = thread0 ? { top: thread0.scrollTop, bottom: thread0.scrollHeight - thread0.scrollTop - thread0.clientHeight < 40 } : null;
+    const scrolls = { main: root.querySelector('main')?.scrollTop, rows: root.querySelector('.rail-rows')?.scrollTop, drawer: root.querySelector('.drawer-body')?.scrollTop, shelves: [...root.querySelectorAll('.shelf-row')].map(e => e.scrollLeft) };
+
     const screen = s.route.screen === 'discover' ? renderDiscover(s) : s.route.screen === 'account' ? renderAccount(s) : (s.route.screen === 'markets' || s.route.screen === 'trade') ? renderStub(s.route) : renderMessagesScreen(s, now());
     const overlays = (s.banner ? renderBanner(s.banner, s) : '') + (s.call ? renderCall(s.call) : '') +
       (directorOpen ? `<div class="director" role="menu">${DIRECTOR.map(([l, k]) => `<button type="button" class="director-key" data-action="director" data-key="${k}">${l}</button>`).join('')}</div>` : '');
     root.innerHTML = renderRail(s, now()) + screen + overlays;
+
     for (const [id, value] of typed) { const el = doc.getElementById(id); if (el && id !== 'say') el.value = value; }
     for (const [name, value] of picked) { const el = root.querySelector(`.upload-form input[type=radio][name="${name}"][value="${value}"]`); if (el) el.checked = true; }
     const say = doc.getElementById('say');
     if (say) say.value = composerText;
     syncIcon();
-    const back = activeId && doc.getElementById(activeId);
-    if (back) { back.focus(); if (caret && typeof back.setSelectionRange === 'function') back.setSelectionRange(caret[0], caret[1]); }
+
+    // scroll: the rail rows always keep theirs; the page and the shelves keep theirs on the same screen; a drawer while it stays the same drawer
+    const sameScreen = last.screen === screenOf(s);
+    const rows = root.querySelector('.rail-rows');
+    if (rows && scrolls.rows != null) rows.scrollTop = scrolls.rows;
+    const main = root.querySelector('main');
+    if (main && sameScreen && scrolls.main != null) main.scrollTop = scrolls.main;
+    if (sameScreen) [...root.querySelectorAll('.shelf-row')].forEach((e, i) => { if (scrolls.shelves[i] != null) e.scrollLeft = scrolls.shelves[i]; });
+    const drawerBody = root.querySelector('.drawer-body');
+    if (drawerBody && last.drawer && last.drawer === drawerOf(s) && scrolls.drawer != null) drawerBody.scrollTop = scrolls.drawer;
+    // the thread stays where the person was reading, unless it is another conversation, it gained a message, or they were at the bottom
+    const open = s.route.screen === 'messages' ? currentConversation(s) : null;
+    const threadSig = open ? `${open.id}:${open.messages.length}` : null;
     const thread = doc.getElementById('thread');
-    if (thread) thread.scrollTop = thread.scrollHeight;
+    if (thread) thread.scrollTop = threadAt && !threadAt.bottom && threadSig === last.thread ? threadAt.top : thread.scrollHeight;
+
+    // focus: back on the same control; into an overlay that just opened; back to its opener when it closes
+    const overlay = overlayOf(s);
+    let opener = last.opener;
+    let target = find(activeKey);
+    if (overlay && overlay !== last.overlay) {
+      opener = activeKey;
+      target = overlay === 'call' ? root.querySelector('.call [data-accept="0"]') : root.querySelector('.drawer .close-key');
+    } else if (!overlay && last.overlay) {
+      target = find(last.opener) ?? target;
+      opener = null;
+    } else if (!target && activeKey) {
+      target = say; // the pressed control went away, as an answered card's keys do: the composer is next
+    }
+    if (target) {
+      target.focus();
+      if (caret && target === find(activeKey) && typeof target.setSelectionRange === 'function') target.setSelectionRange(caret[0], caret[1]);
+    }
+    last = { overlay, opener, screen: screenOf(s), drawer: drawerOf(s), thread: threadSig };
+  }
+
+  // while an IME composes (pinyin), a render would replace the input and lose the composition: hold it until compositionend
+  function requestRender() {
+    if (composing) { pending = true; return; }
+    render();
   }
 
   function go(route) {
@@ -124,18 +214,14 @@ export function boot(win) {
     if (fixed) win.history.replaceState(null, '', fixed);
   }
 
-  function reply(convId, text) {
-    const s = store.get();
-    scheduleEvents(store, timers, convId, replyTo(text, { installed: s.plugins.installed, now: now() }), now);
-  }
-
-  function reset() {
+  function restart(state, route) {
     timers.clear();
-    store.reset(seed(now()));
+    store.reset(state);
     applyTheme(store.get().theme);
     composerText = '';
-    go({ screen: 'messages', id: 'c-1' });
+    go(route);
   }
+  const reset = () => restart(seed(now()), { screen: 'messages', id: 'c-1' });
 
   const actions = {
     open: el => go({ screen: 'messages', id: el.dataset.id }),
@@ -144,6 +230,8 @@ export function boot(win) {
     toggleRail: () => store.dispatch('toggleRail'),
     toggleDraftAttach: () => store.dispatch('toggleDraftAttach'),
     toggleDraftGroup: () => store.dispatch('toggleDraftGroup'),
+    toggleDraftPicker: () => store.dispatch('toggleDraftPicker'),
+    toggleDraftBot: el => store.dispatch('toggleDraftBot', el.dataset.id),
     draftLimit: el => {
       const key = el.dataset.key;
       const d = store.get().draft;
@@ -161,10 +249,9 @@ export function boot(win) {
     },
     suggest: el => { composerText = el.dataset.text; render(); doc.getElementById('say')?.focus(); },
     answer: el => answerFlow(store, timers, el.dataset, now),
+    // + on an install request opens the plugin's drawer; the request is answered when the install happens (reducers/discover.js)
     installAsk: el => {
-      const { conv, msg, plugin } = el.dataset;
-      store.dispatch('answer', { convId: conv, msgId: msg, answer: 'installed', now: now() });
-      store.dispatch('openPlugin', plugin);
+      store.dispatch('openPlugin', el.dataset.plugin);
       go({ screen: 'discover', id: null });
     },
     toggleDetails: () => store.dispatch('toggleDetails'),
@@ -216,10 +303,14 @@ export function boot(win) {
     exportMemory: () => {
       const blob = new win.Blob([JSON.stringify(store.get().memory, null, 2)], { type: 'application/json' });
       const a = doc.createElement('a');
-      a.href = win.URL.createObjectURL(blob);
+      const href = win.URL.createObjectURL(blob);
+      a.href = href;
       a.download = 'gravit-memory.json';
+      doc.body?.appendChild(a);
       a.click();
-      win.URL.revokeObjectURL(a.href);
+      a.remove?.();
+      // Safari and Firefox start the download after the click returns: revoke the link a moment later
+      setTimeout(() => win.URL.revokeObjectURL(href), REVOKE_MS);
     },
     // the director
     director: el => {
@@ -227,9 +318,10 @@ export function boot(win) {
       const s = store.get();
       const convId = currentConversation(s)?.id ?? s.conversations[0]?.id;
       if (k === 'reset') return reset();
+      if (k === 'firstRun') return restart(firstRun(now()), { screen: 'messages', id: null });
       if (k === 'breaking') return showBreaking(store, timers, director.breaking(now()), now);
       if (k === 'call') return store.dispatch('incomingCall', director.call());
-      if (convId) store.dispatch('append', { convId, msg: director[k](now()), at: now() });
+      if (convId && director[k]) store.dispatch('append', { convId, msg: director[k](now()), at: now() });
     },
   };
 
@@ -252,12 +344,12 @@ export function boot(win) {
       const text = composerText.trim();
       if (!text) return;
       const before = store.get();
-      const after = store.dispatch('send', { text, now: now() });
-      if (after === before) return;
+      // empty the composer before the render the send causes, so the box is clear the moment the bubble appears
       composerText = '';
-      const convId = after.route.id;
+      const after = store.dispatch('send', { text, now: now() });
+      if (after === before) { composerText = text; return; }
       if (after.route.id !== before.route.id) win.location.hash = toHash(after.route);
-      reply(convId, text);
+      replyFlow(store, timers, after.route.id, text, now);
     } else if (action === 'publish') {
       const f = new win.FormData(form);
       form.reset();
@@ -269,16 +361,23 @@ export function boot(win) {
     }
   });
 
-  // typing: the composer keeps its words outside the store; the title and the search go through it.
-  // While an IME is composing (pinyin), nothing is dispatched: a re-render would break the composition.
+  // typing: the composer keeps its words outside the store; the title and the search go through it
   function typed(el) {
     if (el.id === 'say') composerText = el.value;
     else if (el.id === 'up-name') syncIcon();
-    else if (el.dataset.action === 'draftTitle') store.dispatch('setDraftTitle', el.value);
-    else if (el.dataset.action === 'query') store.dispatch('setQuery', el.value);
+    else if (el.dataset?.action === 'draftTitle') store.dispatch('setDraftTitle', el.value);
+    else if (el.dataset?.action === 'query') store.dispatch('setQuery', el.value);
   }
-  root.addEventListener('input', ev => { if (!ev.isComposing) typed(ev.target); });
-  root.addEventListener('compositionend', ev => typed(ev.target));
+  root.addEventListener('input', ev => { if (!ev.isComposing && !composing) typed(ev.target); });
+  root.addEventListener('compositionstart', () => { composing = true; });
+  root.addEventListener('compositionend', ev => {
+    composing = false;
+    const before = store.get();
+    typed(ev.target);
+    // run the held render, unless the typed text just caused one
+    if (pending && store.get() === before) render();
+    pending = false;
+  });
 
   doc.addEventListener('keydown', ev => {
     if (ev.key === 'Escape') {
@@ -292,7 +391,7 @@ export function boot(win) {
     }
     // a card is a div with role=button: Enter and Space press it, as they would a real button
     const a = doc.activeElement;
-    if ((ev.key === 'Enter' || ev.key === ' ') && a?.getAttribute('role') === 'button' && actions[a.dataset.action]) {
+    if ((ev.key === 'Enter' || ev.key === ' ') && a?.getAttribute?.('role') === 'button' && actions[a.dataset.action]) {
       ev.preventDefault();
       actions[a.dataset.action](a);
       return;
@@ -302,12 +401,13 @@ export function boot(win) {
   });
 
   win.addEventListener('hashchange', follow);
-  store.subscribe(render);
+  store.subscribe(requestRender);
+  watchToast(store, timers);
   applyTheme(store.get().theme);
   if (!win.location.hash) win.history.replaceState(null, '', toHash(store.get().route));
   follow();
   render();
-  return store;
+  return Object.assign(store, { timers });
 }
 
 if (typeof window !== 'undefined' && window.document) boot(window);
