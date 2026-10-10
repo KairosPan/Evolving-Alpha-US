@@ -52,7 +52,7 @@ test('prepare: at rest without a ticket, picking without a venue, then ready wit
 
 test('prepare refuses what the venue or the account would refuse, in words', () => {
   const text = s => prepare(s, NOW).text;
-  assert.equal(text(ticket(fresh(), 'BTC', { amount: '150' })), '$152.46 is more than the most one order may be ($100.00).');
+  assert.equal(text(ticket(fresh(), 'BTC', { amount: '150' })), '$149.90 is more than the most one order may be ($100.00).');
   assert.equal(text(ticket(fresh(), 'BTC', { amount: '5' })), 'Stand-in Exchange: the smallest order in BTC/USDT is 0.0001 BTC ($6.28 at 62,803.6)');
   assert.equal(text(ticket(fresh(), 'BTC', { amount: '25', orderType: 'limit' })), 'Type the limit price.');
   assert.equal(text(ticket(fresh(), 'BTC', {})), 'Type an amount.');
@@ -131,11 +131,11 @@ test('sells, new holdings and the wallet: all of NVDA goes, SOL arrives, USDY is
   assert.equal(sold.account.netWorth, 12480);
   assert.equal(sold.trade.ticket.said.text, 'Sold: ord-0010 · filled at 187.38');
   const sol = filled(R.placeOrder(ticket(fresh(), 'SOL', { amount: '20' }), { now: NOW }));
-  assert.deepEqual([held(sol, 'SOL').key, held(sol, 'SOL').qty, held(sol, 'SOL').value], ['crypto:SOL', 0.136, 19.99]);
+  assert.deepEqual([held(sol, 'SOL').key, held(sol, 'SOL').qty, held(sol, 'SOL').value], ['crypto:SOL', 0.133, 19.55]);
   const usdy = filled(R.placeOrder(ticket(fresh(), 'USDY', { amount: '50' }), { now: NOW }));
-  assert.equal(held(usdy, 'USDC').qty, 2439.86);
-  assert.equal(held(usdy, 'USDY').value, 49.98);
-  assert.ok(usdy.account.alloc.some(x => x.token === 'rwa'));
+  assert.equal(held(usdy, 'USDC').qty, 2440.83);
+  assert.equal(held(usdy, 'USDY').value, 49);
+  assert.equal(held(usdy, 'USDY').venue, 'Stand-in Wallet');
 });
 
 test('connecting a public venue brings its stand-in cash; a prediction then buys contracts; a waiting ticket takes the venue', () => {
@@ -147,7 +147,7 @@ test('connecting a public venue brings its stand-in cash; a prediction then buys
   assert.deepEqual([h.outcome, h.qty, h.value, h.venue], ['Yes', 15, 9.3, 'Polymarket']);
   assert.equal(yes.account.netWorth, 12779.85);
   assert.equal(yes.account.activity[0].text, 'Fill · 15 FED-DEC Yes @ 63¢ · ord-0010');
-  assert.ok(yes.account.alloc.some(x => x.token === 'event'));
+  assert.equal(yes.account.alloc.reduce((a, x) => a + x.pct, 0), 100);
   const waiting = R.openTicket(fresh(), { id: 'DOGE', now: NOW });
   assert.equal(R.venueConnected(waiting, 'Coinbase').trade.ticket.venue, 'Coinbase');
 });
@@ -230,7 +230,7 @@ test('a ready quote: what it buys and pays, the fee, the ten minutes, What you s
   assert.match(h, /<button type="submit" id="tk-go" class="btn-primary tk-go">Sign and place<\/button>/);
   assert.match(renderTrade(R.toggleSigns(s), NOW), /<pre class="tk-signs">venue: Stand-in Exchange\nsymbol: BTC\/USDT\nside: buy\norderType: market\nqty: 0\.00039\nlimitPrice: \nmaxNotional: 24\.98\n/);
   const cap = renderTrade(R.setTicket(s, { field: 'amount', value: '150', now: NOW }), NOW);
-  assert.match(cap, /<div class="tk-msg no">\$152\.46 is more than the most one order may be \(\$100\.00\)\.<\/div>/);
+  assert.match(cap, /<div class="tk-msg no">\$149\.90 is more than the most one order may be \(\$100\.00\)\.<\/div>/);
   assert.match(cap, /id="tk-go" class="btn-primary tk-go" disabled/);
   const placing = R.placeOrder(s, { now: NOW });
   assert.match(renderTrade(placing, NOW), /<div class="tk-msg wait" role="status">Placing it at Stand-in Exchange…<\/div>/);
@@ -257,11 +257,51 @@ test('Stocks: what you hold; a card Gravit is waiting on shows under Under way; 
   assert.match(st, /data-action="pickMarket" data-id="NVDA" data-venue="Stand-in Broker"/);
   const asked = R.append(onTrade(fresh()), { convId: 'c-1', msg: { from: 'gravit', kind: 'card', text: '要你答：加 $25', data: { title: '要你答：加 $25', by: NOW + 600000, rows: [] } }, at: NOW });
   const h = renderTrade(asked, NOW);
-  assert.match(h, /<b>Gravit asks: 要你答：加 \$25<\/b>/);
+  assert.match(h, /<b>要你答：加 \$25<\/b>/, 'the card speaks for itself');
   assert.match(h, /<span class="tk-st warn">Waiting for you<\/span>/);
   assert.match(h, /<a class="btn-sm" href="#\/messages\/c-1" data-action="open" data-id="c-1">Review<\/a>/);
   const q = renderTrade(onTrade(R.setTradeQuery(fresh(), 'sol')), NOW);
   assert.match(q, /<div class="tk-pg-h">Results for “sol”<\/div>/);
   assert.doesNotMatch(q, /tk-pg-h">You hold</);
   assert.doesNotMatch(h + st, /Each contract pays|Becomes a stock perpetual|Its own signature|Your words go to the agent|trade from here/);
+});
+
+// ---- Markets and Trade review fixes
+
+test('a limit sell is worth what it will fill at, never less than the bid, so the cap holds', () => {
+  const s = ticket(fresh(), 'AAPL', { amount: '10', unit: 'qty', orderType: 'limit', limit: '10' }, { side: 'sell' });
+  const p = prepare(s, NOW);
+  assert.deepEqual([p.state, p.text], ['refused', '$2,283.80 is more than the most one order may be ($100.00).']);
+});
+
+test('a market buy in dollars is sized at the worst price it may pay, so $100 fits $100 a move', () => {
+  const p = prepare(ticket(fresh(), 'BTC', { amount: '100' }), NOW);
+  assert.deepEqual([p.state, p.qty, p.maxUsd], ['ready', 0.00156, 99.93]);
+  assert.ok(p.maxUsd <= 100);
+});
+
+test('the allocation bar leaves out a class that rounds to 0%', () => {
+  const tiny = filled(R.placeOrder(ticket(fresh(), 'USDY', { amount: '5' }), { now: NOW }));
+  assert.ok(tiny.account.holdings.some(h => h.name === 'USDY'));
+  assert.equal(tiny.account.alloc.some(x => x.pct === 0), false);
+  assert.equal(tiny.account.alloc.reduce((a, x) => a + x.pct, 0), 100);
+});
+
+test('moving all of a holding moves it whole: no negative quantity is left behind', () => {
+  const p = R.openPanel(R.nav(fresh(), { screen: 'account', tab: 'portfolio' }), 'move');
+  const m = R.moveFunds(p, { from: 'Stand-in Broker', to: 'Stand-in Exchange', asset: 'AAPL', amount: '2510.12', now: NOW });
+  assert.equal(held(m, 'AAPL', 'Stand-in Broker'), undefined);
+  assert.equal(held(m, 'AAPL', 'Stand-in Exchange').qty, 10.99);
+  for (const h of m.account.holdings) assert.ok(h.qty == null || h.qty > 0, h.key);
+});
+
+test('a held prediction sells from its drawer and from the picker', async () => {
+  const { renderMarkets } = await import('../js/render/markets.js');
+  const yes = filled(R.placeOrder(ticket(R.venueConnected(fresh(), 'Polymarket'), 'FED-DEC', { amount: '10' }), { now: NOW }));
+  const d = renderMarkets(R.nav(yes, { screen: 'markets', id: 'FED-DEC' }), NOW);
+  assert.match(d, /data-action="tradeFrom" data-id="FED-DEC" data-side="sell" data-venue="Polymarket" data-outcome="0">Sell<\/button>/);
+  const t = renderTrade(R.setTradeKind(R.nav(yes, { screen: 'trade' }), 'predictions'), NOW);
+  assert.match(t, /<div class="tk-pg-h">You hold<\/div><ul class="tk-list"><li><button type="button" class="tk-row" data-action="pickMarket" data-id="FED-DEC" data-venue="Polymarket" data-side="sell" data-outcome="0">/);
+  const sell = R.openTicket(yes, { id: 'FED-DEC', side: 'sell', outcome: 0, venue: 'Polymarket', now: NOW });
+  assert.deepEqual([sell.trade.ticket.side, sell.trade.ticket.venue], ['sell', 'Polymarket']);
 });

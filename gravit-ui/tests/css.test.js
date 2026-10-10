@@ -151,6 +151,13 @@ test('app.css is well formed: braces never close more than they opened, so no ru
   assert.equal(depth, 0);
 });
 
+test('Markets and Trade: the table folds 24h and Volume when narrow, a link button looks like a link, selects use the page font', async () => {
+  const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
+  assert.match(css, /@container \(max-width: 620px\) \{[^}]*\.mk-t \.mk-c-chg, \.mk-t \.mk-c-vol \{ display: none; \}/);
+  assert.match(css, /^button\.link \{[^}]*border: 0;[^}]*background: none;/m);
+  assert.match(css, /^button, input, textarea, select \{ font: inherit; color: inherit; \}/m);
+});
+
 test('the equity blue goes by Linqi\'s own name: no --blue, which his tokens use for the orange RWA colour', async () => {
   const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
   const tokens = await readFile(new URL('../css/tokens.css', import.meta.url), 'utf8');

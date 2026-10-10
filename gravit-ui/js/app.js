@@ -140,7 +140,9 @@ function focusKey(el) {
   // controls that share an action (the connector's fields, its radios) are told apart by their name, and a radio or checkbox by its value
   const own = [el.name ? `[name="${q(el.name)}"]` : '', el.type === 'radio' || el.type === 'checkbox' ? `[value="${q(el.value)}"]` : ''].join('');
   const data = Object.entries(el.dataset).map(([k, v]) => `[data-${k.replace(/[A-Z]/g, c => '-' + c.toLowerCase())}="${q(v)}"]`).join('');
-  return { sel: data + own };
+  // the same keys can sit in a drawer and on the page behind it (a market's Watch): look in the same container first
+  const scope = ['.drawer', '.modal', '.tk-panel'].find(c => el.closest?.(c));
+  return { sel: (scope ? `${scope} ` : '') + data + own };
 }
 
 // which overlay is up: focus moves into it when it opens and back to its opener when it closes
@@ -152,6 +154,8 @@ const screenOf = s => (s.route.screen === 'markets' ? 'markets/' : `${s.route.sc
 // which editor is open, by what it edits (its error may change; the editor stays the same)
 const editorOf = e => (e ? [e.kind, e.key, e.convId, e.id, e.dir].join('|') : null);
 // which dialog step is up: its body keeps its scroll only while the step stays the same
+// the ticket on Trade, by market: a new one is brought into view with its amount ready
+const ticketOf = s => (s.route.screen === 'trade' && s.trade.ticket?.id ? s.trade.ticket.id : null);
 const dialogOf = s => (s.discover.create ? `${s.discover.create.run}:${s.discover.create.step}` : null);
 const drawerOf = s => (s.account.panel ? `panel:${s.account.panel}` : null) ?? s.discover.drawer ?? (s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null) ?? (marketDrawer(s) ? `market:${s.route.id}` : null);
 
@@ -191,7 +195,7 @@ export function boot(win) {
     const typed = new Map([...root.querySelectorAll('input[id]:not([type=radio]):not([type=checkbox]):not([type=file]), textarea[id], select[id]')].map(el => [el.id, el.value]));
     const thread0 = doc.getElementById('thread');
     const threadAt = thread0 ? { top: thread0.scrollTop, bottom: thread0.scrollHeight - thread0.scrollTop - thread0.clientHeight < 40 } : null;
-    const scrolls = { main: root.querySelector('main')?.scrollTop, rows: root.querySelector('.rail-rows')?.scrollTop, drawer: root.querySelector('.drawer-body')?.scrollTop, dialog: root.querySelector('.modal-body')?.scrollTop, shelves: [...root.querySelectorAll('.shelf-row')].map(e => e.scrollLeft) };
+    const scrolls = { main: root.querySelector('main')?.scrollTop, rows: root.querySelector('.rail-rows')?.scrollTop, drawer: root.querySelector('.drawer-body')?.scrollTop, dialog: root.querySelector('.modal-body')?.scrollTop, panel: root.querySelector('.tk-panel')?.scrollTop, shelves: [...root.querySelectorAll('.shelf-row')].map(e => e.scrollLeft) };
 
     const screen = s.route.screen === 'discover' ? renderDiscover(s) : s.route.screen === 'account' ? renderAccount(s) : s.route.screen === 'mail' ? renderMailScreen(s, now())
       : s.route.screen === 'markets' ? renderMarkets(s, now()) : s.route.screen === 'trade' ? renderTrade(s, now()) : renderMessagesScreen(s, now());
@@ -228,6 +232,11 @@ export function boot(win) {
     if (sameScreen) [...root.querySelectorAll('.shelf-row')].forEach((e, i) => { if (scrolls.shelves[i] != null) e.scrollLeft = scrolls.shelves[i]; });
     const drawerBody = root.querySelector('.drawer-body');
     if (drawerBody && last.drawer && last.drawer === drawerOf(s) && scrolls.drawer != null) drawerBody.scrollTop = scrolls.drawer;
+    // the ticket keeps its own scroll while you type in it; a ticket just opened is brought into view instead
+    const panel = root.querySelector('.tk-panel');
+    const opened = !!ticketOf(s) && ticketOf(s) !== last.ticket;
+    if (panel && opened) panel.scrollIntoView?.({ block: 'nearest' });
+    else if (panel && sameScreen && scrolls.panel != null) panel.scrollTop = scrolls.panel;
     const dialogBody = root.querySelector('.modal-body');
     if (dialogBody && last.dialog && last.dialog === dialogOf(s) && scrolls.dialog != null) dialogBody.scrollTop = scrolls.dialog;
     // the thread stays where the person was reading, unless it is another conversation, it gained a message, or they were at the bottom
@@ -246,6 +255,8 @@ export function boot(win) {
     } else if (!overlay && last.overlay) {
       target = find(last.opener) ?? target;
       opener = null;
+    } else if (opened) {
+      target = doc.getElementById('tk-amount') ?? root.querySelector('.tk-panel .close-key') ?? target;
     } else if (s.edit && editorOf(s.edit) !== last.editor) {
       target = root.querySelector('.inline-edit [name]') ?? target; // an editor that just opened takes focus
     } else if (s.confirm && s.confirm !== last.confirm) {
@@ -260,7 +271,7 @@ export function boot(win) {
       target.focus();
       if (caret && target === find(activeKey) && typeof target.setSelectionRange === 'function') target.setSelectionRange(caret[0], caret[1]);
     }
-    last = { overlay, opener, screen: screenOf(s), drawer: drawerOf(s), dialog: dialogOf(s), thread: threadSig, editor: editorOf(s.edit), confirm: s.confirm };
+    last = { overlay, opener, screen: screenOf(s), drawer: drawerOf(s), dialog: dialogOf(s), ticket: ticketOf(s), thread: threadSig, editor: editorOf(s.edit), confirm: s.confirm };
     if (s.call?.status === 'live' && !ticking) tick();
     if ((s.route.screen === 'markets' || s.route.screen === 'trade') && !clocking) clock();
   }
@@ -315,6 +326,9 @@ export function boot(win) {
 
   function restart(state, route) {
     timers.clear();
+    // the cleared timers took the call's tick and the countdown clock with them
+    ticking = false;
+    clocking = false;
     store.reset(state);
     applyTheme(store.get().theme);
     composerText = '';
@@ -341,6 +355,12 @@ export function boot(win) {
     a.click();
     a.remove?.();
     setTimeout(() => win.URL.revokeObjectURL(href), REVOKE_MS);
+  }
+
+  // closing a market's drawer replaces its history entry, so Back does not open it again
+  function closeMarket() {
+    win.history.replaceState(null, '', '#/markets');
+    store.dispatch('nav', { screen: 'markets', id: null });
   }
 
   // the scripted client on Discover's MCP face: it connects a moment after its line is used, calls shop.mine, then asks shop.publish
@@ -502,7 +522,7 @@ export function boot(win) {
     },
     // Markets: tabs, sort, the chart interval, the watchlist; a market's drawer is its route
     openMarket: el => go({ screen: 'markets', id: el.dataset.id }),
-    closeMarket: () => go({ screen: 'markets', id: null }),
+    closeMarket: () => closeMarket(),
     mkTab: el => store.dispatch('setMarketsTab', el.dataset.value),
     mkSort: el => store.dispatch('setMarketsSort', el.dataset.value),
     mkInterval: el => store.dispatch('setMarketsInterval', el.dataset.value),
@@ -513,7 +533,7 @@ export function boot(win) {
       store.dispatch('openTicket', { id: el.dataset.id, side: el.dataset.side || 'buy', outcome: Number(el.dataset.outcome || 0), venue: el.dataset.venue || null, now: now() });
       go({ screen: 'trade' });
     },
-    pickMarket: el => store.dispatch('openTicket', { id: el.dataset.id, venue: el.dataset.venue || null, now: now() }),
+    pickMarket: el => store.dispatch('openTicket', { id: el.dataset.id, venue: el.dataset.venue || null, side: el.dataset.side || 'buy', outcome: Number(el.dataset.outcome || 0), now: now() }),
     tradeKind: el => store.dispatch('setTradeKind', el.dataset.value),
     closeTicket: () => store.dispatch('closeTicket'),
     ticketSide: el => store.dispatch('ticketSide', { side: el.dataset.value, now: now() }),
@@ -637,7 +657,7 @@ export function boot(win) {
       if (s.edit) { store.dispatch('cancelEdit'); return; }
       if (s.account.panel) { store.dispatch('closePanel'); return; }
       if (s.confirm) { store.dispatch('cancelConfirm'); return; }
-      if (marketDrawer(s)) { go({ screen: 'markets', id: null }); return; }
+      if (marketDrawer(s)) { closeMarket(); return; }
       if (s.discover.create) store.dispatch('closeCreate');
       else if (s.discover.drawer) store.dispatch('closeDrawer');
       else if (s.detailsOpen) store.dispatch('toggleDetails');

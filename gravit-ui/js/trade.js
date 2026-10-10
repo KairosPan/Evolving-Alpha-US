@@ -51,15 +51,17 @@ export function prepare(state, now) {
   if (!(amount > 0)) return { ...base, state: 'incomplete', text: 'Type an amount.' };
   if (t.orderType === 'limit' && !(limit > 0)) return { ...base, state: 'incomplete', text: 'Type the limit price.' };
   const price = t.orderType === 'limit' ? (ev ? limit / 100 : limit) : shown;
-  const qty = floorTo(t.unit === 'qty' ? amount : amount / price, inst.qtyStep);
+  // a market buy may pay up to 2% over the ask before the venue stops it; dollars are sized at that worst price, as Linqi's ticket does
+  const marketBuy = t.orderType === 'market' && t.side === 'buy';
+  const worst = ev ? Math.min(1, leg.ask * 1.02) : leg.ask * 1.02;
+  const qty = floorTo(t.unit === 'qty' ? amount : amount / (marketBuy ? worst : price), inst.qtyStep);
   if (!(qty > 0) || qty < inst.minQty) {
     return no(ev ? `${leg.venue}: the smallest order in ${leg.symbol} is 1 contract (${cents(price)})` : `${leg.venue}: the smallest order in ${leg.symbol} is ${qtyFmt(inst.minQty)} ${inst.base} (${usd(inst.minQty * price)} at ${px(price)})`);
   }
   if (inst.minUsd && qty * price < inst.minUsd) return no(`${leg.venue}: the smallest order in ${leg.symbol} is worth ${dollars(inst.minUsd)}`);
-  const notional = round2(qty * price);
-  // a market buy may pay up to 2% over the ask before the venue stops it
-  const worst = ev ? Math.min(1, leg.ask * 1.02) : leg.ask * 1.02;
-  const maxUsd = t.orderType === 'market' && t.side === 'buy' ? round2(qty * worst) : notional;
+  // a limit sell under the bid fills at the bid: it is worth that much, and the cap counts that much
+  const notional = round2(qty * (t.orderType === 'limit' && t.side === 'sell' ? Math.max(price, leg.bid) : price));
+  const maxUsd = marketBuy ? round2(qty * worst) : notional;
   if (maxUsd > CAP_USD) return no(`${dollars(maxUsd)} is more than the most one order may be (${dollars(CAP_USD)}).`);
   if (t.side === 'buy') {
     const bp = buyingPower(state.account, leg.venue);
@@ -100,12 +102,13 @@ export function revalue(account) {
   const of = token => holdings.filter(h => CLASS[instrument(h.name)?.kind] === token).reduce((a, h) => a + h.value, 0);
   const cash = Object.values(account.cash ?? {}).reduce((a, b) => a + b, 0);
   const parts = [['Cash', 'cash', cash], ['Stablecoins', 'stable', of('stable') + account.wallet.usdc], ['Crypto', 'crypto', of('crypto')], ['Stocks', 'equity', of('equity')], ['RWA', 'rwa', of('rwa')], ['Predictions', 'event', of('event')]].filter(p => p[2] > 0);
+  // classes that round to 0% are left off the bar and its legend
   const total = parts.reduce((a, p) => a + p[2], 0);
   const raw = parts.map(p => (total ? (p[2] / total) * 100 : 0));
   const pct = raw.map(Math.floor);
   const left = total ? 100 - pct.reduce((a, b) => a + b, 0) : 0;
   raw.map((r, i) => [r - Math.floor(r), i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).slice(0, left).forEach(([, i]) => { pct[i]++; });
-  return { ...account, holdings, netWorth: round2(total), alloc: parts.map((p, i) => ({ name: p[0], pct: pct[i], token: p[1] })) };
+  return { ...account, holdings, netWorth: round2(total), alloc: parts.map((p, i) => ({ name: p[0], pct: pct[i], token: p[1] })).filter(x => x.pct > 0) };
 }
 
 // a fill: the holding, the money at the venue, the statement line; then everything revalued

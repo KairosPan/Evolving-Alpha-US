@@ -2,7 +2,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 var(--font-sans); }
 body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
-button, input, textarea { font: inherit; color: inherit; }
+button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 a { color: inherit; text-decoration: none; }
 h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
@@ -14,6 +14,8 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .down { color: var(--down); font-weight: 700; }
 .spacer { flex: 1 1 auto; }
 .link { color: var(--alloc-equity); font-size: 13px; font-weight: 600; }
+button.link { border: 0; background: none; padding: 0; min-height: 32px; cursor: pointer; }
+button.link:disabled { color: var(--dim); cursor: default; }
 .ticker { display: inline-flex; align-items: center; gap: 2px; color: var(--alloc-equity); font-weight: 700; }
 .ticker-lead { font-size: 15px; }
 
@@ -409,7 +411,15 @@ button.toast-key { border: 0; font: inherit; font-size: 13px; }
   .mk-t .mk-where-l { display: block; max-width: 240px; }
   .mk-t th, .mk-t td { padding-left: 8px; padding-right: 8px; }
 }
-@container (max-width: 640px) { .mk-t td.mk-c-name { white-space: nowrap; min-width: 0; } }
+/* names wrap rather than push the price and the key out of view */
+@container (max-width: 640px) { .mk-t td.mk-c-name { min-width: 150px; } }
+/* beside the drawer the table keeps the market, its price and its key */
+@container (max-width: 620px) {
+  .mk-t .mk-c-chg, .mk-t .mk-c-vol { display: none; }
+  .mk-t td.mk-c-name { min-width: 140px; }
+  .mk-t .mk-act { padding: 0 12px; }
+  .mk-t .mk-act svg { display: none; }
+}
 .mk-star { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--dim); }
 .mk-star:hover, .mk-star[aria-pressed="true"] { color: var(--text); }
 .mk-star[aria-pressed="true"] svg, .mk-on svg { fill: currentColor; }

@@ -15,7 +15,8 @@ const FIELDS = { amount: null, unit: ['usd', 'qty'], orderType: ['market', 'limi
 const changed = (s, patch, now) => tk(s, { ...patch, preparedAt: now, said: null });
 
 export const reducers = {
-  setMarketsTab: (s, tab) => ([...TABS.map(t => t[0]), 'watching', ''].includes(tab) && tab !== s.markets.tab ? mk(s, { tab }) : s),
+  // a tab starts from Most traded, as Linqi's does
+  setMarketsTab: (s, tab) => ([...TABS.map(t => t[0]), 'watching', ''].includes(tab) && tab !== s.markets.tab ? mk(s, { tab, sort: 'volume' }) : s),
   setMarketsSort(s, v) {
     const hit = SORTS.find(([id, label]) => id === v || label === v);
     return hit && hit[0] !== s.markets.sort ? mk(s, { sort: hit[0] }) : s;

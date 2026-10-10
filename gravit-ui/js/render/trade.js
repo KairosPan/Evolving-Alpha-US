@@ -11,7 +11,7 @@ import { chip } from './thread.js';
 import { mkAv, closeSpan, orderWords, cancelKey } from './markets.js';
 
 const QTY_WORD = { coin: null, stock: 'Shares', rwa: null, event: 'Contracts' };
-const pick = (inst, sub, right = '', venue = null) => `<li><button type="button"${attrs({ class: 'tk-row', 'data-action': 'pickMarket', 'data-id': inst.id, 'data-venue': venue })}>${mkAv(inst, 'sm')}` +
+const pick = (inst, sub, right = '', venue = null, sell = null) => `<li><button type="button"${attrs({ class: 'tk-row', 'data-action': 'pickMarket', 'data-id': inst.id, 'data-venue': venue, 'data-side': sell == null ? null : 'sell', 'data-outcome': sell })}>${mkAv(inst, 'sm')}` +
   `<span class="tk-rn"><b>${esc(inst.name)}</b><span class="mk-sub">${sub}</span></span>${right ? `<span class="tk-rp">${right}</span>` : ''}</button></li>`;
 const group = (title, rows) => (rows.length ? `<div class="tk-pg"><div class="tk-pg-h">${title}</div><ul class="tk-list">${rows.join('')}</ul></div>` : '');
 
@@ -34,7 +34,9 @@ function picker(state, now) {
     groups = found.length ? group(`Results for “${esc(q)}”`, found.map(i => pick(i, esc(whereWords(i)), priced(i)))) : `<p class="mk-empty">Nothing matches “${esc(q)}” under ${K.label}.</p>`;
   } else {
     const held = a.holdings.map(h => [h, instrument(h.name)]).filter(([, i]) => i && kindOf(i) === K.id).map(([h, i]) => pick(i,
-      i.kind === 'event' ? `${qtyFmt(h.qty)} contracts · ${esc(h.outcome)} · ${esc(h.venue)}` : `${qtyFmt(h.qty ?? 0)} · ${esc(h.venue)}`, `<span class="num">${usd(h.value)}</span>${chgHtml(h.chg)}`, h.venue));
+      i.kind === 'event' ? `${qtyFmt(h.qty)} contracts · ${esc(h.outcome)} · ${esc(h.venue)}` : `${qtyFmt(h.qty ?? 0)} · ${esc(h.venue)}`, `<span class="num">${usd(h.value)}</span>${chgHtml(h.chg)}`, h.venue,
+      // a prediction you hold opens as a sell of that outcome, as Linqi's does
+      i.kind === 'event' ? String(Math.max(0, i.outcomes.findIndex(o => o.label === h.outcome))) : null));
     const seen = new Set();
     const recent = a.orders.filter(o => o.by === 'you' && kindOf(instrument(o.inst)) === K.id && !seen.has(o.inst) && seen.add(o.inst)).slice(0, 6)
       .map(o => pick(instrument(o.inst), `${esc(o.venue)} · ${fmtDate(o.at)}`));
@@ -59,7 +61,7 @@ function underWay(state) {
   });
   const asks = state.conversations.filter(c => !isClosed(c)).flatMap(c => c.messages.filter(m => m.kind === 'card' && !m.answer).map(m => {
     const d = m.data ?? {};
-    return `<tr><td><b>Gravit asks: ${esc(d.title ?? m.text)}</b><span class="tk-why">${d.venue ? `${esc(d.venue)} · ` : ''}by Gravit</span></td>` +
+    return `<tr><td><b>${esc(d.title ?? m.text)}</b><span class="tk-why">${d.venue ? `${esc(d.venue)} · ` : ''}by Gravit</span></td>` +
       `<td><span class="tk-st warn">Waiting for you</span>${d.by ? `<span class="tk-why">answer by ${fmtClock(d.by)}</span>` : ''}</td>` +
       `<td class="r"><a class="btn-sm" href="#/messages/${c.id}" data-action="open" data-id="${c.id}">Review</a></td></tr>`;
   }));

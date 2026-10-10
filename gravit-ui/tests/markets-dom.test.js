@@ -66,7 +66,7 @@ test('the signature clock counts down in place, and a quote that runs out is pre
   try {
     store.dispatch('openTicket', { id: 'BTC', now: Date.now() });
     store.dispatch('setTicket', { field: 'amount', value: '25', now: Date.now() });
-    await sleep(1100);
+    await sleep(1500);
     assert.match(left.textContent, /^Your signature is good for 9:5\d more\.$/);
     const old = Date.now() - QUOTE_MS + 300;
     store.dispatch('requote', { now: old });
@@ -147,4 +147,79 @@ test('a pending order a reload interrupted still settles; placeFlow schedules th
   await sleep(20);
   assert.equal(st.get().account.orders[0].status, 'filled');
   timers.clear();
+});
+
+// ---- review fixes
+
+test('after Reset demo the signature clock still runs on Trade', async () => {
+  const f = fakeWindow({ ...noDialogs, hash: '#/trade' });
+  const left = f.withSelector('[data-left]', { tagName: 'DIV' });
+  const store = boot(f.win);
+  try {
+    store.dispatch('openTicket', { id: 'BTC', now: Date.now() });
+    f.fire('doc', 'keydown', { key: 'd' });
+    f.click(btn(f, 'director', { key: 'reset' }));
+    f.win.location.hash = '#/trade';
+    await f.tick();
+    store.dispatch('openTicket', { id: 'BTC', now: Date.now() });
+    store.dispatch('setTicket', { field: 'amount', value: '25', now: Date.now() });
+    await sleep(1500);
+    assert.match(left.textContent, /^Your signature is good for 9:5\d more\.$/);
+  } finally {
+    store.timers.clear();
+  }
+});
+
+test('closing a market drawer replaces its history entry, so Back does not reopen it', async () => {
+  const f = fakeWindow({ ...noDialogs, hash: '#/markets/BTC' });
+  const replaced = [];
+  const replace = f.win.history.replaceState;
+  f.win.history.replaceState = (a, b, h) => { replaced.push(h); replace(a, b, h); };
+  const store = boot(f.win);
+  try {
+    f.click(btn(f, 'closeMarket'));
+    await f.tick();
+    assert.deepEqual(store.get().route, { screen: 'markets', id: null });
+    assert.ok(replaced.includes('#/markets'));
+  } finally {
+    store.timers.clear();
+  }
+});
+
+test('Watch inside the drawer keeps focus inside the drawer', () => {
+  const f = fakeWindow({ ...noDialogs, hash: '#/markets/BTC' });
+  const star = f.withSelector('[data-action="toggleWatch"][data-id="BTC"]', { tagName: 'BUTTON', dataset: { action: 'toggleWatch', id: 'BTC' } });
+  const inDrawer = f.withSelector('.drawer [data-action="toggleWatch"][data-id="BTC"]', { tagName: 'BUTTON', dataset: { action: 'toggleWatch', id: 'BTC' }, closestMap: { '.drawer': {} } });
+  const store = boot(f.win);
+  try {
+    inDrawer.focus();
+    f.click(inDrawer);
+    assert.equal(store.get().markets.watch.includes('BTC'), false);
+    assert.equal(f.doc.activeElement, inDrawer);
+    assert.notEqual(f.doc.activeElement, star);
+  } finally {
+    store.timers.clear();
+  }
+});
+
+test('the ticket keeps its own scroll while you type, and a new ticket is brought into view with the amount ready', async () => {
+  const f = fakeWindow({ ...noDialogs, hash: '#/markets' });
+  let shown = 0;
+  const panel = f.withSelector('.tk-panel', { tagName: 'ASIDE', scrollIntoView() { shown++; } });
+  const amount = f.withId('tk-amount', { tagName: 'INPUT', name: 'amount', dataset: { action: 'ticketField' } });
+  const store = boot(f.win);
+  try {
+    f.click(btn(f, 'tradeFrom', { id: 'BTC' }));
+    await f.tick();
+    assert.equal(store.get().route.screen, 'trade');
+    assert.equal(shown, 1, 'the ticket is scrolled into view');
+    assert.equal(f.doc.activeElement, amount, 'the amount takes focus');
+    panel.scrollTop = 200;
+    amount.value = '2';
+    f.fire('root', 'input', { target: amount });
+    assert.equal(panel.scrollTop, 200, 'typing does not jump the ticket back to its top');
+    assert.equal(shown, 1, 'and does not scroll it into view again');
+  } finally {
+    store.timers.clear();
+  }
 });

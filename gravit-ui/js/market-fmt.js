@@ -38,7 +38,8 @@ export function closeIn(ms) {
 }
 
 export function leftWords(ms) {
-  const t = Math.max(0, Math.ceil(ms / 1000));
+  // a countdown rounds down: the first second after a quote already reads 9:59
+  const t = Math.max(0, Math.floor(ms / 1000));
   return `Your signature is good for ${Math.floor(t / 60)}:${pad(t % 60)} more.`;
 }
 

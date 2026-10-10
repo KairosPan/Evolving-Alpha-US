@@ -95,9 +95,11 @@ export const reducers = {
     if (!src) return err(`${from} 没有 ${asset}`);
     if (n > src.value) return err(`${from} 只有 ${money(src.value)}`);
     // dollars move as quantity at the holding's price; revalue then prints the values
-    const dq = n / (markOf(src) ?? 1);
+    // all of it (to the cent shown) moves the whole quantity, so nothing below zero is left behind
+    const whole = n >= src.value - 0.005;
+    const dq = whole ? src.qty ?? src.value : n / (markOf(src) ?? 1);
     const tidy = v => Number(v.toFixed(8));
-    let holdings = s.account.holdings.map(h => (h === src ? { ...h, qty: tidy((h.qty ?? h.value) - dq) } : h));
+    let holdings = whole ? s.account.holdings.filter(h => h !== src) : s.account.holdings.map(h => (h === src ? { ...h, qty: tidy((h.qty ?? h.value) - dq) } : h));
     const dst = holdings.find(h => h.name === asset && h.venue === to);
     holdings = dst ? holdings.map(h => (h === dst ? { ...h, qty: tidy((h.qty ?? h.value) + dq) } : h)) : [...holdings, { ...src, key: `${src.key}@${to}`, venue: to, qty: tidy(dq) }];
     const activity = [{ at: now, text: `Move ${money(n)} ${asset} · ${from} → ${to}`, amount: 0 }, ...s.account.activity];

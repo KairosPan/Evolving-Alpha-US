@@ -62,7 +62,7 @@ test('Markets: the head with its search, tabs that have rows, one table with one
   assert.match(h, /data-action="toggleWatch" data-id="ETH" aria-pressed="false" aria-label="Watch Ethereum"/);
   assert.match(h, /<td class="mk-c-where"><span class="mk-where"><span class="mk-v">Stand-in Exchange<\/span> · <span class="mk-v">Stand-in Wallet<\/span> <span class="mk-more">\+1<\/span><\/span><\/td>/);
   assert.match(h, /<td class="r">\$62,800\.00<\/td>/);
-  assert.match(h, /<td class="r">\$1\.9B<\/td>/);
+  assert.match(h, /<td class="r mk-c-vol">\$1\.9B<\/td>/);
   assert.doesNotMatch(h, /Why these|Not shown|Read-only server|24h at/);
 });
 
@@ -148,4 +148,29 @@ test('the Fed drawer: two outcomes, Connect to trade until Polymarket connects, 
   assert.doesNotMatch(usdc, /aria-label="Price history"|aria-label="Across venues"|data-action="tradeFrom"/);
   assert.match(usdc, /<div class="mk-t1">2,490 USDC · \$2,490\.00<\/div>/);
   assert.equal(R.nav(seed(NOW), { screen: 'markets', id: 'NOPE' }).route.id, null);
+});
+
+// ---- review fixes
+
+test('a tab starts from Most traded, as Linqi\'s does; a sort the tab does not offer shows Most traded', () => {
+  const m = R.setMarketsSort(mkts(), 'Closing soonest');
+  assert.equal(R.setMarketsTab(m, 'stocks').markets.sort, 'volume');
+  const stuck = { ...mkts(), markets: { ...mkts().markets, tab: 'stocks', sort: 'closing' } };
+  const h = renderMarkets(stuck, NOW);
+  assert.match(h, /class="seg-item pressed" aria-pressed="true" data-action="mkSort" data-value="Most traded"/);
+  assert.deepEqual(rows(h), ['SPY', 'TSLA', 'AAPL', 'NVDA', 'KO'].sort((a, b) => ({ NVDA: 1, SPY: 2, TSLA: 3, AAPL: 4, KO: 5 })[a] - ({ NVDA: 1, SPY: 2, TSLA: 3, AAPL: 4, KO: 5 })[b]));
+});
+
+test('the search count is what the tab shows', () => {
+  const s = R.setMarketsQuery(R.setMarketsTab(mkts(), 'stocks'), 'a');
+  const h = renderMarkets(s, NOW);
+  const shown = rows(h).length + count(h, /class="mk-card"/g);
+  assert.match(h, new RegExp(`<p class="mk-q">${shown} markets? for “a”`));
+  const all = renderMarkets(R.setMarketsQuery(mkts(), 'a'), NOW);
+  assert.ok(rows(all).length > shown, 'the test means something: other tabs match too');
+});
+
+test('Gravit asks in the drawer without repeating 要你答', () => {
+  const s = R.append(R.nav(seed(NOW), { screen: 'markets', id: 'BTC' }), { convId: 'c-1', msg: { from: 'gravit', kind: 'card', text: '要你答：加 $25', data: { title: '要你答：加 $25', rows: [] } }, at: NOW });
+  assert.match(renderMarkets(s, NOW), /<div class="mk-t1">Gravit asks: 加 \$25<\/div>/);
 });

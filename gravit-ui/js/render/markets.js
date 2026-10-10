@@ -55,13 +55,13 @@ function row(inst, state, now, withVolume) {
     `${inst.issuer ? `<span class="mk-iss">Issued by ${esc(inst.issuer)}</span>` : ''}</span></button><div class="mk-where-l">${where}</div></td>` +
     `<td class="mk-c-where">${where}</td>` +
     `<td class="r">${ev ? `${cents(yes.price)}<span class="mk-out-l"> Yes</span>` : usd(inst.price)}</td>` +
-    `<td class="r">${ev ? chgHtml(centsChg(yes.chg), '¢') : chgHtml(inst.chg)}</td>` +
-    `${withVolume ? `<td class="r">${vol(inst.vol)}</td>` : ''}<td class="r">${actionKey(inst, state.account)}</td></tr>`;
+    `<td class="r mk-c-chg">${ev ? chgHtml(centsChg(yes.chg), '¢') : chgHtml(inst.chg)}</td>` +
+    `${withVolume ? `<td class="r mk-c-vol">${vol(inst.vol)}</td>` : ''}<td class="r">${actionKey(inst, state.account)}</td></tr>`;
 }
 
 function table(insts, state, now, withVolume = true) {
-  const head = `<tr><th scope="col"><span class="sr-only">Watch</span></th><th scope="col" class="mk-c-name">Market</th><th scope="col" class="mk-c-where">Where</th><th scope="col" class="r">Price</th><th scope="col" class="r">24h</th>` +
-    `${withVolume ? '<th scope="col" class="r">Volume</th>' : ''}<th scope="col" class="r"><span class="sr-only">Actions</span></th></tr>`;
+  const head = `<tr><th scope="col"><span class="sr-only">Watch</span></th><th scope="col" class="mk-c-name">Market</th><th scope="col" class="mk-c-where">Where</th><th scope="col" class="r">Price</th><th scope="col" class="r mk-c-chg">24h</th>` +
+    `${withVolume ? '<th scope="col" class="r mk-c-vol">Volume</th>' : ''}<th scope="col" class="r"><span class="sr-only">Actions</span></th></tr>`;
   return `<section class="cardbox mk-tcard" aria-label="Markets"><div class="mk-wrap"><table class="mk-t"><thead>${head}</thead><tbody>${insts.map(i => row(i, state, now, withVolume)).join('')}</tbody></table></div></section>`;
 }
 
@@ -101,11 +101,15 @@ export function renderMarkets(state, now) {
   const tabs = [...(q ? [['', 'All results']] : []), ...TABS.filter(([id]) => found.some(i => inTab(i, id))), ...(watch.length ? [['watching', 'Watching']] : [])];
   const shown = id => tabs.some(t => t[0] === id);
   const tab = q ? (shown(m.tab) && m.tab !== 'all' ? m.tab : '') : shown(m.tab) ? m.tab : 'all';
-  let insts = tab === 'watching' ? watch.filter(i => matches(i, q)) : sorted(found.filter(i => inTab(i, tab)), m.sort);
-
-  const sorts = SORTS.filter(([id]) => id !== 'closing' || tab === 'predictions' || insts.some(i => i.closeTime));
-  const pressed = SORTS.find(s => s[0] === m.sort)[1];
-  const left = q ? `<p class="mk-q">${found.length} market${found.length === 1 ? '' : 's'} for “${esc(q)}” <button type="button" class="mk-clear" data-action="mkClear">Clear</button></p>` : '<span></span>';
+  const inThisTab = tab === 'watching' ? watch.filter(i => matches(i, q)) : found.filter(i => inTab(i, tab));
+  // the sorts this tab offers; one it does not offer reads as Most traded
+  const sorts = SORTS.filter(([id]) => id !== 'closing' || tab === 'predictions' || inThisTab.some(i => i.closeTime));
+  const sort = sorts.some(([id]) => id === m.sort) ? m.sort : 'volume';
+  let insts = tab === 'watching' ? inThisTab : sorted(inThisTab, sort);
+  const pressed = SORTS.find(s => s[0] === sort)[1];
+  // the count is what this tab shows
+  const n = insts.length;
+  const left = q ? `<p class="mk-q">${n} market${n === 1 ? '' : 's'} for “${esc(q)}” <button type="button" class="mk-clear" data-action="mkClear">Clear</button></p>` : '<span></span>';
   const bar = `<div class="mk-bar">${left}${tab !== 'watching' && insts.length > 1 ? seg(sorts.map(s => s[1]), pressed, 'mkSort') : ''}</div>`;
 
   let body;
@@ -176,10 +180,11 @@ export function marketDrawer(inst, state, now) {
     }).join('')}</div>`;
   }
   if (!stable) {
-    const heldAble = a.holdings.find(h => h.name === inst.base && legs.some(l => l.state === 'able' && l.venue === h.venue));
+    const heldAble = a.holdings.find(h => h.name === inst.base && legsOf(inst, a, ev ? Math.max(0, inst.outcomes.findIndex(o => o.label === h.outcome)) : 0).some(l => l.state === 'able' && l.venue === h.venue));
+    const heldOut = ev && heldAble ? inst.outcomes.findIndex(o => o.label === heldAble.outcome) : -1;
     const acts = [
       ev ? '' : r.act === 'trade' ? `<button type="button" class="btn-primary" data-action="tradeFrom" data-id="${inst.id}">Buy</button>` : r.act === 'connect' ? connectKey(r.venue, a, 'btn-primary', 16) : '',
-      !ev && heldAble ? `<button type="button" class="btn" data-action="tradeFrom" data-id="${inst.id}" data-side="sell" data-venue="${esc(heldAble.venue)}">Sell</button>` : '',
+      heldAble ? `<button type="button" class="btn" data-action="tradeFrom" data-id="${inst.id}" data-side="sell" data-venue="${esc(heldAble.venue)}"${heldOut >= 0 ? ` data-outcome="${heldOut}"` : ''}>Sell</button>` : '',
       `<button type="button" class="btn" data-action="handToGravit" data-id="${inst.id}">${icon('agent', 16, 2)}Hand to Gravit</button>`,
       `<button type="button" class="${cls('btn', watched && 'mk-on')}" data-action="toggleWatch" data-id="${inst.id}" aria-pressed="${watched}">${icon('star', 16, 2)}${watched ? 'Watching' : 'Watch'}</button>`,
     ];
@@ -214,7 +219,7 @@ export function marketDrawer(inst, state, now) {
     // the conversations about it: Gravit's orders on it, or the market named in a title, a message or a card row
     const about = state.conversations.filter(c => a.orders.some(o => o.inst === inst.id && o.by === 'gravit' && o.conv === c.id)
       || mentions(c.title, inst.base) || c.messages.some(msg => mentions(msg.text, inst.base) || (msg.data?.rows ?? []).some(x => x.t === inst.base)));
-    const asks = about.flatMap(c => c.messages.filter(msg => msg.kind === 'card' && !msg.answer).map(msg => line('!', `Gravit asks: ${esc(msg.data?.title ?? msg.text)}`,
+    const asks = about.flatMap(c => c.messages.filter(msg => msg.kind === 'card' && !msg.answer).map(msg => line('!', `Gravit asks: ${esc((msg.data?.title ?? msg.text).replace(/^要你答：/, ''))}`,
       `Waiting for you · <a class="link" href="#/messages/${c.id}" data-action="open" data-id="${c.id}">Review</a>`, '', 'warn')));
     const convs = about.map(c => {
       const L = c.intent.limit;
