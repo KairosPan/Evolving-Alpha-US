@@ -11,16 +11,22 @@ export const CANDLES = [
   [33, 26, 36, 20], [26, 20, 30, 14], [20, 25, 28, 16], [25, 18, 28, 12], [18, 22, 26, 14], [22, 16, 26, 10], [16, 20, 24, 12],
 ];
 
+// about $5 of each coin at the stand-in prices
+const COINS = { BTC: { qty: '0.00008', price: '62,500' }, ETH: { qty: '0.0019', price: '2,630' }, SOL: { qty: '0.034', price: '147' } };
+const coinIn = t => (/\beth\b|以太/.test(t) ? 'ETH' : /\bsol\b/.test(t) ? 'SOL' : 'BTC');
+
 export function replyTo(text, ctx = {}) {
   const t = (text ?? '').toLowerCase();
   const installed = ctx.installed ?? [];
   const now = ctx.now ?? Date.now();
   // whole words only: "something" and "method" are not ETH; JS \b treats Chinese as a boundary, so 买btc still matches
   if (/\bbtc\b|比特币|\beth\b|以太|\bsol\b/.test(t)) {
+    const coin = coinIn(t);
+    const title = `要你答：买 ${COINS[coin].qty} ${coin}`;
     return [
       ev(1200, G('text', '收到。看了 Stand-in Exchange 和 Stand-in Wallet 的 DEX，交易所便宜。先建 $5 试水。')),
       // {card} {ord} {ledger} are numbered by the store's counters when the message lands (reducers/messages.js append)
-      ev(2800, G('card', '要你答：买 0.00008 BTC', { title: '要你答：买 0.00008 BTC', venue: 'Stand-in Exchange', type: 'market', about: 'about $5.00', cardId: '{card}', by: now + 26 * MIN })),
+      ev(2800, G('card', title, { title, coin, venue: 'Stand-in Exchange', type: 'market', about: 'about $5.00', cardId: '{card}', by: now + 26 * MIN })),
     ];
   }
   if (/pelosi|跟单|政客/.test(t)) {
@@ -44,8 +50,9 @@ export function replyTo(text, ctx = {}) {
 export function followUp(msg, answer, ctx = {}) {
   if (!msg || msg.answer) return [];
   if (msg.kind === 'card') {
+    const coin = COINS[msg.data?.coin] ? msg.data.coin : 'BTC';
     return answer === 'approved'
-      ? [ev(1500, G('receipt', '0.00008 BTC @ 62,500 · {ord} · 账本 {ledger}', { status: 'filled' })), ev(3400, G('limit', '想再加 $30，但你的每单上限是 $25。改到 $50？', { from: 25, to: 50 }))]
+      ? [ev(1500, G('receipt', `${COINS[coin].qty} ${coin} @ ${COINS[coin].price} · {ord} · 账本 {ledger}`, { status: 'filled' })), ev(3400, G('limit', '想再加 $30，但你的每单上限是 $25。改到 $50？', { from: 25, to: 50 }))]
       : [ev(1200, G('text', '好，不买。有变化我再问。'))];
   }
   if (msg.kind === 'limit') {

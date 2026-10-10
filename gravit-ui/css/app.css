@@ -19,11 +19,14 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 
 /* ---- the app frame: rail + main ---- */
 .app { display: flex; flex-wrap: wrap; min-height: 100vh; }
-.rail { position: sticky; top: 0; height: 100vh; overflow-y: auto; flex: 0 0 var(--rail); min-width: 0; max-width: 100%; display: flex; flex-direction: column; gap: 18px; padding: 24px 16px; background: var(--rail-bg); border-right: 1px solid var(--border); }
+.rail { position: sticky; top: 0; height: 100vh; overflow: hidden; flex: 0 0 var(--rail); min-width: 0; max-width: 100%; display: flex; flex-direction: column; gap: 18px; padding: 24px 16px; background: var(--rail-bg); border-right: 1px solid var(--border); }
 .main { flex: 999 1 560px; min-width: 0; position: relative; display: flex; flex-direction: column; height: 100vh; }
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 12px; }
 .brand-name { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
 .rail-group { display: flex; flex-direction: column; gap: 4px; }
+/* the conversation rows scroll on their own; the header, the nav and Account stay put (spec §4) */
+.rail-messages { flex: 0 1 auto; min-height: 0; }
+.rail-rows { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-y: auto; }
 .rail-head { display: flex; align-items: center; min-height: 44px; padding: 0 0 0 12px; gap: 12px; font-weight: 500; color: var(--dim); }
 .rail-head-label { flex: 1 1 auto; }
 .rail-head-keys { display: inline-flex; gap: 2px; }
@@ -289,5 +292,5 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .switch.on .knob { left: 18px; }
 
 /* ---- the demo director (keyboard d) ---- */
-.director { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: var(--radius-m); background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--shadow-lift); z-index: 45; }
+.director { position: fixed; right: 16px; bottom: 88px; display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: var(--radius-m); background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--shadow-lift); z-index: 45; }
 .director-key { min-height: 32px; padding: 0 12px; border: 0; border-radius: var(--radius-pill); background: var(--surface-2); color: var(--text); font-size: 13px; text-align: left; }

@@ -46,6 +46,9 @@ test('the layout: one screen tall, the thread scrolls under a pinned composer, t
   assert.match(rule('.main'), /(?:^|;)\s*height: 100vh/, 'a real height, not a minimum');
   assert.match(rule('.thread'), /min-height: 0/);
   assert.match(rule('.rail'), /position: sticky/);
+  assert.match(rule('.rail'), /overflow: hidden/, 'the rail never scrolls as a whole: Account stays at the bottom (spec §4)');
+  assert.match(rule('.rail-rows'), /overflow-y: auto/);
+  assert.match(rule('.director'), /bottom: 88px/, 'the director sits above the composer, clear of the send key');
   assert.match(rule('.drawer'), /position: fixed/);
   assert.match(rule('.toast'), /position: fixed/);
   assert.doesNotMatch(css, /\.main\.with-drawer \{ overflow: hidden/, 'the page behind a drawer stays usable');

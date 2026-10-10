@@ -50,11 +50,11 @@ export function renderRail(state, now) {
   const accountCurrent = screen === 'account';
   return `<nav class="rail" aria-label="Gravit">
   <div class="brand">${avatar('gravit', 28)}<span class="brand-name">Gravit</span></div>
-  <div class="rail-group">
+  <div class="rail-group rail-messages">
     <div class="rail-head">${icon('chat', 22, 2)}<span class="rail-head-label">Messages</span><span class="rail-head-keys">` +
       `<button type="button" class="icon-key" data-action="startDraft" aria-label="New message">${icon('plus', 16, 2.2)}</button>` +
       `<button type="button" class="icon-key" data-action="toggleRail" aria-expanded="${state.railCollapsed ? 'false' : 'true'}" aria-label="Collapse messages">${icon(state.railCollapsed ? 'chevRight' : 'chevDown', 14, 2.2)}</button></span></div>
-    ${rows}
+    ${rows ? `<div class="rail-rows">${rows}</div>` : ''}
   </div>
   <div class="rail-group">
     ${navItem('#/discover', 'compass', 'Discover', screen === 'discover')}

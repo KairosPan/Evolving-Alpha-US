@@ -54,6 +54,7 @@ test('renderRail: brand, Messages header with + and chevron, four rows, the curr
   assert.match(h, /href="#\/account\/portfolio"[^>]*class="account"/);
   assert.match(h, /\$12,480 · Guard/);
   assert.doesNotMatch(h, /Trading on/);
+  assert.match(h, /<div class="rail-rows"><a class="row/, 'the rows scroll on their own, so Account stays pinned');
 });
 
 test('renderRail: a draft row leads the list; the discover nav is current on that screen; collapsed hides the rows', () => {

@@ -80,6 +80,16 @@ test('the coin words match whole words only', () => {
   assert.equal(replyTo('买一点 SOL', ctx).at(-1).msg.kind, 'card');
 });
 
+test('the card and the receipt name the coin that was asked for', () => {
+  const sol = replyTo('小仓位买 SOL，别超过 $30 一次', ctx).at(-1).msg;
+  assert.equal(sol.data.coin, 'SOL');
+  assert.equal(sol.text, '要你答：买 0.034 SOL');
+  assert.match(followUp(sol, 'approved', ctx)[0].msg.text, /^0\.034 SOL @ 147 · /);
+  const eth = replyTo('再看看 eth', ctx).at(-1).msg;
+  assert.equal(eth.data.title, '要你答：买 0.0019 ETH');
+  assert.match(followUp(message('gravit', 'card', 'x', {}), 'approved', ctx)[0].msg.text, /^0\.00008 BTC @ 62,500/, 'a card without a coin is the seed BTC card');
+});
+
 test('a grant asks for News sentiment only when it is not installed', () => {
   const limit = message('gravit', 'limit', 'x', { from: 25, to: 50 });
   assert.equal(followUp(limit, 'granted', { installed: ['news'], now: NOW }).length, 1);
