@@ -19,6 +19,10 @@ test('parseHash and toHash round-trip, unknown screens fall back to messages', (
   assert.deepEqual(parseHash('#/account/memory'), { screen: 'account', tab: 'memory' });
   assert.deepEqual(parseHash('#/account/nope'), { screen: 'account', tab: 'portfolio' });
   assert.deepEqual(parseHash('#/markets/NVDA'), { screen: 'markets', id: 'NVDA' });
+  assert.deepEqual(parseHash('#/mail'), { screen: 'mail', id: null });
+  assert.deepEqual(parseHash('#/mail/mail-2'), { screen: 'mail', id: 'mail-2' });
+  assert.equal(toHash({ screen: 'mail', id: null }), '#/mail');
+  assert.equal(toHash({ screen: 'mail', id: 'mail-2' }), '#/mail/mail-2');
   assert.deepEqual(parseHash('#/trade'), { screen: 'trade' });
   assert.deepEqual(parseHash(''), { screen: 'messages', id: null });
   assert.deepEqual(parseHash('#/whatever'), { screen: 'messages', id: null });

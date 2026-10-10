@@ -78,6 +78,8 @@ export function fakeWindow({ hash = '#/messages/c-1', storage = null, prompt = (
   return {
     win, doc, root, body, revoked,
     get writes() { return writes; },
+    // what the last render wrote into #app
+    html: () => root.innerHTML,
     element,
     // register an element the app will look up by id, or by an exact selector
     withId(id, props = {}) { const el = element({ id, ...props }); byId.set(id, el); return el; },

@@ -2,7 +2,8 @@
 import { MIN, DAY } from '../time.js';
 
 // 2: the controls round added edit, confirm, compose, mail, account activity and panels
-export const SEED_VERSION = 2;
+// 3: round 3 made the mailbox a screen and Create Discover's own MCP face
+export const SEED_VERSION = 3;
 
 // the places Gravit may trade, as the draft's venue pick list and the Move form offer them
 export const VENUES = ['Stand-in Exchange', 'Stand-in Broker', 'Stand-in Wallet'];
@@ -78,7 +79,7 @@ export function seed(now = Date.now()) {
     draft: null,
     detailsOpen: false,
     settingsOpen: false,
-    counters: { intent: 4, ord: 9, card: 1, pay: 7, ledger: 58, msg: n, conv: 4, plugin: 0, mem: 9 },
+    counters: { intent: 4, ord: 9, card: 1, pay: 7, ledger: 58, msg: n, conv: 4, plugin: 0, mem: 9, mail: 3 },
     conversations: [btc, pelosi, addr, group],
     discover: { query: '', installedOnly: false, drawer: null, create: null, toast: null },
     plugins: { installed: ['pricefeed', 'fraud', 'politician', 'buffett', 'pairs'], mine: ['pairs'], uploaded: [] },
@@ -116,9 +117,9 @@ export function seed(now = Date.now()) {
     compose: { files: [], listening: false },
     // Gravit's own mailbox (docs/research/2026-10-06-agent-phone-and-email.md: the agent's own address)
     mail: {
-      address: 'gravit@mail.stand-in', open: false, reading: null,
+      address: 'gravit@mail.stand-in',
       items: [
-        { id: 'mail-1', from: 'Stand-in Broker', subject: '10 月对账单', at: ago(120), read: false, body: '本月成交 2 笔：NVDA $25、KO 挂单中。持仓市值 $2,510。附件：statement-2026-10.pdf。' },
+        { id: 'mail-1', from: 'Stand-in Broker', subject: '10 月对账单', at: ago(120), read: false, files: ['statement-2026-10.pdf'], body: '本月成交 2 笔：NVDA $25、KO 挂单中。持仓市值 $2,510。' },
         { id: 'mail-2', from: 'SEC EDGAR', subject: 'Form 4：Pelosi 申报买入 NVDA', at: ago(300), read: false, body: '申报人 Nancy Pelosi，10/7 买入 NVDA，金额 $1–5M。美国政客 bot 已经读到这条。' },
         { id: 'mail-3', from: 'Gravit', subject: '每周小结', at: now - DAY - 3 * 60 * MIN, read: true, body: '这周替你下了 2 笔单，花了 $30，额度还剩 $95。没有碰到上限。' },
       ],

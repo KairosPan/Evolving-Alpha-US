@@ -9,7 +9,6 @@ const closed = isClosed;
 // one drawer at a time: an opener first closes whatever else was open, with any editor or confirm in it
 export const closeOverlays = s => ({
   ...s, detailsOpen: false, settingsOpen: false, edit: null, confirm: null,
-  mail: s.mail ? { ...s.mail, open: false, reading: null } : s.mail,
   account: { ...s.account, panel: null, panelError: null },
   discover: { ...s.discover, drawer: null, create: null },
 });
@@ -54,8 +53,11 @@ export const reducers = {
     if (route.screen === 'messages' && !(route.id === 'new' && state.draft) && !state.conversations.some(c => c.id === route.id)) {
       route = { screen: 'messages', id: state.conversations[0]?.id ?? null };
     }
+    // a letter that is not in the mailbox opens the inbox
+    if (route.screen === 'mail' && route.id && !state.mail.items.some(m => m.id === route.id)) route = { screen: 'mail', id: null };
     let s = { ...state, route, detailsOpen: false, settingsOpen: false, edit: null, confirm: null };
-    if (s.mail?.open) s.mail = { ...s.mail, open: false, reading: null };
+    // opening a letter reads it, the way opening a conversation clears its dot
+    if (route.screen === 'mail' && route.id) s.mail = { ...s.mail, items: s.mail.items.map(m => (m.id === route.id && !m.read ? { ...m, read: true } : m)) };
     // the first level's Messages key returns to the conversation you last had open
     if (route.screen === 'messages' && route.id && route.id !== 'new') s.lastConv = route.id;
     // an Account panel belongs to Account

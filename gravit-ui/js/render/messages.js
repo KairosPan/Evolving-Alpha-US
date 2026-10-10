@@ -152,18 +152,6 @@ export function renderCall(c, now = Date.now()) {
   return `<div class="call-scrim"><div class="call" role="dialog" aria-label="${label}">${inner}</div></div>`;
 }
 
-// Gravit's own mailbox, from the rail's mail key: the list, or one message
-export function renderMail(state, now) {
-  const m = state.mail;
-  if (!m?.open) return '';
-  const reading = m.reading ? m.items.find(x => x.id === m.reading) : null;
-  const body = reading
-    ? `<button type="button" class="back-link" data-action="backToInbox">‹ 收件箱</button><div class="mail-subject">${esc(reading.subject)}</div><div class="dim">${esc(reading.from)} · ${rowTime(reading.at, now)}</div><p class="mail-body">${esc(reading.body)}</p>`
-    : `<div class="mail-list">${m.items.map(x => `<button type="button" class="${cls('mail-row', !x.read && 'unread')}" data-action="readMail" data-id="${esc(x.id)}"><span class="mail-top"><span class="mail-from">${esc(x.from)}</span><span class="row-time">${rowTime(x.at, now)}</span></span><span class="mail-line">${esc(x.subject)}</span></button>`).join('')}</div>`;
-  return `<aside class="drawer" aria-label="Gravit 的邮箱"><div class="drawer-head"><div><h2>Gravit 的邮箱</h2><div class="dim mono">${esc(m.address)}</div></div><button type="button" class="close-key" data-action="closeMail" aria-label="Close">×</button></div><div class="drawer-body">${body}</div></aside>`;
-}
-
-// Markets and Trade are Linqi's pages; this pure front end only shows where a ticker would land
 export function renderStub(route) {
   const title = route.screen === 'markets' ? 'Markets' : 'Trade';
   const sub = route.screen === 'markets' && route.id ? `Markets › ${esc(route.id)}` : '';

@@ -4,6 +4,7 @@ import { icon } from '../icons.js';
 import { byId } from '../data/plugins.js';
 import { rowTime } from '../time.js';
 import { avatar, groupMark } from './avatars.js';
+import { renderMailList } from './mail.js';
 
 const NAME = { you: '你', gravit: 'Gravit', system: '' };
 export function senderName(from, state) {
@@ -46,7 +47,7 @@ function navItem(href, name, label, current, mini, badge = 0) {
     `<span class="nav-label">${esc(label)}</span>${badge ? `<span class="nav-badge">${badge}</span>` : ''}</a>`;
 }
 
-// the first level: Messages · Discover · Markets · Trade, the phone and mail lines, Account; it collapses to a strip of icons
+// the first level: Messages · Discover · Markets · Trade, the phone key and the mail key, Account; it collapses to a strip of icons
 export function renderNav(state) {
   const { screen } = state.route;
   const mini = !!state.railCollapsed;
@@ -54,6 +55,7 @@ export function renderNav(state) {
   const messagesHref = `#/messages/${screen === 'messages' && state.route.id && state.route.id !== 'new' ? state.route.id : state.lastConv ?? state.conversations[0]?.id ?? ''}`;
   const mailUnread = (state.mail?.items ?? []).filter(m => !m.read).length;
   const accountCurrent = screen === 'account';
+  const mailCurrent = screen === 'mail';
   return `<nav class="${cls('rail', mini && 'mini')}" aria-label="Gravit">
   <div class="brand">${avatar('gravit', 28)}<span class="brand-name">Gravit</span>` +
     `<button type="button" class="icon-key rail-toggle" data-action="toggleRail" aria-expanded="${mini ? 'false' : 'true'}" aria-label="${mini ? '展开导航' : '收起导航'}">${icon(mini ? 'chevRight' : 'chevLeft', 14, 2.2)}</button></div>
@@ -65,14 +67,15 @@ export function renderNav(state) {
   </div>
   <div class="rail-foot">
     <div class="rail-lines"><button type="button" class="${cls('line-key', state.call && 'on')}" data-action="phoneCall" aria-label="Phone">${icon('phone', 20, 2)}</button>` +
-      `<button type="button" class="line-key" data-action="openMail" aria-label="Email">${icon('mail', 20, 2)}${mailUnread ? `<span class="nav-badge">${mailUnread}</span>` : ''}</button></div>
+      `<a${attrs({ id: 'mail-key', class: cls('line-key', mailCurrent && 'current'), href: '#/mail', 'aria-label': 'Mail', 'aria-current': mailCurrent ? 'page' : null, title: mini ? 'Mail' : null })}>${icon('mail', 20, mailCurrent ? 2.1 : 2)}${mailUnread ? `<span class="nav-badge">${mailUnread}</span>` : ''}</a></div>
     <a${attrs({ href: '#/account/portfolio', class: cls('account', accountCurrent && 'current'), 'aria-current': accountCurrent ? 'page' : null, title: mini ? 'Account' : null })}>${icon('wallet', 22, accountCurrent ? 2.1 : 2)}<span class="account-body"><span class="account-title">Account</span><span class="account-line">$${state.account.netWorth.toLocaleString('en-US')} · ${state.account.mode === 'beast' ? 'Beast' : 'Guard'}</span></span></a>
   </div>
 </nav>`;
 }
 
-// the second level, open on Messages: the conversations, the new-message key on top
+// the second level, open on Messages (the conversations, the new-message key on top) and on Mail (the letters)
 export function renderList(state, now) {
+  if (state.route.screen === 'mail') return renderMailList(state, now);
   if (state.route.screen !== 'messages') return '';
   const rows = (state.draft ? draftRow() : '') + state.conversations.map(c => row(c, state, now)).join('');
   return `<aside class="list" aria-label="Messages"><div class="list-head"><h2 class="list-title">Messages</h2>` +

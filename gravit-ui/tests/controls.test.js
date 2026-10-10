@@ -12,7 +12,7 @@ const fresh = () => seed(NOW);
 const conv = (s, id) => s.conversations.find(c => c.id === id);
 
 test('the state shape grew, so the seed version moved on', () => {
-  assert.equal(SEED_VERSION, 2);
+  assert.equal(SEED_VERSION, 3);
   const s = fresh();
   assert.deepEqual([s.edit, s.confirm], [null, null]);
 });
@@ -170,24 +170,25 @@ test('the call card says how it went', async () => {
   assert.match(r({ answer: 'cancelled', data: { dir: 'out' } }), />没打通</);
 });
 
-test('mail: the mailbox opens, a message is read and marked read, back goes to the list', async () => {
-  const { renderMail } = await import('../js/render/messages.js');
-  let s = R.openMail(R.toggleDetails(fresh()));
-  assert.deepEqual([s.mail.open, s.detailsOpen], [true, false], 'one drawer at a time');
-  const list = renderMail(s, NOW);
-  assert.match(list, /<aside class="drawer" aria-label="Gravit 的邮箱">/);
-  assert.match(list, /gravit@mail.stand-in/);
-  assert.equal((list.match(/class="mail-row unread"/g) ?? []).length, 2);
-  assert.match(list, /data-action="readMail" data-id="mail-1"/);
-  s = R.readMail(s, 'mail-1');
-  assert.equal(s.mail.reading, 'mail-1');
+test('Mail is a screen: a letter opens by its route and is marked read; an unknown letter falls back to the inbox', async () => {
+  const { renderMailScreen } = await import('../js/render/mail.js');
+  assert.equal(R.openMail, undefined, 'no mailbox drawer any more');
+  assert.equal('open' in fresh().mail, false);
+  let s = R.nav(R.toggleDetails(fresh()), { screen: 'mail', id: null });
+  assert.equal(s.detailsOpen, false, 'going to Mail closes Details');
+  const inbox = renderMailScreen(s, NOW);
+  assert.match(inbox, /^<main class="main mail">/);
+  assert.match(inbox, /<div class="mail-none">[\s\S]*?<span class="dim">没选中邮件<\/span><\/div>/);
+  s = R.nav(s, { screen: 'mail', id: 'mail-1' });
   assert.equal(s.mail.items[0].read, true);
-  const one = renderMail(s, NOW);
-  assert.match(one, /data-action="backToInbox">‹ 收件箱</);
-  assert.match(one, /class="mail-subject">10 月对账单</);
-  assert.match(one, /本月成交 2 笔/);
-  assert.equal(R.backToInbox(s).mail.reading, null);
-  assert.equal(R.closeMail(s).mail.open, false);
+  const one = renderMailScreen(s, NOW);
+  assert.match(one, /^<main class="main mail has-letter">/);
+  assert.match(one, /<header class="head"><h1 class="head-title">10 月对账单<\/h1><\/header>/);
+  assert.match(one, /<div class="mail-meta dim">Stand-in Broker · Today 12:07<\/div>/);
+  assert.match(one, /<span class="file-chip">[\s\S]*?statement-2026-10\.pdf<\/span>/);
+  assert.match(one, /<p class="mail-body">本月成交 2 笔：NVDA \$25、KO 挂单中。持仓市值 \$2,510。<\/p>/);
+  assert.doesNotMatch(one, /附件/);
+  assert.deepEqual(R.nav(fresh(), { screen: 'mail', id: 'mail-9' }).route, { screen: 'mail', id: null });
 });
 
 test('Account panels: Move shifts a holding between venues and logs it; bad moves are refused in the panel', () => {
@@ -254,14 +255,10 @@ test('Top up cannot take more than your USDC holding', () => {
 });
 
 test('one drawer at a time: each opener closes the others, and an Account panel does not follow you off Account', () => {
-  const mailOpen = R.openMail(fresh());
-  assert.equal(R.openPlugin(mailOpen, 'news').mail.open, false, 'a plugin drawer replaces the mailbox');
-  assert.equal(R.toggleDetails(mailOpen).mail.open, false, 'Details replaces the mailbox');
-  assert.equal(R.openSettings(mailOpen).mail.open, false);
-  assert.equal(R.openPanel(mailOpen, 'move').mail.open, false);
   const panel = R.openPanel(R.nav(fresh(), { screen: 'account', tab: 'portfolio' }), 'receive');
-  const mailed = R.openMail(R.askConfirm(panel, { action: 'forgetAll' }));
-  assert.deepEqual([mailed.account.panel, mailed.confirm], [null, null], 'the mailbox replaces a panel and drops a pending confirm');
+  const mailed = R.nav(R.askConfirm(panel, { action: 'forgetAll' }), { screen: 'mail', id: null });
+  assert.deepEqual([mailed.account.panel, mailed.confirm], [null, null], 'going to Mail closes a panel and drops a pending confirm');
+  assert.equal(R.toggleDetails(R.openPlugin(fresh(), 'news')).discover.drawer, null, 'Details replaces a plugin drawer');
   assert.equal(R.openSettings(panel).account.panel, null);
   assert.equal(R.nav(panel, { screen: 'discover', id: null }).account.panel, null, 'leaving Account closes its panel');
   assert.equal(R.nav(panel, { screen: 'account', tab: 'venues' }).account.panel, 'receive', 'moving inside Account keeps it');

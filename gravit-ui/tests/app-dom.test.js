@@ -282,18 +282,20 @@ test('the phone key rings Gravit, it picks up, the timer runs, hang up leaves th
   }
 });
 
-test('the mail key opens the mailbox; a message opens and reads; Escape closes it', () => {
+test('the mail key switches to the mailbox screen; a letter opens by its link and is read; a bad letter id goes back to the inbox', async () => {
   const f = fakeWindow(noDialogs);
   const store = boot(f.win);
-  const click = (action, id) => f.click(f.element({ tagName: 'BUTTON', dataset: id ? { action, id } : { action } }));
-  click('openMail');
-  assert.equal(store.get().mail.open, true);
-  click('readMail', 'mail-2');
-  assert.equal(store.get().mail.reading, 'mail-2');
-  click('backToInbox');
-  assert.equal(store.get().mail.reading, null);
-  f.fire('doc', 'keydown', { key: 'Escape' });
-  assert.equal(store.get().mail.open, false);
+  f.win.location.hash = '#/mail';
+  await f.tick();
+  assert.deepEqual(store.get().route, { screen: 'mail', id: null });
+  assert.match(f.html(), /<main class="main mail">/);
+  f.win.location.hash = '#/mail/mail-2';
+  await f.tick();
+  assert.equal(store.get().mail.items.find(m => m.id === 'mail-2').read, true);
+  assert.match(f.html(), /<h1 class="head-title">Form 4：Pelosi 申报买入 NVDA<\/h1>/);
+  f.win.location.hash = '#/mail/nope';
+  await f.tick();
+  assert.equal(f.win.location.hash, '#/mail', 'the address bar is put right');
   store.timers.clear();
 });
 
@@ -392,12 +394,10 @@ test('focus goes to what replaced the pressed key: the confirm, or the drawer, n
   f.click(withdraw);
   assert.equal(f.doc.activeElement, yes, 'the confirm takes focus');
   store.dispatch('cancelConfirm');
-  store.dispatch('toggleDetails');
-  store.dispatch('openMail');
-  const row = f.element({ tagName: 'BUTTON', dataset: { action: 'readMail', id: 'mail-1' } });
-  row.focus();
-  f.click(row);
-  assert.equal(f.doc.activeElement, close, 'the read row went away: focus stays in the mailbox, not the composer behind it');
+  const gone = f.element({ tagName: 'BUTTON', dataset: { action: 'changeWords', conv: 'c-9' } });
+  gone.focus();
+  store.dispatch('setMode', 'beast');
+  assert.equal(f.doc.activeElement, close, 'the pressed key went away: focus stays in the drawer, not the composer behind it');
   assert.notEqual(f.doc.activeElement, say);
   store.timers.clear();
 });

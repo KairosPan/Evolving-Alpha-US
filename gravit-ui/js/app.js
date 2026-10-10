@@ -4,7 +4,8 @@ import { reducers } from './reducers/index.js';
 import { seed, firstRun, SEED_VERSION } from './data/seed.js';
 import { parseHash, toHash } from './router.js';
 import { renderRail } from './render/rail.js';
-import { renderMessagesScreen, renderBanner, renderCall, renderMail, renderStub, currentConversation } from './render/messages.js';
+import { renderMessagesScreen, renderBanner, renderCall, renderStub, currentConversation } from './render/messages.js';
+import { renderMailScreen } from './render/mail.js';
 import { renderDiscover } from './render/discover.js';
 import { renderAccount } from './render/account.js';
 import { replyTo, followUp, director, toolsFor } from './driver.js';
@@ -38,7 +39,6 @@ const withoutMoments = s => ({
   ...s, banner: null, call: null, edit: null, confirm: null,
   discover: { ...s.discover, drawer: null, create: null, toast: null },
   compose: { files: [], listening: false },
-  mail: s.mail ? { ...s.mail, open: false, reading: null } : s.mail,
   account: { ...s.account, panel: null, connecting: null, copied: false, panelError: null },
 });
 
@@ -122,11 +122,11 @@ function focusKey(el) {
 }
 
 // which overlay is up: focus moves into it when it opens and back to its opener when it closes
-const overlayOf = s => (s.call ? 'call' : s.discover.create ? 'modal' : s.mail?.open || s.account.panel || s.detailsOpen || s.settingsOpen || s.discover.drawer ? 'drawer' : null);
+const overlayOf = s => (s.call ? 'call' : s.discover.create ? 'modal' : s.account.panel || s.detailsOpen || s.settingsOpen || s.discover.drawer ? 'drawer' : null);
 const screenOf = s => `${s.route.screen}/${s.route.id ?? s.route.tab ?? ''}`;
 // which editor is open, by what it edits (its error may change; the editor stays the same)
 const editorOf = e => (e ? [e.kind, e.key, e.convId, e.id, e.dir].join('|') : null);
-const drawerOf = s => (s.mail?.open ? `mail:${s.mail.reading ?? ''}` : null) ?? (s.account.panel ? `panel:${s.account.panel}` : null) ?? s.discover.drawer ?? (s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null);
+const drawerOf = s => (s.account.panel ? `panel:${s.account.panel}` : null) ?? s.discover.drawer ?? (s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null);
 
 export function boot(win) {
   const doc = win.document;
@@ -165,8 +165,8 @@ export function boot(win) {
     const threadAt = thread0 ? { top: thread0.scrollTop, bottom: thread0.scrollHeight - thread0.scrollTop - thread0.clientHeight < 40 } : null;
     const scrolls = { main: root.querySelector('main')?.scrollTop, rows: root.querySelector('.rail-rows')?.scrollTop, drawer: root.querySelector('.drawer-body')?.scrollTop, shelves: [...root.querySelectorAll('.shelf-row')].map(e => e.scrollLeft) };
 
-    const screen = s.route.screen === 'discover' ? renderDiscover(s) : s.route.screen === 'account' ? renderAccount(s) : (s.route.screen === 'markets' || s.route.screen === 'trade') ? renderStub(s.route) : renderMessagesScreen(s, now());
-    const overlays = (s.banner ? renderBanner(s.banner, s) : '') + renderMail(s, now()) + (s.call ? renderCall(s.call, now()) : '') +
+    const screen = s.route.screen === 'discover' ? renderDiscover(s) : s.route.screen === 'account' ? renderAccount(s) : s.route.screen === 'mail' ? renderMailScreen(s, now()) : (s.route.screen === 'markets' || s.route.screen === 'trade') ? renderStub(s.route) : renderMessagesScreen(s, now());
+    const overlays = (s.banner ? renderBanner(s.banner, s) : '') + (s.call ? renderCall(s.call, now()) : '') +
       (directorOpen ? `<div class="director" role="menu">${DIRECTOR.map(([l, k]) => `<button type="button" class="director-key" data-action="director" data-key="${k}">${l}</button>`).join('')}</div>` : '');
     root.innerHTML = renderRail(s, now()) + screen + overlays;
 
@@ -179,10 +179,11 @@ export function boot(win) {
     const say = doc.getElementById('say');
     if (say) say.value = composerText;
 
-    // scroll: the rail rows always keep theirs; the page and the shelves keep theirs on the same screen; a drawer while it stays the same drawer
+    // scroll: the second level keeps its rows while it lists the same thing (conversations or letters); the page and the shelves keep theirs
+    // on the same screen; a drawer while it stays the same drawer
     const sameScreen = last.screen === screenOf(s);
     const rows = root.querySelector('.rail-rows');
-    if (rows && scrolls.rows != null) rows.scrollTop = scrolls.rows;
+    if (rows && scrolls.rows != null && last.screen?.split('/')[0] === s.route.screen) rows.scrollTop = scrolls.rows;
     const main = root.querySelector('main');
     if (main && sameScreen && scrolls.main != null) main.scrollTop = scrolls.main;
     if (sameScreen) [...root.querySelectorAll('.shelf-row')].forEach((e, i) => { if (scrolls.shelves[i] != null) e.scrollLeft = scrolls.shelves[i]; });
@@ -354,11 +355,6 @@ export function boot(win) {
     },
     hangUp: () => store.dispatch('hangUp', { now: now() }),
     toggleMute: () => store.dispatch('toggleMute'),
-    // the rail's mail key: Gravit's own mailbox
-    openMail: () => store.dispatch('openMail'),
-    closeMail: () => store.dispatch('closeMail'),
-    readMail: el => store.dispatch('readMail', el.dataset.id),
-    backToInbox: () => store.dispatch('backToInbox'),
     // Discover
     openPlugin: el => store.dispatch('openPlugin', el.dataset.id),
     closeDrawer: () => store.dispatch('closeDrawer'),
@@ -485,7 +481,6 @@ export function boot(win) {
       const s = store.get();
       if (s.call) return;
       if (s.edit) { store.dispatch('cancelEdit'); return; }
-      if (s.mail?.open) { store.dispatch('closeMail'); return; }
       if (s.account.panel) { store.dispatch('closePanel'); return; }
       if (s.confirm) { store.dispatch('cancelConfirm'); return; }
       if (s.discover.create) store.dispatch('closeCreate');

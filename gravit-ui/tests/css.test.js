@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { renderRail } from '../js/render/rail.js';
-import { renderMessagesScreen, renderBanner, renderCall, renderMail, renderStub } from '../js/render/messages.js';
+import { renderMessagesScreen, renderBanner, renderCall, renderStub } from '../js/render/messages.js';
+import { renderMailScreen } from '../js/render/mail.js';
 import { renderDiscover } from '../js/render/discover.js';
 import { renderAccount } from '../js/render/account.js';
 import { director } from '../js/driver.js';
@@ -31,17 +32,18 @@ function everyState() {
     R.nav(s, { screen: 'account', tab: 'portfolio' }), R.nav(s, { screen: 'account', tab: 'venues' }), R.nav(s, { screen: 'account', tab: 'memory' }), R.openSettings(R.nav(s, { screen: 'account', tab: 'portfolio' })),
     ...['move', 'receive', 'statement', 'connect'].map(panel => R.openPanel(R.nav(s, { screen: 'account', tab: 'portfolio' }), panel)),
     R.moveFunds(R.openPanel(R.nav(s, { screen: 'account', tab: 'portfolio' }), 'move'), { from: 'Stand-in Wallet', to: 'Stand-in Wallet', asset: 'USDC', amount: '1', now: NOW }),
+    R.nav(s, { screen: 'mail', id: null }), R.nav(s, { screen: 'mail', id: 'mail-1' }), { ...R.nav(s, { screen: 'mail', id: null }), railCollapsed: true },
   ];
 }
 
 test('every class the screens emit has a rule in app.css, and app.css names no colour by hex', async () => {
   const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
   assert.doesNotMatch(css, /#[0-9a-fA-F]{3,6}\b/, 'colours come from tokens.css');
-  const screen = st => st.route.screen === 'discover' ? renderDiscover(st) : st.route.screen === 'account' ? renderAccount(st) : st.route.screen === 'messages' ? renderMessagesScreen(st, NOW) : renderStub(st.route);
+  const screen = st => st.route.screen === 'discover' ? renderDiscover(st) : st.route.screen === 'account' ? renderAccount(st) : st.route.screen === 'mail' ? renderMailScreen(st, NOW) : st.route.screen === 'messages' ? renderMessagesScreen(st, NOW) : renderStub(st.route);
   const html = everyState().map(st => renderRail(st, NOW) + screen(st)).join('')
     + renderBanner(director.breaking(NOW), seed(NOW)) + renderCall(director.call()) + renderStub({ screen: 'markets', id: 'NVDA' })
     + renderCall({ from: 'gravit', about: '', dir: 'out', status: 'ringing', since: NOW }, NOW) + renderCall({ from: 'gravit', about: 'x', dir: 'in', status: 'live', since: NOW, muted: true }, NOW)
-    + renderMail(R.openMail(seed(NOW)), NOW) + renderMail(R.readMail(R.openMail(seed(NOW)), 'mail-1'), NOW) + renderRail(R.startCall(seed(NOW), { now: NOW }), NOW);
+    + renderRail(R.startCall(seed(NOW), { now: NOW }), NOW);
   const classes = new Set(html.match(/class="([^"]+)"/g).flatMap(m => m.slice(7, -1).split(/\s+/)));
   const missing = [...classes].filter(c => c && !new RegExp(`\\.${c.replace(/[-]/g, '\\-')}(?![\\w-])`).test(css));
   assert.deepEqual(missing, [], 'classes without a rule');

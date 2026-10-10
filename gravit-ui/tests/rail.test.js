@@ -43,7 +43,8 @@ test('the first level: brand and its collapse key, Messages · Discover · Marke
   assert.match(h, /href="#\/markets"/);
   assert.match(h, /href="#\/trade"/);
   assert.match(h, /data-action="phoneCall" aria-label="Phone"/);
-  assert.match(h, /data-action="openMail" aria-label="Email"/);
+  assert.match(h, /<a id="mail-key" class="line-key" href="#\/mail" aria-label="Mail">[\s\S]*?<span class="nav-badge">2<\/span><\/a>/, 'the mail key is a link to the mailbox, with its unread count');
+  assert.doesNotMatch(h, /openMail/);
   assert.match(h, /href="#\/account\/portfolio"[^>]*class="account"/);
   assert.match(h, /\$12,480 · Guard/);
   assert.doesNotMatch(h, /Trading on/);
@@ -80,4 +81,20 @@ test('collapsed, the first level is a strip of icons: names stay for screen read
   assert.match(c, /class="nav-item current"[^>]*title="Messages"/);
   assert.match(c, /<span class="nav-label">Discover<\/span>/);
   assert.match(c, /class="list"/);
+});
+
+test('on Mail the mail key is current, Messages is not, and the second level lists the letters', () => {
+  const s = R.nav(seed(NOW), { screen: 'mail', id: null });
+  const h = renderRail(s, NOW);
+  assert.match(h, /<a id="mail-key" class="line-key current" href="#\/mail" aria-label="Mail" aria-current="page">/);
+  assert.doesNotMatch(h, /class="nav-item current"/);
+  assert.match(h, /<aside class="list" aria-label="Mail"><div class="list-head"><div><h2 class="list-title">Mail<\/h2><div class="list-sub mono">gravit@mail.stand-in<\/div><\/div><\/div>/);
+  assert.doesNotMatch(h, /data-action="startDraft"/, 'no new-message key in the mailbox');
+  assert.equal(count(h, /<a id="mr-mail-\d" class="row(?: unread)?" href="#\/mail\/mail-\d"/g), 3);
+  assert.equal(count(h, /class="row unread"/g), 2);
+  assert.match(h, /href="#\/mail\/mail-1"><span class="dot on"><\/span>[\s\S]*?<span class="row-title">Stand-in Broker<\/span><span class="row-time">12:07<\/span><\/span><span class="row-preview">10 月对账单<\/span>/);
+  const reading = renderRail(R.nav(seed(NOW), { screen: 'mail', id: 'mail-2' }), NOW);
+  assert.match(reading, /<a id="mr-mail-2" class="row current" href="#\/mail\/mail-2" aria-current="page"><span class="dot"><\/span>/, 'the open letter is current and read');
+  assert.match(reading, /<span class="nav-badge">1<\/span><\/a>/, 'one letter left unread');
+  assert.match(renderRail({ ...s, railCollapsed: true }, NOW), /<a id="mail-key" class="line-key current" href="#\/mail" aria-label="Mail" aria-current="page" title="Mail">/);
 });

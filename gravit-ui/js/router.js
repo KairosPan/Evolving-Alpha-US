@@ -1,4 +1,4 @@
-// gravit-ui/js/router.js — hash routes: #/messages/<id> · #/discover[/<shelf>] · #/account/<tab> · #/markets[/<ticker>] · #/trade
+// gravit-ui/js/router.js — hash routes: #/messages/<id> · #/mail[/<letter>] · #/discover[/<shelf>] · #/account/<tab> · #/markets[/<ticker>] · #/trade
 const TABS = ['portfolio', 'venues', 'memory'];
 
 export function parseHash(hash) {
@@ -9,6 +9,7 @@ export function parseHash(hash) {
     case 'markets': return { screen: 'markets', id: a ?? null };
     case 'trade': return { screen: 'trade' };
     case 'messages': return { screen: 'messages', id: a ?? null };
+    case 'mail': return { screen: 'mail', id: a ?? null };
     default: return { screen: 'messages', id: null };
   }
 }

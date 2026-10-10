@@ -59,6 +59,7 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .rail-lines { display: flex; gap: 8px; }
 .line-key { position: relative; flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius-s); background: var(--surface); color: var(--dim); }
 .line-key.on { border-color: var(--up); color: var(--up); }
+.line-key.current { background: var(--surface-2); color: var(--text); }
 .account { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-s); background: var(--surface); color: var(--text); }
 .account.current { border-color: var(--rule); background: var(--surface-2); }
 .account-body { display: flex; flex-direction: column; line-height: 1.25; }
@@ -247,17 +248,13 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .key.mute { color: var(--dim); }
 .key.mute.on { background: var(--surface-2); color: var(--text); }
 /* Gravit's mailbox */
-.mail-list { display: flex; flex-direction: column; }
-.mail-row { display: flex; flex-direction: column; gap: 2px; padding: 10px 4px; border: 0; border-bottom: 1px solid var(--border); background: transparent; text-align: left; color: var(--text); }
-.mail-row:hover { background: var(--hover); }
-.mail-row.unread .mail-from::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: var(--radius-pill); background: var(--alloc-equity); }
-.mail-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.mail-from { font-size: 14px; font-weight: 700; }
-.mail-row.unread .mail-line { color: var(--text); font-weight: 600; }
-.mail-line { font-size: 13px; color: var(--dim); }
-.mail-subject { font-size: 17px; font-weight: 700; }
-.mail-body { margin: 0; font-size: 14px; line-height: 1.6; }
-button.back-link { align-self: flex-start; border: 0; background: transparent; padding: 0; color: var(--alloc-equity); font-size: 13px; font-weight: 600; }
+/* Mail: the letters sit in the second level; an unread letter's subject is bold; the open letter fills the main column */
+.list-sub { margin-top: 2px; font-size: 12px; color: var(--dim); }
+.row.unread .row-preview { color: var(--text); font-weight: 600; }
+.mail-letter { flex: 1 1 auto; display: flex; flex-direction: column; gap: 14px; padding: 20px 28px 28px; overflow-y: auto; }
+.mail-meta { font-size: 13px; }
+.mail-body { margin: 0; max-width: 640px; font-size: 15px; line-height: 1.6; }
+.mail-none { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--dim); }
 /* the toast sits at the bottom-centre of the main column (spec §3.3), whatever the two levels' widths */
 .toast { position: sticky; bottom: 28px; align-self: center; margin-top: auto; display: inline-flex; align-items: center; gap: 12px; padding: 8px 8px 8px 18px; border-radius: var(--radius-pill); background: var(--primary); color: var(--on-primary); font-size: 13px; white-space: nowrap; box-shadow: var(--shadow-lift); z-index: 25; }
 .toast-key { min-height: 32px; padding: 0 14px; display: inline-flex; align-items: center; border-radius: var(--radius-pill); background: var(--surface); color: var(--text); font-weight: 600; }
@@ -395,6 +392,8 @@ button.back-link { align-self: flex-start; border: 0; background: transparent; p
   .banner { width: calc(100vw - 32px); }
   .head.centered { padding: 16px 16px 12px; }
   .head-right { position: static; align-self: flex-end; }
+  /* the letters stand alone until one is open */
+  .main.mail:not(.has-letter) { display: none; }
 }
 
 /* ---- Account's panels: Move, Receive, Statement, Connect an account ---- */

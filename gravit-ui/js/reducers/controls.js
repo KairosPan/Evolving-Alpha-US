@@ -79,11 +79,6 @@ export const reducers = {
   removeFile: (s, i) => (s.compose?.files?.[i] ? { ...s, compose: { ...s.compose, files: s.compose.files.filter((_, k) => k !== i) } } : s),
   setListening: (s, on) => (!!s.compose?.listening === !!on ? s : { ...s, compose: { ...s.compose, listening: !!on } }),
 
-  // Gravit's mailbox: one drawer at a time, so opening it closes Details, Settings and a plugin drawer
-  openMail: s => { const c = closeOverlays(s); return { ...c, mail: { ...c.mail, open: true, reading: null } }; },
-  closeMail: s => (s.mail?.open ? { ...s, mail: { ...s.mail, open: false, reading: null } } : s),
-  readMail: (s, id) => (s.mail?.items.some(m => m.id === id) ? { ...s, mail: { ...s.mail, reading: id, items: s.mail.items.map(m => (m.id === id ? { ...m, read: true } : m)) } } : s),
-  backToInbox: s => (s.mail?.reading ? { ...s, mail: { ...s.mail, reading: null } } : s),
 
   // Account's panels (Move, Receive, Statement, Connect): drawers, one at a time
   openPanel: (s, panel) => { const c = closeOverlays(s); return { ...c, account: { ...c.account, panel, panelError: null, copied: false } }; },
