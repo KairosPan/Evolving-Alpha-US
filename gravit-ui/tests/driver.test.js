@@ -90,6 +90,47 @@ test('the card and the receipt name the coin that was asked for', () => {
   assert.match(followUp(message('gravit', 'card', 'x', {}), 'approved', ctx)[0].msg.text, /^0\.00008 BTC @ 62,500/, 'a card without a coin is the seed BTC card');
 });
 
+test('limit asks read the conversation\'s real limit, and a fill carries its amount', () => {
+  const card = message('gravit', 'card', 'x', {});
+  const after50 = followUp(card, 'approved', { ...ctx, limit: { perOrder: 50, total: 100, spent: 5 } });
+  assert.equal(after50.length, 1, 'a $50 cap already covers the $30 add: no ask');
+  assert.equal(after50[0].msg.data.amount, 5);
+  const ask = followUp(card, 'approved', { ...ctx, limit: { perOrder: 20, total: 100, spent: 0 } })[1].msg;
+  assert.match(ask.text, /每单上限是 \$20。改到 \$40？/);
+  assert.deepEqual([ask.data.from, ask.data.to], [20, 40]);
+  const more = replyTo('额度不够', { ...ctx, limit: { perOrder: 30, total: 100, spent: 0 } })[0].msg;
+  assert.deepEqual([more.data.from, more.data.to], [30, 60]);
+});
+
+test('in a group the @named bot answers, and only Gravit proposes', () => {
+  const group = { kind: 'group', members: ['gravit', 'politician', 'buffett'] };
+  const named = replyTo('@Buffett 你怎么看 KO', { ...ctx, conv: group });
+  assert.equal(named.length, 1);
+  assert.equal(named[0].msg.from, 'buffett');
+  assert.equal(named[0].msg.kind, 'text');
+  const byShortName = replyTo('@政客 你最近怎么看', { ...ctx, conv: group });
+  assert.deepEqual(byShortName.map(e => [e.msg.from, e.msg.kind]), [['politician', 'text']], 'the short name 政客 is a mention, not the Pelosi branch');
+  const pelosi = replyTo('跟一下 Pelosi', { ...ctx, installed: ['politician', 'buffett'], conv: group });
+  assert.deepEqual(pelosi.map(e => [e.msg.from, e.msg.kind]), [['politician', 'text'], ['gravit', 'card']]);
+});
+
+test('a teaching conversation is answered by the plugin it teaches', () => {
+  const r = replyTo('两年', { ...ctx, conv: { kind: 'bot', members: ['gravit', 'buffett'], teach: 'buffett' } });
+  assert.equal(r.length, 1);
+  assert.equal(r[0].msg.from, 'buffett');
+  assert.match(r[0].msg.text, /两年/);
+  assert.equal(replyTo('ok', { ...ctx, conv: { kind: 'bot', members: ['gravit', 'whale'], teach: 'whale' } })[0].msg.from, 'whale');
+});
+
+test('the director can show the door\'s refusal and the close', () => {
+  const ref = director.refusal();
+  assert.equal(ref.kind, 'refusal');
+  assert.equal(ref.data.code, 'E_MANDATE_PER_ORDER_CAP');
+  const done = director.done(NOW);
+  assert.equal(done.kind, 'done');
+  assert.ok(done.data.foot);
+});
+
 test('a grant asks for News sentiment only when it is not installed', () => {
   const limit = message('gravit', 'limit', 'x', { from: 25, to: 50 });
   assert.equal(followUp(limit, 'granted', { installed: ['news'], now: NOW }).length, 1);
