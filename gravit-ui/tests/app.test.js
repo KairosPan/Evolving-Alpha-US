@@ -112,4 +112,6 @@ test('answerFlow: a double click answers once and schedules the follow-up once',
   const texts = store.get().conversations[0].messages.map(m => m.text);
   assert.equal(texts.filter(t => t === 'Granted.').length, 1);
   assert.equal(texts.filter(t => t === '改到 $50 了。').length, 1);
+  const asks = store.get().conversations[0].messages.filter(m => m.kind === 'install' && m.data.plugin === 'news');
+  assert.equal(asks.length, 1, 'the seed already asks for News sentiment; the grant does not ask again');
 });

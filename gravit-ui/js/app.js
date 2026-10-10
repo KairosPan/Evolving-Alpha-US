@@ -58,9 +58,11 @@ export function showBreaking(store, timers, banner, now = () => Date.now(), ms =
 
 // answer a card once; the follow-up is scheduled only for the first answer (Review Focus 4)
 export function answerFlow(store, timers, { conv, msg, answer }, now = () => Date.now(), schedule = scheduleEvents) {
-  const before = store.get().conversations.find(c => c.id === conv)?.messages.find(m => m.id === msg);
+  const c = store.get().conversations.find(x => x.id === conv);
+  const before = c?.messages.find(m => m.id === msg);
   if (!before || before.answer) return;
-  const events = followUp(before, answer, { installed: store.get().plugins.installed, now: now() });
+  const pending = c.messages.filter(m => m.kind === 'install' && !m.answer).map(m => m.data.plugin);
+  const events = followUp(before, answer, { installed: store.get().plugins.installed, pending, now: now() });
   store.dispatch('answer', { convId: conv, msgId: msg, answer, now: now() });
   schedule(store, timers, conv, events, now);
 }

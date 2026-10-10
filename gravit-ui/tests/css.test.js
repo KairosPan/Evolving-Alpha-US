@@ -40,6 +40,17 @@ test('every class the screens emit has a rule in app.css, and app.css names no c
   assert.match(css, /\.key\.no[^{]*\{[^}]*color: var\(--down\)/);
 });
 
+test('the layout: one screen tall, the thread scrolls under a pinned composer, the drawer and the toast are fixed (spec §3.3)', async () => {
+  const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
+  const rule = sel => css.match(new RegExp(`^${sel.replace(/[.]/g, '\\.')} \\{([^}]*)\\}`, 'm'))?.[1] ?? '';
+  assert.match(rule('.main'), /(?:^|;)\s*height: 100vh/, 'a real height, not a minimum');
+  assert.match(rule('.thread'), /min-height: 0/);
+  assert.match(rule('.rail'), /position: sticky/);
+  assert.match(rule('.drawer'), /position: fixed/);
+  assert.match(rule('.toast'), /position: fixed/);
+  assert.doesNotMatch(css, /\.main\.with-drawer \{ overflow: hidden/, 'the page behind a drawer stays usable');
+});
+
 test('the equity blue goes by Linqi\'s own name: no --blue, which his tokens use for the orange RWA colour', async () => {
   const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
   const tokens = await readFile(new URL('../css/tokens.css', import.meta.url), 'utf8');

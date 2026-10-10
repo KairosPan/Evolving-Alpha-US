@@ -50,7 +50,8 @@ export function followUp(msg, answer, ctx = {}) {
   }
   if (msg.kind === 'limit') {
     if (answer !== 'granted') return [ev(1200, G('text', `那就还是 $${msg.data.from}。`))];
-    const ask = (ctx.installed ?? []).includes('news') ? [] : [ev(2800, G('install', 'Discover 里有个 News sentiment。装上我就能看情绪再加仓。', { plugin: 'news' }))];
+    // no ask when it is installed, or when an earlier ask for it is still waiting in this conversation
+    const ask = [...(ctx.installed ?? []), ...(ctx.pending ?? [])].includes('news') ? [] : [ev(2800, G('install', 'Discover 里有个 News sentiment。装上我就能看情绪再加仓。', { plugin: 'news' }))];
     return [ev(1200, G('text', `改到 $${msg.data.to} 了。`)), ...ask];
   }
   if (msg.kind === 'install') return answer === 'no' ? [ev(1000, G('text', '好，不装。'))] : [];

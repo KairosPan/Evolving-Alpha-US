@@ -19,9 +19,8 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 
 /* ---- the app frame: rail + main ---- */
 .app { display: flex; flex-wrap: wrap; min-height: 100vh; }
-.rail { flex: 0 0 var(--rail); min-width: 0; max-width: 100%; display: flex; flex-direction: column; gap: 18px; padding: 24px 16px; background: var(--rail-bg); border-right: 1px solid var(--border); }
-.main { flex: 999 1 560px; min-width: 0; position: relative; display: flex; flex-direction: column; min-height: 100vh; }
-.main.with-drawer { overflow: hidden; }
+.rail { position: sticky; top: 0; height: 100vh; overflow-y: auto; flex: 0 0 var(--rail); min-width: 0; max-width: 100%; display: flex; flex-direction: column; gap: 18px; padding: 24px 16px; background: var(--rail-bg); border-right: 1px solid var(--border); }
+.main { flex: 999 1 560px; min-width: 0; position: relative; display: flex; flex-direction: column; height: 100vh; }
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 12px; }
 .brand-name { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
 .rail-group { display: flex; flex-direction: column; gap: 4px; }
@@ -116,7 +115,7 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .seg-item.pressed { background: var(--surface); color: var(--text); font-weight: 700; box-shadow: var(--shadow-card); }
 
 /* ---- the thread ---- */
-.thread { flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; padding: 18px 28px 22px; overflow-y: auto; }
+.thread { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 18px 28px 22px; overflow-y: auto; }
 .divider { text-align: center; font-size: 11px; font-weight: 600; color: var(--dim); padding: 4px 0 8px; }
 .sysline { text-align: center; font-size: 11px; color: var(--dim); padding: 4px 0; }
 .msg { display: flex; align-items: flex-end; gap: 8px; }
@@ -168,8 +167,13 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .stub { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
 
 /* ---- drawers (Linqi's #drawer): right edge, 460, radius 20 0 0 20 ---- */
-.drawer { position: absolute; top: 0; right: 0; bottom: 0; width: min(460px, 100%); display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--card-border); border-radius: var(--radius-l) 0 0 var(--radius-l); box-shadow: var(--shadow); overflow: hidden; z-index: 30; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100%); display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--card-border); border-radius: var(--radius-l) 0 0 var(--radius-l); box-shadow: var(--shadow); overflow: hidden; z-index: 30; }
 .drawer.details { width: min(400px, 100%); }
+/* the page behind a drawer stays usable (spec §3.3): on a wide screen it makes room instead of hiding under it */
+@media (min-width: 1100px) {
+  .main.with-drawer > .head, .main.with-drawer > .thread, .main.with-drawer > .composer { margin-right: 400px; }
+  .disc.with-drawer, .acct.with-drawer { padding-right: 488px; }
+}
 .drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 14px 14px 24px; border-bottom: 1px solid var(--border); }
 .drawer-head h2 { font-size: 20px; }
 .drawer-body { flex: 1 1 auto; display: flex; flex-direction: column; gap: 16px; padding: 20px 24px 24px; overflow-y: auto; }
@@ -194,12 +198,12 @@ h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .call-scrim { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--scrim); z-index: 50; }
 .call { display: flex; flex-direction: column; align-items: center; gap: 10px; width: min(320px, calc(100vw - 32px)); padding: 22px 18px; border-radius: var(--radius-l); background: var(--surface); border: 1px solid var(--down-edge); box-shadow: var(--shadow); text-align: center; }
 .call-keys { display: flex; gap: 16px; margin-top: 4px; }
-.toast { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 12px; padding: 8px 8px 8px 18px; border-radius: var(--radius-pill); background: var(--primary); color: var(--on-primary); font-size: 13px; white-space: nowrap; box-shadow: var(--shadow-lift); z-index: 35; }
+.toast { position: fixed; left: calc(var(--rail) + (100vw - var(--rail)) / 2); bottom: 28px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 12px; padding: 8px 8px 8px 18px; border-radius: var(--radius-pill); background: var(--primary); color: var(--on-primary); font-size: 13px; white-space: nowrap; box-shadow: var(--shadow-lift); z-index: 35; }
 .toast-key { min-height: 32px; padding: 0 14px; display: inline-flex; align-items: center; border-radius: var(--radius-pill); background: var(--surface); color: var(--text); font-weight: 600; }
 .toast-x { width: 28px; height: 28px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--on-primary); font-size: 14px; }
 
 /* ---- Discover ---- */
-.disc, .acct { gap: 22px; padding: 24px 28px 28px; }
+.disc, .acct { gap: 22px; padding: 24px 28px 28px; overflow-y: auto; }
 .disc-head, .acct-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .disc-head .head-title, .acct-head .head-title { flex: none; }
 .search { display: flex; align-items: center; gap: 10px; height: 44px; width: 420px; max-width: 100%; padding: 0 14px; border-radius: var(--radius-pill); border: 1px solid var(--border); background: var(--surface); color: var(--dim); }

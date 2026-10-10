@@ -84,6 +84,7 @@ test('a grant asks for News sentiment only when it is not installed', () => {
   const limit = message('gravit', 'limit', 'x', { from: 25, to: 50 });
   assert.equal(followUp(limit, 'granted', { installed: ['news'], now: NOW }).length, 1);
   assert.equal(followUp(limit, 'granted', { installed: [], now: NOW }).length, 2);
+  assert.equal(followUp(limit, 'granted', { installed: [], pending: ['news'], now: NOW }).length, 1, 'an unanswered ask is not repeated');
 });
 
 test('fills carry order, ledger and card placeholders for the store to number', () => {
