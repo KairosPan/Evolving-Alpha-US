@@ -29,24 +29,24 @@ test('the store page: header with search, 我的插件 · n, Create; six shelves
   assert.match(like, /Buffett bot/);
 });
 
-test('a card: 44 px logo top-left, kind top-right, name, one line, author line; installed shows ✓ beside the trash key', () => {
+test('a card: 44 px logo top-left, kind top-right, name, one line, and no author or price line; installed shows ✓ beside the trash key', () => {
   const s = disc();
   const h = card(byId('buffett'), s);
   assert.match(h, /^<div class="pcard" data-action="openPlugin" data-id="buffett" role="button" tabindex="0">/);
   assert.match(h, /av-portrait tone-warm/);
   assert.match(h, /class="pcard-kind">BOTS</);
   assert.match(h, /class="pcard-name">Buffett bot</);
-  assert.match(h, /class="pcard-by">Free · by Gravit</);
+  assert.doesNotMatch(h, /pcard-by|Free|by Gravit/);
   const installed = keyFor(byId('buffett'), s);
   assert.match(installed, /^<span class="pkeys"><span class="pkey-done" role="img" aria-label="已安装">/);
   assert.match(installed, /<button type="button" class="pkey uninstall" data-action="uninstall" data-id="buffett" aria-label="Uninstall Buffett bot">/);
   assert.doesNotMatch(installed, /Installed/);
   assert.match(keyFor(byId('news'), s), /^<button type="button" class="pkey install" data-action="install" data-id="news" aria-label="Install News sentiment">/);
-  assert.match(card(byId('pairs'), s), /Free · by @you · Private/);
+  assert.doesNotMatch(card(byId('pairs'), s), /Free|by @you/);
   assert.match(card(byId('news'), s, { pressed: true }), /class="pcard pressed"/);
 });
 
-test('the drawer: sections, the signature table inline, Install at the foot; installed shows Uninstall', () => {
+test('the drawer: sections, the signature table inline, Install at the foot; installed shows Uninstall; no author, price or 怎么付', () => {
   const s = R.openPlugin(disc(), 'news');
   const h = renderDiscover(s);
   assert.match(h, /<aside class="drawer" aria-label="News sentiment">/);
@@ -55,8 +55,8 @@ test('the drawer: sections, the signature table inline, Install at the foot; ins
   assert.match(d, /class="dsec-label">它能被问什么</);
   assert.match(d, /class="dsec-label">它会写什么</);
   assert.match(d, /不会：动钱、付人、改额度/);
-  assert.match(d, /class="dsec-label">怎么付</);
-  assert.match(d, /免费。Gravit 只在模型调用和成交的单上抽成。/);
+  assert.doesNotMatch(d, /怎么付|免费|Free|by Gravit/);
+  assert.match(pluginDrawer(byId('buffett'), s), /class="dim">Bots · 1\.2k 装了</);
   assert.match(d, /class="dsec-label">要你什么</);
   assert.match(d, /class="dsec-label">你签的是</);
   assert.match(d, /install news/);
@@ -78,18 +78,18 @@ test('我的插件 view: the pill pressed, every card with ✓ and the trash key
   assert.equal(count(h, /class="pkey uninstall"/g), 6, 'five installed that are not yours plus the private Pairs you made');
   assert.equal(count(h, /class="pkey-done"/g), 6);
   assert.match(h, /class="grid-title">你创建的</);
-  assert.match(h, /刚装好/);
+  assert.doesNotMatch(h, /刚装好/);
   assert.match(h, /class="toast" role="status">News sentiment 装好了/);
   assert.match(h, /class="toast-key" href="#\/messages\/c-5">Open</);
   assert.match(h, /data-action="open" data-id="c-5" href="#\/messages\/c-5">Open in Messages ›/, 'the link opens the conversation, not the card drawer');
 });
 
-test('the shelves show the just-installed card too, and only while it is installed', () => {
+test('the just-installed card keeps Open in Messages, with no 刚装好 chip, and only while it is installed', () => {
   const s = R.install(disc(), { id: 'news', now: NOW });
   const h = renderDiscover(s);
-  assert.match(h, /刚装好/);
-  assert.match(h, /data-action="open" data-id="c-5" href="#\/messages\/c-5">Open in Messages ›/);
-  assert.doesNotMatch(renderDiscover(R.uninstall(s, 'news')), /刚装好/);
+  assert.doesNotMatch(h, /刚装好/);
+  assert.match(h, /<div class="pcard-extra"><a class="link" data-action="open" data-id="c-5" href="#\/messages\/c-5">Open in Messages ›<\/a><\/div>/);
+  assert.doesNotMatch(renderDiscover(R.uninstall(s, 'news')), /Open in Messages/);
 });
 
 test('the signature follows the plugin: only a bot may propose; uninstalling signs only what and for; empty sections are left out', () => {

@@ -1,9 +1,8 @@
 // gravit-ui/js/render/discover.js — Discover as an App Store (spec §7): shelves, cards, the drawer that signs, 我的插件, the MCP connector
 import { esc, attrs, cls } from '../html.js';
 import { icon } from '../icons.js';
-import { PLUGINS, SHELVES, KINDS, byId, byline, search, likeFor, ICON_CHOICES, hostOf } from '../data/plugins.js';
+import { PLUGINS, SHELVES, KINDS, byId, search, likeFor, ICON_CHOICES, hostOf } from '../data/plugins.js';
 import { logo } from './avatars.js';
-import { chip } from './thread.js';
 import { kv, sec } from './controls.js';
 
 // not installed: the + key; installed: a ✓ beside the trash key, in every view
@@ -15,9 +14,9 @@ export function keyFor(p, state) {
 
 export function card(p, state, { view = 'shelf', pressed = false, openIn = null } = {}) {
   // the link carries its own action so a click opens the conversation, not the card's drawer
-  const extra = openIn ? `<div class="pcard-extra">${chip('刚装好', 'up')}<a class="link" data-action="open" data-id="${esc(openIn)}" href="#/messages/${esc(openIn)}">Open in Messages ›</a></div>` : '';
+  const extra = openIn ? `<div class="pcard-extra"><a class="link" data-action="open" data-id="${esc(openIn)}" href="#/messages/${esc(openIn)}">Open in Messages ›</a></div>` : '';
   return `<div${attrs({ class: cls('pcard', pressed && 'pressed', view === 'grid' && 'grid'), 'data-action': 'openPlugin', 'data-id': p.id, role: 'button', tabindex: '0' })}>${logo(p, 44)}` +
-    `<div class="pcard-body"><div class="pcard-name">${esc(p.name)}</div><div class="pcard-blurb">${esc(p.blurb)}</div><div class="pcard-by">${esc(byline(p))}</div>${extra}</div>` +
+    `<div class="pcard-body"><div class="pcard-name">${esc(p.name)}</div><div class="pcard-blurb">${esc(p.blurb)}</div>${extra}</div>` +
     `<div class="pcard-side"><span class="pcard-kind">${esc(p.kind.toUpperCase())}</span>${keyFor(p, state)}</div></div>`;
 }
 
@@ -64,12 +63,12 @@ function signRows(p, installed, state) {
 
 export function pluginDrawer(p, state) {
   const installed = state.plugins.installed.includes(p.id);
-  const meta = [p.kind, `by ${p.by}`, 'Free', p.installs ? `${p.installs} 装了` : null].filter(Boolean).join(' · ');
+  const meta = [p.kind, p.installs ? `${p.installs} 装了` : null].filter(Boolean).join(' · ');
   const writes = [...p.writes.map(esc), ...(p.never.length ? [`<span class="dim">不会：${esc(p.never.join('、'))}</span>`] : [])];
   return `<aside class="drawer"${attrs({ 'aria-label': p.name })}><div class="drawer-head"><h2>${esc(p.name)}</h2><button type="button" class="close-key" data-action="closeDrawer" aria-label="Close">×</button></div><div class="drawer-body">` +
     `<div class="plug-id">${logo(p, 56)}<div><div class="plug-name">${esc(p.name)}</div><div class="dim">${esc(meta)}</div></div></div><p class="plug-blurb">${esc(p.blurb)}。</p>` +
     (p.asks.length ? sec('它能被问什么', p.asks) : '') + (writes.length ? sec('它会写什么', writes, true) : '') +
-    sec('怎么付', ['免费。Gravit 只在模型调用和成交的单上抽成。']) + sec('要你什么', [p.needs]) +
+    sec('要你什么', [p.needs]) +
     `<div class="dsec"><div class="dsec-label">你签的是</div>${kv(signRows(p, installed, state))}</div>` +
     `<div class="drawer-foot">${installed ? `<button type="button" class="btn-primary" data-action="uninstall" data-id="${esc(p.id)}">Uninstall</button>` : `<button type="button" class="btn-primary" data-action="install" data-id="${esc(p.id)}">Install</button>`}</div></div></aside>`;
 }

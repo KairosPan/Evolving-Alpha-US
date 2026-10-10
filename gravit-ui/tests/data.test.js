@@ -1,7 +1,8 @@
 // gravit-ui/tests/data.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PLUGINS, KINDS, SHELVES, byId, byline, search, likeFor } from '../js/data/plugins.js';
+import * as plugins from '../js/data/plugins.js';
+import { PLUGINS, KINDS, SHELVES, byId, search, likeFor } from '../js/data/plugins.js';
 import { seed, SEED_VERSION } from '../js/data/seed.js';
 import { MIN, DAY } from '../js/time.js';
 
@@ -15,8 +16,7 @@ test('the catalogue: unique ids, known kinds, every shelf id resolves, Serenity 
   }
   for (const s of SHELVES.filter(s => s.id !== 'like')) for (const id of s.ids) assert.ok(byId(id), id);
   assert.equal(byId('serenity').blurb, '科技产业链分析');
-  assert.equal(byline(byId('buffett')), 'Free · by Gravit');
-  assert.equal(byline(byId('pairs')), 'Free · by @you · Private');
+  assert.equal(plugins.byline, undefined, 'no author or price line is made any more');
   assert.equal(byId('nope'), null);
   assert.equal(byId('p-1', [{ id: 'p-1', name: 'Mine' }]).name, 'Mine');
 });

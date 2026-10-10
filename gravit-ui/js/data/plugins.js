@@ -55,10 +55,6 @@ export function byId(id, extra = []) {
   return PLUGINS.find(p => p.id === id) ?? extra.find(p => p.id === id) ?? null;
 }
 
-export function byline(p) {
-  return `Free · by ${p.by}` + (p.visibility === 'private' ? ' · Private' : '');
-}
-
 export function search(q, extra = []) {
   const s = (q ?? '').trim().toLowerCase();
   if (!s) return [];
