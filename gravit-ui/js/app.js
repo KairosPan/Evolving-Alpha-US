@@ -114,7 +114,10 @@ function focusKey(el) {
   if (!el || el.tagName === 'BODY') return null;
   if (el.id) return { id: el.id };
   if (!el.dataset?.action) return null;
-  return { sel: FOCUS_ATTRS.filter(a => el.dataset[a] != null).map(a => `[data-${a}="${String(el.dataset[a]).replace(/"/g, '\\"')}"]`).join('') };
+  const q = v => String(v).replace(/"/g, '\\"');
+  // controls that share an action (the connector's fields, its radios) are told apart by their name, and a radio or checkbox by its value
+  const own = [el.name ? `[name="${q(el.name)}"]` : '', el.type === 'radio' || el.type === 'checkbox' ? `[value="${q(el.value)}"]` : ''].join('');
+  return { sel: FOCUS_ATTRS.filter(a => el.dataset[a] != null).map(a => `[data-${a}="${q(el.dataset[a])}"]`).join('') + own };
 }
 
 // which overlay is up: focus moves into it when it opens and back to its opener when it closes

@@ -303,6 +303,19 @@ test('Account panels: Move submits its form; Connect connects after a moment; Re
   store.timers.clear();
 });
 
+test('focus stays on the radio that was picked, not on the first field sharing its action', () => {
+  const f = fakeWindow({ ...noDialogs, hash: '#/discover' });
+  f.withSelector('[data-action="mcpField"]', { tagName: 'INPUT', type: 'text', name: 'name', dataset: { action: 'mcpField' } });
+  const radio = f.withSelector('[data-action="mcpField"][name="auth"][value="API key"]', { tagName: 'INPUT', type: 'radio', name: 'auth', value: 'API key', rendered: 'API key', dataset: { action: 'mcpField' } });
+  const store = boot(f.win);
+  store.dispatch('openCreate');
+  radio.focus();
+  f.fire('root', 'change', { target: radio });
+  assert.equal(store.get().discover.create.form.auth, 'API key');
+  assert.equal(f.doc.activeElement, radio);
+  store.timers.clear();
+});
+
 test('the draft picker keys reach the store', () => {
   const f = fakeWindow();
   const store = boot(f.win);
