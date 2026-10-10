@@ -163,3 +163,41 @@ Final: minor (deferred): under about 778 px tall, Publish and 拒绝 of the firs
 Final: minor (deferred): at about 700 to 803 px and 861 to 871 px wide, My plugins and Create split onto two rows.
 Final: minor (deferred): the Claude Code line wraps inside its address at stand- | in/mcp.
 Final: minor (deferred): an open letter's grey sender mark disappears into its row's grey highlight.
+
+## Round 4 — Markets and Trade after Linqi's buyer-agent-demo (spec §15)
+Round 4: the operator's words "Markets和trade的前端借鉴Linqi的buyer-agent-demo"; built in 7583e14..da6d886 (data and domain, the screens, docs 2b5021a, review fixes); branch kept, nothing merged or pushed.
+Round 4: understanding workflow wf_4205fec1-651 — readers over Linqi's ui/markets.js, ui/trade.js and the shared shell (read from the primary checkout's demo/ at 0ef5131; this worktree's demo/ is empty), one agent on his live stand-in page (offline: network blocked, payments refused, a scratch home; it placed one $20 SOL stand-in buy and paired the browser pane with that stand-in; nothing under demo/ changed), one reader on gravit-ui; a designer wrote the plan.
+Round 4: Ruling: four kinds only — Crypto, Stocks, RWAs, Predictions; Perps and Pre-IPO need a margin model and Memory says 不碰杠杆 — cost if wrong: two tabs and a position model to add.
+Round 4: Ruling: quotes are stand-ins held still — what is shown is what fills and the tests stay exact; a resting limit never fills — cost if wrong: Linqi's ticking tint and price drift to add.
+Round 4: Ruling: Sign and place stands in for Linqi's device-key signature; the prepared order, What you sign and the ten-minute window stay — cost if wrong: none for a demo; the back end of §9 carries the real signature.
+Round 4: Ruling: a hand order is the owner's, capped at the account's $100 a move and never drawn from a conversation's limit; Hand to Gravit instead opens gravit's New message with the words and the limit chips instead of Linqi's agent composer — cost if wrong: one more surface to port.
+Round 4: Ruling: the market drawer is the route #/markets/<id>, so it is never stored and a ticker links straight to it — cost if wrong: none.
+Round 4: Ruling: Linqi's class names are renamed mk-* and tk-*; his .card, .quote, .spark, .empty, .tabs, .t, .yes and .no would restyle gravit's own — cost if wrong: none.
+Round 4: Ruling: SEED_VERSION goes to 4 (holdings with quantities, cash at the venues, account.orders, the watchlist, the ticket) — cost if wrong: a viewer's saved demo state resets once.
+Round 4: Ruling: the plan's "sell 1 BTC → Sells only what you hold" test could not happen (the cap refuses first); the held check is tested with a 0.3 NVDA sell — cost if wrong: none.
+Round 4: review wf_465c2b2c-3d2, four lenses (fidelity to Linqi, domain and money, wiring and focus, layout in a real browser) with three-lens verification; one Critical, eleven distinct Important survived, all fixed in da6d886; suite 220/220.
+Final: fixed the Critical — a limit sell was valued at its limit, so a sell under the bid slipped under the $100 cap and filled for thousands — a limit sell is worth what it will fill at, never less than the bid, so the cap holds RED→GREEN, suite 220/220
+Final: fixed dollar market buys sized at the ask, so $100 was refused — a market buy in dollars is sized at the worst price it may pay, so $100 fits $100 a move RED→GREEN; the worked numbers moved (the $150 refusal now reads $149.90, $20 SOL buys 0.133, $50 USDY buys 44.34)
+Final: fixed the clock dying after Reset demo or 空白开始 (and the call timer with it) — after Reset demo the signature clock still runs on Trade RED→GREEN; the countdown now rounds down, which also ended a flaky first-second "10:00"
+Final: fixed a held prediction that could not be sold — a held prediction sells from its drawer and from the picker RED→GREEN
+Final: fixed moving a holding's full shown value leaving a negative quantity — moving all of a holding moves it whole RED→GREEN
+Final: fixed Back reopening a closed market drawer — closing a market drawer replaces its history entry RED→GREEN
+Final: fixed Watch and Connect inside the drawer sending focus to the table row behind — Watch inside the drawer keeps focus inside the drawer RED→GREEN (focus keys are looked up inside the same drawer, dialog or ticket first)
+Final: fixed the table beside the drawer showing only names — the css assertion for 24h and Volume folding RED→GREEN; names wrap from a 140 px minimum and the key drops its icon; checked at 1280: table 492 px in a 491 px box, price and key in view
+Final: fixed the ticket jumping to its top on every keystroke, and opening off-screen on narrower windows — the ticket keeps its own scroll while you type, and a new ticket is brought into view with the amount ready RED→GREEN
+Final: fixed the ticket's Connect to trade rendering as a grey native button — the button.link css assertion RED→GREEN
+Final: fixed the sort carrying across tabs and the search count covering every tab — a tab starts from Most traded …; the search count is what the tab shows RED→GREEN
+Final: Ruling: re-graded to fix as cheap and visible — the doubled "Gravit asks: 要你答：", a 0% class on the allocation bar, selects in Arial — tests RED→GREEN — cost if wrong: none.
+Final: Ruling: kept as deferred, graded Minor by effect — Move puts USDC at a venue as a holding the ticket does not count as money to trade with there (the venues' own cash covers every scripted order) — cost if wrong: a moved-USDC trade is refused with the venue's cash figure.
+Final: Ruling: kept as not checked — Safari and Firefox, screen readers, and every difference from Linqi's live page beyond what the readers and the fidelity lens compared — cost if wrong: polish found by hand.
+Final: minor (deferred): the ticket at rest has no Market search or list, and the picked row has no Change (Linqi's has both).
+Final: minor (deferred): Trade rounds venue prices to cents ($1.11 for USDY) where Linqi shows the venue's precision; the limit placeholder is Math.round of the price ('0' for DOGE).
+Final: minor (deferred): Under way drifts from Linqi's — no Cancel all, cards after orders, a 0 count shown, "0 filled", and prediction orders not worded in contracts.
+Final: minor (deferred): the kind block and the quote drop the quote currency (USDT, USDC, USD) and his per-kind lines (no 24h for stocks, the RWA issuer box, "none held").
+Final: minor (deferred): Watching reuses the market row instead of his watch row; the USD Coin drawer drops his Price and Agents parts; Across venues shows Buy at and Spread for USDY and spreads on public rows; Gravit on it does not list Gravit's open orders.
+Final: minor (deferred): picker rows differ from his; a Most traded or Recent row hands focus to the You hold row of the same market.
+Final: minor (deferred): a sell is not re-checked against what is held when it fills; Gravit's scripted $5 BTC buys are below the BTC minimum the owner's ticket enforces; a limit's room in Gravit on it can print float subtraction.
+Final: minor (deferred): Account's holding rows do not say which outcome a prediction holding is (the plan's account.js change was not made).
+Final: minor (deferred): focus falls to the page after Sign and place, × on the ticket, Clear, a cancel confirm on Trade and Hand to Gravit from the drawer; Hand to Gravit replaces half-written composer text.
+Final: minor (deferred): two overlapping Connect to trade presses clear each other's Connecting…; d on a focused ticket select opens the director; Escape ending an IME composition in the search also closes the drawer.
+Final: minor (deferred): at 1280x800 the docked ticket runs to the window's bottom edge; What you sign has no disclosure marker and a 28 px target.
