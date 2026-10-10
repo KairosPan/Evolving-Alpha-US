@@ -5,6 +5,14 @@ import { byId } from '../data/plugins.js';
 import { isClosed } from '../messages.js';
 
 const closed = isClosed;
+
+// one drawer at a time: an opener first closes whatever else was open, with any editor or confirm in it
+export const closeOverlays = s => ({
+  ...s, detailsOpen: false, settingsOpen: false, edit: null, confirm: null,
+  mail: s.mail ? { ...s.mail, open: false, reading: null } : s.mail,
+  account: { ...s.account, panel: null, panelError: null },
+  discover: { ...s.discover, drawer: null, create: null },
+});
 const installedBots = s => s.plugins.installed.filter(id => byId(id, s.plugins.uploaded)?.kind === 'Bots');
 const upd = (state, id, fn) => ({ ...state, conversations: state.conversations.map(c => (c.id === id ? fn(c) : c)) });
 const push = (state, convId, msg) => upd(state, convId, c => ({ ...c, messages: [...c.messages, msg] }));
@@ -50,6 +58,8 @@ export const reducers = {
     if (s.mail?.open) s.mail = { ...s.mail, open: false, reading: null };
     // the first level's Messages key returns to the conversation you last had open
     if (route.screen === 'messages' && route.id && route.id !== 'new') s.lastConv = route.id;
+    // an Account panel belongs to Account
+    if (route.screen !== 'account' && s.account.panel) s.account = { ...s.account, panel: null, panelError: null };
     // Discover's drawer, trash-key ask and toast belong to Discover; they do not follow you out of it
     if (route.screen !== 'discover' && (s.discover.drawer || s.discover.create || s.discover.toast)) {
       s = { ...s, discover: { ...s.discover, drawer: null, create: null, toast: null } };
@@ -150,7 +160,7 @@ export const reducers = {
     return s;
   },
 
-  toggleDetails: s => ({ ...s, detailsOpen: !s.detailsOpen, edit: null, confirm: null }),
+  toggleDetails: s => (s.detailsOpen ? { ...s, detailsOpen: false, edit: null, confirm: null } : { ...closeOverlays(s), detailsOpen: true }),
   stopGravit(s, { convId, now }) {
     if (closed(s.conversations.find(c => c.id === convId))) return s;
     const st = stampMessage(s, { from: 'system', kind: 'text', text: 'Gravit 停了，这件事不再动。', data: {} }, now);

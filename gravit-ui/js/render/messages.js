@@ -3,6 +3,7 @@ import { esc, attrs, cls, money } from '../html.js';
 import { icon } from '../icons.js';
 import { fmtDate, fmtClock } from '../time.js';
 import { byId } from '../data/plugins.js';
+import { isClosed } from '../messages.js';
 import { avatar, cluster } from './avatars.js';
 import { renderThread, chip } from './thread.js';
 import { senderName } from './rail.js';
@@ -102,14 +103,14 @@ export function renderDetails(conv, state) {
   <div class="drawer-head"><h2>Details</h2><button type="button" class="close-key" data-action="toggleDetails" aria-label="Close">×</button></div>
   <div class="drawer-body">
     <section class="dsec"><div class="dsec-label">这件事</div>${title}<div class="dim">你委托于 ${fmtDate(conv.intent.created)} · 到 ${fmtDate(conv.intent.until)} · ${esc(conv.intent.id)}</div>
-      <div class="btn-row">${asking('withdraw') ? confirmPair('确认撤回') : btn('changeWords', 'Change words') + btn('withdraw', 'Withdraw')}</div></section>
+      <div class="btn-row">${asking('withdraw') ? confirmPair('确认撤回') : btn('changeWords', 'Change words') + (isClosed(conv) ? '' : btn('withdraw', 'Withdraw'))}</div></section>
     <section class="dsec"><div class="dsec-label">额度</div>${limit}
-      <div class="btn-row">${asking('endLimit') ? confirmPair('确认结束额度') : btn('changeLimit', 'Change limit') + btn('endLimit', 'End limit')}</div></section>
+      <div class="btn-row">${asking('endLimit') ? confirmPair('确认结束额度') : btn('changeLimit', 'Change limit') + (L ? btn('endLimit', 'End limit') : '')}</div></section>
     <section class="dsec"><div class="dsec-label">插件</div>${plugs.length ? plugs.map(n => `<div class="dsec-line">${esc(n)}</div>`).join('') : '<div class="dim">没有</div>'}<a class="link" href="#/discover">Find more in Discover ›</a></section>
     <section class="dsec"><div class="dsec-label">Gravit 的钱包</div>${kv([['USDC', money(w.usdc)], ['链', esc(w.chain)], ['地址', `<span class="mono">${esc(w.address)}</span>`]])}${wallet}
       <div class="btn-row">${btn('topUp', 'Top up…')}${btn('takeBack', 'Take back…')}</div></section>
     <section class="dsec"><div class="dsec-label">模式</div>${seg(['Guard', 'Beast'], state.account.mode === 'beast' ? 'Beast' : 'Guard', 'setMode')}</section>
-    <section class="dsec">${asking('stopGravit') ? confirmPair('确认停掉') : `<button type="button" class="btn-danger" data-action="stopGravit" data-conv="${conv.id}">Stop Gravit</button>`}</section>
+    ${isClosed(conv) ? '' : `<section class="dsec">${asking('stopGravit') ? confirmPair('确认停掉') : `<button type="button" class="btn-danger" data-action="stopGravit" data-conv="${conv.id}">Stop Gravit</button>`}</section>`}
   </div>
 </aside>`;
 }

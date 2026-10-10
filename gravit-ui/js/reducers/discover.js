@@ -2,7 +2,7 @@
 import { nextId } from '../ids.js';
 import { DAY } from '../time.js';
 import { byId, ICON_CHOICES, hostOf } from '../data/plugins.js';
-import { stampMessage } from './messages.js';
+import { stampMessage, closeOverlays } from './messages.js';
 
 const disc = (s, patch) => ({ ...s, discover: { ...s.discover, ...patch } });
 
@@ -15,11 +15,11 @@ const withCreate = (s, patch) => (s.discover.create ? disc(s, { create: { ...s.d
 export const reducers = {
   setQuery: (s, query) => disc(s, { query: query ?? '' }),
   toggleInstalledOnly: s => disc(s, { installedOnly: !s.discover.installedOnly }),
-  openPlugin: (s, id) => disc(s, { drawer: id, create: null }),
+  openPlugin: (s, id) => disc(closeOverlays(s), { drawer: id }),
   closeDrawer: s => disc(s, { drawer: null }),
   dismissToast: s => (s.discover.toast ? disc(s, { toast: null }) : s),
 
-  openCreate: s => disc(s, { create: { step: 'form', form: { ...EMPTY_FORM }, tools: [], error: null }, drawer: null }),
+  openCreate: s => disc(closeOverlays(s), { create: { step: 'form', form: { ...EMPTY_FORM }, tools: [], error: null } }),
   closeCreate: s => (s.discover.create ? disc(s, { create: null }) : s),
   setCreateField(s, { key, value }) {
     const c = s.discover.create;

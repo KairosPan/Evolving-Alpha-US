@@ -1,11 +1,12 @@
 // gravit-ui/js/reducers/account.js — Account: mode, Memory, settings
+import { closeOverlays } from './messages.js';
 import { nextId } from '../ids.js';
 
 const mem = (s, patch) => ({ ...s, memory: { ...s.memory, ...patch } });
 
 export const reducers = {
   setMode: (s, mode) => ({ ...s, account: { ...s.account, mode } }),
-  openSettings: s => ({ ...s, settingsOpen: true, edit: null, confirm: null }),
+  openSettings: s => ({ ...closeOverlays(s), settingsOpen: true }),
   closeSettings: s => ({ ...s, settingsOpen: false, edit: null, confirm: null }),
   addMemory(s, { text, now }) {
     const t = (text ?? '').trim();

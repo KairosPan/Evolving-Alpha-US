@@ -8,6 +8,7 @@ import { renderMessagesScreen, renderBanner, renderCall, renderMail, renderStub,
 import { renderDiscover } from './render/discover.js';
 import { renderAccount } from './render/account.js';
 import { replyTo, followUp, director, toolsFor } from './driver.js';
+import { fmtDuration } from './time.js';
 
 export class Timers {
   constructor() { this.set = new Set(); }
@@ -108,8 +109,7 @@ export function watchToast(store, timers, ms = TOAST_MS) {
 
 const DIRECTOR = [['早报', 'brief'], ['技术分析', 'ta'], ['突发', 'breaking'], ['来电', 'call'], ['bot 插话', 'bot'], ['拒单', 'refusal'], ['收尾', 'done'], ['空白开始', 'firstRun'], ['重置 demo', 'reset']];
 
-// a key that finds "the same control" after a re-render: its id, or its data-* attributes
-const FOCUS_ATTRS = ['action', 'id', 'conv', 'msg', 'key', 'value', 'answer', 'accept', 'plugin'];
+// a key that finds "the same control" after a re-render: its id, or every data-* attribute it carries
 function focusKey(el) {
   if (!el || el.tagName === 'BODY') return null;
   if (el.id) return { id: el.id };
@@ -117,12 +117,15 @@ function focusKey(el) {
   const q = v => String(v).replace(/"/g, '\\"');
   // controls that share an action (the connector's fields, its radios) are told apart by their name, and a radio or checkbox by its value
   const own = [el.name ? `[name="${q(el.name)}"]` : '', el.type === 'radio' || el.type === 'checkbox' ? `[value="${q(el.value)}"]` : ''].join('');
-  return { sel: FOCUS_ATTRS.filter(a => el.dataset[a] != null).map(a => `[data-${a}="${q(el.dataset[a])}"]`).join('') + own };
+  const data = Object.entries(el.dataset).map(([k, v]) => `[data-${k.replace(/[A-Z]/g, c => '-' + c.toLowerCase())}="${q(v)}"]`).join('');
+  return { sel: data + own };
 }
 
 // which overlay is up: focus moves into it when it opens and back to its opener when it closes
 const overlayOf = s => (s.call ? 'call' : s.discover.create ? 'modal' : s.mail?.open || s.account.panel || s.detailsOpen || s.settingsOpen || s.discover.drawer ? 'drawer' : null);
 const screenOf = s => `${s.route.screen}/${s.route.id ?? s.route.tab ?? ''}`;
+// which editor is open, by what it edits (its error may change; the editor stays the same)
+const editorOf = e => (e ? [e.kind, e.key, e.convId, e.id, e.dir].join('|') : null);
 const drawerOf = s => (s.mail?.open ? `mail:${s.mail.reading ?? ''}` : null) ?? (s.account.panel ? `panel:${s.account.panel}` : null) ?? s.discover.drawer ?? (s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null);
 
 export function boot(win) {
@@ -157,7 +160,7 @@ export function boot(win) {
     const activeKey = focusKey(active);
     const caret = active && typeof active.selectionStart === 'number' && active.id ? [active.selectionStart, active.selectionEnd] : null;
     // typed text only: a file input refuses a path written back, and radios and checkboxes carry state, not text
-    const typed = new Map([...root.querySelectorAll('input[id]:not([type=radio]):not([type=checkbox]):not([type=file]), textarea[id]')].map(el => [el.id, el.value]));
+    const typed = new Map([...root.querySelectorAll('input[id]:not([type=radio]):not([type=checkbox]):not([type=file]), textarea[id], select[id]')].map(el => [el.id, el.value]));
     const thread0 = doc.getElementById('thread');
     const threadAt = thread0 ? { top: thread0.scrollTop, bottom: thread0.scrollHeight - thread0.scrollTop - thread0.clientHeight < 40 } : null;
     const scrolls = { main: root.querySelector('main')?.scrollTop, rows: root.querySelector('.rail-rows')?.scrollTop, drawer: root.querySelector('.drawer-body')?.scrollTop, shelves: [...root.querySelectorAll('.shelf-row')].map(e => e.scrollLeft) };
@@ -167,7 +170,12 @@ export function boot(win) {
       (directorOpen ? `<div class="director" role="menu">${DIRECTOR.map(([l, k]) => `<button type="button" class="director-key" data-action="director" data-key="${k}">${l}</button>`).join('')}</div>` : '');
     root.innerHTML = renderRail(s, now()) + screen + overlays;
 
-    for (const [id, value] of typed) { const el = doc.getElementById(id); if (el && id !== 'say') el.value = value; }
+    const sameEditor = editorOf(s.edit) === last.editor;
+    for (const [id, value] of typed) {
+      const el = doc.getElementById(id);
+      // an editor's box (edit-*) keeps what was typed only while the same editor stays open
+      if (el && id !== 'say' && (sameEditor || !id.startsWith('edit-'))) el.value = value;
+    }
     const say = doc.getElementById('say');
     if (say) say.value = composerText;
 
@@ -196,21 +204,35 @@ export function boot(win) {
     } else if (!overlay && last.overlay) {
       target = find(last.opener) ?? target;
       opener = null;
-    } else if (s.edit && s.edit !== last.edit) {
+    } else if (s.edit && editorOf(s.edit) !== last.editor) {
       target = root.querySelector('.inline-edit [name]') ?? target; // an editor that just opened takes focus
+    } else if (s.confirm && s.confirm !== last.confirm) {
+      target = root.querySelector('.confirm [data-action="confirmYes"]') ?? target; // a confirm that just asked takes focus
     } else if (!target && activeKey) {
-      target = say; // the pressed control went away, as an answered card's keys do: the composer is next
+      // the pressed control went away (an answered card's keys, a read mail row): stay inside the overlay if one is up, else the composer
+      target = overlay === 'call' ? root.querySelector('.call [data-action="hangUp"]') ?? root.querySelector('.call [data-accept="0"]')
+        : overlay === 'modal' ? root.querySelector('.modal .close-key')
+          : overlay === 'drawer' ? root.querySelector('.drawer .close-key') : say;
     }
     if (target) {
       target.focus();
       if (caret && target === find(activeKey) && typeof target.setSelectionRange === 'function') target.setSelectionRange(caret[0], caret[1]);
     }
-    last = { overlay, opener, screen: screenOf(s), drawer: drawerOf(s), thread: threadSig, edit: s.edit };
-    // a live call re-renders each second, for its timer
-    if (s.call?.status === 'live' && !ticking) {
-      ticking = true;
-      timers.after(1000, () => { ticking = false; if (store.get().call?.status === 'live') render(); });
-    }
+    last = { overlay, opener, screen: screenOf(s), drawer: drawerOf(s), thread: threadSig, editor: editorOf(s.edit), confirm: s.confirm };
+    if (s.call?.status === 'live' && !ticking) tick();
+  }
+
+  // a live call's timer: only its text changes each second; the page and the call's keys stay as they are
+  function tick() {
+    ticking = true;
+    timers.after(1000, () => {
+      ticking = false;
+      const c = store.get().call;
+      if (c?.status !== 'live') return;
+      const el = root.querySelector('.call-timer');
+      if (el) el.textContent = fmtDuration(now() - c.since);
+      tick();
+    });
   }
 
   // while an IME composes (pinyin), a render would replace the input and lose the composition: hold it until compositionend
@@ -474,7 +496,7 @@ export function boot(win) {
       return;
     }
     const a = doc.activeElement;
-    if (ev.key === 'Enter' && store.get().edit && a?.closest?.('.inline-edit')) { ev.preventDefault(); commitEdit(); return; }
+    if (ev.key === 'Enter' && !ev.isComposing && ev.keyCode !== 229 && store.get().edit && a?.closest?.('.inline-edit') && a.tagName !== 'BUTTON') { ev.preventDefault(); commitEdit(); return; }
     // a card is a div with role=button: Enter and Space press it, as they would a real button
     if ((ev.key === 'Enter' || ev.key === ' ') && a?.getAttribute?.('role') === 'button' && actions[a.dataset.action]) {
       ev.preventDefault();

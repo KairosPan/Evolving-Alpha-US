@@ -45,7 +45,7 @@ export function fakeWindow({ hash = '#/messages/c-1', storage = null, prompt = (
       if (bySelector.has(sel)) return bySelector.get(sel);
       if (!sel.includes('input[id]')) return [];
       const skip = [...sel.matchAll(/:not\(\[type=(\w+)\]\)/g)].map(m => m[1]);
-      return [...byId.values()].filter(e => (e.tagName === 'INPUT' && !skip.includes(e.type)) || e.tagName === 'TEXTAREA');
+      return [...byId.values()].filter(e => (e.tagName === 'INPUT' && !skip.includes(e.type)) || e.tagName === 'TEXTAREA' || (e.tagName === 'SELECT' && sel.includes('select[id]')));
     },
     querySelector(sel) { return (bySelector.get(sel) ?? [])[0] ?? null; },
     addEventListener(type, fn) { (listeners.root[type] ??= []).push(fn); },

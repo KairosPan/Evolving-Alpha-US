@@ -236,6 +236,37 @@ test('Connect an account: a venue connects after a moment and joins the list; Re
   assert.match(statement, /data-action="exportStatement">Export CSV</);
 });
 
+// round-two review fixes
+
+test('Details offers only what still works: no Withdraw or Stop once closed, no End limit without a limit', () => {
+  const stopped = R.toggleDetails(R.stopGravit(fresh(), { convId: 'c-1', now: NOW }));
+  const d = renderDetails(conv(stopped, 'c-1'), stopped);
+  assert.doesNotMatch(d, /data-action="withdraw"/);
+  assert.doesNotMatch(d, /data-action="stopGravit"/);
+  const open = R.toggleDetails(R.nav(fresh(), { screen: 'messages', id: 'c-3' }));
+  assert.doesNotMatch(renderDetails(conv(open, 'c-3'), open), /data-action="endLimit"/, 'c-3 has no limit');
+});
+
+test('Top up cannot take more than your USDC holding', () => {
+  const s = R.commitEdit(R.startEdit(fresh(), { kind: 'wallet', dir: 'in' }), { values: { amount: '3000' }, now: NOW });
+  assert.equal(s.edit.error, '你的 USDC 只有 $2,490');
+  assert.equal(s.account.holdings.find(h => h.key === 'stable:USDC').value, 2490);
+});
+
+test('one drawer at a time: each opener closes the others, and an Account panel does not follow you off Account', () => {
+  const mailOpen = R.openMail(fresh());
+  assert.equal(R.openPlugin(mailOpen, 'news').mail.open, false, 'a plugin drawer replaces the mailbox');
+  assert.equal(R.toggleDetails(mailOpen).mail.open, false, 'Details replaces the mailbox');
+  assert.equal(R.openSettings(mailOpen).mail.open, false);
+  assert.equal(R.openPanel(mailOpen, 'move').mail.open, false);
+  const panel = R.openPanel(R.nav(fresh(), { screen: 'account', tab: 'portfolio' }), 'receive');
+  const mailed = R.openMail(R.askConfirm(panel, { action: 'forgetAll' }));
+  assert.deepEqual([mailed.account.panel, mailed.confirm], [null, null], 'the mailbox replaces a panel and drops a pending confirm');
+  assert.equal(R.openSettings(panel).account.panel, null);
+  assert.equal(R.nav(panel, { screen: 'discover', id: null }).account.panel, null, 'leaving Account closes its panel');
+  assert.equal(R.nav(panel, { screen: 'account', tab: 'venues' }).account.panel, 'receive', 'moving inside Account keeps it');
+});
+
 test('Memory edits in place, Forget all asks first, and Reset demo asks first', () => {
   const s = R.nav(fresh(), { screen: 'account', tab: 'memory' });
   assert.match(renderMemory(R.startEdit(s, { kind: 'memory', id: 'mem-1' })), /<span class="inline-edit"><input id="edit-text" class="input small" name="text" type="text" value="偏价值，不追热点" aria-label="改成">/);

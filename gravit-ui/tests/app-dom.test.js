@@ -263,20 +263,23 @@ test('the mic listens, then writes what it heard into the composer; a second pre
 test('the phone key rings Gravit, it picks up, the timer runs, hang up leaves the card', async () => {
   const f = fakeWindow(noDialogs);
   const hang = f.withSelector('.call [data-action="hangUp"]', { tagName: 'BUTTON' });
+  const timer = f.withSelector('.call-timer', { tagName: 'DIV' });
   const store = boot(f.win);
-  f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'phoneCall' } }));
-  assert.deepEqual([store.get().call.dir, store.get().call.status], ['out', 'ringing']);
-  assert.equal(f.doc.activeElement, hang, 'the call takes focus on its hang-up key');
-  await sleep(1600);
-  assert.equal(store.get().call.status, 'live');
-  const writes = f.writes;
-  await sleep(1100);
-  assert.ok(f.writes > writes, 'the live call re-renders each second for its timer');
-  f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'hangUp' } }));
-  assert.equal(store.get().call, null);
-  const card = store.get().conversations[0].messages.at(-1);
-  assert.deepEqual([card.kind, card.answer, card.data.dir], ['call', 'accepted', 'out']);
-  store.timers.clear();
+  try {
+    f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'phoneCall' } }));
+    assert.deepEqual([store.get().call.dir, store.get().call.status], ['out', 'ringing']);
+    assert.equal(f.doc.activeElement, hang, 'the call takes focus on its hang-up key');
+    await sleep(1600);
+    assert.equal(store.get().call.status, 'live');
+    await sleep(1100);
+    assert.match(timer.textContent, /^00:0[12]$/, 'the timer runs');
+    f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'hangUp' } }));
+    assert.equal(store.get().call, null);
+    const card = store.get().conversations[0].messages.at(-1);
+    assert.deepEqual([card.kind, card.answer, card.data.dir], ['call', 'accepted', 'out']);
+  } finally {
+    store.timers.clear();
+  }
 });
 
 test('the mail key opens the mailbox; a message opens and reads; Escape closes it', () => {
@@ -333,6 +336,97 @@ test('focus stays on the radio that was picked, not on the first field sharing i
   assert.equal(store.get().discover.create.form.auth, 'API key');
   assert.equal(f.doc.activeElement, radio);
   store.timers.clear();
+});
+
+// round-two review fixes
+
+test('opening another editor starts from its own value, not the text left in the last one', () => {
+  const f = fakeWindow(noDialogs);
+  const box = f.withId('edit-text', { tagName: 'INPUT', rendered: '不碰杠杆' });
+  const store = boot(f.win);
+  store.dispatch('nav', { screen: 'account', tab: 'memory' });
+  store.dispatch('startEdit', { kind: 'memory', id: 'mem-1' });
+  box.value = '偏价值，改了一半';
+  store.dispatch('startEdit', { kind: 'memory', id: 'mem-2' });
+  assert.equal(box.value, '不碰杠杆', 'mem-2 shows its own text');
+  box.value = '不碰杠杆，也不碰期权';
+  store.dispatch('setMode', 'beast');
+  assert.equal(box.value, '不碰杠杆，也不碰期权', 'while the same editor stays open, typing survives a render');
+  store.timers.clear();
+});
+
+test('the Move pickers keep their choice across a render, such as an error', () => {
+  const f = fakeWindow({ ...noDialogs, hash: '#/account/portfolio' });
+  const from = f.withId('mv-from', { tagName: 'SELECT', rendered: 'Stand-in Wallet' });
+  const store = boot(f.win);
+  store.dispatch('openPanel', 'move');
+  from.value = 'Stand-in Exchange';
+  store.dispatch('moveFunds', { from: 'Stand-in Exchange', to: 'Stand-in Exchange', asset: 'BTC', amount: '1', now: Date.now() });
+  assert.equal(store.get().account.panelError, '换一个去处');
+  assert.equal(from.value, 'Stand-in Exchange');
+  store.timers.clear();
+});
+
+test('Enter on an editor\'s × key does not save', () => {
+  const f = fakeWindow(noDialogs);
+  f.withSelector('.inline-edit [name]', { tagName: 'INPUT', name: 'title', value: 'X', rendered: 'X' });
+  const cancel = f.withSelector('[data-action="cancelEdit"]', { tagName: 'BUTTON', dataset: { action: 'cancelEdit' }, closestMap: { '.inline-edit': {} } });
+  const store = boot(f.win);
+  store.dispatch('toggleDetails');
+  store.dispatch('startEdit', { kind: 'rename', convId: 'c-1' });
+  cancel.focus();
+  f.fire('doc', 'keydown', { key: 'Enter' });
+  assert.notEqual(store.get().conversations[0].title, 'X');
+  store.timers.clear();
+});
+
+test('focus goes to what replaced the pressed key: the confirm, or the drawer, never the page behind an overlay', () => {
+  const f = fakeWindow(noDialogs);
+  const yes = f.withSelector('.confirm [data-action="confirmYes"]', { tagName: 'BUTTON' });
+  const close = f.withSelector('.drawer .close-key', { tagName: 'BUTTON' });
+  const say = f.withId('say', { tagName: 'INPUT' });
+  const store = boot(f.win);
+  store.dispatch('toggleDetails');
+  const withdraw = f.element({ tagName: 'BUTTON', dataset: { action: 'withdraw', conv: 'c-1' } });
+  withdraw.focus();
+  f.click(withdraw);
+  assert.equal(f.doc.activeElement, yes, 'the confirm takes focus');
+  store.dispatch('cancelConfirm');
+  store.dispatch('toggleDetails');
+  store.dispatch('openMail');
+  const row = f.element({ tagName: 'BUTTON', dataset: { action: 'readMail', id: 'mail-1' } });
+  row.focus();
+  f.click(row);
+  assert.equal(f.doc.activeElement, close, 'the read row went away: focus stays in the mailbox, not the composer behind it');
+  assert.notEqual(f.doc.activeElement, say);
+  store.timers.clear();
+});
+
+test('focus returns to the same panel key, told apart by every data attribute', () => {
+  const f = fakeWindow({ ...noDialogs, hash: '#/account/portfolio' });
+  f.withSelector('[data-action="openPanel"]', { tagName: 'BUTTON', dataset: { action: 'openPanel', panel: 'move' } });
+  const receive = f.withSelector('[data-action="openPanel"][data-panel="receive"]', { tagName: 'BUTTON', dataset: { action: 'openPanel', panel: 'receive' } });
+  const store = boot(f.win);
+  receive.focus();
+  store.dispatch('setMode', 'beast');
+  assert.equal(f.doc.activeElement, receive);
+  store.timers.clear();
+});
+
+test('a live call updates only its timer each second; the page is not redrawn under the keys', async () => {
+  const f = fakeWindow(noDialogs);
+  const timer = f.withSelector('.call-timer', { tagName: 'DIV' });
+  const store = boot(f.win);
+  try {
+    store.dispatch('startCall', { now: Date.now() });
+    store.dispatch('connectCall', { now: Date.now() - 61_000 });
+    const writes = f.writes;
+    await sleep(1100);
+    assert.equal(f.writes, writes, 'no full redraw while the call runs');
+    assert.match(timer.textContent, /^01:0[12]$/);
+  } finally {
+    store.timers.clear(); // a live call ticks every second: a failed assertion must not leave it running
+  }
 });
 
 test('the draft picker keys reach the store', () => {

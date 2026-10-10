@@ -77,6 +77,20 @@ test('narrow windows, the toast under a drawer, and long words that wrap', async
   assert.match(css, /^\.pcard-extra \{[^}]*flex-wrap: wrap/m, 'on a narrow shelf card the link drops under the chip');
 });
 
+test('Details never covers the conversation: it makes room, folding the list away on a medium window; the first level folds to icons below 1180 px', async () => {
+  const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
+  const block = q => css.match(new RegExp(`@media ${q.replace(/[()]/g, '\\$&')} \\{([\\s\\S]*?)\\n\\}`))?.[1] ?? '';
+  const wide = block('(min-width: 861px)');
+  assert.match(wide, /\.main\.with-drawer > \.head, \.main\.with-drawer > \.thread, \.main\.with-drawer > \.composer \{ margin-right: 400px; \}/);
+  const medium = block('(min-width: 861px) and (max-width: 1399px)');
+  assert.match(medium, /\.list:has\(~ \.main\.with-drawer\) \{ display: none; \}/);
+  const folded = block('(min-width: 861px) and (max-width: 1180px)');
+  assert.match(folded, /\.rail \{[^}]*flex-basis: var\(--nav-mini\)/);
+  assert.match(css, /^\.head-title \{[^}]*flex: 1 1 0;[^}]*min-width: 0/m, 'a long title shortens instead of pushing Details to a second row');
+  assert.match(css, /^\.head \{[^}]*flex-wrap: nowrap/m);
+  assert.match(css, /^\.head\.centered \{[^}]*padding: 16px 200px 12px/m, 'the group head keeps clear of Working and Details');
+});
+
 test('the equity blue goes by Linqi\'s own name: no --blue, which his tokens use for the orange RWA colour', async () => {
   const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
   const tokens = await readFile(new URL('../css/tokens.css', import.meta.url), 'utf8');

@@ -1,7 +1,7 @@
 // gravit-ui/js/reducers/controls.js — the in-page controls: inline editors and two-step confirms (they replaced prompt and confirm)
 import { DAY } from '../time.js';
 import { money } from '../html.js';
-import { reducers as messages } from './messages.js';
+import { reducers as messages, closeOverlays } from './messages.js';
 import { reducers as account } from './account.js';
 import { VENUES, CONNECTABLE } from '../data/seed.js';
 
@@ -9,13 +9,16 @@ const num = v => { const n = Number(String(v ?? '').trim()); return Number.isFin
 const fail = (s, error) => ({ ...s, edit: { ...s.edit, error } });
 const done = s => ({ ...s, edit: null });
 
-// move USDC between you and Gravit's wallet: in = Top up from your USDC, out = Take back into it
+// move USDC between you and Gravit's wallet: in = Top up from your USDC holding, out = Take back into it
+// returns the new state, or the reason it cannot move
 function walletMove(s, dir, amount, now) {
   const w = s.account.wallet;
-  if (dir === 'out' && amount > w.usdc) return null;
+  const yours = s.account.holdings.find(h => h.key === 'stable:USDC');
+  if (dir === 'out' && amount > w.usdc) return { error: `钱包里只有 ${money(w.usdc)}` };
+  if (dir === 'in' && amount > (yours?.value ?? 0)) return { error: `你的 USDC 只有 ${money(yours?.value ?? 0)}` };
   const sign = dir === 'in' ? 1 : -1;
   const round = n => Math.round(n * 100) / 100;
-  return {
+  return { state: {
     ...s,
     account: {
       ...s.account,
@@ -23,7 +26,7 @@ function walletMove(s, dir, amount, now) {
       holdings: s.account.holdings.map(h => (h.key === 'stable:USDC' ? { ...h, value: round(h.value - sign * amount) } : h)),
       activity: [{ at: now, text: `${dir === 'in' ? 'Top up' : 'Take back'} ${money(amount)} · Gravit 的钱包`, amount: -sign * amount }, ...s.account.activity],
     },
-  };
+  } };
 }
 
 export const reducers = {
@@ -60,7 +63,7 @@ export const reducers = {
         const n = num(values.amount);
         if (!n) return fail(s, '要一个大于 0 的数');
         const moved = walletMove(s, e.dir, n, now);
-        return moved ? done(moved) : fail(s, `钱包里只有 ${money(s.account.wallet.usdc)}`);
+        return moved.state ? done(moved.state) : fail(s, moved.error);
       }
       default:
         return done(s);
@@ -77,13 +80,13 @@ export const reducers = {
   setListening: (s, on) => (!!s.compose?.listening === !!on ? s : { ...s, compose: { ...s.compose, listening: !!on } }),
 
   // Gravit's mailbox: one drawer at a time, so opening it closes Details, Settings and a plugin drawer
-  openMail: s => ({ ...s, mail: { ...s.mail, open: true, reading: null }, detailsOpen: false, settingsOpen: false, discover: { ...s.discover, drawer: null } }),
+  openMail: s => { const c = closeOverlays(s); return { ...c, mail: { ...c.mail, open: true, reading: null } }; },
   closeMail: s => (s.mail?.open ? { ...s, mail: { ...s.mail, open: false, reading: null } } : s),
   readMail: (s, id) => (s.mail?.items.some(m => m.id === id) ? { ...s, mail: { ...s.mail, reading: id, items: s.mail.items.map(m => (m.id === id ? { ...m, read: true } : m)) } } : s),
   backToInbox: s => (s.mail?.reading ? { ...s, mail: { ...s.mail, reading: null } } : s),
 
   // Account's panels (Move, Receive, Statement, Connect): drawers, one at a time
-  openPanel: (s, panel) => ({ ...s, account: { ...s.account, panel, panelError: null, copied: false }, settingsOpen: false, mail: s.mail ? { ...s.mail, open: false, reading: null } : s.mail }),
+  openPanel: (s, panel) => { const c = closeOverlays(s); return { ...c, account: { ...c.account, panel, panelError: null, copied: false } }; },
   closePanel: s => (s.account.panel ? { ...s, account: { ...s.account, panel: null, panelError: null } } : s),
   // Move: an asset from one venue to another; what you own stays the same
   moveFunds(s, { from, to, asset, amount, now }) {
