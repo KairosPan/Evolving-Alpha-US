@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gravit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="./css/tokens.css">
+<link rel="stylesheet" href="./css/app.css">
+<script>
+  // the theme before the first paint: the saved choice, else the system's own
+  try { const t = localStorage.getItem('gravit-ui.theme'); if (t === 'cream' || t === 'black') document.documentElement.dataset.theme = t; } catch {}
+</script>
+</head>
+<body>
+<div id="app" class="app"></div>
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>
