@@ -393,3 +393,38 @@ values, so Black comes for free. Keep every number in §3–§5 (rail 248, rows 
 composer 36/32, drawer 460) and every state on the boards (current, unread, pressed, installed,
 just-installed, collapsed). Nothing in this spec touches Linqi's doors: every order, limit, payment and
 install still passes through his signed instructions.
+
+## 13. Amendment, 2026-10-10 (after the first build)
+
+The operator's words, after seeing the pure front end in `gravit-ui/`: keep the branch as it is;
+"✓ Installed" becomes a ✓ beside the delete key; "Installed · 6" becomes 我的插件; Upload becomes Create,
+which pops up an MCP connector; Messages, Discover, Markets and Trade go in a first-level column that
+collapses to small icons, and opening Messages shows the second level; and the controls get built.
+Where this section and §4, §7.3, §7.5 or §7.7 disagree, this section wins.
+
+1. **Two levels (replaces the single rail of §4).** The first level: the brand with a collapse chevron,
+   Messages (with the unread count) · Discover · Markets · Trade, the phone and mail keys, Account at the
+   foot. Collapsed, it is a strip of icons; the names stay as titles and for screen readers. The second
+   level appears on Messages only: the title "Messages", the new-message +, and the conversation rows of
+   §4.3. Messages returns to the last open conversation. The rows' own collapse chevron is gone. Below
+   860 px the first level is a bar of icons on top and the list a block under it.
+2. **The installed key (replaces the three states of §7.3).** Not installed: the + key. Installed: a ✓
+   mark beside a trash key, in every view; the trash key uninstalls at once. There is no "✓ Installed"
+   word key and no ask step.
+3. **我的插件 (renames the Installed pill of §7.5).** The pill reads 我的插件 · n; pressed, it shows your
+   installed plugins, with 你创建的 for the ones you made.
+4. **Create, the MCP connector (replaces the upload drawer of §7.7).** A dialog over a light scrim: 名称,
+   MCP 服务器地址, 认证 (无 · API key · OAuth, each showing its fields), 图标 (initials by default, 换一张图),
+   类型, 放哪 (Private · Public). 连接 checks the address, connects, and lists the tools the server
+   offers, each with a check; 添加 makes the server your own installed plugin, with a conversation that
+   teaches its tools. A typed key or secret never leaves the page; the front end stores nothing of it.
+5. **The controls.** No browser prompt or confirm remains. Editors open in place with ✓ and × (Enter and
+   Esc): the draft's limit chips, Change words, Change limit, Top up and Take back (USDC between you and
+   Gravit's wallet), Memory entries. Withdraw, End limit, Stop Gravit, Forget all and Reset demo ask in
+   place and act on the second press. The composer's + picks files that send as chips; the mic listens
+   and fills the composer (scripted here). The phone key calls Gravit: ringing, a live call with a timer,
+   mute and hang up, then a call card; an accepted incoming call goes live the same way. The mail key
+   opens Gravit's own mailbox. Account's Move, Receive (address, QR, copy), Statement (activity, CSV) and
+   Connect an account work as drawers.
+6. **Tokens.** The equity blue is Linqi's `--alloc-equity`; the white words on it use `--on-equity`, a
+   second addition beside `--down-edge` (his own `--blue` is his orange RWA colour).
