@@ -77,12 +77,15 @@ test('narrow windows, the toast under a drawer, and long words that wrap', async
   assert.match(narrow, /\.rail, \.rail\.mini \{[^}]*position: static/, 'below 860 px the first level stops being a sticky column, collapsed or not');
   assert.match(narrow, /\.main \{[^}]*height: auto/);
   assert.match(narrow, /\.list \{[^}]*position: static/);
+  assert.match(narrow, /\.list:has\(~ \.main\.mail:not\(\.has-letter\)\) \.rail-rows \{ max-height: none; \}/, 'the inbox standing alone is not cut at 40vh');
   const z = sel => Number(css.match(new RegExp(`^\\${sel} \\{[^}]*z-index: (\\d+)`, 'm'))?.[1]);
   assert.ok(z('.toast') < z('.drawer'), 'a toast never covers a drawer');
   assert.match(css, /\.bubble, \.card \{[^}]*overflow-wrap: anywhere/, 'a pasted address wraps inside its bubble');
   assert.match(css, /^\.chip \{[^}]*white-space: nowrap/m, 'a chip never breaks one character per line');
   assert.match(css, /^\.pcard-extra \{[^}]*flex-wrap: wrap/m, 'on a narrow shelf card the link drops under the chip');
   assert.match(css, /^\.field > \.radio-seg, \.modal-body > \.status \{ align-self: flex-start; \}/m, 'the client switcher and the status pill keep their own width in the dialog');
+  assert.match(css, /^\.modal-scrim \{[^}]*align-items: flex-start;[^}]*padding: max\(16px, 8vh\) 16px 16px/m, 'the dialog hangs from the top, so a taller step does not move what is under the pointer');
+  assert.match(css, /^\.snippet \.btn-sm \{[^}]*background: var\(--surface\);[^}]*border: 1px solid var\(--border\)/m, 'the copy key stands out from the code box');
 });
 
 test('Details never covers the conversation: it makes room, folding the list away on a medium window; the first level folds to icons below 1180 px', async () => {

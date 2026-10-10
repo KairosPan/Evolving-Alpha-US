@@ -130,6 +130,8 @@ const overlayOf = s => (s.call ? 'call' : s.discover.create ? 'modal' : s.accoun
 const screenOf = s => `${s.route.screen}/${s.route.id ?? s.route.tab ?? ''}`;
 // which editor is open, by what it edits (its error may change; the editor stays the same)
 const editorOf = e => (e ? [e.kind, e.key, e.convId, e.id, e.dir].join('|') : null);
+// which dialog step is up: its body keeps its scroll only while the step stays the same
+const dialogOf = s => (s.discover.create ? `${s.discover.create.run}:${s.discover.create.step}` : null);
 const drawerOf = s => (s.account.panel ? `panel:${s.account.panel}` : null) ?? s.discover.drawer ?? (s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null);
 
 export function boot(win) {
@@ -167,7 +169,7 @@ export function boot(win) {
     const typed = new Map([...root.querySelectorAll('input[id]:not([type=radio]):not([type=checkbox]):not([type=file]), textarea[id], select[id]')].map(el => [el.id, el.value]));
     const thread0 = doc.getElementById('thread');
     const threadAt = thread0 ? { top: thread0.scrollTop, bottom: thread0.scrollHeight - thread0.scrollTop - thread0.clientHeight < 40 } : null;
-    const scrolls = { main: root.querySelector('main')?.scrollTop, rows: root.querySelector('.rail-rows')?.scrollTop, drawer: root.querySelector('.drawer-body')?.scrollTop, shelves: [...root.querySelectorAll('.shelf-row')].map(e => e.scrollLeft) };
+    const scrolls = { main: root.querySelector('main')?.scrollTop, rows: root.querySelector('.rail-rows')?.scrollTop, drawer: root.querySelector('.drawer-body')?.scrollTop, dialog: root.querySelector('.modal-body')?.scrollTop, shelves: [...root.querySelectorAll('.shelf-row')].map(e => e.scrollLeft) };
 
     const screen = s.route.screen === 'discover' ? renderDiscover(s) : s.route.screen === 'account' ? renderAccount(s) : s.route.screen === 'mail' ? renderMailScreen(s, now()) : (s.route.screen === 'markets' || s.route.screen === 'trade') ? renderStub(s.route) : renderMessagesScreen(s, now());
     const overlays = (s.banner ? renderBanner(s.banner, s) : '') + (s.call ? renderCall(s.call, now()) : '') +
@@ -182,6 +184,9 @@ export function boot(win) {
     }
     const say = doc.getElementById('say');
     if (say) say.value = composerText;
+    // the search box says what the store searches: Publish and 插件上传 clear it
+    const dq = doc.getElementById('dq');
+    if (dq) dq.value = s.discover.query;
 
     // scroll: the second level keeps its rows while it lists the same thing (conversations or letters); the page and the shelves keep theirs
     // on the same screen; a drawer while it stays the same drawer
@@ -193,6 +198,8 @@ export function boot(win) {
     if (sameScreen) [...root.querySelectorAll('.shelf-row')].forEach((e, i) => { if (scrolls.shelves[i] != null) e.scrollLeft = scrolls.shelves[i]; });
     const drawerBody = root.querySelector('.drawer-body');
     if (drawerBody && last.drawer && last.drawer === drawerOf(s) && scrolls.drawer != null) drawerBody.scrollTop = scrolls.drawer;
+    const dialogBody = root.querySelector('.modal-body');
+    if (dialogBody && last.dialog && last.dialog === dialogOf(s) && scrolls.dialog != null) dialogBody.scrollTop = scrolls.dialog;
     // the thread stays where the person was reading, unless it is another conversation, it gained a message, or they were at the bottom
     const open = s.route.screen === 'messages' ? currentConversation(s) : null;
     const threadSig = open ? `${open.id}:${open.messages.length}` : null;
@@ -223,7 +230,7 @@ export function boot(win) {
       target.focus();
       if (caret && target === find(activeKey) && typeof target.setSelectionRange === 'function') target.setSelectionRange(caret[0], caret[1]);
     }
-    last = { overlay, opener, screen: screenOf(s), drawer: drawerOf(s), thread: threadSig, editor: editorOf(s.edit), confirm: s.confirm };
+    last = { overlay, opener, screen: screenOf(s), drawer: drawerOf(s), dialog: dialogOf(s), thread: threadSig, editor: editorOf(s.edit), confirm: s.confirm };
     if (s.call?.status === 'live' && !ticking) tick();
   }
 
@@ -307,7 +314,9 @@ export function boot(win) {
   function startUpload() {
     directorOpen = false;
     const c = store.get().discover.create;
-    if (c && (c.step !== 'wait' || c.started)) { render(); return; }
+    // an upload under way is left to finish; a refused one makes way for a fresh one
+    if (c && c.step !== 'refused' && (c.step !== 'wait' || c.started)) { render(); return; }
+    if (c?.step === 'refused') store.dispatch('closeCreate');
     store.dispatch('nav', { screen: 'discover', id: null });
     go({ screen: 'discover', id: null });
     if (store.get().discover.query) store.dispatch('setQuery', '');

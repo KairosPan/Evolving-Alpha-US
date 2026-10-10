@@ -312,8 +312,9 @@ button.toast-key { border: 0; font: inherit; font-size: 13px; }
 .input:focus, .textarea:focus { border-color: var(--rule); }
 .field-error { margin-top: -8px; font-size: 12px; color: var(--down); }
 /* Create: the MCP connector, a dialog over a light scrim */
-.modal-scrim { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--scrim); z-index: 48; }
-.modal { width: min(480px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; border-radius: var(--radius-l); background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--shadow); overflow: hidden; }
+/* the dialog hangs from the top: a taller step grows downward and never moves what is under the pointer */
+.modal-scrim { position: fixed; inset: 0; display: flex; align-items: flex-start; justify-content: center; padding: max(16px, 8vh) 16px 16px; background: var(--scrim); z-index: 48; }
+.modal { width: min(480px, 100%); max-height: calc(100vh - max(16px, 8vh) - 16px); display: flex; flex-direction: column; border-radius: var(--radius-l); background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--shadow); overflow: hidden; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 14px 14px 24px; border-bottom: 1px solid var(--border); }
 .modal-title { font-size: 20px; }
 /* Create: Discover's MCP face — its tools, the line a client takes, the client's calls, the manifest the owner signs */
@@ -322,7 +323,7 @@ button.toast-key { border: 0; font: inherit; font-size: 13px; }
 .snippet { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-s); background: var(--surface-2); }
 .snippet-file { font-size: 12px; color: var(--dim); }
 .snippet-code { margin: 0; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.snippet .btn-sm { align-self: flex-end; }
+.snippet .btn-sm { align-self: flex-end; background: var(--surface); border: 1px solid var(--border); }
 .tool-state { display: inline-flex; align-items: center; font-weight: 700; }
 .tool-state.ok { color: var(--up); }
 .tool-state.wait { color: var(--dim); }
@@ -395,6 +396,7 @@ button.toast-key { border: 0; font: inherit; font-size: 13px; }
   .line-key { min-height: 40px; padding: 0 10px; }
   .list { position: static; height: auto; width: auto; flex: none; border-right: 0; border-bottom: 1px solid var(--border); }
   .rail-rows { max-height: 40vh; }
+  .list:has(~ .main.mail:not(.has-letter)) .rail-rows { max-height: none; }
   .main { height: auto; min-height: 100vh; background: var(--bg); }
   .thread { overflow-y: visible; }
   .disc, .acct { overflow-y: visible; }

@@ -513,3 +513,61 @@ test('the draft picker keys reach the store', () => {
   assert.deepEqual(store.get().draft.bots, ['buffett']);
   store.timers.clear();
 });
+
+// round-three review fixes
+
+test('when Publish or 插件上传 clears the search, the search box is cleared too', async () => {
+  const f = fakeWindow({ ...noDialogs, hash: '#/discover' });
+  const dq = f.withId('dq', { tagName: 'INPUT', type: 'search', dataset: { action: 'query' } });
+  const store = boot(f.win);
+  try {
+    dq.value = 'quant';
+    f.fire('root', 'input', { target: dq });
+    store.dispatch('toggleRail');
+    assert.equal(dq.value, 'quant', 'a re-render keeps what was typed while it is the search');
+    f.fire('doc', 'keydown', { key: 'd' });
+    f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'director', key: 'upload' } }));
+    assert.equal(store.get().discover.query, '');
+    assert.equal(dq.value, '', 'the box says what the page shows');
+  } finally {
+    store.timers.clear();
+  }
+});
+
+test('the dialog body keeps its scroll while the same step changes, and starts at the top on a new step', () => {
+  const f = fakeWindow({ ...noDialogs, hash: '#/discover' });
+  const body = f.withSelector('.modal-body');
+  const store = boot(f.win);
+  try {
+    store.dispatch('openCreate');
+    body.scrollTop = 120;
+    store.dispatch('setClient', 'Cursor');
+    assert.equal(body.scrollTop, 120, 'switching the client does not jump the dialog');
+    const { run } = store.get().discover.create;
+    store.dispatch('startClient', { run });
+    store.dispatch('clientConnected', { run });
+    assert.equal(body.scrollTop, 0, 'a new step starts at its top');
+  } finally {
+    store.timers.clear();
+  }
+});
+
+test('after 拒绝, the director\'s 插件上传 starts a fresh upload in a new dialog', () => {
+  const f = fakeWindow({ ...noDialogs, hash: '#/discover' });
+  const store = boot(f.win);
+  try {
+    store.dispatch('openCreate');
+    const { run } = store.get().discover.create;
+    store.dispatch('startClient', { run });
+    store.dispatch('clientConnected', { run });
+    store.dispatch('clientPublishes', { run, manifest: nextUpload([]) });
+    store.dispatch('rejectUpload');
+    f.fire('doc', 'keydown', { key: 'd' });
+    f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'director', key: 'upload' } }));
+    const c = store.get().discover.create;
+    assert.notEqual(c.run, run);
+    assert.deepEqual([c.step, c.started], ['wait', true]);
+  } finally {
+    store.timers.clear();
+  }
+});
