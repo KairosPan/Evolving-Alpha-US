@@ -6,7 +6,9 @@ how it is drawn in Linqi's visual language, and what it expects from the back en
 how the back end is built: the architecture boards (canvas rows 5–6, D1–D5: 架构 · 组件 · 数据流 ·
 出错与测试 · 十幕) were drafted on 2026-10-08 and parked on the operator's word (*"目前还是专注在前端设计"*);
 they get their own spec when the operator returns to them. §9 lists the seams the screens need so that
-spec has a checklist.
+spec has a checklist. **2026-10-11:** the operator asked for the whole front end in English
+(*"我要把这个前端全部转成英文"*): every product string in this spec and in `gravit-ui/` is the English copy;
+the canvas's own annotations (board titles, specimen labels, stickies, F12/F16 notes) stay Chinese.
 **Companion:** the design canvas this spec is the written form of —
 <https://claude.ai/artifact/XwsiQ4VTqzfGdtzBi2LWgb> (Design type; rows 7–10 are the settled boards,
 rows 1–6 the decision history). On a disagreement this spec wins; the canvas is the picture.
@@ -50,9 +52,11 @@ one question per round. The decisions, in the order the operator took them:
 9. **Screens carry no explanatory small print** (2026-10-09, three deletion rounds): no helper
    sentences, no shelf subtitles, no notes under switches. Every removed sentence is kept on F16 for
    the onboarding guide and for the back-end spec (§10).
+10. **The product speaks English** (2026-10-11): every label, placeholder, message and seed string,
+    the example conversations included; the glossary is the boards themselves and §5–§8 below.
 
 Two earlier decisions still bind: Venues are never in Discover (they stay in Account), and Serenity
-bot's one line is 科技产业链分析.
+bot's one line is "Tech supply-chain analysis" (科技产业链分析).
 
 ## 2. The screens
 
@@ -156,7 +160,7 @@ F1's head should follow F7/F14 is open** (§11).
 ### 5.2 Bubbles and cards
 
 - The owner speaks on the right: equity-blue bubble, white words, radius 18 18 4 18, a 28 px outlined
-  "你" avatar at the bubble's foot. Every owner message is a signed instruction.
+  "You" avatar at the bubble's foot. Every owner message is a signed instruction.
 - Gravit speaks on the left: surface-2 bubble, radius 18 18 18 4, its 28 px G avatar at the foot.
   Bots use their own 28 px avatar; in a group the sender's name is written 11 px dim above the bubble.
 - Cards are left bubbles on surface with an edge; the edge colour is the importance level (§6).
@@ -175,31 +179,31 @@ are 44 px with phone glyphs in the same two colours.
 
 A pill on surface with a hairline, padding 4, at the bottom of the main column above an 18 px inset:
 a 32 px surface-2 round **+** (attach) at the far left · the input ("Tell Gravit…"; in a group
-"Tell Gravit… 打 @ 点名一个 bot") · a 32 px surface-2 round **mic** · a 36 px equity-blue round **send
+"Tell Gravit… @ a bot by name") · a 32 px surface-2 round **mic** · a 36 px equity-blue round **send
 arrow** at the far right. Sending signs. The iMessage rule may apply at build time: mic when the input
 is empty, send when it has words.
 
 ### 5.5 The new-message state (F7)
 
 Pressing + inserts a current row at the top of the list (dashed + avatar, "New message", "now",
-"还没发出去"). The head becomes: Cancel at the top-right; a 44 px G avatar; the title as a centred,
-borderless 17 px 700 input ("这件事叫什么（不填就用你第一句话）"); a "To:" line with a Gravit chip and a
-dashed "+ 加个 bot，就成群聊" key. The thread area is empty. Above the composer a chip row "附一份额度":
-每单 $25 ▾ · 总 $100 ▾ · 到 Oct 15 ▾ · 在 Stand-in Exchange ▾ · 不附 — sent together with the first
+"Not sent yet"). The head becomes: Cancel at the top-right; a 44 px G avatar; the title as a centred,
+borderless 17 px 700 input ("Name this (or your first line is the name)"); a "To:" line with a Gravit chip and a
+dashed "+ Add a bot for a group" key. The thread area is empty. Above the composer a chip row "Attach a limit":
+$25 an order ▾ · $100 in all ▾ · until Oct 15 ▾ · on Stand-in Exchange ▾ · None — sent together with the first
 message as one signature.
 
 ### 5.6 Details (F8)
 
-A 400 px drawer from the right (Linqi's `#drawer` look): 这件事 (title; 你委托于 Oct 8 · 到 Oct 15 ·
-intent-0003; Change words / Withdraw) · 额度 ($25 an order · $100 in all · $95 left; Change limit /
-End limit) · 插件 (what this conversation uses; "Find more in Discover ›") · Gravit 的钱包 ($12.40 USDC ·
-Base · address; Top up… / Take back…) · 模式 (Guard | Beast) · Stop Gravit (a down-fill danger pill).
+A 400 px drawer from the right (Linqi's `#drawer` look): This task (title; Delegated Oct 8 · until Oct 15 ·
+intent-0003; Change words / Withdraw) · Limit ($25 an order · $100 in all · $95 left; Change limit /
+End limit) · Plugins (what this conversation uses; "Find more in Discover ›") · Gravit’s wallet ($12.40 USDC ·
+Base · address; Top up… / Take back…) · Mode (Guard | Beast) · Stop Gravit (a down-fill danger pill).
 
 ### 5.7 Empty (F6) and Black (F9)
 
-F6: the rail has the Messages header and no rows; the main column centres a 56 px G, "还没有交给
-Gravit 的事", one line ("在下面说一句你想让它做的事，或者点左上角的 + 先起个名。") and three surface-2
-chips that fill the composer (小仓位买 BTC · 跟单 Pelosi · 查一个地址). F9: F1 with the Black column of
+F6: the rail has the Messages header and no rows; the main column centres a 56 px G, "Nothing handed to
+Gravit yet", one line ("Say what you want done below, or press + at the top-left to name it first.") and three surface-2
+chips that fill the composer (Buy a little BTC · Follow Pelosi · Check an address). F9: F1 with the Black column of
 §3.1 and every shadow removed; the ✓ and ✗ keys sit on `#17191c` with a `#2b2e34` hairline.
 
 ### 5.8 Group chat (F14)
@@ -214,31 +218,31 @@ Colour is importance, five levels, all from the tokens:
 
 | level | drawing | carries |
 |---|---|---|
-| 灰 · talk | surface-2 bubble | Gravit thinking, progress, replies |
-| 白 · to read | surface bubble, 1 px border | the morning brief, K-line analysis, monitor signals, research |
-| 橙边 · needs a decision | surface bubble, warn-edge, a warn-fill chip ("answer by 14:33") | approve an order, grant a limit, install a plugin |
-| 红边 · urgent or bad | surface bubble, down-edge, a down-fill chip | breaking news, refusals from the doors, incoming calls |
-| 绿底 · done | up-fill bubble, a white chip with up-colour words | filled, paid, report done |
+| grey (灰) · talk | surface-2 bubble | Gravit thinking, progress, replies |
+| white (白) · to read | surface bubble, 1 px border | the morning brief, K-line analysis, monitor signals, research |
+| orange edge (橙边) · needs a decision | surface bubble, warn-edge, a warn-fill chip ("answer by 14:33") | approve an order, grant a limit, install a plugin |
+| red edge (红边) · urgent or bad | surface bubble, down-edge, a down-fill chip | breaking news, refusals from the doors, incoming calls |
+| green fill (绿底) · done | up-fill bubble, a white chip with up-colour words | filled, paid, report done |
 
 The fifteen kinds (F3 1–10, F15 11–15), who speaks, the level, the keys, and what each is bound to:
 
 | # | kind | who | level | keys | bound to |
 |---|---|---|---|---|---|
-| 1 | the owner's words | 你 | blue | — | a signed `setIntent` / `say` |
-| 2 | Gravit's words | G | 灰 | — | the journal |
-| 3 | an order to approve | G | 橙边 | ✗ ✓ | the approval card (`approveCard`), its deadline |
-| 4 | a limit request | G | 橙边 | ✓ ✗ | Give a limit (`setPolicy`) |
-| 5 | a plugin request | G | 橙边 | + ✗ | the Discover drawer (`shop.get` → `shop.install`) |
-| 6 | a bot's proposal that executed inside the limit | bot | 绿底 | — | the order and its ledger row |
-| 7 | a monitor's signal | monitor | 白 | — | a plugin message; read-only, never an order |
-| 8 | a door's refusal | G | 红边 | — | the error code verbatim (`E_MANDATE_PER_ORDER_CAP`) |
-| 9 | a receipt | G | 绿底 | — | a ledger row (fill, payment) |
-| 10 | the close | G | 绿底 | — | `agentReport` done |
-| 11 | K-line technical analysis | G | 白 | — | a plugin output; the ticker is a link to Linqi's market drawer (`openMarket`) |
-| 12 | the morning brief | G | 白 | — | a 7:30 scheduled plugin output with tickers |
-| 13 | breaking news | banner | 红边 | × | a banner over the thread for 5 s, then a red-edged message in it |
-| 14 | an incoming call | card | 红边 | decline ✗ accept ✓ (44 px phones) | the rail's phone line; a declined call becomes a message |
-| 15 | a group-chat message | bot | 灰 | — | the sender's name above the bubble |
+| 1 | the owner's words | You | blue | — | a signed `setIntent` / `say` |
+| 2 | Gravit's words | G | grey | — | the journal |
+| 3 | an order to approve | G | orange edge | ✗ ✓ | the approval card (`approveCard`), its deadline |
+| 4 | a limit request | G | orange edge | ✓ ✗ | Give a limit (`setPolicy`) |
+| 5 | a plugin request | G | orange edge | + ✗ | the Discover drawer (`shop.get` → `shop.install`) |
+| 6 | a bot's proposal that executed inside the limit | bot | green fill | — | the order and its ledger row |
+| 7 | a monitor's signal | monitor | white | — | a plugin message; read-only, never an order |
+| 8 | a door's refusal | G | red edge | — | the error code verbatim (`E_MANDATE_PER_ORDER_CAP`) |
+| 9 | a receipt | G | green fill | — | a ledger row (fill, payment) |
+| 10 | the close | G | green fill | — | `agentReport` done |
+| 11 | K-line technical analysis | G | white | — | a plugin output; the ticker is a link to Linqi's market drawer (`openMarket`) |
+| 12 | the morning brief | G | white | — | a 7:30 scheduled plugin output with tickers |
+| 13 | breaking news | banner | red edge | × | a banner over the thread for 5 s, then a red-edged message in it |
+| 14 | an incoming call | card | red edge | decline ✗ accept ✓ (44 px phones) | the rail's phone line; a declined call becomes a message |
+| 15 | a group-chat message | bot | grey | — | the sender's name above the bubble |
 
 ## 7. Discover, the store
 
@@ -252,11 +256,11 @@ installed plugins) · an **Upload a plugin** pill with an upload glyph. No sente
 Six shelves, each a title (17 px 700) with "See all ›" in equity blue at the right and a horizontal
 row of 300 px cards, three in view and the fourth cut at the main column's edge (the row bleeds into
 the column's padding): **Like** (recommended from Memory — the user's style: a value investor gets
-Buffett bot, 研报, 美国政客 bot, Quant team; a high-frequency trader gets high-frequency strategies and
+Buffett bot, Broker research, US politician bot, Quant team; a high-frequency trader gets high-frequency strategies and
 low-latency data; someone who wants to try quant gets a team to run an idea) · **Data** · **Monitors** ·
-**Bots** · **Crypto** · **Quant**. The catalogue on the boards: Price feed, News sentiment, 研报,
-On-chain flows · Telegram monitor, X monitor, Whale alerts, Earnings calendar · 美国政客 bot, KOL bot,
-Buffett bot, Serenity bot (科技产业链分析) · 地址欺诈检测, 交易所价差, Gas 时机, 合约体检 · Quant team,
+**Bots** · **Crypto** · **Quant**. The catalogue on the boards: Price feed, News sentiment, Broker research,
+On-chain flows · Telegram monitor, X monitor, Whale alerts, Earnings calendar · US politician bot, KOL bot,
+Buffett bot, Serenity bot (Tech supply-chain analysis) · Address fraud check, Exchange spread, Gas timing, Contract check · Quant team,
 Backtest, Factor screen, Pairs (the user's own, private).
 
 ### 7.3 A card
@@ -273,9 +277,9 @@ line: plugins are free (§7.6).
 
 ### 7.4 The drawer (F10)
 
-Linqi's drawer: a 56 px image, the name 17 px 700, "Bots · by Gravit · Free · 1.2k 装了", one line of
-what it is; then sections 它能被问什么 · 它会写什么 (what it writes into the conversation, and what it
-never does) · 怎么付 · 要你什么 (nothing, a Telegram session, an exchange key…) · **你签的是**, the
+Linqi's drawer: a 56 px image, the name 17 px 700, "Bots · by Gravit · Free · 1.2k installs", one line of
+what it is; then sections What you can ask it · What it writes (what it writes into the conversation, and what it
+never does) · How it is paid · What it needs from you (nothing, a Telegram session, an exchange key…) · **What you sign**, the
 signature table inline — What you sign `install buffett-bot` · For `Gravit · 0xec4c…16c1` · May `read
 Portfolio · propose in your limit` · May not `pay anyone · move money` · Until `you uninstall` — and a
 full-width ink **Install**. No second sheet pops up: the drawer is the signing surface.
@@ -283,9 +287,9 @@ full-width ink **Install**. No second sheet pops up: the drawer is the signing s
 ### 7.5 Installed (F11) and after install
 
 The Installed pill pressed shows only installed cards in a grid, each with the trash key, plus a
-"你上传的" group for the user's own plugins. Right after an install: the new card carries a green
-"刚装好" chip and "Open in Messages ›"; a toast "Buffett bot 装好了 · Gravit 开了一个会话教你用 · Open";
-and the rail gains an unread conversation opened by the plugin ("Buffett bot：怎么用我") that teaches
+"Yours" group for the user's own plugins. Right after an install: the new card carries a green
+"Just installed" chip and "Open in Messages ›"; a toast "Buffett bot installed · Gravit opened a conversation to show you how · Open";
+and the rail gains an unread conversation opened by the plugin ("Buffett bot: how to use me") that teaches
 its use.
 
 ### 7.6 Money
@@ -297,9 +301,9 @@ pay an outside data vendor.
 
 ### 7.7 Upload a plugin and the shop's MCP face (F12)
 
-The upload drawer: 名字 · 一句话 · 类型 (Data · Monitors · Bots · Crypto · Quant) · 图标 (44 px slot,
-initials by default) · 它暴露的工具 (the MCP server's tool names) · 要用户什么 (none · Telegram session ·
-exchange key · wallet address) · 放哪 (**只给我自己 · Private** | **放进 Public shop**) · Cancel / Publish.
+The upload drawer: Name · One line · Kind (Data · Monitors · Bots · Crypto · Quant) · Icon (44 px slot,
+initials if none) · Tools it exposes (the MCP server's tool names) · What it needs from the user (Nothing ·
+Telegram session · Exchange key · Wallet address) · Where (**Just me · Private** | **Public shop**) · Cancel / Publish.
 A private plugin is visible only to this user's Gravit and usable at once; a public one is reviewed
 first (run in a sandbox, its permissions and author read).
 
@@ -327,12 +331,12 @@ Connect an account, embedded same-origin (net worth, allocation bar, holdings, M
 Statement; venues with health chips, Connect an account). Markets and Trade are on the rail, not here;
 Venues are here and never in Discover.
 
-**Memory (F13)** — what Gravit remembers about the user, in a two-column layout. Left, "Gravit 记得的你":
-entries grouped 风格 · 规矩 · 场所和人, each with its text, its **source and date** (你说的 · 来自额度 ·
-它从你的问题里学的 · 它自己比出来的 · 来自装的 bot), a pencil key and a trash key; an input "加一条它该记住的…"
-with an ink Add. Right, "它用在哪": chips naming the places Memory feeds (Discover's Like shelf, the
-morning brief, a new conversation's defaults, group chats); "开关": three switches — 让 Gravit 记新东西
-(on), 它学到的先问我再记 (off; a new memory then arrives as a card to answer), 群聊里的 bot 也能看 Memory
+**Memory (F13)** — what Gravit remembers about the user, in a two-column layout. Left, "What Gravit remembers about you":
+entries grouped Style · Rules · Venues and people, each with its text, its **source and date** (You said · From your limit ·
+Learned from your questions · Compared on its own · From installed bots), a pencil key and a trash key; an input "Add something it should remember…"
+with an ink Add. Right, "Where it is used": chips naming the places Memory feeds (Discover's Like shelf, the
+morning brief, a new conversation's defaults, group chats); "Switches": three switches — Let Gravit remember new things
+(on), Ask me before it keeps what it learned (off; a new memory then arrives as a card to answer), Bots in group chats can read Memory
 (off; only Gravit reads it) — and Export (a JSON file) · Forget all (down-fill danger pill; deletes the
 file, no recycle bin). Memory lives on this machine only.
 
@@ -397,11 +401,11 @@ install still passes through his signed instructions.
 ## 13. Amendment, 2026-10-10 (after the first build)
 
 The operator's words, after seeing the pure front end in `gravit-ui/`: keep the branch as it is;
-"✓ Installed" becomes a ✓ beside the delete key; "Installed · 6" becomes 我的插件; Upload becomes Create,
+"✓ Installed" becomes a ✓ beside the delete key; "Installed · 6" becomes My plugins; Upload becomes Create,
 which pops up an MCP connector; Messages, Discover, Markets and Trade go in a first-level column that
 collapses to small icons, and opening Messages shows the second level; and the controls get built.
 Where this section and §4, §7.1, §7.3, §7.5, §7.7 or §12 disagree, this section wins. In §7.1 the
-header now reads 我的插件 · n and + Create; in §12 the rail's 248 gives way to the widths in item 1.
+header now reads My plugins · n and + Create; in §12 the rail's 248 gives way to the widths in item 1.
 
 1. **Two levels (replaces the single rail of §4).** The first level: the brand with a collapse chevron,
    Messages (with the unread count) · Discover · Markets · Trade, the phone and mail keys, Account at the
@@ -416,12 +420,12 @@ header now reads 我的插件 · n and + Create; in §12 the rail's 248 gives wa
 2. **The installed key (replaces the three states of §7.3).** Not installed: the + key. Installed: a ✓
    mark beside a trash key, in every view; the trash key uninstalls at once. There is no "✓ Installed"
    word key and no ask step.
-3. **我的插件 (renames the Installed pill of §7.5).** The pill reads 我的插件 · n; pressed, it shows your
-   installed plugins, with 你创建的 for the ones you made.
-4. **Create, the MCP connector (replaces the upload drawer of §7.7).** A dialog over a light scrim: 名称,
-   MCP 服务器地址, 认证 (无 · API key · OAuth, each showing its fields), 图标 (initials by default, 换一张图),
-   类型, 放哪 (Private · Public). 连接 checks the address, connects, and lists the tools the server
-   offers, each with a check; 添加 makes the server your own installed plugin, with a conversation that
+3. **My plugins (renames the Installed pill of §7.5).** The pill reads My plugins · n; pressed, it shows your
+   installed plugins, with Yours for the ones you made.
+4. **Create, the MCP connector (replaces the upload drawer of §7.7).** A dialog over a light scrim: Name,
+   MCP server address, Auth (None · API key · OAuth, each showing its fields), Icon (initials by default, Choose an image),
+   Kind, Where (Private · Public). Connect checks the address, connects, and lists the tools the server
+   offers, each with a check; Add makes the server your own installed plugin, with a conversation that
    teaches its tools. A typed key or secret never leaves the page; the front end stores nothing of it.
 5. **The controls.** No browser prompt or confirm remains. Editors open in place with ✓ and × (Enter and
    Esc): the draft's limit chips, Change words, Change limit, Top up and Take back (USDC between you and
@@ -440,43 +444,43 @@ header now reads 我的插件 · n and + Create; in §12 the rail's 248 gives wa
 
 The operator's words, after round 2: the 我的插件 pill loses its count and takes an English name; "by
 MCP I meant wrapping Discover as an MCP, so that plugins users make themselves can be uploaded into
-Discover"; no "Free · by …" and no 刚装好, keep Open in Messages; pressing the mail key switches fully to
+Discover"; no "Free · by …" and no "Just installed" chip, keep Open in Messages; pressing the mail key switches fully to
 a mail screen. Where this section and §7.1, §7.3, §7.4, §7.5, §7.7, §12 or §13 disagree, this section
 wins.
 
-1. **My plugins.** The pill reads My plugins, with no count; pressed, it shows 装了的 and 你创建的 as before.
-2. **No author or price.** Cards have no author line (§7.3's "Free · by Gravit" is gone) and no 刚装好
+1. **My plugins.** The pill reads My plugins, with no count; pressed, it shows Installed and Yours as before.
+2. **No author or price.** Cards have no author line (§7.3's "Free · by Gravit" is gone) and no "Just installed"
    chip; a just-installed card keeps only "Open in Messages ›", and the install toast stays. The drawer's
-   meta line is the kind and, for a catalogue plugin, how many installed it ("Bots · 1.2k 装了"); for your
-   own plugin, where it stands ("Data · Private", "Data · 审核中", "Data · Public"). The drawer has no
-   怎么付 section. `by` stays in the data, never on screen; the shop stamps the author from the signature.
+   meta line is the kind and, for a catalogue plugin, how many installed it ("Bots · 1.2k installs"); for your
+   own plugin, where it stands ("Data · Private", "Data · In review", "Data · Public"). The drawer has no
+   How it is paid section. `by` stays in the data, never on screen; the shop stamps the author from the signature.
 3. **Create is Discover's own MCP face (replaces §13.4).** Discover is itself an MCP server (§7.7), and
    Create shows it: a dialog titled Discover MCP with the server address, its seven tools as chips
    (`shop.search` · `shop.get` · `shop.install` · `shop.uninstall` · `shop.publish` · `shop.mine` ·
-   `plugin.call`), a 客户端 switch (Claude Code · Cursor · Codex) with the line that client takes to add
-   Discover and a 复制 key, and the status 等待连接. Nothing in the dialog can be typed. When a client
-   connects, the status reads "<client> 已连接" and the client's calls are listed (`shop.mine()` ✓). When it
+   `plugin.call`), a Client switch (Claude Code · Cursor · Codex) with the line that client takes to add
+   Discover and a Copy key, and the status Waiting for a connection. Nothing in the dialog can be typed. When a client
+   connects, the status reads "<client> connected" and the client's calls are listed (`shop.mine()` ✓). When it
    asks `shop.publish`, the owner sees the manifest (logo, name, one line, kind, tools, what it needs),
-   picks 放哪 (只给我自己 · Private | 放进 Public shop) and signs it in the drawer's grammar (你签的是:
+   picks Where (Just me · Private | Public shop) and signs it in the drawer's grammar (What you sign:
    private = publish and install for Gravit, with May, May not and Until; public = publish into the
-   Public shop), with 拒绝 or Publish. Focus never lands on Publish by itself.
+   Public shop), with Refuse or Publish. Focus never lands on Publish by itself.
    - Private: published and installed at once; the plugin opens its teaching conversation, leads its
-     kind's shelf and See all, and sits under 你创建的; toast "<name> 已上传 · Private · Open".
+     kind's shelf and See all, and sits under Yours; toast "<name> uploaded · Private · Open".
    - Public: reviewed first (a sandbox run, its permissions and author read; 5 s here) behind a clock key
-     on its card and a disabled 审核中 in its drawer; toast "<name> 已上传 · 审核中". When the review
-     passes, Discover writes to Gravit's mailbox ("<name> 过审了"), Discover shows "<name> 过审了 · Public
+     on its card and a disabled In review in its drawer; toast "<name> uploaded · In review". When the review
+     passes, Discover writes to Gravit's mailbox ("<name> passed review"), Discover shows "<name> passed review · Public
      · Open", and the owner installs it with the drawer's usual signature.
-   - Here the client is scripted: 复制, or the director's 插件上传, starts it; it connects after 1.5 s and
-     asks to publish 1.5 s later. The uploads come in turn (Moat score, private; CPI 速读, public; then
+   - Here the client is scripted: Copy, or the director's Plugin upload, starts it; it connects after 1.5 s and
+     asks to publish 1.5 s later. The uploads come in turn (Moat score, private; CPI quick read, public; then
      the same again with a number). The back end of §9 gains `shop.publish`'s client authorization and
      the real review path.
 4. **Mail is a screen (replaces the mailbox drawer of §13.5).** The mail key is a link to `#/mail`; on Mail
    it is current. The second level, which §13.1 kept for Messages, also opens on Mail: the title Mail,
    Gravit's address, and the letters newest first (sender, time, subject; an unread letter has the dot
    and a bold subject). The main column shows the open letter (`#/mail/<id>`: subject, sender and time,
-   its files, the body) or, with none open, 没选中邮件. Opening a letter reads it; an unknown letter opens
+   its files, the body) or, with none open, No mail selected. Opening a letter reads it; an unknown letter opens
    the inbox. Below 860 px the letters stand alone until one is open.
-5. **The director** gains 插件上传 and sits above the dialog's scrim.
+5. **The director** gains Plugin upload and sits above the dialog's scrim.
 
 ## 15. Amendment, 2026-10-10 (round 4): Markets and Trade after Linqi's
 
@@ -506,7 +510,7 @@ gravit-ui's render functions on his tokens, with stand-in data. Nothing is impor
    (the stand-in wallet pays in USDC), the Statement, net worth and the allocation bar (with RWA and Predictions
    in his colours). Hand to Gravit instead opens a new message with the ticket in words and the limit chips set
    where Gravit may trade; only the owner's send gives Gravit room.
-5. **Kept out.** Perps and Pre-IPO (no margin model; Memory says 不碰杠杆), stop orders, time in force,
+5. **Kept out.** Perps and Pre-IPO (no margin model; Memory says No leverage), stop orders, time in force,
    amend, Cancel all, wallet sends, live price ticks (quotes hold still, so a resting limit stays open), his
    top-bar search, lens and statement modal, and his explanatory sentences (kept for F16 and the onboarding
    guide). The back end of §9 gains the venues' real quotes and order endpoints behind the same ticket.
