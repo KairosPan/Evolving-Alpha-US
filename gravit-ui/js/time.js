@@ -17,7 +17,7 @@ export function sameDay(a, b) {
 
 export function dayLabel(ts, now) {
   if (sameDay(ts, now)) return 'Today';
-  if (sameDay(ts, now - DAY)) return '昨天';
+  if (sameDay(ts, now - DAY)) return 'Yesterday';
   const d = new Date(ts);
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }

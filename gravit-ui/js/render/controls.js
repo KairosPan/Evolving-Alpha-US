@@ -32,5 +32,5 @@ export function inlineEdit(fields, error = null) {
 
 // the second step of a confirm, in place of the button that asked
 export function confirmPair(label) {
-  return `<span class="confirm"><button type="button" class="btn-danger small" data-action="confirmYes">${esc(label)}</button><button type="button" class="btn-sm" data-action="cancelConfirm">取消</button></span>`;
+  return `<span class="confirm"><button type="button" class="btn-danger small" data-action="confirmYes">${esc(label)}</button><button type="button" class="btn-sm" data-action="cancelConfirm">No</button></span>`;
 }

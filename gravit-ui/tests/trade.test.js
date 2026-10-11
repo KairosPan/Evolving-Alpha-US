@@ -158,7 +158,7 @@ test('cancelling: your own open order at once; Gravit\'s leaves a line in its co
   const ko = R.cancelOrder(fresh(), { id: 'ord-0008', now: NOW });
   assert.equal(ko.account.orders.find(o => o.id === 'ord-0008').status, 'canceled');
   const c4 = ko.conversations.find(c => c.id === 'c-4');
-  assert.deepEqual([c4.messages.at(-1).from, c4.messages.at(-1).text, c4.unread], ['system', '你在 Trade 里撤了 ord-0008（KO limit 58.2）。', true]);
+  assert.deepEqual([c4.messages.at(-1).from, c4.messages.at(-1).text, c4.unread], ['system', 'You canceled ord-0008 (KO limit 58.2) in Trade.', true]);
   const s = fresh();
   assert.equal(R.cancelOrder(s, { id: 'ord-0001', now: NOW }), s);
 });
@@ -174,10 +174,10 @@ test('moving funds and the wallet keep quantity and value together; net worth st
 
 test('Hand to Gravit words the ticket for the composer; mentions keeps ETH apart from ETH-3K', () => {
   const s = ticket(fresh(), 'BTC', { amount: '25' });
-  assert.deepEqual(handOver(s, s.trade.ticket), { words: '买 $25 的 BTC', venue: 'Stand-in Exchange', perOrder: 25, attach: true });
+  assert.deepEqual(handOver(s, s.trade.ticket), { words: 'Buy $25 of BTC', venue: 'Stand-in Exchange', perOrder: 25, attach: true });
   const poly = ticket(R.venueConnected(fresh(), 'Polymarket'), 'FED-DEC', { amount: '10' });
   assert.equal(handOver(poly, poly.trade.ticket).attach, false, 'Gravit has no limit at Polymarket');
-  assert.equal(mentions('小仓位 BTC，$70k 以下', 'BTC'), true);
+  assert.equal(mentions('Small BTC position under $70k', 'BTC'), true);
   assert.equal(mentions('Will ETH-3K close', 'ETH'), false);
   assert.equal(mentions('Fill · 0.00008 BTC @ 62,500', 'BTC'), true);
 });
@@ -255,9 +255,9 @@ test('Stocks: what you hold; a card Gravit is waiting on shows under Under way; 
   const st = renderTrade(onTrade(R.setTradeKind(fresh(), 'stocks')), NOW);
   assert.match(st, /data-action="pickMarket" data-id="AAPL" data-venue="Stand-in Broker"/);
   assert.match(st, /data-action="pickMarket" data-id="NVDA" data-venue="Stand-in Broker"/);
-  const asked = R.append(onTrade(fresh()), { convId: 'c-1', msg: { from: 'gravit', kind: 'card', text: '要你答：加 $25', data: { title: '要你答：加 $25', by: NOW + 600000, rows: [] } }, at: NOW });
+  const asked = R.append(onTrade(fresh()), { convId: 'c-1', msg: { from: 'gravit', kind: 'card', text: 'Your call: add $25', data: { title: 'Your call: add $25', by: NOW + 600000, rows: [] } }, at: NOW });
   const h = renderTrade(asked, NOW);
-  assert.match(h, /<b>要你答：加 \$25<\/b>/, 'the card speaks for itself');
+  assert.match(h, /<b>Your call: add \$25<\/b>/, 'the card speaks for itself');
   assert.match(h, /<span class="tk-st warn">Waiting for you<\/span>/);
   assert.match(h, /<a class="btn-sm" href="#\/messages\/c-1" data-action="open" data-id="c-1">Review<\/a>/);
   const q = renderTrade(onTrade(R.setTradeQuery(fresh(), 'sol')), NOW);

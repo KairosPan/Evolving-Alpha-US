@@ -158,7 +158,7 @@ export function handOver(state, t) {
   const dollarsTyped = a > 0 && (t.unit ?? 'usd') === 'usd' ? a : null;
   const qtyTyped = a > 0 && t.unit === 'qty' ? a : null;
   const what = ev ? `${inst.outcomes[t.outcome ?? 0].label} · ${inst.name}` : inst.base;
-  const words = `${t.side === 'sell' ? '卖' : '买'}${dollarsTyped ? ` $${t.amount} 的` : qtyTyped ? ` ${t.amount}` : ''} ${what}${t.orderType === 'limit' && Number(t.limit) > 0 ? `，限价 ${t.limit}` : ''}`;
+  const words = `${t.side === 'sell' ? 'Sell' : 'Buy'}${dollarsTyped ? ` $${t.amount} of` : qtyTyped ? ` ${t.amount}` : ''} ${what}${t.orderType === 'limit' && Number(t.limit) > 0 ? `, limit ${t.limit}` : ''}`;
   return { words, venue, perOrder: dollarsTyped, attach: VENUES.includes(venue) };
 }
 

@@ -23,9 +23,9 @@ export function candles(data) {
     const tone = c < o ? 'var(--up)' : 'var(--down)';
     return `<line x1="${x}" y1="${h}" x2="${x}" y2="${l}" stroke="${tone}" stroke-width="1.5"></line><rect x="${x - 5}" y="${Math.min(o, c)}" width="10" height="${Math.max(Math.abs(o - c), 2)}" fill="${tone}" rx="1"></rect>`;
   }).join('');
-  return `<svg class="kline" viewBox="0 0 300 68" role="img" aria-label="${esc(data.ticker)} ${esc(data.tf)} K 线">` +
-    `<line x1="0" y1="12" x2="300" y2="12" class="kline-rule"></line><text x="298" y="9" class="kline-label" text-anchor="end">压力 ${esc(data.resistance)}</text>` +
-    `<line x1="0" y1="56" x2="300" y2="56" class="kline-rule"></line><text x="298" y="66" class="kline-label" text-anchor="end">支撑 ${esc(data.support)}</text>${bars}</svg>`;
+  return `<svg class="kline" viewBox="0 0 300 68" role="img" aria-label="${esc(data.ticker)} ${esc(data.tf)} candles">` +
+    `<line x1="0" y1="12" x2="300" y2="12" class="kline-rule"></line><text x="298" y="9" class="kline-label" text-anchor="end">Resistance ${esc(data.resistance)}</text>` +
+    `<line x1="0" y1="56" x2="300" y2="56" class="kline-rule"></line><text x="298" y="66" class="kline-label" text-anchor="end">Support ${esc(data.support)}</text>${bars}</svg>`;
 }
 
 const keysFor = (m, conv) => {
@@ -60,21 +60,21 @@ function body(m, conv) {
     case 'signal':
       return `<div class="card white"><div class="dim">${esc(d.source ?? '')}</div><div class="quote">${esc(m.text)}</div></div>`;
     case 'ta':
-      return `<div class="card white"><div class="card-head"><span class="ticker-lead">${ticker(d.ticker)}</span><span class="dim">${esc(d.tf)} · 技术面</span></div>${candles(d)}` +
-        (d.lines ?? []).map((l, i) => `<div${i ? ' class="dim"' : ''}>${esc(l)}</div>`).join('') + `<a class="link" href="#/markets/${esc(d.ticker)}">在 Markets 里看 ›</a></div>`;
+      return `<div class="card white"><div class="card-head"><span class="ticker-lead">${ticker(d.ticker)}</span><span class="dim">${esc(d.tf)} · technicals</span></div>${candles(d)}` +
+        (d.lines ?? []).map((l, i) => `<div${i ? ' class="dim"' : ''}>${esc(l)}</div>`).join('') + `<a class="link" href="#/markets/${esc(d.ticker)}">See in Markets ›</a></div>`;
     case 'brief':
-      return `<div class="card white"><div class="card-head"><div class="card-title">早报 · ${esc(d.date)}</div><span class="dim">${esc(d.time)} · 每天</span></div>` +
+      return `<div class="card white"><div class="card-head"><div class="card-title">Morning brief · ${esc(d.date)}</div><span class="dim">${esc(d.time)} · daily</span></div>` +
         (d.lines ?? []).map((l, i, a) => `<div${i === a.length - 1 ? ' class="dim"' : ''}>${withTickers(l)}</div>`).join('') + `</div>`;
     case 'refusal':
       return `<div class="card red">${chip(`✗ ${d.code ?? ''}`, 'down')}<div>${esc(m.text)}</div></div>`;
     case 'alert':
       return `<div class="card red">${esc(m.text)}</div>`;
     case 'breaking':
-      return `<div class="card red"><div class="card-head">${chip('突发', 'down')}<span class="dim">${fmtClock(m.at)}</span></div><div class="card-title">${esc(d.headline ?? m.text)}</div>${d.body ? `<div class="dim">${withTickers(d.body)}</div>` : ''}</div>`;
+      return `<div class="card red"><div class="card-head">${chip('Breaking', 'down')}<span class="dim">${fmtClock(m.at)}</span></div><div class="card-title">${esc(d.headline ?? m.text)}</div>${d.body ? `<div class="dim">${withTickers(d.body)}</div>` : ''}</div>`;
     case 'call': {
       // how the call went: connected and for how long, missed, or never got through
-      const title = d.dir === 'out' ? '打给 Gravit' : 'Gravit 来电';
-      const [label, tone] = { accepted: [`接通 · ${fmtDuration(d.duration ?? 0)}`, 'up'], cancelled: ['没打通', 'grey'] }[m.answer] ?? ['没接', 'down'];
+      const title = d.dir === 'out' ? 'Called Gravit' : 'Gravit called';
+      const [label, tone] = { accepted: [`Connected · ${fmtDuration(d.duration ?? 0)}`, 'up'], cancelled: ['Did not connect', 'grey'] }[m.answer] ?? ['Missed', 'down'];
       return `<div class="card red"><div class="card-head"><div class="card-title">${title}</div>${chip(label, tone)}</div>${d.about ? `<div class="dim">${esc(d.about)}</div>` : ''}</div>`;
     }
     case 'receipt':

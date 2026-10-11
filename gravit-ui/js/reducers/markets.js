@@ -122,7 +122,7 @@ export const reducers = {
     let next = { ...s, account: { ...s.account, orders: s.account.orders.map(x => (x.id === id ? { ...x, status: 'canceled', note: 'canceled by you' } : x)) } };
     if (next.trade.ticket?.placing === id) next = tk(next, { placing: null });
     if (o.by === 'gravit' && o.conv) {
-      const text = `你在 Trade 里撤了 ${o.id}（${instrument(o.inst).base}${o.limit != null ? ` limit ${px(o.limit)}` : ''}）。`;
+      const text = `You canceled ${o.id} (${instrument(o.inst).base}${o.limit != null ? ` limit ${px(o.limit)}` : ''}) in Trade.`;
       next = messages.append(next, { convId: o.conv, msg: { from: 'system', kind: 'text', text, data: {} }, at: now });
     }
     return next;

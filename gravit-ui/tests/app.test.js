@@ -115,7 +115,7 @@ test('answerFlow: a double click answers once and schedules the follow-up once',
   await sleep(20);
   const texts = store.get().conversations[0].messages.map(m => m.text);
   assert.equal(texts.filter(t => t === 'Granted.').length, 1);
-  assert.equal(texts.filter(t => t === '改到 $50 了。').length, 1);
+  assert.equal(texts.filter(t => t === 'Raised to $50.').length, 1);
   const asks = store.get().conversations[0].messages.filter(m => m.kind === 'install' && m.data.plugin === 'news');
   assert.equal(asks.length, 1, 'the seed already asks for News sentiment; the grant does not ask again');
 });
@@ -126,7 +126,7 @@ test('answerFlow hands the driver the real limit: a $50 cap gets no ask for the 
   const store = makeStore(null, NOW);
   const timers = new Timers();
   store.dispatch('changeLimit', { convId: 'c-1', limit: { perOrder: 50 } });
-  store.dispatch('append', { convId: 'c-1', msg: { from: 'gravit', kind: 'card', text: '要你答', data: { title: '要你答' } }, at: NOW });
+  store.dispatch('append', { convId: 'c-1', msg: { from: 'gravit', kind: 'card', text: 'Your call', data: { title: 'Your call' } }, at: NOW });
   const card = store.get().conversations[0].messages.at(-1);
   answerFlow(store, timers, { conv: 'c-1', msg: card.id, answer: 'approved' }, () => NOW, fast);
   await sleep(15);
@@ -138,7 +138,7 @@ test('answerFlow hands the driver the real limit: a $50 cap gets no ask for the 
 test('replyFlow hands the driver the conversation: in the group the @named bot answers', async () => {
   const store = makeStore(null, NOW);
   const timers = new Timers();
-  replyFlow(store, timers, 'c-4', '@Buffett 你怎么看 KO', () => NOW, fast);
+  replyFlow(store, timers, 'c-4', '@Buffett what do you think of KO', () => NOW, fast);
   await sleep(15);
   assert.equal(store.get().conversations.find(c => c.id === 'c-4').messages.at(-1).from, 'buffett');
 });

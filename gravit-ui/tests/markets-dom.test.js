@@ -85,7 +85,7 @@ test('cancelling Gravit\'s order asks first, then leaves a line in its conversat
     assert.deepEqual(store.get().confirm, { action: 'cancelOrder', id: 'ord-0008' });
     f.click(btn(f, 'confirmYes'));
     assert.equal(store.get().account.orders.find(o => o.id === 'ord-0008').status, 'canceled');
-    assert.equal(store.get().conversations.find(c => c.id === 'c-4').messages.at(-1).text, '你在 Trade 里撤了 ord-0008（KO limit 58.2）。');
+    assert.equal(store.get().conversations.find(c => c.id === 'c-4').messages.at(-1).text, 'You canceled ord-0008 (KO limit 58.2) in Trade.');
   } finally {
     store.timers.clear();
   }
@@ -118,7 +118,7 @@ test('Hand to Gravit opens a new message with the words and the limit set from t
     const s = store.get();
     assert.deepEqual(s.route, { screen: 'messages', id: 'new' });
     assert.deepEqual([s.draft.limit.venue, s.draft.limit.perOrder, s.draft.limit.total, s.draft.attach], ['Stand-in Exchange', 25, 100, true]);
-    assert.equal(say.value, '买 $25 的 BTC');
+    assert.equal(say.value, 'Buy $25 of BTC');
   } finally {
     store.timers.clear();
   }

@@ -16,8 +16,8 @@ const done = s => ({ ...s, edit: null });
 function walletMove(s, dir, amount, now) {
   const w = s.account.wallet;
   const yours = s.account.holdings.find(h => h.key === 'stable:USDC');
-  if (dir === 'out' && amount > w.usdc) return { error: `钱包里只有 ${money(w.usdc)}` };
-  if (dir === 'in' && amount > (yours?.value ?? 0)) return { error: `你的 USDC 只有 ${money(yours?.value ?? 0)}` };
+  if (dir === 'out' && amount > w.usdc) return { error: `The wallet only has ${money(w.usdc)}` };
+  if (dir === 'in' && amount > (yours?.value ?? 0)) return { error: `Your USDC is only ${money(yours?.value ?? 0)}` };
   const sign = dir === 'in' ? 1 : -1;
   const round = n => Math.round(n * 100) / 100;
   return { state: {
@@ -26,7 +26,7 @@ function walletMove(s, dir, amount, now) {
       ...s.account,
       wallet: { ...w, usdc: round(w.usdc + sign * amount) },
       holdings: s.account.holdings.map(h => (h.key === 'stable:USDC' ? { ...h, qty: round((h.qty ?? h.value) - sign * amount), value: round(h.value - sign * amount) } : h)),
-      activity: [{ at: now, text: `${dir === 'in' ? 'Top up' : 'Take back'} ${money(amount)} · Gravit 的钱包`, amount: -sign * amount }, ...s.account.activity],
+      activity: [{ at: now, text: `${dir === 'in' ? 'Top up' : 'Take back'} ${money(amount)} · Gravit’s wallet`, amount: -sign * amount }, ...s.account.activity],
     }),
   } };
 }
@@ -42,28 +42,28 @@ export const reducers = {
     switch (e.kind) {
       case 'draftLimit': {
         if (!s.draft) return done(s);
-        if (e.key === 'venue') return VENUES.includes(values.value) ? done(messages.setDraftLimit(s, { key: 'venue', value: values.value })) : fail(s, '选一个场所');
+        if (e.key === 'venue') return VENUES.includes(values.value) ? done(messages.setDraftLimit(s, { key: 'venue', value: values.value })) : fail(s, 'Pick a venue');
         const n = num(values.value);
-        if (!n) return fail(s, '要一个大于 0 的数');
+        if (!n) return fail(s, 'Needs a number above 0');
         return done(messages.setDraftLimit(s, { key: e.key, value: e.key === 'until' ? now + n * DAY : n }));
       }
       case 'rename': {
         const t = String(values.title ?? '').trim();
-        return t ? done(messages.rename(s, { convId: e.convId, title: t })) : fail(s, '不能是空的');
+        return t ? done(messages.rename(s, { convId: e.convId, title: t })) : fail(s, 'Cannot be empty');
       }
       case 'limit': {
         const perOrder = num(values.perOrder), total = num(values.total);
-        if (!perOrder || !total) return fail(s, '要一个大于 0 的数');
-        if (perOrder > total) return fail(s, '每单不能超过总额');
+        if (!perOrder || !total) return fail(s, 'Needs a number above 0');
+        if (perOrder > total) return fail(s, 'Per order cannot exceed the total');
         return done(messages.changeLimit(s, { convId: e.convId, limit: { perOrder, total } }));
       }
       case 'memory': {
         const t = String(values.text ?? '').trim();
-        return t ? done(account.editMemory(s, { id: e.id, text: t })) : fail(s, '不能是空的');
+        return t ? done(account.editMemory(s, { id: e.id, text: t })) : fail(s, 'Cannot be empty');
       }
       case 'wallet': {
         const n = num(values.amount);
-        if (!n) return fail(s, '要一个大于 0 的数');
+        if (!n) return fail(s, 'Needs a number above 0');
         const moved = walletMove(s, e.dir, n, now);
         return moved.state ? done(moved.state) : fail(s, moved.error);
       }
@@ -89,11 +89,11 @@ export const reducers = {
   moveFunds(s, { from, to, asset, amount, now }) {
     const n = num(amount);
     const err = panelError => ({ ...s, account: { ...s.account, panelError } });
-    if (!n) return err('要一个大于 0 的数');
-    if (from === to) return err('换一个去处');
+    if (!n) return err('Needs a number above 0');
+    if (from === to) return err('Pick a different destination');
     const src = s.account.holdings.find(h => h.name === asset && h.venue === from);
-    if (!src) return err(`${from} 没有 ${asset}`);
-    if (n > src.value) return err(`${from} 只有 ${money(src.value)}`);
+    if (!src) return err(`${from} has no ${asset}`);
+    if (n > src.value) return err(`${from} only has ${money(src.value)}`);
     // dollars move as quantity at the holding's price; revalue then prints the values
     // all of it (to the cent shown) moves the whole quantity, so nothing below zero is left behind
     const whole = n >= src.value - 0.005;

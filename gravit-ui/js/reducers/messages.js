@@ -83,7 +83,7 @@ export const reducers = {
   setDraftTitle: (s, title) => (s.draft ? { ...s, draft: { ...s.draft, title } } : s),
   setDraftLimit: (s, { key, value }) => (s.draft ? { ...s, draft: { ...s.draft, limit: { ...s.draft.limit, [key]: value } } } : s),
   toggleDraftAttach: s => (s.draft ? { ...s, draft: { ...s.draft, attach: !s.draft.attach } } : s),
-  // "+ 加个 bot" opens a picker of the installed bots; each one is picked on its own (spec §5.5)
+  // "+ Add a bot" opens a picker of the installed bots; each one is picked on its own (spec §5.5)
   toggleDraftPicker: s => (s.draft ? { ...s, draft: { ...s.draft, picking: !s.draft.picking } } : s),
   toggleDraftBot(s, id) {
     if (!s.draft) return s;
@@ -168,12 +168,12 @@ export const reducers = {
   toggleDetails: s => (s.detailsOpen ? { ...s, detailsOpen: false, edit: null, confirm: null } : { ...closeOverlays(s), detailsOpen: true }),
   stopGravit(s, { convId, now }) {
     if (closed(s.conversations.find(c => c.id === convId))) return s;
-    const st = stampMessage(s, { from: 'system', kind: 'text', text: 'Gravit 停了，这件事不再动。', data: {} }, now);
+    const st = stampMessage(s, { from: 'system', kind: 'text', text: 'Gravit stopped. This task no longer moves.', data: {} }, now);
     return upd(push(st.state, convId, st.msg), convId, c => ({ ...c, status: 'stopped' }));
   },
   withdraw(s, { convId, now }) {
     if (closed(s.conversations.find(c => c.id === convId))) return s;
-    const st = stampMessage(s, { from: 'system', kind: 'text', text: '委托撤了。', data: {} }, now);
+    const st = stampMessage(s, { from: 'system', kind: 'text', text: 'Delegation withdrawn.', data: {} }, now);
     return upd(push(st.state, convId, st.msg), convId, c => ({ ...c, status: 'withdrawn' }));
   },
   changeLimit: (s, { convId, limit }) => upd(s, convId, c => ({ ...c, intent: { ...c.intent, limit: { ...(c.intent.limit ?? { perOrder: 25, total: 100, spent: 0, venue: 'Stand-in Exchange' }), ...limit } } })),
@@ -200,7 +200,7 @@ export const reducers = {
   answerCall(s, { accept, now }) {
     if (!s.call || s.call.status === 'live' || s.call.dir === 'out') return s;
     if (accept) return { ...s, call: { ...s.call, dir: 'in', status: 'live', since: now, muted: false } };
-    return callCard({ ...s, call: null }, s.call, { text: `没接。它想说：${s.call.about}。`, answer: 'missed', duration: 0 }, now);
+    return callCard({ ...s, call: null }, s.call, { text: `Missed. It wanted to say: ${s.call.about}.`, answer: 'missed', duration: 0 }, now);
   },
   // hanging up leaves a card: how long it lasted, or that it never connected
   hangUp(s, { now }) {
@@ -209,7 +209,7 @@ export const reducers = {
     const live = c.status === 'live';
     const duration = live ? Math.max(0, now - c.since) : 0;
     const answer = live ? 'accepted' : c.dir === 'out' ? 'cancelled' : 'missed';
-    return callCard({ ...s, call: null }, c, { text: live ? `通话 ${fmtDuration(duration)}` : '没打通', answer, duration }, now);
+    return callCard({ ...s, call: null }, c, { text: live ? `Call ${fmtDuration(duration)}` : 'Did not connect', answer, duration }, now);
   },
 };
 

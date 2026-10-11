@@ -19,11 +19,11 @@ test('the BTC thread: dividers, owner bubbles right, Gravit left, an answered ca
   assert.equal(count(h, /class="divider"/g), 1, 'messages inside 15 minutes share one divider');
   assert.equal(count(h, /class="msg you"/g), 2);
   assert.equal(count(h, /class="msg left"/g), 5);
-  assert.match(h, /class="bubble you">小仓位买 BTC/);
+  assert.match(h, /class="bubble you">Buy a small BTC position/);
   assert.match(h, /class="card orange"/);
   assert.doesNotMatch(h, /answer by/, 'the seeded card is answered: no deadline left to meet');
-  assert.match(h, /class="card orange"><div class="card-head"><div class="card-title">要你答：买 0.00008 BTC<\/div><span class="chip up">Approved<\/span>/);
-  const live = renderMessage({ id: 'm-x', at: NOW, ...message('gravit', 'card', '要你答', { title: '要你答', by: NOW + 26 * 60_000 }) }, ctx, s);
+  assert.match(h, /class="card orange"><div class="card-head"><div class="card-title">Your call: buy 0.00008 BTC<\/div><span class="chip up">Approved<\/span>/);
+  const live = renderMessage({ id: 'm-x', at: NOW, ...message('gravit', 'card', 'Your call', { title: 'Your call', by: NOW + 26 * 60_000 }) }, ctx, s);
   assert.match(live, /<span class="chip warn">answer by 14:33<\/span>/, 'a card still waiting carries its deadline');
   const cardPart = h.slice(h.indexOf('card orange'), h.indexOf('class="msg you">', h.indexOf('card orange')));
   assert.doesNotMatch(cardPart, /class="key/, 'an answered card has no keys');
@@ -38,34 +38,34 @@ test('the BTC thread: dividers, owner bubbles right, Gravit left, an answered ca
 
 test('a group thread writes the sender over bot bubbles and draws the two-order card', () => {
   const h = renderThread(group, s, NOW);
-  assert.match(h, /class="sender-name">美国政客 bot</);
+  assert.match(h, /class="sender-name">US politician bot</);
   assert.match(h, /class="sender-name">Buffett bot</);
   assert.match(h, /class="sender-name">Gravit</);
   assert.equal(count(h, /class="order-row"/g), 2);
-  assert.match(h, /KO 挂着/);
+  assert.match(h, /KO is on the book/);
 });
 
 test('every kind renders at its level', () => {
   const r = m => renderMessage({ id: 'm-x', at: NOW, ...m }, ctx, s);
   assert.match(r(message('gravit', 'text', 'hi')), /class="bubble grey">hi</);
-  assert.match(r(message('fraud', 'signal', 'q', { source: '地址欺诈检测' })), /class="card white"[\s\S]*地址欺诈检测[\s\S]*class="quote">q</);
+  assert.match(r(message('fraud', 'signal', 'q', { source: 'Address fraud check' })), /class="card white"[\s\S]*Address fraud check[\s\S]*class="quote">q</);
   assert.match(r(message('gravit', 'refusal', '$30 is above', { code: 'E_MANDATE_PER_ORDER_CAP' })), /class="card red"[\s\S]*E_MANDATE_PER_ORDER_CAP/);
   assert.match(r(message('gravit', 'alert', 'bad')), /class="card red">[\s\S]*bad/);
   assert.match(r(message('gravit', 'receipt', 'x', { status: 'paid' })), /class="bubble green"[\s\S]*>paid</);
-  assert.match(r(message('gravit', 'done', 'x', { foot: '账本对上' })), /class="bubble green"[\s\S]*class="foot">账本对上/);
+  assert.match(r(message('gravit', 'done', 'x', { foot: 'Ledger reconciled' })), /class="bubble green"[\s\S]*class="foot">Ledger reconciled/);
   assert.match(r(message('politician', 'proposal', 'x', { status: 'filled', ord: 'ord-0004', venue: 'Stand-in Broker' })), /class="bubble green"[\s\S]*ord-0004 · Stand-in Broker/);
   const brief = r(director.brief(NOW));
   assert.match(brief, /class="card white"/);
-  assert.match(brief, /早报 · Oct 9/);
+  assert.match(brief, /Morning brief · Oct 9/);
   assert.equal(count(brief, /class="ticker" href="#\/markets\/BTC"/g), 2);
   const ta = r(director.ta(NOW));
   assert.match(ta, /class="ticker" href="#\/markets\/NVDA"/);
   assert.equal(count(ta, /<rect /g), 14);
-  assert.match(ta, /压力 192/);
-  assert.match(r(message('gravit', 'breaking', 'x', { headline: 'H', body: 'B' })), /class="card red"[\s\S]*>突发<[\s\S]*H/);
-  const call = r({ ...message('gravit', 'call', '来电', { about: '想说 BTC 的事' }), answer: 'missed' });
-  assert.match(call, /class="card red"[\s\S]*没接/);
-  assert.match(r({ from: 'system', kind: 'text', text: '委托撤了。', data: {} }), /class="sysline">委托撤了。</);
+  assert.match(ta, /Resistance 192/);
+  assert.match(r(message('gravit', 'breaking', 'x', { headline: 'H', body: 'B' })), /class="card red"[\s\S]*>Breaking<[\s\S]*H/);
+  const call = r({ ...message('gravit', 'call', 'Call', { about: 'About BTC' }), answer: 'missed' });
+  assert.match(call, /class="card red"[\s\S]*Missed/);
+  assert.match(r({ from: 'system', kind: 'text', text: 'Delegation withdrawn.', data: {} }), /class="sysline">Delegation withdrawn\.</);
 });
 
 test('helpers: chip, key, ticker, candles', () => {

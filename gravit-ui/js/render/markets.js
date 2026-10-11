@@ -145,7 +145,7 @@ function chart(inst, interval, venue, now) {
 
 export const orderWords = (o, inst) => `${o.side === 'buy' ? 'Buy' : 'Sell'} ${qtyFmt(o.qty)} ${inst.kind === 'event' ? `${inst.id} ${o.outcome}` : inst.base} · ${o.type === 'limit' ? `limit ${inst.kind === 'event' ? cents(o.limit) : px(o.limit)}` : 'market'}`;
 // Cancel, or its in-place confirm while it asks
-export const cancelKey = (o, state) => (state.confirm?.action === 'cancelOrder' && state.confirm.id === o.id ? confirmPair('确认撤单') : `<button type="button" class="btn-sm" data-action="cancelOrder" data-id="${o.id}">Cancel</button>`);
+export const cancelKey = (o, state) => (state.confirm?.action === 'cancelOrder' && state.confirm.id === o.id ? confirmPair('Yes, cancel the order') : `<button type="button" class="btn-sm" data-action="cancelOrder" data-id="${o.id}">Cancel</button>`);
 const line = (mark, t1, t2, extra = '', markClass = '') => `<div class="mk-line"><span class="${cls('mk-mark', markClass)}">${mark}</span><div class="mk-line-b"><div class="mk-t1">${t1}</div><div class="mk-t2">${t2}</div></div>${extra}</div>`;
 const section = (label, head, inner) => `<section class="dsec" aria-label="${label}">${head}${inner}</section>`;
 const h2 = text => `<div class="mk-h2">${text}</div>`;
@@ -219,7 +219,7 @@ export function marketDrawer(inst, state, now) {
     // the conversations about it: Gravit's orders on it, or the market named in a title, a message or a card row
     const about = state.conversations.filter(c => a.orders.some(o => o.inst === inst.id && o.by === 'gravit' && o.conv === c.id)
       || mentions(c.title, inst.base) || c.messages.some(msg => mentions(msg.text, inst.base) || (msg.data?.rows ?? []).some(x => x.t === inst.base)));
-    const asks = about.flatMap(c => c.messages.filter(msg => msg.kind === 'card' && !msg.answer).map(msg => line('!', `Gravit asks: ${esc((msg.data?.title ?? msg.text).replace(/^要你答：/, ''))}`,
+    const asks = about.flatMap(c => c.messages.filter(msg => msg.kind === 'card' && !msg.answer).map(msg => line('!', `Gravit asks: ${esc((msg.data?.title ?? msg.text).replace(/^Your call: /, ''))}`,
       `Waiting for you · <a class="link" href="#/messages/${c.id}" data-action="open" data-id="${c.id}">Review</a>`, '', 'warn')));
     const convs = about.map(c => {
       const L = c.intent.limit;

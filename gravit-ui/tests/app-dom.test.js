@@ -14,10 +14,10 @@ test('the composer is empty right after a send', () => {
   const f = fakeWindow();
   const say = f.withId('say', { tagName: 'INPUT' });
   const store = boot(f.win);
-  say.value = '再看看 ETH';
+  say.value = 'Look at ETH again';
   f.fire('root', 'input', { target: say });
   send(f, say);
-  assert.equal(store.get().conversations[0].messages.at(-1).text, '再看看 ETH');
+  assert.equal(store.get().conversations[0].messages.at(-1).text, 'Look at ETH again');
   assert.equal(say.value, '');
   store.timers.clear();
 });
@@ -137,9 +137,9 @@ test('Change words edits in place: the editor takes focus, Enter commits, Escape
   f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'changeWords', conv: 'c-1' } }));
   assert.deepEqual(store.get().edit, { kind: 'rename', convId: 'c-1' });
   assert.equal(f.doc.activeElement, title, 'the editor takes focus');
-  title.value = 'BTC 小仓';
+  title.value = 'Small BTC';
   f.fire('doc', 'keydown', { key: 'Enter' });
-  assert.equal(store.get().conversations[0].title, 'BTC 小仓');
+  assert.equal(store.get().conversations[0].title, 'Small BTC');
   assert.equal(store.get().edit, null);
   f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'changeLimit', conv: 'c-1' } }));
   f.fire('doc', 'keydown', { key: 'Escape' });
@@ -270,7 +270,7 @@ test('the mail key switches to the mailbox screen; a letter opens by its link an
   f.win.location.hash = '#/mail/mail-2';
   await f.tick();
   assert.equal(store.get().mail.items.find(m => m.id === 'mail-2').read, true);
-  assert.match(f.html(), /<h1 class="head-title">Form 4：Pelosi 申报买入 NVDA<\/h1>/);
+  assert.match(f.html(), /<h1 class="head-title">Form 4: Pelosi reports buying NVDA<\/h1>/);
   f.win.location.hash = '#/mail/nope';
   await f.tick();
   assert.equal(f.win.location.hash, '#/mail', 'the address bar is put right');
@@ -375,7 +375,7 @@ test('Create: Escape mid-run leaves the late client nothing to move, even in a d
   }
 });
 
-test('the director\'s 插件上传 starts an upload from anywhere; a public one passes review and its letter comes', async () => {
+test('the director\'s Plugin upload starts an upload from anywhere; a public one passes review and its letter comes', async () => {
   const f = fakeWindow(noDialogs);
   const store = boot(f.win);
   try {
@@ -392,8 +392,8 @@ test('the director\'s 插件上传 starts an upload from anywhere; a public one 
     await sleep(5100);
     const s = store.get();
     assert.equal(s.plugins.uploaded[0].review, null);
-    assert.deepEqual([s.mail.items[0].from, s.mail.items[0].subject, s.mail.items[0].read], ['Discover', 'Moat score 过审了', false]);
-    assert.equal(s.discover.toast.text, 'Moat score 过审了 · Public');
+    assert.deepEqual([s.mail.items[0].from, s.mail.items[0].subject, s.mail.items[0].read], ['Discover', 'Moat score passed review', false]);
+    assert.equal(s.discover.toast.text, 'Moat score passed review · Public');
   } finally {
     store.timers.clear();
   }
@@ -418,16 +418,16 @@ test('a review still pending in a save is finished after boot', async () => {
 
 test('opening another editor starts from its own value, not the text left in the last one', () => {
   const f = fakeWindow(noDialogs);
-  const box = f.withId('edit-text', { tagName: 'INPUT', rendered: '不碰杠杆' });
+  const box = f.withId('edit-text', { tagName: 'INPUT', rendered: 'No leverage' });
   const store = boot(f.win);
   store.dispatch('nav', { screen: 'account', tab: 'memory' });
   store.dispatch('startEdit', { kind: 'memory', id: 'mem-1' });
-  box.value = '偏价值，改了一半';
+  box.value = 'Prefers value, half edited';
   store.dispatch('startEdit', { kind: 'memory', id: 'mem-2' });
-  assert.equal(box.value, '不碰杠杆', 'mem-2 shows its own text');
-  box.value = '不碰杠杆，也不碰期权';
+  assert.equal(box.value, 'No leverage', 'mem-2 shows its own text');
+  box.value = 'No leverage, no options either';
   store.dispatch('setMode', 'beast');
-  assert.equal(box.value, '不碰杠杆，也不碰期权', 'while the same editor stays open, typing survives a render');
+  assert.equal(box.value, 'No leverage, no options either', 'while the same editor stays open, typing survives a render');
   store.timers.clear();
 });
 
@@ -438,7 +438,7 @@ test('the Move pickers keep their choice across a render, such as an error', () 
   store.dispatch('openPanel', 'move');
   from.value = 'Stand-in Exchange';
   store.dispatch('moveFunds', { from: 'Stand-in Exchange', to: 'Stand-in Exchange', asset: 'BTC', amount: '1', now: Date.now() });
-  assert.equal(store.get().account.panelError, '换一个去处');
+  assert.equal(store.get().account.panelError, 'Pick a different destination');
   assert.equal(from.value, 'Stand-in Exchange');
   store.timers.clear();
 });
@@ -516,7 +516,7 @@ test('the draft picker keys reach the store', () => {
 
 // round-three review fixes
 
-test('when Publish or 插件上传 clears the search, the search box is cleared too', async () => {
+test('when Publish or Plugin upload clears the search, the search box is cleared too', async () => {
   const f = fakeWindow({ ...noDialogs, hash: '#/discover' });
   const dq = f.withId('dq', { tagName: 'INPUT', type: 'search', dataset: { action: 'query' } });
   const store = boot(f.win);
@@ -552,7 +552,7 @@ test('the dialog body keeps its scroll while the same step changes, and starts a
   }
 });
 
-test('after 拒绝, the director\'s 插件上传 starts a fresh upload in a new dialog', () => {
+test('after Refuse, the director\'s Plugin upload starts a fresh upload in a new dialog', () => {
   const f = fakeWindow({ ...noDialogs, hash: '#/discover' });
   const store = boot(f.win);
   try {

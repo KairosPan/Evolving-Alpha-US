@@ -4,42 +4,42 @@ export const KINDS = ['Data', 'Monitors', 'Bots', 'Crypto', 'Quant'];
 const P = (id, kind, name, blurb, extra = {}) => ({
   id, kind, name, blurb, by: 'Gravit', visibility: 'public', installs: '',
   logo: { type: 'letter', text: name[0].toUpperCase() }, avatar: null,
-  asks: [], writes: [], never: ['动钱', '付人', '改额度'], needs: '没有。',
-  teach: `你好，我是 ${name}。${blurb}。`,
+  asks: [], writes: [], never: ['move money', 'pay anyone', 'change limits'], needs: 'Nothing.',
+  teach: `Hi, I’m ${name}. ${blurb}.`,
   ...extra,
 });
 
 export const PLUGINS = [
-  P('buffett', 'Bots', 'Buffett bot', '只买看得懂的、便宜的，拿很久', {
+  P('buffett', 'Bots', 'Buffett bot', 'Buys only what it understands, cheap, and holds for years', {
     logo: { type: 'portrait', initials: 'WB', tone: 'warm' }, avatar: { type: 'portrait', initials: 'WB', tone: 'warm' }, installs: '1.2k',
-    asks: ['「这只股便宜吗」', '「巴菲特会买它吗」', '「我仓里哪只不像他会拿的」'],
-    writes: ['提议：在你额度里的直接成交，超出的发一张要你答的卡', '每周一一份持仓点评，发进这个会话'],
-    needs: '没有。只读 Portfolio 和 Markets。',
-    teach: '你好，我是 Buffett bot。三件我会做的事：看一只股贵不贵；每周一点评你的仓；在你额度里替你买便宜的好公司。先问你一个问题：你能拿多久？' }),
-  P('research', 'Data', '研报', '券商研报摘成三句，按 ticker 问', { logo: { type: 'glyph', icon: 'book' }, asks: ['「NVDA 最近的研报怎么说」', '「谁在看多 KO」'], writes: ['三句摘要和出处，发进会话'] }),
-  P('politician', 'Bots', '美国政客 bot', '跟公开披露的国会交易，一笔披露一笔单', {
+    asks: ['“Is this stock cheap?”', '“Would Buffett buy it?”', '“Which of my holdings would he not keep?”'],
+    writes: ['Proposals: inside your limit it fills directly; beyond it, a card for your call', 'Every Monday, a review of your holdings, into this conversation'],
+    needs: 'Nothing. It only reads Portfolio and Markets.',
+    teach: 'Hi, I’m Buffett bot. Three things I do: tell you whether a stock is expensive; review your holdings every Monday; buy good companies cheap inside your limit. One question first: how long can you hold?' }),
+  P('research', 'Data', 'Broker research', 'Broker research cut to three lines, ask by ticker', { logo: { type: 'glyph', icon: 'book' }, asks: ['“What do the latest notes say on NVDA?”', '“Who is bullish on KO?”'], writes: ['A three-line summary with sources, into the conversation'] }),
+  P('politician', 'Bots', 'US politician bot', 'Follows disclosed congressional trades, one order per disclosure', {
     logo: { type: 'glyph', icon: 'columns' }, avatar: { type: 'letter', text: 'P', tone: 'blue' }, installs: '3.4k',
-    asks: ['「Pelosi 最近买了什么」', '「跟谁的披露」'], writes: ['每条披露一条消息；在你额度里的直接下单，超出的发一张卡'],
-    teach: '你好，我是美国政客 bot。国会议员的交易披露一出来我就告诉你，跟不跟按你的额度。先选要跟的人：Pelosi？' }),
-  P('quantteam', 'Quant', 'Quant team', '给它一个想法，组一队 agent 回测、挑参数、给结论', { logo: { type: 'glyph', icon: 'team' }, asks: ['「动量在美股过去两年行不行」'], writes: ['一份回测报告发进会话；不下单'] }),
-  P('pricefeed', 'Data', 'Price feed', '各场所的 K 线和报价', { logo: { type: 'glyph', icon: 'bars' }, installs: '8.1k', writes: ['K 线和报价，给 Gravit 和技术分析用'] }),
-  P('news', 'Data', 'News sentiment', '每个 ticker 一个情绪分', { logo: { type: 'letter', text: 'N' }, asks: ['「BTC 现在情绪怎么样」'], writes: ['一个分数和三条标题'] }),
-  P('onchain', 'Data', 'On-chain flows', '大额转账、交易所进出', { by: 'community', logo: { type: 'glyph', icon: 'link' } }),
-  P('telegram', 'Monitors', 'Telegram monitor', '盯你指定的群聊，摘成信号发进会话', { logo: { type: 'glyph', icon: 'plane' }, avatar: { type: 'letter', text: 'TG', tone: 'grey' }, installs: '2.0k', writes: ['只读的信号消息；不下单'], needs: '你的 Telegram 会话。' }),
-  P('xmon', 'Monitors', 'X monitor', '盯几个账号的发帖，摘成一句', { by: '@kol_watch', logo: { type: 'letter', text: 'X' }, writes: ['只读的信号消息；不下单'] }),
-  P('whale', 'Monitors', 'Whale alerts', '链上大户动了就说一声', { by: 'community', logo: { type: 'glyph', icon: 'wave' } }),
-  P('earnings', 'Monitors', 'Earnings calendar', '你持仓的财报日，提前一天提醒', { logo: { type: 'glyph', icon: 'calendar' } }),
-  P('kol', 'Bots', 'KOL bot', '跟一个 KOL 的链上钱包或喊单', { logo: { type: 'letter', text: 'K' }, avatar: { type: 'letter', text: 'K', tone: 'grey' } }),
-  P('serenity', 'Bots', 'Serenity bot', '科技产业链分析', { logo: { type: 'portrait', initials: 'S', tone: 'green' }, avatar: { type: 'portrait', initials: 'S', tone: 'green' }, asks: ['「英伟达的上游是谁」'], writes: ['一条产业链图谱和三个结论'] }),
-  P('fraud', 'Crypto', '地址欺诈检测', '转账前查收款地址：骗子名单、合约陷阱', { logo: { type: 'glyph', icon: 'shield' }, avatar: { type: 'glyph', icon: 'shield' }, installs: '5.6k', asks: ['「这个地址安全吗」'], writes: ['一条结论：名单、合约、历史'] }),
-  P('spread', 'Crypto', '交易所价差', '同一个币在几家的价，差多少', { logo: { type: 'glyph', icon: 'arrows' } }),
-  P('gas', 'Crypto', 'Gas 时机', '链上手续费低的时候再动', { by: 'community', logo: { type: 'glyph', icon: 'flame' } }),
-  P('audit', 'Crypto', '合约体检', '买之前看合约：能不能卖、税多少', { by: 'community', logo: { type: 'glyph', icon: 'fileCheck' } }),
-  P('backtest', 'Quant', 'Backtest', '一个想法在过去两年跑一遍', { logo: { type: 'glyph', icon: 'rewind' } }),
-  P('factor', 'Quant', 'Factor screen', '按因子筛一遍股票池', { by: 'community', logo: { type: 'glyph', icon: 'filter' } }),
-  P('pairs', 'Quant', 'Pairs', '两只相关股的价差回归，配对信号', { by: '@you', visibility: 'private', logo: { type: 'glyph', icon: 'pairs' }, tools: ['pairs.scan', 'pairs.signal'] }),
-  P('latency', 'Data', 'Low-latency feed', '毫秒级的报价流，给高频用', { logo: { type: 'glyph', icon: 'bolt' } }),
-  P('hft', 'Quant', 'HFT strategies', '几套做市和套利的模板，自己调参', { by: 'community', logo: { type: 'glyph', icon: 'sigma' } }),
+    asks: ['“What did Pelosi buy lately?”', '“Whose disclosures to follow?”'], writes: ['One message per disclosure; inside your limit it places the order, beyond it a card'],
+    teach: 'Hi, I’m US politician bot. The moment a member of Congress discloses a trade I tell you; whether I follow depends on your limit. First pick who to follow: Pelosi?' }),
+  P('quantteam', 'Quant', 'Quant team', 'Give it an idea; a team of agents backtests, tunes and reports', { logo: { type: 'glyph', icon: 'team' }, asks: ['“Did momentum work in US stocks over the past two years?”'], writes: ['A backtest report into the conversation; no orders'] }),
+  P('pricefeed', 'Data', 'Price feed', 'Candles and quotes from every venue', { logo: { type: 'glyph', icon: 'bars' }, installs: '8.1k', writes: ['Candles and quotes, for Gravit and technical analysis'] }),
+  P('news', 'Data', 'News sentiment', 'One sentiment score per ticker', { logo: { type: 'letter', text: 'N' }, asks: ['“How is sentiment on BTC right now?”'], writes: ['One score and three headlines'] }),
+  P('onchain', 'Data', 'On-chain flows', 'Large transfers, exchange inflows and outflows', { by: 'community', logo: { type: 'glyph', icon: 'link' } }),
+  P('telegram', 'Monitors', 'Telegram monitor', 'Watches the groups you name, posts a one-line signal', { logo: { type: 'glyph', icon: 'plane' }, avatar: { type: 'letter', text: 'TG', tone: 'grey' }, installs: '2.0k', writes: ['Read-only signal messages; no orders'], needs: 'Your Telegram session.' }),
+  P('xmon', 'Monitors', 'X monitor', 'Watches a few accounts, one line per post', { by: '@kol_watch', logo: { type: 'letter', text: 'X' }, writes: ['Read-only signal messages; no orders'] }),
+  P('whale', 'Monitors', 'Whale alerts', 'Says so when a big wallet moves', { by: 'community', logo: { type: 'glyph', icon: 'wave' } }),
+  P('earnings', 'Monitors', 'Earnings calendar', 'Earnings dates for what you hold, a day ahead', { logo: { type: 'glyph', icon: 'calendar' } }),
+  P('kol', 'Bots', 'KOL bot', 'Follows a KOL’s wallet or calls', { logo: { type: 'letter', text: 'K' }, avatar: { type: 'letter', text: 'K', tone: 'grey' } }),
+  P('serenity', 'Bots', 'Serenity bot', 'Tech supply-chain analysis', { logo: { type: 'portrait', initials: 'S', tone: 'green' }, avatar: { type: 'portrait', initials: 'S', tone: 'green' }, asks: ['“Who is upstream of Nvidia?”'], writes: ['A supply-chain map and three conclusions'] }),
+  P('fraud', 'Crypto', 'Address fraud check', 'Checks a payee address before you send: scam lists, contract traps', { logo: { type: 'glyph', icon: 'shield' }, avatar: { type: 'glyph', icon: 'shield' }, installs: '5.6k', asks: ['“Is this address safe?”'], writes: ['One verdict: lists, contract, history'] }),
+  P('spread', 'Crypto', 'Exchange spread', 'The same coin across venues, and the gap', { logo: { type: 'glyph', icon: 'arrows' } }),
+  P('gas', 'Crypto', 'Gas timing', 'Moves when fees are low', { by: 'community', logo: { type: 'glyph', icon: 'flame' } }),
+  P('audit', 'Crypto', 'Contract check', 'Reads a contract before you buy: can you sell, what tax', { by: 'community', logo: { type: 'glyph', icon: 'fileCheck' } }),
+  P('backtest', 'Quant', 'Backtest', 'Runs an idea over the past two years', { logo: { type: 'glyph', icon: 'rewind' } }),
+  P('factor', 'Quant', 'Factor screen', 'Screens a universe by factors', { by: 'community', logo: { type: 'glyph', icon: 'filter' } }),
+  P('pairs', 'Quant', 'Pairs', 'Spread reversion between two related stocks', { by: '@you', visibility: 'private', logo: { type: 'glyph', icon: 'pairs' }, tools: ['pairs.scan', 'pairs.signal'] }),
+  P('latency', 'Data', 'Low-latency feed', 'Millisecond quote stream, for high-frequency use', { logo: { type: 'glyph', icon: 'bolt' } }),
+  P('hft', 'Quant', 'HFT strategies', 'Market-making and arbitrage templates, tune them yourself', { by: 'community', logo: { type: 'glyph', icon: 'sigma' } }),
 ];
 
 export const SHELVES = [
@@ -64,8 +64,8 @@ export function search(q, extra = []) {
 // the Like shelf: the user's style, read out of Memory (spec §7.2)
 export function likeFor(memory) {
   const text = (memory?.entries ?? []).map(e => e.text).join(' ');
-  if (/高频/.test(text)) return ['hft', 'latency', 'spread', 'backtest'];
-  if (/量化/.test(text)) return ['quantteam', 'backtest', 'factor', 'pairs'];
+  if (/high[- ]?frequency|\bhft\b/i.test(text)) return ['hft', 'latency', 'spread', 'backtest'];
+  if (/\bquant/i.test(text)) return ['quantteam', 'backtest', 'factor', 'pairs'];
   return ['buffett', 'research', 'politician', 'quantteam'];
 }
 
@@ -83,15 +83,15 @@ export const SHOP_MCP = {
 };
 
 // what a manifest's writes and needs say in the drawer
-const WRITES = { message: '消息，发进会话', proposal: '提议：在你额度里的直接成交，超出的发一张卡' };
-const NEEDS = { none: '没有。', 'exchange key': '一把交易所 key。', 'telegram session': '你的 Telegram 会话。', 'wallet address': '一个钱包地址。' };
+const WRITES = { message: 'Messages, into the conversation', proposal: 'Proposals: inside your limit it fills directly, beyond it a card' };
+const NEEDS = { none: 'Nothing.', 'exchange key': 'An exchange key.', 'telegram session': 'Your Telegram session.', 'wallet address': 'A wallet address.' };
 
 // a manifest that came in through shop.publish, made into your own plugin; the shop stamps the author from the signature
 export function fromManifest(m, visibility, now) {
   return {
     id: m.id, kind: m.kind, name: m.name, blurb: m.blurb, by: '@you', visibility, installs: '',
     logo: m.icon ? { type: 'glyph', icon: m.icon } : { type: 'letter', text: m.name[0].toUpperCase() }, avatar: null,
-    asks: [], writes: m.writes.map(w => WRITES[w] ?? w), never: ['动钱', '付人', '改额度'], needs: NEEDS[m.needs] ?? '没有。',
-    tools: [...m.tools], teach: `你好，我是 ${m.name}。${m.blurb}。我有 ${m.tools.length} 个工具：${m.tools.join('、')}。`, review: null, at: now,
+    asks: [], writes: m.writes.map(w => WRITES[w] ?? w), never: ['move money', 'pay anyone', 'change limits'], needs: NEEDS[m.needs] ?? 'Nothing.',
+    tools: [...m.tools], teach: `Hi, I’m ${m.name}. ${m.blurb}. I have ${m.tools.length} tool${m.tools.length === 1 ? '' : 's'}: ${m.tools.join(', ')}.`, review: null, at: now,
   };
 }

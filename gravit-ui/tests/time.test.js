@@ -11,9 +11,9 @@ test('fmtClock is zero-padded 24h', () => {
   assert.equal(fmtClock(NOW), '14:07');
 });
 
-test('rowTime is the clock today, 昨天 yesterday, M/D before', () => {
+test('rowTime is the clock today, Yesterday for yesterday, M/D before', () => {
   assert.equal(rowTime(NOW - 6 * MIN, NOW), '14:01');
-  assert.equal(rowTime(NOW - DAY, NOW), '昨天');
+  assert.equal(rowTime(NOW - DAY, NOW), 'Yesterday');
   assert.equal(rowTime(NOW - 3 * DAY, NOW), '10/6');
 });
 
@@ -22,7 +22,7 @@ test('divider: first of the day carries the day, later ones the clock, none insi
   assert.equal(divider(first, null, NOW), 'Today 14:01');
   assert.equal(divider(first + 3 * MIN, first, NOW), null);
   assert.equal(divider(first + 20 * MIN, first, NOW), '14:21');
-  assert.equal(divider(NOW - DAY, null, NOW), '昨天 14:07');
+  assert.equal(divider(NOW - DAY, null, NOW), 'Yesterday 14:07');
   assert.equal(divider(NOW, NOW - DAY, NOW), 'Today 14:07');
   assert.equal(sameDay(NOW, NOW - DAY), false);
 });

@@ -25,31 +25,31 @@ test('nav opens a conversation, clears its unread dot, closes drawers and drops 
 test('send: blank text is ignored; otherwise an owner bubble joins the open conversation', () => {
   const s0 = fresh();
   assert.equal(R.send(s0, { text: '   ', now: NOW }), s0);
-  const s1 = R.send(s0, { text: ' 再看看 ETH ', now: NOW + MIN });
+  const s1 = R.send(s0, { text: ' Look at ETH again ', now: NOW + MIN });
   const last = conv(s1, 'c-1').messages.at(-1);
   assert.equal(last.from, 'you');
-  assert.equal(last.text, '再看看 ETH');
+  assert.equal(last.text, 'Look at ETH again');
   assert.equal(last.at, NOW + MIN);
   assert.equal(last.id, 'm-' + (s0.counters.msg + 1));
 });
 
 test('send from a draft creates the conversation, titled by the draft or the first words, with the attached limit', () => {
   let s = R.startDraft(fresh(), { now: NOW });
-  s = R.setDraftTitle(s, '买一点 SOL');
+  s = R.setDraftTitle(s, 'Buy a little SOL');
   s = R.setDraftLimit(s, { key: 'perOrder', value: 30 });
-  s = R.send(s, { text: '小仓位买 SOL，别超过 $30 一次', now: NOW });
+  s = R.send(s, { text: 'Buy a small SOL position, no more than $30 at a time', now: NOW });
   assert.equal(s.draft, null);
   assert.equal(s.route.id, 'c-5');
   const c = conv(s, 'c-5');
-  assert.equal(c.title, '买一点 SOL');
+  assert.equal(c.title, 'Buy a little SOL');
   assert.equal(c.intent.id, 'intent-0005');
   assert.equal(c.intent.limit.perOrder, 30);
-  assert.equal(c.messages[0].text, '小仓位买 SOL，别超过 $30 一次');
+  assert.equal(c.messages[0].text, 'Buy a small SOL position, no more than $30 at a time');
   assert.equal(s.conversations[0].id, 'c-5', 'the new conversation is first in the list');
 
   let t = R.startDraft(fresh(), { now: NOW });
   t = R.toggleDraftAttach(t);
-  t = R.send(t, { text: '帮我盯一下这个很长很长很长很长很长很长很长很长的事情', now: NOW });
+  t = R.send(t, { text: 'Keep an eye on this very very very very very long thing for me', now: NOW });
   assert.equal(conv(t, 'c-5').intent.limit, null);
   assert.equal(conv(t, 'c-5').title.length, 25);
   assert.ok(conv(t, 'c-5').title.endsWith('…'));
@@ -93,10 +93,10 @@ test('details, stop, withdraw, banner, call', () => {
   assert.equal(s.banner.id, 'b1');
   s = R.dismissBanner(s);
   assert.equal(s.banner, null);
-  s = R.incomingCall(s, { from: 'gravit', about: '想说 BTC 的事' });
+  s = R.incomingCall(s, { from: 'gravit', about: 'About BTC' });
   s = R.answerCall(s, { accept: false, now: NOW });
   assert.equal(s.call, null);
-  assert.match(s.conversations[0].messages.at(-1).text, /没接/);
+  assert.match(s.conversations[0].messages.at(-1).text, /Missed/);
 });
 
 test('discover: install adds the plugin, a teaching conversation and a toast; uninstall removes', () => {
@@ -105,15 +105,15 @@ test('discover: install adds the plugin, a teaching conversation and a toast; un
   const s1 = R.install(s0, { id: 'news', now: NOW });
   assert.ok(s1.plugins.installed.includes('news'));
   assert.equal(s1.discover.drawer, null);
-  assert.match(s1.discover.toast.text, /News sentiment 装好了/);
-  assert.equal(s1.conversations[0].title, 'News sentiment：怎么用我');
+  assert.match(s1.discover.toast.text, /News sentiment installed/);
+  assert.equal(s1.conversations[0].title, 'News sentiment: how to use me');
   assert.equal(s1.conversations[0].unread, true);
   assert.equal(s1.conversations[0].members[1], 'news');
   assert.equal(s1.discover.toast.action.route.id, s1.conversations[0].id);
   assert.equal(R.install(s1, { id: 'news', now: NOW }), s1, 'installing twice is a no-op');
   const s2 = R.uninstall(s1, 'news');
   assert.ok(!s2.plugins.installed.includes('news'));
-  assert.equal(s2.conversations[0].title, 'News sentiment：怎么用我', 'the conversation stays');
+  assert.equal(s2.conversations[0].title, 'News sentiment: how to use me', 'the conversation stays');
   const s3 = s2;
   const s4 = R.setQuery(R.toggleInstalledOnly(s3), 'bot');
   assert.equal(s4.discover.installedOnly, true);
@@ -125,12 +125,12 @@ test('account: mode, memory add/edit/forget/forget all, switches, settings', () 
   let s = R.setMode(fresh(), 'beast');
   assert.equal(s.account.mode, 'beast');
   assert.equal(R.addMemory(s, { text: '  ', now: NOW }), s);
-  s = R.addMemory(s, { text: '周五不开新仓', now: NOW });
+  s = R.addMemory(s, { text: 'No new positions on Fridays', now: NOW });
   const added = s.memory.entries.at(-1);
   assert.equal(added.id, 'mem-10');
-  assert.equal(added.source, '你说的');
-  s = R.editMemory(s, { id: 'mem-10', text: '周五不开新仓，周一也不' });
-  assert.equal(s.memory.entries.at(-1).text, '周五不开新仓，周一也不');
+  assert.equal(added.source, 'You said');
+  s = R.editMemory(s, { id: 'mem-10', text: 'No new positions on Fridays, nor Mondays' });
+  assert.equal(s.memory.entries.at(-1).text, 'No new positions on Fridays, nor Mondays');
   s = R.forgetMemory(s, 'mem-1');
   assert.equal(s.memory.entries.length, 9);
   s = R.setMemorySwitch(s, { key: 'askFirst', value: true });
@@ -168,12 +168,12 @@ test('a stopped or withdrawn conversation takes no more messages from Gravit or 
 });
 
 test('a call leaves a call card; dismissing a banner leaves the breaking message', () => {
-  let s = R.incomingCall(fresh(), { from: 'gravit', about: '想说 BTC 的事' });
+  let s = R.incomingCall(fresh(), { from: 'gravit', about: 'About BTC' });
   s = R.answerCall(s, { accept: false, now: NOW });
   const missed = s.conversations[0].messages.at(-1);
   assert.equal(missed.kind, 'call');
   assert.equal(missed.answer, 'missed');
-  assert.equal(missed.data.about, '想说 BTC 的事');
+  assert.equal(missed.data.about, 'About BTC');
   const took = R.answerCall(R.incomingCall(fresh(), { from: 'gravit', about: 'x' }), { accept: true, now: NOW });
   assert.equal(took.call.status, 'live', 'an accepted call goes live; its card comes when it ends');
   assert.equal(R.hangUp(took, { now: NOW + 5000 }).conversations[0].messages.at(-1).answer, 'accepted');
@@ -225,19 +225,19 @@ test('publishing: a private plugin is installed at once with its teaching conver
   assert.deepEqual([p.id, p.name, p.kind, p.by, p.visibility, p.review], ['moat', 'Moat score', 'Data', '@you', 'private', null]);
   assert.deepEqual(p.tools, ['moat.score', 'moat.compare']);
   assert.ok(s.plugins.mine.includes('moat') && s.plugins.installed.includes('moat'));
-  assert.deepEqual([s.conversations[0].teach, s.conversations[0].title, s.conversations[0].unread], ['moat', 'Moat score：怎么用我', true]);
+  assert.deepEqual([s.conversations[0].teach, s.conversations[0].title, s.conversations[0].unread], ['moat', 'Moat score: how to use me', true]);
   assert.deepEqual([s.discover.create, s.discover.query, s.discover.installedOnly], [null, '', false], 'the shop is back on its shelves');
-  assert.deepEqual(s.discover.toast, { text: 'Moat score 已上传 · Private', action: { label: 'Open', route: { screen: 'messages', id: s.conversations[0].id } } });
+  assert.deepEqual(s.discover.toast, { text: 'Moat score uploaded · Private', action: { label: 'Open', route: { screen: 'messages', id: s.conversations[0].id } } });
   s = R.publishUpload(R.setUploadVisibility(atSign(R.openCreate(s), nextUpload(s.plugins.uploaded)), 'public'), { now: NOW });
   const q = s.plugins.uploaded.at(-1);
   assert.deepEqual([q.id, q.visibility, q.review], ['cpi', 'public', { until: NOW + REVIEW_MS }]);
   assert.equal(s.plugins.installed.includes('cpi'), false, 'the owner signed publish, not install');
   assert.equal(R.install(s, { id: 'cpi', now: NOW }), s, 'no install while it is reviewed');
-  assert.deepEqual(s.discover.toast, { text: 'CPI 速读 已上传 · 审核中', action: null });
+  assert.deepEqual(s.discover.toast, { text: 'CPI quick read uploaded · In review', action: null });
   const passed = R.reviewPassed(s, { id: 'cpi', now: NOW + REVIEW_MS });
   assert.equal(passed.plugins.uploaded.at(-1).review, null);
-  assert.deepEqual(passed.mail.items[0], { id: 'mail-4', from: 'Discover', subject: 'CPI 速读 过审了', at: NOW + REVIEW_MS, read: false, body: '已上架 Data · Public。sandbox 跑过；不会动钱、付人、改额度。' });
-  assert.deepEqual(passed.discover.toast, { text: 'CPI 速读 过审了 · Public', action: { label: 'Open', plugin: 'cpi' } });
+  assert.deepEqual(passed.mail.items[0], { id: 'mail-4', from: 'Discover', subject: 'CPI quick read passed review', at: NOW + REVIEW_MS, read: false, body: 'Listed under Data · Public. Ran in the sandbox; never moves money, pays anyone or changes limits.' });
+  assert.deepEqual(passed.discover.toast, { text: 'CPI quick read passed review · Public', action: { label: 'Open', plugin: 'cpi' } });
   assert.equal(R.reviewPassed(passed, { id: 'cpi', now: NOW }), passed, 'it passes once');
   const away = R.reviewPassed(R.nav(s, { screen: 'messages', id: 'c-1' }), { id: 'cpi', now: NOW });
   assert.equal(away.discover.toast, null, 'off Discover the letter carries the news');
@@ -246,11 +246,11 @@ test('publishing: a private plugin is installed at once with its teaching conver
 });
 
 test('append fills order and ledger placeholders from the counters', () => {
-  const receipt = { from: 'gravit', kind: 'receipt', text: '0.00008 BTC @ 62,500 · {ord} · 账本 {ledger}', data: { status: 'filled' } };
+  const receipt = { from: 'gravit', kind: 'receipt', text: '0.00008 BTC @ 62,500 · {ord} · ledger {ledger}', data: { status: 'filled' } };
   const s1 = R.append(fresh(), { convId: 'c-1', msg: receipt, at: NOW });
   const s2 = R.append(s1, { convId: 'c-1', msg: receipt, at: NOW });
-  assert.equal(conv(s1, 'c-1').messages.at(-1).text, '0.00008 BTC @ 62,500 · ord-0010 · 账本 #59');
-  assert.equal(conv(s2, 'c-1').messages.at(-1).text, '0.00008 BTC @ 62,500 · ord-0011 · 账本 #60');
+  assert.equal(conv(s1, 'c-1').messages.at(-1).text, '0.00008 BTC @ 62,500 · ord-0010 · ledger #59');
+  assert.equal(conv(s2, 'c-1').messages.at(-1).text, '0.00008 BTC @ 62,500 · ord-0011 · ledger #60');
   const prop = { from: 'politician', kind: 'proposal', text: 'x', data: { status: 'filled', ord: '{ord}', venue: 'Stand-in Broker' } };
   assert.equal(conv(R.append(fresh(), { convId: 'c-2', msg: prop, at: NOW }), 'c-2').messages.at(-1).data.ord, 'ord-0010');
 });
@@ -277,7 +277,7 @@ test('installing answers every waiting ask for that plugin and tells the convers
   const c1 = conv(s, 'c-1');
   assert.equal(c1.messages.find(m => m.kind === 'install' && m.data.plugin === 'news').answer, 'installed');
   assert.equal(c1.messages.at(-1).from, 'gravit');
-  assert.match(c1.messages.at(-1).text, /News sentiment 装好了/);
+  assert.match(c1.messages.at(-1).text, /News sentiment installed/);
 });
 
 test('leaving Discover clears its drawer, ask and toast', () => {
@@ -296,7 +296,7 @@ test('the new-message draft picks bots one by one', () => {
   assert.equal(s.draft.picking, true);
   s = R.toggleDraftBot(s, 'buffett');
   assert.deepEqual(s.draft.bots, ['buffett']);
-  const sent = R.send(s, { text: '看看 KO', now: NOW });
+  const sent = R.send(s, { text: 'Look at KO', now: NOW });
   assert.equal(sent.conversations[0].kind, 'group');
   assert.deepEqual(sent.conversations[0].members, ['gravit', 'buffett']);
   assert.deepEqual(R.toggleDraftBot(s, 'buffett').draft.bots, []);

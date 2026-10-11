@@ -1,4 +1,4 @@
-// gravit-ui/js/render/avatars.js — the round marks: 你, G, a bot's letter, a portrait slot, a glyph; logos are the 44 px rounded squares of Discover
+// gravit-ui/js/render/avatars.js — the round marks: You, G, a bot's letter, a portrait slot, a glyph; logos are the 44 px rounded squares of Discover
 import { esc } from '../html.js';
 import { icon } from '../icons.js';
 import { byId } from '../data/plugins.js';
@@ -7,13 +7,13 @@ const SILHOUETTE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="tr
 
 export function mark(spec, size, radius, name) {
   const box = `width:${size}px;height:${size}px;border-radius:${radius}`;
-  if (spec.type === 'portrait') return `<span class="av av-portrait tone-${spec.tone ?? 'warm'}" role="img" aria-label="${esc(name)} 的头像图" style="${box}">${SILHOUETTE}</span>`;
+  if (spec.type === 'portrait') return `<span class="av av-portrait tone-${spec.tone ?? 'warm'}" role="img" aria-label="${esc(name)}’s portrait" style="${box}">${SILHOUETTE}</span>`;
   if (spec.type === 'glyph') return `<span class="av av-glyph" style="${box}">${icon(spec.icon, Math.round(size / 2), 2)}</span>`;
   return `<span class="av av-letter tone-${spec.tone ?? 'grey'}" style="${box};font-size:${Math.round(size * 0.42)}px">${esc(spec.text)}</span>`;
 }
 
 export function avatar(who, size = 28, state = null) {
-  if (who === 'you') return `<span class="av av-you" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.43)}px">你</span>`;
+  if (who === 'you') return `<span class="av av-you" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.43)}px">You</span>`;
   if (who === 'gravit') return `<span class="av av-g" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.46)}px">G</span>`;
   const p = byId(who, state?.plugins?.uploaded ?? []);
   const spec = p?.avatar ?? (p?.logo?.type === 'portrait' ? p.logo : null) ?? { type: 'letter', text: (p?.name ?? who).slice(0, 1).toUpperCase(), tone: 'grey' };

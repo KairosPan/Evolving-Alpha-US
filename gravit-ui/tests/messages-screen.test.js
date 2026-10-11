@@ -21,7 +21,7 @@ test('F1: the head is title + Working + Details; the thread and the composer fol
   const s = seed(NOW);
   const h = renderMessagesScreen(s, NOW);
   assert.match(h, /<main class="main">/);
-  assert.match(h, /<h1 class="head-title">小仓位 BTC，\$70k 以下<\/h1>/);
+  assert.match(h, /<h1 class="head-title">Small BTC position under \$70k<\/h1>/);
   assert.match(h, /class="status up"[^>]*>[\s\S]*?Working/);
   assert.match(h, /data-action="toggleDetails" aria-expanded="false"/);
   assert.match(h, /class="thread" id="thread"/);
@@ -30,7 +30,7 @@ test('F1: the head is title + Working + Details; the thread and the composer fol
   assert.match(h, /aria-label="Voice input"/);
   assert.match(h, /type="submit" class="send-key" aria-label="Sign and send"/);
   assert.match(h, /placeholder="Tell Gravit…"/);
-  assert.doesNotMatch(h, /发出去就是/);
+  assert.doesNotMatch(h, /Sending is/);
   assert.doesNotMatch(h, /class="drawer/);
 });
 
@@ -39,39 +39,39 @@ test('F14: a group gets the cluster head with the members line and the @ placeho
   const h = renderMessagesScreen(s, NOW);
   assert.match(h, /<header class="head centered">/);
   assert.equal(count(h, /class="cluster-item"/g), 3);
-  assert.match(h, /class="head-task">跟 Pelosi 和 Buffett 挑股</);
-  assert.match(h, /Gravit · 美国政客 bot · Buffett bot · 3 位/);
-  assert.match(h, /placeholder="Tell Gravit… 打 @ 点名一个 bot"/);
+  assert.match(h, /class="head-task">Pick stocks with Pelosi and Buffett</);
+  assert.match(h, /Gravit · US politician bot · Buffett bot · 3 members/);
+  assert.match(h, /placeholder="Tell Gravit… @ a bot by name"/);
 });
 
 test('F7: the draft head is avatar + title input + To line; the limit chips sit over the composer; a group draft shows the cluster', () => {
   let s = R.startDraft(seed(NOW), { now: NOW });
-  s = R.setDraftTitle(s, '买一点 SOL');
+  s = R.setDraftTitle(s, 'Buy a little SOL');
   const h = renderMessagesScreen(s, NOW);
   assert.match(h, /<header class="head centered draft">/);
   assert.match(h, /data-action="cancelDraft"/);
-  assert.match(h, /id="nm-title"[^>]*data-action="draftTitle"[^>]*value="买一点 SOL"/);
+  assert.match(h, /id="nm-title"[^>]*data-action="draftTitle"[^>]*value="Buy a little SOL"/);
   assert.match(h, /class="to-label">To:</);
   assert.match(h, /class="to-chip">[\s\S]*Gravit</);
   assert.match(h, /data-action="toggleDraftPicker"/);
-  assert.match(h, /class="limit-label">附一份额度</);
-  assert.match(h, /data-action="draftLimit" data-key="perOrder">每单 \$25/);
-  assert.match(h, /data-key="until">到 Oct 15/);
-  assert.match(h, /data-key="venue">在 Stand-in Exchange/);
-  assert.match(h, /data-action="toggleDraftAttach">不附</);
+  assert.match(h, /class="limit-label">Attach a limit</);
+  assert.match(h, /data-action="draftLimit" data-key="perOrder">\$25 an order/);
+  assert.match(h, /data-key="until">until Oct 15/);
+  assert.match(h, /data-key="venue">on Stand-in Exchange/);
+  assert.match(h, /data-action="toggleDraftAttach">None</);
   const off = renderMessagesScreen(R.toggleDraftAttach(s), NOW);
   assert.doesNotMatch(off, /data-key="perOrder"/);
-  assert.match(off, /data-action="toggleDraftAttach">附上</);
+  assert.match(off, /data-action="toggleDraftAttach">Attach</);
   const g = R.toggleDraftGroup(s);
   assert.equal(g.draft.group, true);
   const gh = renderMessagesScreen(g, NOW);
   assert.equal(count(gh, /class="cluster-item"/g), 3, 'Gravit plus the two installed bots');
-  const sent = R.send(g, { text: '两位看看 KO', now: NOW });
+  const sent = R.send(g, { text: 'You two, look at KO', now: NOW });
   assert.equal(sent.conversations[0].kind, 'group');
   assert.deepEqual(sent.conversations[0].members, ['gravit', 'politician', 'buffett']);
 });
 
-test('F7 picker: + 加个 bot lists the installed bots; picking one makes a group draft with the @ placeholder', () => {
+test('F7 picker: + Add a bot lists the installed bots; picking one makes a group draft with the @ placeholder', () => {
   let s = R.toggleDraftPicker(R.startDraft(seed(NOW), { now: NOW }));
   const h = renderMessagesScreen(s, NOW);
   assert.match(h, /data-action="toggleDraftBot" data-id="politician" aria-pressed="false"/);
@@ -81,15 +81,15 @@ test('F7 picker: + 加个 bot lists the installed bots; picking one makes a grou
   assert.match(g, /data-action="toggleDraftBot" data-id="buffett" aria-pressed="true"/);
   assert.equal(count(g, /class="cluster-item"/g), 2, 'Gravit and Buffett bot');
   assert.match(g, /class="to-chip">[\s\S]*?Buffett bot</);
-  assert.match(g, /placeholder="Tell Gravit… 打 @ 点名一个 bot"/);
+  assert.match(g, /placeholder="Tell Gravit… @ a bot by name"/);
 });
 
 test('F6: no conversations → the empty state with three suggestion chips', () => {
   const s = { ...seed(NOW), conversations: [], route: { screen: 'messages', id: null } };
   const h = renderMessagesScreen(s, NOW);
-  assert.match(h, /class="empty-title">还没有交给 Gravit 的事</);
+  assert.match(h, /class="empty-title">Nothing handed to Gravit yet</);
   assert.equal(count(h, /data-action="suggest"/g), 3);
-  assert.match(h, /data-text="跟单 Pelosi"/);
+  assert.match(h, /data-text="Follow Pelosi"/);
   assert.match(h, /<form class="composer"/);
 });
 
@@ -100,7 +100,7 @@ test('F8: Details drawer sections and keys', () => {
   assert.match(h, /<aside class="drawer details" aria-label="Details">/);
   assert.match(h, /data-action="toggleDetails" aria-expanded="true"/);
   const d = renderDetails(s.conversations[0], s);
-  assert.match(d, /你委托于 Oct 9 · 到 Oct 15 · intent-0003/);
+  assert.match(d, /Delegated Oct 9 · until Oct 15 · intent-0003/);
   assert.match(d, /data-action="withdraw" data-conv="c-1"/);
   assert.match(d, /data-action="changeWords" data-conv="c-1"/);
   assert.match(d, /\$95/, 'what is left of the limit');
@@ -111,9 +111,9 @@ test('F8: Details drawer sections and keys', () => {
   assert.match(d, /class="seg-item pressed" aria-pressed="true" data-action="setMode" data-value="Guard"/);
   assert.match(d, /class="btn-danger" data-action="stopGravit" data-conv="c-1"/);
   const none = renderDetails({ ...s.conversations[2] }, s);
-  assert.match(none, /没附额度/);
-  const renamed = R.rename(s, { convId: 'c-1', title: '  BTC 小仓  ' });
-  assert.equal(renamed.conversations[0].title, 'BTC 小仓');
+  assert.match(none, /No limit attached/);
+  const renamed = R.rename(s, { convId: 'c-1', title: '  Small BTC  ' });
+  assert.equal(renamed.conversations[0].title, 'Small BTC');
   assert.equal(R.rename(s, { convId: 'c-1', title: '  ' }), s);
 });
 
@@ -121,11 +121,11 @@ test('banner, call, stub and the controls', () => {
   const s = seed(NOW);
   const b = renderBanner({ id: 'b', headline: 'H', body: 'B', at: NOW }, s);
   assert.match(b, /class="banner" role="status"/);
-  assert.match(b, />突发</);
+  assert.match(b, />Breaking</);
   assert.match(b, /14:07/);
   assert.match(b, /data-action="dismissBanner" aria-label="Dismiss"/);
   assert.match(b, /href="#\/messages\/c-1"/);
-  const c = renderCall({ from: 'gravit', about: '想说 BTC 的事' });
+  const c = renderCall({ from: 'gravit', about: 'About BTC' });
   assert.match(c, /class="call-scrim"/);
   assert.match(c, /class="key no big" data-action="answerCall" data-accept="0" aria-label="Decline"/);
   assert.match(c, /class="key yes big" data-action="answerCall" data-accept="1" aria-label="Accept"/);
@@ -134,6 +134,6 @@ test('banner, call, stub and the controls', () => {
   assert.equal(seg(['A', 'B'], 'B', 'pick'), '<div class="seg"><button type="button" class="seg-item" aria-pressed="false" data-action="pick" data-value="A">A</button><button type="button" class="seg-item pressed" aria-pressed="true" data-action="pick" data-value="B">B</button></div>');
   assert.match(segLinks([['Portfolio', '#/account/portfolio', 'portfolio'], ['Memory', '#/account/memory', 'memory']], 'memory'), /class="seg-item pressed" aria-current="page" href="#\/account\/memory"/);
   assert.equal(kv([['For', '<b>x</b>']]), '<div class="kv-list"><div class="kv"><span class="kv-k">For</span><span class="kv-v"><b>x</b></span></div></div>');
-  assert.equal(sec('怎么付', ['<免费>']), '<div class="dsec"><div class="dsec-label">怎么付</div><div class="dsec-line">&lt;免费&gt;</div></div>');
+  assert.equal(sec('How it is paid', ['<Free>']), '<div class="dsec"><div class="dsec-label">How it is paid</div><div class="dsec-line">&lt;Free&gt;</div></div>');
   assert.match(renderComposer({ placeholder: 'x', above: '<i>a</i>' }), /<form class="composer" data-action="send"><i>a<\/i>/);
 });

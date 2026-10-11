@@ -25,7 +25,7 @@ test('Portfolio: header with Guard|Beast, Trading on, Settings; the three tabs; 
   assert.match(h, /class="ticker" href="#\/markets\/BTC"/);
   assert.match(h, /class="up">\+1\.2%</);
   assert.match(h, /class="down">−0\.4%</);
-  assert.doesNotMatch(h, /同源嵌进来/);
+  assert.doesNotMatch(h, /embedded same-origin/);
 });
 
 test('Venues: four venues with their state chips and Connect an account', () => {
@@ -41,25 +41,25 @@ test('Memory: entries grouped with their source and two keys, the add box, where
   const h = renderAccount(s);
   assert.match(h, /class="seg-item pressed" aria-current="page" href="#\/account\/memory"/);
   const m = renderMemory(s);
-  assert.deepEqual([...m.matchAll(/class="mem-label">([^<]+)</g)].map(x => x[1]), ['风格', '规矩', '场所和人']);
+  assert.deepEqual([...m.matchAll(/class="mem-label">([^<]+)</g)].map(x => x[1]), ['Style', 'Rules', 'Venues and people']);
   assert.equal(count(m, /class="mem-entry"/g), 9);
-  assert.match(m, /class="mem-text">偏价值，不追热点<\/div><div class="mem-source">你说的 · Oct 2</);
+  assert.match(m, /class="mem-text">Prefers value, does not chase hype<\/div><div class="mem-source">You said · Oct 2</);
   assert.equal(count(m, /data-action="editMemory" data-id="mem-\d+"/g), 9);
   assert.equal(count(m, /data-action="forgetMemory" data-id="mem-\d+"/g), 9);
   assert.match(m, /<form class="mem-add" data-action="addMemory">/);
-  assert.match(m, /placeholder="加一条它该记住的…"/);
+  assert.match(m, /placeholder="Add something it should remember…"/);
   assert.match(m, /class="chip grey">Discover</);
   assert.match(m, /role="switch" aria-checked="true" data-action="memorySwitch" data-key="remember"/);
   assert.match(m, /role="switch" aria-checked="false" data-action="memorySwitch" data-key="askFirst"/);
   assert.match(m, /data-key="botsRead"/);
   assert.match(m, /data-action="exportMemory"/);
   assert.match(m, /class="btn-danger" data-action="forgetAll"/);
-  assert.doesNotMatch(m, /没有回收站/);
-  assert.doesNotMatch(m, /关了它就只用/);
+  assert.doesNotMatch(m, /no recycle bin/);
+  assert.doesNotMatch(m, /switch it off and/);
   const empty = renderMemory(R.forgetAll(s));
   assert.equal(count(empty, /class="mem-entry"/g), 0);
-  const added = renderMemory(R.addMemory(s, { text: '周五不开新仓', now: NOW }));
-  assert.match(added, /class="mem-label">你加的</);
+  const added = renderMemory(R.addMemory(s, { text: 'No new positions on Fridays', now: NOW }));
+  assert.match(added, /class="mem-label">Added by you</);
 });
 
 test('Settings drawer: theme seg and Reset demo', () => {

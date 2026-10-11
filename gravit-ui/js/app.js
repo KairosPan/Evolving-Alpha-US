@@ -44,7 +44,7 @@ const CLIENT_PUBLISH_MS = 1500;
 const FILL_MS = 900;
 const CLOCK_MS = 1000;
 // what the scripted mic hears, in turn
-const HEARD = ['小仓位买 BTC，$70k 以下', 'Pelosi 最近买了什么', '查一下这个地址是不是骗子', '额度改到每单 $50'];
+const HEARD = ['Buy a small BTC position under $70k', 'What did Pelosi buy lately', 'Is this address a scam', 'Raise the limit to $50 an order'];
 const usable = saved => !!saved && saved.v === SEED_VERSION && Array.isArray(saved.conversations);
 
 // a banner, a ringing call, an open drawer, a trash-key ask and a toast belong to their moment: a reload starts without them
@@ -129,7 +129,7 @@ export function watchToast(store, timers, ms = TOAST_MS) {
   });
 }
 
-const DIRECTOR = [['早报', 'brief'], ['技术分析', 'ta'], ['突发', 'breaking'], ['来电', 'call'], ['bot 插话', 'bot'], ['拒单', 'refusal'], ['收尾', 'done'], ['插件上传', 'upload'], ['空白开始', 'firstRun'], ['重置 demo', 'reset']];
+const DIRECTOR = [['Morning brief', 'brief'], ['Technicals', 'ta'], ['Breaking', 'breaking'], ['Call', 'call'], ['Bot chimes in', 'bot'], ['Refusal', 'refusal'], ['Done', 'done'], ['Plugin upload', 'upload'], ['First run', 'firstRun'], ['Reset demo', 'reset']];
 
 // a key that finds "the same control" after a re-render: its id, or every data-* attribute it carries
 function focusKey(el) {
@@ -211,7 +211,7 @@ export function boot(win) {
     }
     const say = doc.getElementById('say');
     if (say) say.value = composerText;
-    // the search box says what the store searches: Publish and 插件上传 clear it
+    // the search box says what the store searches: Publish and Plugin upload clear it
     const dq = doc.getElementById('dq');
     if (dq) dq.value = s.discover.query;
     // Markets' and Trade's boxes say what the store holds, so a fill clears the amount it used
@@ -379,7 +379,7 @@ export function boot(win) {
     timers.after(Math.max(0, p.review.until - now()), () => store.dispatch('reviewPassed', { id: p.id, now: now() }));
   }
 
-  // the director's 插件上传: Discover on its shelves, Create open, the scripted client started without the clipboard
+  // the director's Plugin upload: Discover on its shelves, Create open, the scripted client started without the clipboard
   function startUpload() {
     directorOpen = false;
     const c = store.get().discover.create;

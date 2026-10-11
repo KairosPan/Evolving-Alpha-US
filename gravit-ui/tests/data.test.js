@@ -15,7 +15,7 @@ test('the catalogue: unique ids, known kinds, every shelf id resolves, Serenity 
     assert.ok(p.teach.length > 0, p.id);
   }
   for (const s of SHELVES.filter(s => s.id !== 'like')) for (const id of s.ids) assert.ok(byId(id), id);
-  assert.equal(byId('serenity').blurb, '科技产业链分析');
+  assert.equal(byId('serenity').blurb, 'Tech supply-chain analysis');
   assert.equal(plugins.byline, undefined, 'no author or price line is made any more');
   assert.equal(byId('nope'), null);
   assert.equal(byId('p-1', [{ id: 'p-1', name: 'Mine' }]).name, 'Mine');
@@ -23,15 +23,15 @@ test('the catalogue: unique ids, known kinds, every shelf id resolves, Serenity 
 
 test('search matches name, blurb and kind, case-insensitively; blank query is empty', () => {
   assert.deepEqual(search('buffett').map(p => p.id), ['buffett']);
-  assert.ok(search('骗子').some(p => p.id === 'fraud'));
+  assert.ok(search('scam').some(p => p.id === 'fraud'));
   assert.ok(search('quant').length >= 3);
   assert.deepEqual(search('   '), []);
 });
 
 test('likeFor reads the style out of Memory', () => {
-  assert.deepEqual(likeFor({ entries: [{ text: '偏价值，不追热点' }] }), ['buffett', 'research', 'politician', 'quantteam']);
-  assert.equal(likeFor({ entries: [{ text: '我做高频' }] })[0], 'hft');
-  assert.equal(likeFor({ entries: [{ text: '想试试量化' }] })[0], 'quantteam');
+  assert.deepEqual(likeFor({ entries: [{ text: 'Prefers value, does not chase hype' }] }), ['buffett', 'research', 'politician', 'quantteam']);
+  assert.equal(likeFor({ entries: [{ text: 'I trade high frequency' }] })[0], 'hft');
+  assert.equal(likeFor({ entries: [{ text: 'want to try quant' }] })[0], 'quantteam');
   assert.equal(likeFor({ entries: [] })[0], 'buffett');
 });
 
@@ -52,7 +52,7 @@ test('seed: four conversations shaped as the boards, memory, account, counters',
   assert.equal(s.conversations.length, 4);
   const [btc, pelosi, addr, group] = s.conversations;
   assert.equal(btc.id, 'c-1');
-  assert.equal(btc.title, '小仓位 BTC，$70k 以下');
+  assert.equal(btc.title, 'Small BTC position under $70k');
   assert.equal(btc.intent.id, 'intent-0003');
   assert.deepEqual(btc.intent.limit, { perOrder: 25, total: 100, spent: 5, venue: 'Stand-in Exchange' });
   assert.equal(btc.messages[0].from, 'you');
@@ -72,7 +72,7 @@ test('seed: four conversations shaped as the boards, memory, account, counters',
   assert.equal(s.counters.msg, ids.length);
   assert.equal(s.counters.conv, 4);
   assert.equal(s.memory.entries.length, 9);
-  assert.deepEqual(s.memory.entries.map(e => e.group).filter((g, i, a) => a.indexOf(g) === i), ['风格', '规矩', '场所和人']);
+  assert.deepEqual(s.memory.entries.map(e => e.group).filter((g, i, a) => a.indexOf(g) === i), ['Style', 'Rules', 'Venues and people']);
   assert.deepEqual(s.plugins.installed, ['pricefeed', 'fraud', 'politician', 'buffett', 'pairs']);
   assert.deepEqual(s.plugins.mine, ['pairs']);
   assert.equal(s.account.netWorth, 12480);
@@ -90,12 +90,12 @@ test('Discover is itself an MCP server: its address, its seven tools, a line for
   assert.deepEqual(JSON.parse(SHOP_MCP.clients.Cursor.code), { mcpServers: { discover: { url: 'https://discover.stand-in/mcp' } } });
   assert.deepEqual(SHOP_MCP.clients.Codex, { file: '~/.codex/config.toml', code: '[mcp_servers.discover]\nurl = "https://discover.stand-in/mcp"' });
   for (const sh of SHELVES.filter(x => x.id !== 'like')) assert.ok(KINDS.includes(sh.kind), sh.id);
-  const m = { id: 'moat', name: 'Moat score', kind: 'Data', blurb: '护城河打分，按 ticker 问', icon: null, tools: ['moat.score', 'moat.compare'], writes: ['message'], needs: 'none', visibility: 'private' };
+  const m = { id: 'moat', name: 'Moat score', kind: 'Data', blurb: 'Moat scores, ask by ticker', icon: null, tools: ['moat.score', 'moat.compare'], writes: ['message'], needs: 'none', visibility: 'private' };
   const p = fromManifest(m, 'public', 1000);
-  assert.deepEqual([p.id, p.kind, p.by, p.visibility, p.logo, p.needs, p.writes, p.tools, p.review, p.at], ['moat', 'Data', '@you', 'public', { type: 'letter', text: 'M' }, '没有。', ['消息，发进会话'], ['moat.score', 'moat.compare'], null, 1000]);
-  assert.equal(p.teach, '你好，我是 Moat score。护城河打分，按 ticker 问。我有 2 个工具：moat.score、moat.compare。');
+  assert.deepEqual([p.id, p.kind, p.by, p.visibility, p.logo, p.needs, p.writes, p.tools, p.review, p.at], ['moat', 'Data', '@you', 'public', { type: 'letter', text: 'M' }, 'Nothing.', ['Messages, into the conversation'], ['moat.score', 'moat.compare'], null, 1000]);
+  assert.equal(p.teach, 'Hi, I’m Moat score. Moat scores, ask by ticker. I have 2 tools: moat.score, moat.compare.');
   assert.deepEqual(fromManifest({ ...m, icon: 'bell', needs: 'exchange key' }, 'private', 1000).logo, { type: 'glyph', icon: 'bell' });
-  assert.equal(fromManifest({ ...m, needs: 'exchange key' }, 'private', 1000).needs, '一把交易所 key。');
+  assert.equal(fromManifest({ ...m, needs: 'exchange key' }, 'private', 1000).needs, 'An exchange key.');
   assert.equal(plugins.ICON_CHOICES, undefined, 'the round-2 connector form is gone');
   assert.equal(plugins.hostOf, undefined);
   assert.equal(seed(1000).counters.mail, 3);

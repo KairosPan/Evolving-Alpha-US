@@ -11,11 +11,11 @@ const NOW = new Date(2026, 9, 9, 14, 7).getTime();
 const count = (h, re) => (h.match(re) ?? []).length;
 
 test('avatars: you, Gravit, a bot letter, a portrait slot, a glyph; logos are rounded squares', () => {
-  assert.match(avatar('you', 28), /class="av av-you"[^>]*>你</);
+  assert.match(avatar('you', 28), /class="av av-you"[^>]*>You</);
   assert.match(avatar('gravit', 36), /class="av av-g" style="width:36px;height:36px/);
   assert.match(avatar('politician', 28), /av-letter tone-blue[^>]*>P</);
   assert.match(avatar('buffett', 28), /av-portrait tone-warm/);
-  assert.match(avatar('buffett', 28), /aria-label="Buffett bot 的头像图"/);
+  assert.match(avatar('buffett', 28), /aria-label="Buffett bot’s portrait"/);
   assert.match(avatar('fraud', 28), /av-glyph/);
   assert.match(avatar('p-1', 28, { plugins: { uploaded: [{ id: 'p-1', name: 'Zed', logo: { type: 'letter', text: 'Z' } }] } }), />Z</);
   assert.match(avatar('ghost', 28), />G</, 'an unknown sender gets its first letter');
@@ -26,18 +26,18 @@ test('avatars: you, Gravit, a bot letter, a portrait slot, a glyph; logos are ro
 
 test('previewOf: the last message in words, with the sender in a group', () => {
   const s = seed(NOW);
-  assert.equal(previewOf(s.conversations[0]), 'Discover 里有个 News sentiment。装上我就能看情绪再加仓。');
-  assert.equal(previewOf(s.conversations[1]), '披露：Pelosi 买 NVDA。照它买 $20，在额度里，直接成交。');
-  assert.equal(previewOf(s.conversations[3]), 'Gravit：filled · NVDA $25 @ 187.40 · ord-0009 · 账本 #58');
+  assert.equal(previewOf(s.conversations[0]), 'There is a News sentiment plugin in Discover. With it I can read sentiment before adding.');
+  assert.equal(previewOf(s.conversations[1]), 'Disclosure: Pelosi bought NVDA. Bought $20 the same way, inside the limit, filled directly.');
+  assert.equal(previewOf(s.conversations[3]), 'Gravit: filled · NVDA $25 @ 187.40 · ord-0009 · ledger #58');
   assert.equal(previewOf({ kind: 'gravit', messages: [] }), '');
   const stopped = R.stopGravit(seed(NOW), { convId: 'c-4', now: NOW });
-  assert.equal(previewOf(stopped.conversations[3]), 'Gravit 停了，这件事不再动。', 'a system line in a group has no sender');
+  assert.equal(previewOf(stopped.conversations[3]), 'Gravit stopped. This task no longer moves.', 'a system line in a group has no sender');
 });
 
 test('the first level: brand and its collapse key, Messages · Discover · Markets · Trade, phone and mail, Account; Messages carries the unread count', () => {
   const h = renderRail(seed(NOW), NOW);
   assert.match(h, /<nav class="rail" aria-label="Gravit">/);
-  assert.match(h, /data-action="toggleRail" aria-expanded="true" aria-label="收起导航"/);
+  assert.match(h, /data-action="toggleRail" aria-expanded="true" aria-label="Collapse navigation"/);
   assert.match(h, /class="nav-item current" aria-current="page" href="#\/messages\/c-1"[^>]*>[\s\S]*?<span class="nav-label">Messages<\/span><span class="nav-badge">1<\/span>/);
   assert.match(h, /href="#\/discover"[^>]*>[\s\S]*?<span class="nav-label">Discover</);
   assert.match(h, /href="#\/markets"/);
@@ -57,7 +57,7 @@ test('the second level opens with Messages: its title, the new-message key, the 
   assert.equal(count(h, /class="row current" aria-current="page" href="#\/messages\/c-1"/g), 1);
   assert.equal(count(h, /class="dot on"/g), 1, 'one unread conversation');
   assert.match(h, /row-time">14:07</);
-  assert.match(h, /row-time">昨天</);
+  assert.match(h, /row-time">Yesterday</);
   assert.match(h, /<div class="rail-rows"><a class="row/, 'the rows scroll on their own');
   const d = renderRail(R.startDraft(seed(NOW), { now: NOW }), NOW);
   assert.match(d, /class="row current draft"/);
@@ -77,7 +77,7 @@ test('off Messages there is no second level; the first level marks its screen; M
 test('collapsed, the first level is a strip of icons: names stay for screen readers and as titles, the second level stays', () => {
   const c = renderRail(R.toggleRail(seed(NOW)), NOW);
   assert.match(c, /<nav class="rail mini" aria-label="Gravit">/);
-  assert.match(c, /data-action="toggleRail" aria-expanded="false" aria-label="展开导航"/);
+  assert.match(c, /data-action="toggleRail" aria-expanded="false" aria-label="Expand navigation"/);
   assert.match(c, /class="nav-item current"[^>]*title="Messages"/);
   assert.match(c, /<span class="nav-label">Discover<\/span>/);
   assert.match(c, /class="list"/);
@@ -92,7 +92,7 @@ test('on Mail the mail key is current, Messages is not, and the second level lis
   assert.doesNotMatch(h, /data-action="startDraft"/, 'no new-message key in the mailbox');
   assert.equal(count(h, /<a id="mr-mail-\d" class="row(?: unread)?" href="#\/mail\/mail-\d"/g), 3);
   assert.equal(count(h, /class="row unread"/g), 2);
-  assert.match(h, /href="#\/mail\/mail-1"><span class="dot on"><\/span>[\s\S]*?<span class="row-title">Stand-in Broker<\/span><span class="row-time">12:07<\/span><\/span><span class="row-preview">10 月对账单<\/span>/);
+  assert.match(h, /href="#\/mail\/mail-1"><span class="dot on"><\/span>[\s\S]*?<span class="row-title">Stand-in Broker<\/span><span class="row-time">12:07<\/span><\/span><span class="row-preview">October statement<\/span>/);
   const reading = renderRail(R.nav(seed(NOW), { screen: 'mail', id: 'mail-2' }), NOW);
   assert.match(reading, /<a id="mr-mail-2" class="row current" href="#\/mail\/mail-2" aria-current="page"><span class="dot"><\/span>/, 'the open letter is current and read');
   assert.match(reading, /<span class="nav-badge">1<\/span><\/a>/, 'one letter left unread');

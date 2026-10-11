@@ -31,7 +31,7 @@ export function renderMailList(state, now) {
 // the main column on Mail: the open letter, or nothing picked yet
 export function renderMailScreen(state, now) {
   const m = openLetter(state);
-  if (!m) return `<main class="main mail"><div class="mail-none">${icon('mail', 40, 1.8)}<span class="dim">没选中邮件</span></div></main>`;
+  if (!m) return `<main class="main mail"><div class="mail-none">${icon('mail', 40, 1.8)}<span class="dim">No mail selected</span></div></main>`;
   const files = (m.files ?? []).map(n => `<span class="file-chip">${icon('file', 13, 2)}${esc(n)}</span>`).join('');
   return `<main class="main mail has-letter"><header class="head"><h1 class="head-title">${esc(m.subject)}</h1></header>` +
     `<article class="mail-letter"><div class="mail-meta dim">${esc(m.from)} · ${dayLabel(m.at, now)} ${fmtClock(m.at)}</div>` +

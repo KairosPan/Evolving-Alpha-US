@@ -129,7 +129,7 @@ test('the KO drawer: Gravit\'s order on the book can be cancelled, and asks firs
   assert.match(h, /<div class="mk-t1">Buy 0\.4295 KO · limit 58\.2<\/div><div class="mk-t2">Stand-in Broker · Gravit · 0 of 0\.4295 filled<\/div><\/div><button type="button" class="btn-sm" data-action="cancelOrder" data-id="ord-0008">Cancel<\/button>/);
   const asking = renderMarkets(R.askConfirm(s, { action: 'cancelOrder', id: 'ord-0008' }), NOW);
   assert.match(asking, /class="confirm"/);
-  assert.match(asking, /确认撤单/);
+  assert.match(asking, /Yes, cancel the order/);
   assert.match(h, /href="#\/messages\/c-4"/);
 });
 
@@ -170,7 +170,7 @@ test('the search count is what the tab shows', () => {
   assert.ok(rows(all).length > shown, 'the test means something: other tabs match too');
 });
 
-test('Gravit asks in the drawer without repeating 要你答', () => {
-  const s = R.append(R.nav(seed(NOW), { screen: 'markets', id: 'BTC' }), { convId: 'c-1', msg: { from: 'gravit', kind: 'card', text: '要你答：加 $25', data: { title: '要你答：加 $25', rows: [] } }, at: NOW });
-  assert.match(renderMarkets(s, NOW), /<div class="mk-t1">Gravit asks: 加 \$25<\/div>/);
+test('Gravit asks in the drawer without repeating Your call', () => {
+  const s = R.append(R.nav(seed(NOW), { screen: 'markets', id: 'BTC' }), { convId: 'c-1', msg: { from: 'gravit', kind: 'card', text: 'Your call: add $25', data: { title: 'Your call: add $25', rows: [] } }, at: NOW });
+  assert.match(renderMarkets(s, NOW), /<div class="mk-t1">Gravit asks: add \$25<\/div>/);
 });

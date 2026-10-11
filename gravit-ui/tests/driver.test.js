@@ -8,25 +8,25 @@ const NOW = new Date(2026, 9, 9, 14, 7).getTime();
 const ctx = { installed: ['pricefeed', 'fraud'], now: NOW };
 
 test('replyTo scripts by what the owner said', () => {
-  const btc = replyTo('小仓位买 BTC，$70k 以下', ctx);
+  const btc = replyTo('Buy a small BTC position under $70k', ctx);
   assert.equal(btc.length, 2);
   assert.equal(btc[0].msg.kind, 'text');
   assert.equal(btc[1].msg.kind, 'card');
   assert.equal(btc[1].msg.data.by, NOW + 26 * 60_000);
   assert.ok(btc[1].delay > btc[0].delay);
-  const askInstall = replyTo('跟单 Pelosi', ctx);
+  const askInstall = replyTo('Follow Pelosi', ctx);
   assert.equal(askInstall[0].msg.kind, 'install');
   assert.equal(askInstall[0].msg.data.plugin, 'politician');
-  const withBot = replyTo('跟单 Pelosi', { ...ctx, installed: ['politician'] });
+  const withBot = replyTo('Follow Pelosi', { ...ctx, installed: ['politician'] });
   assert.equal(withBot.at(-1).msg.from, 'politician');
   assert.equal(withBot.at(-1).msg.kind, 'proposal');
-  const addr = replyTo('查 0x9f3a1234 是不是骗子', ctx);
+  const addr = replyTo('Is 0x9f3a1234 a scam', ctx);
   assert.equal(addr[1].msg.from, 'fraud');
   assert.equal(addr[1].msg.kind, 'signal');
   assert.equal(addr[2].msg.kind, 'alert');
-  const limit = replyTo('额度不够', ctx);
+  const limit = replyTo('The limit is not enough', ctx);
   assert.equal(limit[0].msg.kind, 'limit');
-  const other = replyTo('今天天气', ctx);
+  const other = replyTo('How is the weather today', ctx);
   assert.equal(other.length, 2);
   assert.ok(other.every(e => e.msg.from === 'gravit' && e.msg.kind === 'text'));
   for (const e of [...btc, ...askInstall, ...addr, ...other]) {
@@ -37,7 +37,7 @@ test('replyTo scripts by what the owner said', () => {
 });
 
 test('followUp continues the scripted story and never answers twice', () => {
-  const card = message('gravit', 'card', '要你答', { title: 'x' });
+  const card = message('gravit', 'card', 'Your call', { title: 'x' });
   const ok = followUp(card, 'approved', ctx);
   assert.equal(ok[0].msg.kind, 'receipt');
   assert.equal(ok[1].msg.kind, 'limit');
@@ -75,18 +75,18 @@ test('the director hands out the brief, a K-line card, a breaking banner, a call
 test('the coin words match whole words only', () => {
   assert.ok(replyTo('can you do something about NVDA', ctx).every(e => e.msg.kind === 'text'));
   assert.ok(replyTo('the method matters', ctx).every(e => e.msg.kind === 'text'));
-  assert.equal(replyTo('买btc', ctx).at(-1).msg.kind, 'card');
-  assert.equal(replyTo('再看看 eth', ctx).at(-1).msg.kind, 'card');
-  assert.equal(replyTo('买一点 SOL', ctx).at(-1).msg.kind, 'card');
+  assert.equal(replyTo('buy btc', ctx).at(-1).msg.kind, 'card');
+  assert.equal(replyTo('look at eth again', ctx).at(-1).msg.kind, 'card');
+  assert.equal(replyTo('buy a little SOL', ctx).at(-1).msg.kind, 'card');
 });
 
 test('the card and the receipt name the coin that was asked for', () => {
-  const sol = replyTo('小仓位买 SOL，别超过 $30 一次', ctx).at(-1).msg;
+  const sol = replyTo('Buy a small SOL position, no more than $30 at a time', ctx).at(-1).msg;
   assert.equal(sol.data.coin, 'SOL');
-  assert.equal(sol.text, '要你答：买 0.034 SOL');
+  assert.equal(sol.text, 'Your call: buy 0.034 SOL');
   assert.match(followUp(sol, 'approved', ctx)[0].msg.text, /^0\.034 SOL @ 147 · /);
-  const eth = replyTo('再看看 eth', ctx).at(-1).msg;
-  assert.equal(eth.data.title, '要你答：买 0.0019 ETH');
+  const eth = replyTo('look at eth again', ctx).at(-1).msg;
+  assert.equal(eth.data.title, 'Your call: buy 0.0019 ETH');
   assert.match(followUp(message('gravit', 'card', 'x', {}), 'approved', ctx)[0].msg.text, /^0\.00008 BTC @ 62,500/, 'a card without a coin is the seed BTC card');
 });
 
@@ -96,29 +96,29 @@ test('limit asks read the conversation\'s real limit, and a fill carries its amo
   assert.equal(after50.length, 1, 'a $50 cap already covers the $30 add: no ask');
   assert.equal(after50[0].msg.data.amount, 5);
   const ask = followUp(card, 'approved', { ...ctx, limit: { perOrder: 20, total: 100, spent: 0 } })[1].msg;
-  assert.match(ask.text, /每单上限是 \$20。改到 \$40？/);
+  assert.match(ask.text, /your limit is \$20 an order\. Raise it to \$40\?/);
   assert.deepEqual([ask.data.from, ask.data.to], [20, 40]);
-  const more = replyTo('额度不够', { ...ctx, limit: { perOrder: 30, total: 100, spent: 0 } })[0].msg;
+  const more = replyTo('The limit is not enough', { ...ctx, limit: { perOrder: 30, total: 100, spent: 0 } })[0].msg;
   assert.deepEqual([more.data.from, more.data.to], [30, 60]);
 });
 
 test('in a group the @named bot answers, and only Gravit proposes', () => {
   const group = { kind: 'group', members: ['gravit', 'politician', 'buffett'] };
-  const named = replyTo('@Buffett 你怎么看 KO', { ...ctx, conv: group });
+  const named = replyTo('@Buffett what do you think of KO', { ...ctx, conv: group });
   assert.equal(named.length, 1);
   assert.equal(named[0].msg.from, 'buffett');
   assert.equal(named[0].msg.kind, 'text');
-  const byShortName = replyTo('@政客 你最近怎么看', { ...ctx, conv: group });
-  assert.deepEqual(byShortName.map(e => [e.msg.from, e.msg.kind]), [['politician', 'text']], 'the short name 政客 is a mention, not the Pelosi branch');
-  const pelosi = replyTo('跟一下 Pelosi', { ...ctx, installed: ['politician', 'buffett'], conv: group });
+  const byShortName = replyTo('@politician what do you make of it lately', { ...ctx, conv: group });
+  assert.deepEqual(byShortName.map(e => [e.msg.from, e.msg.kind]), [['politician', 'text']], 'the short name politician is a mention, not the Pelosi branch');
+  const pelosi = replyTo('Follow Pelosi for a bit', { ...ctx, installed: ['politician', 'buffett'], conv: group });
   assert.deepEqual(pelosi.map(e => [e.msg.from, e.msg.kind]), [['politician', 'text'], ['gravit', 'card']]);
 });
 
 test('a teaching conversation is answered by the plugin it teaches', () => {
-  const r = replyTo('两年', { ...ctx, conv: { kind: 'bot', members: ['gravit', 'buffett'], teach: 'buffett' } });
+  const r = replyTo('two years', { ...ctx, conv: { kind: 'bot', members: ['gravit', 'buffett'], teach: 'buffett' } });
   assert.equal(r.length, 1);
   assert.equal(r[0].msg.from, 'buffett');
-  assert.match(r[0].msg.text, /两年/);
+  assert.match(r[0].msg.text, /two years/);
   assert.equal(replyTo('ok', { ...ctx, conv: { kind: 'bot', members: ['gravit', 'whale'], teach: 'whale' } })[0].msg.from, 'whale');
 });
 
@@ -131,26 +131,26 @@ test('the director can show the door\'s refusal and the close', () => {
   assert.ok(done.data.foot);
 });
 
-test('the scripted client uploads in turn: Moat score (private), CPI 速读 (public), then the same again with a number', async () => {
+test('the scripted client uploads in turn: Moat score (private), CPI quick read (public), then the same again with a number', async () => {
   const drv = await import('../js/driver.js');
   assert.equal(drv.toolsFor, undefined, 'the round-2 connector script is gone');
-  assert.deepEqual(drv.nextUpload([]), { id: 'moat', name: 'Moat score', kind: 'Data', blurb: '护城河打分，按 ticker 问', icon: null, tools: ['moat.score', 'moat.compare'], writes: ['message'], needs: 'none', visibility: 'private' });
+  assert.deepEqual(drv.nextUpload([]), { id: 'moat', name: 'Moat score', kind: 'Data', blurb: 'Moat scores, ask by ticker', icon: null, tools: ['moat.score', 'moat.compare'], writes: ['message'], needs: 'none', visibility: 'private' });
   const second = drv.nextUpload([{ id: 'moat' }]);
-  assert.deepEqual([second.id, second.name, second.visibility, second.icon], ['cpi', 'CPI 速读', 'public', 'bell']);
+  assert.deepEqual([second.id, second.name, second.visibility, second.icon], ['cpi', 'CPI quick read', 'public', 'bell']);
   const third = drv.nextUpload([{ id: 'moat' }, { id: 'cpi' }]);
   assert.deepEqual([third.id, third.name], ['moat-2', 'Moat score 2']);
   assert.equal(drv.nextUpload([{ id: 'moat' }]).visibility, 'public');
   const say = t => replyTo('KO', { installed: [], now: NOW, conv: { kind: 'bot', members: ['gravit', t], teach: t } })[0].msg.text;
-  assert.equal(say('moat'), '「KO」：护城河 8/10 · 品牌、渠道、定价权。');
-  assert.equal(say('moat-2'), '「KO」：护城河 8/10 · 品牌、渠道、定价权。', 'a numbered upload answers like its first');
-  assert.equal(say('cpi'), '记下了。下一次 CPI 一出来，我在这里三句话讲清。');
+  assert.equal(say('moat'), '“KO”: moat 8/10 · brand, distribution, pricing power.');
+  assert.equal(say('moat-2'), '“KO”: moat 8/10 · brand, distribution, pricing power.', 'a numbered upload answers like its first');
+  assert.equal(say('cpi'), 'Noted. The next CPI print, I explain it here in three lines.');
 });
 
 test('files sent without a task get Gravit reading them', () => {
   const r = replyTo('', { ...ctx, files: ['q3.pdf'] });
   assert.equal(r.length, 2);
   assert.match(r[0].msg.text, /q3.pdf/);
-  assert.equal(replyTo('买 BTC', { ...ctx, files: ['q3.pdf'] }).at(-1).msg.kind, 'card', 'words with a task still lead');
+  assert.equal(replyTo('buy BTC', { ...ctx, files: ['q3.pdf'] }).at(-1).msg.kind, 'card', 'words with a task still lead');
 });
 
 test('a grant asks for News sentiment only when it is not installed', () => {
@@ -161,10 +161,10 @@ test('a grant asks for News sentiment only when it is not installed', () => {
 });
 
 test('fills carry order, ledger and card placeholders for the store to number', () => {
-  const card = replyTo('小仓位买 BTC', ctx).at(-1).msg;
+  const card = replyTo('Buy a little BTC', ctx).at(-1).msg;
   assert.equal(card.data.cardId, '{card}');
   const receipt = followUp(message('gravit', 'card', 'x', {}), 'approved', ctx)[0].msg;
-  assert.match(receipt.text, /\{ord\} · 账本 \{ledger\}/);
-  const prop = replyTo('跟单 Pelosi', { ...ctx, installed: ['politician'] }).at(-1).msg;
+  assert.match(receipt.text, /\{ord\} · ledger \{ledger\}/);
+  const prop = replyTo('Follow Pelosi', { ...ctx, installed: ['politician'] }).at(-1).msg;
   assert.equal(prop.data.ord, '{ord}');
 });

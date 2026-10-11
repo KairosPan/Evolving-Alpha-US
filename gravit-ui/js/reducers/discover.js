@@ -47,22 +47,22 @@ export const reducers = {
     if (!c || c.step !== 'sign') return state;
     const p = { ...fromManifest(c.manifest, c.visibility, now), review: c.visibility === 'public' ? { until: now + REVIEW_MS } : null };
     let s = disc({ ...state, plugins: { ...state.plugins, uploaded: [...state.plugins.uploaded, p], mine: [...state.plugins.mine, p.id] } }, { create: null, query: '', installedOnly: false });
-    if (p.review) return disc(s, { toast: { text: `${p.name} 已上传 · 审核中`, action: null } });
+    if (p.review) return disc(s, { toast: { text: `${p.name} uploaded · In review`, action: null } });
     s = reducers.install(s, { id: p.id, now });
-    return disc(s, { toast: { text: `${p.name} 已上传 · Private`, action: { label: 'Open', route: { screen: 'messages', id: s.conversations[0].id } } } });
+    return disc(s, { toast: { text: `${p.name} uploaded · Private`, action: { label: 'Open', route: { screen: 'messages', id: s.conversations[0].id } } } });
   },
   // the review passed: the shop lists it, and Discover writes to Gravit's mailbox
   reviewPassed(state, { id, now }) {
     const p = state.plugins.uploaded.find(x => x.id === id);
     if (!p?.review) return state;
     const { id: mailId, counters } = nextId(state.counters, 'mail');
-    const letter = { id: mailId, from: 'Discover', subject: `${p.name} 过审了`, at: now, read: false, body: `已上架 ${p.kind} · Public。sandbox 跑过；不会动钱、付人、改额度。` };
+    const letter = { id: mailId, from: 'Discover', subject: `${p.name} passed review`, at: now, read: false, body: `Listed under ${p.kind} · Public. Ran in the sandbox; never moves money, pays anyone or changes limits.` };
     const s = {
       ...state, counters, mail: { ...state.mail, items: [letter, ...state.mail.items] },
       plugins: { ...state.plugins, uploaded: state.plugins.uploaded.map(x => (x.id === id ? { ...x, review: null } : x)) },
     };
     // a toast only where it can be seen; elsewhere the letter carries the news
-    return s.route.screen === 'discover' ? disc(s, { toast: { text: `${p.name} 过审了 · Public`, action: { label: 'Open', plugin: id } } }) : s;
+    return s.route.screen === 'discover' ? disc(s, { toast: { text: `${p.name} passed review · Public`, action: { label: 'Open', plugin: id } } }) : s;
   },
 
   install(state, { id, now }) {
@@ -74,20 +74,20 @@ export const reducers = {
     // the plugin opens a conversation that teaches its use (spec §7.5)
     const st = stampMessage(s, { from: id, kind: 'text', text: p.teach, data: {} }, now);
     const conv = {
-      id: c1.id, title: `${p.name}：怎么用我`, kind: 'bot', members: ['gravit', id], unread: true, status: 'working', teach: id,
+      id: c1.id, title: `${p.name}: how to use me`, kind: 'bot', members: ['gravit', id], unread: true, status: 'working', teach: id,
       intent: { id: c2.id, created: now, until: now + 6 * DAY, limit: null }, plugins: [id], messages: [st.msg],
     };
     s = { ...st.state, conversations: [conv, ...st.state.conversations] };
     // every conversation that was waiting on this install gets its answer and a word from Gravit
     for (const c of s.conversations) {
       if (!c.messages.some(m => m.kind === 'install' && m.data?.plugin === id && !m.answer)) continue;
-      const said = stampMessage(s, { from: 'gravit', kind: 'text', text: `${p.name} 装好了，我接着看。`, data: {} }, now);
+      const said = stampMessage(s, { from: 'gravit', kind: 'text', text: `${p.name} installed. Carrying on.`, data: {} }, now);
       s = { ...said.state, conversations: said.state.conversations.map(x => (x.id !== c.id ? x : {
         ...x, plugins: x.plugins.includes(id) ? x.plugins : [...x.plugins, id],
         messages: [...x.messages.map(m => (m.kind === 'install' && m.data?.plugin === id && !m.answer ? { ...m, answer: 'installed' } : m)), said.msg],
       })) };
     }
-    return disc(s, { drawer: null, toast: { text: `${p.name} 装好了 · Gravit 开了一个会话教你用`, action: { label: 'Open', route: { screen: 'messages', id: conv.id } } } });
+    return disc(s, { drawer: null, toast: { text: `${p.name} installed · Gravit opened a conversation to show you how`, action: { label: 'Open', route: { screen: 'messages', id: conv.id } } } });
   },
 
   uninstall(s, id) {

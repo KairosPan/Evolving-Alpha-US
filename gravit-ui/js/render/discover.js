@@ -8,9 +8,9 @@ import { kv, sec } from './controls.js';
 // not installed: the + key; installed: a ✓ beside the trash key, in every view; your public upload while it is reviewed: a clock
 export function keyFor(p, state) {
   const installed = state.plugins.installed.includes(p.id);
-  if (!installed && p.review) return `<span class="pkey-wait" role="img" aria-label="审核中">${icon('clock', 15, 2.1)}</span>`;
+  if (!installed && p.review) return `<span class="pkey-wait" role="img" aria-label="In review">${icon('clock', 15, 2.1)}</span>`;
   if (!installed) return `<button type="button"${attrs({ class: 'pkey install', 'data-action': 'install', 'data-id': p.id, 'aria-label': `Install ${p.name}` })}>${icon('plus', 14, 2.4)}</button>`;
-  return `<span class="pkeys"><span class="pkey-done" role="img" aria-label="已安装">${icon('check', 14, 2.4)}</span>` +
+  return `<span class="pkeys"><span class="pkey-done" role="img" aria-label="Installed">${icon('check', 14, 2.4)}</span>` +
     `<button type="button"${attrs({ class: 'pkey uninstall', 'data-action': 'uninstall', 'data-id': p.id, 'aria-label': `Uninstall ${p.name}` })}>${icon('trash', 15, 2.1)}</button></span>`;
 }
 
@@ -69,18 +69,18 @@ export function pluginDrawer(p, state) {
   const installed = state.plugins.installed.includes(p.id);
   // your own plugin says where it stands; a catalogue plugin, how many installed it
   const meta = state.plugins.mine.includes(p.id)
-    ? `${p.kind} · ${p.review ? '审核中' : p.visibility === 'private' ? 'Private' : 'Public'}`
-    : [p.kind, p.installs ? `${p.installs} 装了` : null].filter(Boolean).join(' · ');
-  const writes = [...p.writes.map(esc), ...(p.never.length ? [`<span class="dim">不会：${esc(p.never.join('、'))}</span>`] : [])];
-  const tools = Array.isArray(p.tools) && p.tools.length ? sec('工具', p.tools.map(t => `<span class="mono">${esc(t)}</span>`), true) : '';
+    ? `${p.kind} · ${p.review ? 'In review' : p.visibility === 'private' ? 'Private' : 'Public'}`
+    : [p.kind, p.installs ? `${p.installs} installs` : null].filter(Boolean).join(' · ');
+  const writes = [...p.writes.map(esc), ...(p.never.length ? [`<span class="dim">Never: ${esc(p.never.join(', '))}</span>`] : [])];
+  const tools = Array.isArray(p.tools) && p.tools.length ? sec('Tools', p.tools.map(t => `<span class="mono">${esc(t)}</span>`), true) : '';
   // while it is reviewed there is nothing to sign yet
   const pending = p.review && !installed;
-  const foot = pending ? '<button type="button" class="btn-primary" disabled>审核中</button>'
+  const foot = pending ? '<button type="button" class="btn-primary" disabled>In review</button>'
     : installed ? `<button type="button" class="btn-primary" data-action="uninstall" data-id="${esc(p.id)}">Uninstall</button>` : `<button type="button" class="btn-primary" data-action="install" data-id="${esc(p.id)}">Install</button>`;
   return `<aside class="drawer"${attrs({ 'aria-label': p.name })}><div class="drawer-head"><h2>${esc(p.name)}</h2><button type="button" class="close-key" data-action="closeDrawer" aria-label="Close">×</button></div><div class="drawer-body">` +
-    `<div class="plug-id">${logo(p, 56)}<div><div class="plug-name">${esc(p.name)}</div><div class="dim">${esc(meta)}</div></div></div><p class="plug-blurb">${esc(p.blurb)}。</p>` +
-    (p.asks.length ? sec('它能被问什么', p.asks) : '') + (writes.length ? sec('它会写什么', writes, true) : '') + tools + sec('要你什么', [p.needs]) +
-    (pending ? '' : `<div class="dsec"><div class="dsec-label">你签的是</div>${kv(signRows(p, installed, state))}</div>`) +
+    `<div class="plug-id">${logo(p, 56)}<div><div class="plug-name">${esc(p.name)}</div><div class="dim">${esc(meta)}</div></div></div><p class="plug-blurb">${esc(p.blurb)}.</p>` +
+    (p.asks.length ? sec('What you can ask it', p.asks) : '') + (writes.length ? sec('What it writes', writes, true) : '') + tools + sec('What it needs from you', [p.needs]) +
+    (pending ? '' : `<div class="dsec"><div class="dsec-label">What you sign</div>${kv(signRows(p, installed, state))}</div>`) +
     `<div class="drawer-foot">${foot}</div></div></aside>`;
 }
 
@@ -101,15 +101,15 @@ export function renderCreate(state) {
   const c = state.discover.create;
   if (!c) return '';
   const head = '<div class="modal-head"><h2 class="modal-title">Discover MCP</h2><button type="button" class="close-key" data-action="closeCreate" aria-label="Close">×</button></div>';
-  const face = field('地址', `<span class="mono">${esc(SHOP_MCP.url)}</span>`) + field('工具', `<div class="tool-chips">${SHOP_MCP.tools.map(t => `<span class="chip grey mono">${esc(t)}</span>`).join('')}</div>`);
-  const status = c.step === 'wait' ? '<span class="status grey"><span class="status-dot"></span>等待连接</span>' : `<span class="status up"><span class="status-dot"></span>${esc(c.client)} 已连接</span>`;
+  const face = field('Address', `<span class="mono">${esc(SHOP_MCP.url)}</span>`) + field('Tools', `<div class="tool-chips">${SHOP_MCP.tools.map(t => `<span class="chip grey mono">${esc(t)}</span>`).join('')}</div>`);
+  const status = c.step === 'wait' ? '<span class="status grey"><span class="status-dot"></span>Waiting for a connection</span>' : `<span class="status up"><span class="status-dot"></span>${esc(c.client)} connected</span>`;
   const publishCall = c.manifest ? `shop.publish(${c.manifest.id}, ${c.visibility})` : '';
   let body;
   if (c.step === 'wait') {
     const line = SHOP_MCP.clients[c.client];
-    body = face + field('客户端', `<div class="radio-seg">${Object.keys(SHOP_MCP.clients).map(n => radio('client', 'mcpClient', n, n === c.client)).join('')}</div>`) +
+    body = face + field('Client', `<div class="radio-seg">${Object.keys(SHOP_MCP.clients).map(n => radio('client', 'mcpClient', n, n === c.client)).join('')}</div>`) +
       `<div class="snippet">${line.file ? `<div class="snippet-file mono">${esc(line.file)}</div>` : ''}<pre class="snippet-code mono">${esc(line.code)}</pre>` +
-      `<button type="button" id="mcp-copy" class="btn-sm" data-action="copyMcp">${c.copied ? '已复制' : '复制'}</button></div>` + status;
+      `<button type="button" id="mcp-copy" class="btn-sm" data-action="copyMcp">${c.copied ? 'Copied' : 'Copy'}</button></div>` + status;
   } else if (c.step === 'connected') {
     body = face + status + `<div class="tool-list">${callRow('shop.mine()', 'ok')}</div>`;
   } else if (c.step === 'refused') {
@@ -118,10 +118,10 @@ export function renderCreate(state) {
     const p = fromManifest(c.manifest, c.visibility, 0);
     body = status + `<div class="tool-list">${callRow('shop.mine()', 'ok')}${callRow(publishCall, 'wait')}</div>` +
       `<div class="manifest"><div class="manifest-top">${logo(p, 44)}<div class="manifest-body"><div class="pcard-name">${esc(p.name)}</div><div class="pcard-blurb">${esc(p.blurb)}</div></div><span class="pcard-kind">${esc(p.kind.toUpperCase())}</span></div>` +
-      kv([['工具', `<span class="mono">${p.tools.map(esc).join(' · ')}</span>`], ['要你什么', esc(p.needs)]]) + '</div>' +
-      field('放哪', `<div class="radio-seg">${radio('visibility', 'uploadVisibility', 'private', c.visibility === 'private', '只给我自己 · Private')}${radio('visibility', 'uploadVisibility', 'public', c.visibility === 'public', '放进 Public shop')}</div>`) +
-      `<div class="dsec"><div class="dsec-label">你签的是</div>${kv(publishRows(c.manifest, c.visibility, state))}</div>` +
-      '<div class="btn-row grow"><button type="button" class="btn" data-action="rejectUpload">拒绝</button><button type="button" class="btn-primary" data-action="publishUpload">Publish</button></div>';
+      kv([['Tools', `<span class="mono">${p.tools.map(esc).join(' · ')}</span>`], ['What it needs from you', esc(p.needs)]]) + '</div>' +
+      field('Where', `<div class="radio-seg">${radio('visibility', 'uploadVisibility', 'private', c.visibility === 'private', 'Just me · Private')}${radio('visibility', 'uploadVisibility', 'public', c.visibility === 'public', 'Public shop')}</div>`) +
+      `<div class="dsec"><div class="dsec-label">What you sign</div>${kv(publishRows(c.manifest, c.visibility, state))}</div>` +
+      '<div class="btn-row grow"><button type="button" class="btn" data-action="rejectUpload">Refuse</button><button type="button" class="btn-primary" data-action="publishUpload">Publish</button></div>';
   }
   return `<div class="modal-scrim"><div class="modal wide" role="dialog" aria-label="Discover MCP">${head}<div class="modal-body">${body}</div></div></div>`;
 }
@@ -141,11 +141,11 @@ export function renderDiscover(state) {
   let body;
   if (d.query.trim()) {
     const found = search(d.query, state.plugins.uploaded);
-    body = grid(`${found.length} 个`, found, state);
+    body = grid(`${found.length} result${found.length === 1 ? '' : 's'}`, found, state);
   } else if (d.installedOnly) {
     const mine = all.filter(p => state.plugins.mine.includes(p.id));
     const installed = all.filter(p => state.plugins.installed.includes(p.id) && !state.plugins.mine.includes(p.id));
-    body = grid('装了的', installed, state) + (mine.length ? grid('你创建的', mine, state) : '');
+    body = grid('Installed', installed, state) + (mine.length ? grid('Yours', mine, state) : '');
   } else if (state.route.id) {
     const s = SHELVES.find(x => x.id === state.route.id);
     body = grid(s?.title ?? 'Discover', (s ? shelfIds(s, state) : []).map(id => byId(id, state.plugins.uploaded)).filter(Boolean), state, true);

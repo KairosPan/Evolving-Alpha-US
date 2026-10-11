@@ -12,7 +12,7 @@ export const reducers = {
     const t = (text ?? '').trim();
     if (!t) return s;
     const { id, counters } = nextId(s.counters, 'mem');
-    return { ...mem(s, { entries: [...s.memory.entries, { id, group: '你加的', text: t, source: '你说的', at: now }] }), counters };
+    return { ...mem(s, { entries: [...s.memory.entries, { id, group: 'Added by you', text: t, source: 'You said', at: now }] }), counters };
   },
   editMemory: (s, { id, text }) => mem(s, { entries: s.memory.entries.map(e => (e.id === id ? { ...e, text: (text ?? '').trim() || e.text } : e)) }),
   forgetMemory: (s, id) => mem(s, { entries: s.memory.entries.filter(e => e.id !== id) }),

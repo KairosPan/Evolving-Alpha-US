@@ -20,11 +20,11 @@ export function renderComposer({ placeholder = 'Tell Gravit…', above = '', com
   const files = compose?.files ?? [];
   const listening = !!compose?.listening;
   // the tray of picked files over the pill; the + opens the hidden file input (app.js: pickFile)
-  const tray = files.length ? `<div class="files">${files.map((f, i) => `<span class="file-chip">${icon('file', 13, 2)}${esc(f.name)}<button type="button" class="file-x" data-action="removeFile" data-id="${i}" aria-label="移除 ${esc(f.name)}">×</button></span>`).join('')}</div>` : '';
+  const tray = files.length ? `<div class="files">${files.map((f, i) => `<span class="file-chip">${icon('file', 13, 2)}${esc(f.name)}<button type="button" class="file-x" data-action="removeFile" data-id="${i}" aria-label="Remove ${esc(f.name)}">×</button></span>`).join('')}</div>` : '';
   return `<form class="composer" data-action="send">${above}${tray}<div class="composer-pill">` +
     `<input id="attach-input" class="sr-only" type="file" multiple data-action="attachFiles" tabindex="-1">` +
     `<button type="button" class="round-key" data-action="pickFile" aria-label="Add a file">${icon('plus', 14, 2.4)}</button>` +
-    `<label for="say" class="sr-only">Tell Gravit</label><input id="say" class="composer-input" type="text" autocomplete="off"${attrs({ placeholder: listening ? '正在听…' : placeholder })}>` +
+    `<label for="say" class="sr-only">Tell Gravit</label><input id="say" class="composer-input" type="text" autocomplete="off"${attrs({ placeholder: listening ? 'Listening…' : placeholder })}>` +
     `<button type="button" class="${cls('round-key', 'mic', listening && 'on')}" data-action="toggleMic" aria-pressed="${listening ? 'true' : 'false'}" aria-label="Voice input">${icon('mic', 14, 2.2)}</button>` +
     `<button type="submit" class="send-key" aria-label="Sign and send">${icon('send', 18, 2.4)}</button></div></form>`;
 }
@@ -41,7 +41,7 @@ export function renderHead(conv, state) {
   if (conv.kind !== 'group') return `<header class="head"><h1 class="head-title">${esc(conv.title)}</h1>${headRight(conv, state)}</header>`;
   const names = conv.members.map(m => senderName(m, state)).join(' · ');
   return `<header class="head centered"><div class="head-right">${headRight(conv, state)}</div>${cluster(conv.members, 44, state)}` +
-    `<div class="head-task">${esc(conv.title)}</div><div class="dim">${esc(names)} · ${conv.members.length} 位</div></header>`;
+    `<div class="head-task">${esc(conv.title)}</div><div class="dim">${esc(names)} · ${conv.members.length} members</div></header>`;
 }
 
 function draftHead(state) {
@@ -51,39 +51,39 @@ function draftHead(state) {
   const bots = d.bots ?? (d.group ? installedBots : []);
   const who = bots.length ? cluster(['gravit', ...bots], 44, state) : avatar('gravit', 44);
   const toChips = ['gravit', ...bots].map(m => `<span class="to-chip">${avatar(m, 20, state)}${esc(senderName(m, state))}</span>`).join('');
-  // "+ 加个 bot" opens the picker: each installed bot is a chip that joins or leaves the conversation (spec §5.5)
+  // "+ Add a bot" opens the picker: each installed bot is a chip that joins or leaves the conversation (spec §5.5)
   const picker = d.picking ? `<div class="to-picker">${installedBots.map(id => `<button type="button"${attrs({ class: cls('to-pick', bots.includes(id) && 'on'), 'data-action': 'toggleDraftBot', 'data-id': id, 'aria-pressed': bots.includes(id) ? 'true' : 'false' })}>${avatar(id, 20, state)}${esc(senderName(id, state))}</button>`).join('')}</div>` : '';
   return `<header class="head centered draft"><button type="button" class="btn-sm head-cancel" data-action="cancelDraft">Cancel</button>${who}` +
-    `<label for="nm-title" class="sr-only">这件事叫什么</label><input id="nm-title" class="title-input" type="text" autocomplete="off" placeholder="这件事叫什么（不填就用你第一句话）" data-action="draftTitle"${attrs({ value: d.title })}>` +
-    `<div class="to-line"><span class="to-label">To:</span>${toChips}<button type="button" class="to-add" data-action="toggleDraftPicker" aria-expanded="${d.picking ? 'true' : 'false'}">${icon('plus', 11, 2.4)}加个 bot，就成群聊</button></div>${picker}</header>`;
+    `<label for="nm-title" class="sr-only">Name this</label><input id="nm-title" class="title-input" type="text" autocomplete="off" placeholder="Name this (or your first line is the name)" data-action="draftTitle"${attrs({ value: d.title })}>` +
+    `<div class="to-line"><span class="to-label">To:</span>${toChips}<button type="button" class="to-add" data-action="toggleDraftPicker" aria-expanded="${d.picking ? 'true' : 'false'}">${icon('plus', 11, 2.4)}Add a bot for a group</button></div>${picker}</header>`;
 }
 
 // the limit chips over the new-message composer; the chip being edited turns into its editor
 function limitRow(d, state, now) {
   const e = state.edit?.kind === 'draftLimit' ? state.edit : null;
   const days = Math.max(1, Math.round((d.limit.until - now) / DAY));
-  const chips = [['perOrder', `每单 $${d.limit.perOrder}`], ['total', `总 $${d.limit.total}`], ['until', `到 ${fmtDate(d.limit.until)}`], ['venue', `在 ${d.limit.venue}`]];
+  const chips = [['perOrder', `$${d.limit.perOrder} an order`], ['total', `$${d.limit.total} in all`], ['until', `until ${fmtDate(d.limit.until)}`], ['venue', `on ${d.limit.venue}`]];
   const editor = k => inlineEdit([{
-    perOrder: { name: 'value', value: d.limit.perOrder, type: 'number', label: '每单上限' },
-    total: { name: 'value', value: d.limit.total, type: 'number', label: '总额' },
-    until: { name: 'value', value: days, type: 'number', label: '几天后到期' },
-    venue: { name: 'value', value: d.limit.venue, label: '场所', options: VENUES },
+    perOrder: { name: 'value', value: d.limit.perOrder, type: 'number', label: 'Per order' },
+    total: { name: 'value', value: d.limit.total, type: 'number', label: 'Total' },
+    until: { name: 'value', value: days, type: 'number', label: 'Days until it ends' },
+    venue: { name: 'value', value: d.limit.venue, label: 'Venue', options: VENUES },
   }[k]], e.error);
-  return `<div class="limit-row"><span class="limit-label">附一份额度</span>` +
+  return `<div class="limit-row"><span class="limit-label">Attach a limit</span>` +
     (d.attach ? chips.map(([k, t]) => (e?.key === k ? editor(k) : `<button type="button" class="chip white" data-action="draftLimit" data-key="${k}">${esc(t)} ▾</button>`)).join('') : '') +
-    `<button type="button" class="limit-off" data-action="toggleDraftAttach">${d.attach ? '不附' : '附上'}</button></div>`;
+    `<button type="button" class="limit-off" data-action="toggleDraftAttach">${d.attach ? 'None' : 'Attach'}</button></div>`;
 }
 
 function draftScreen(state, now) {
   const d = state.draft;
   const group = (d.bots ?? []).length > 0 || (!d.bots && d.group);
-  return `<main class="main">${draftHead(state)}<div class="thread" id="thread"></div>${renderComposer({ above: limitRow(d, state, now), placeholder: group ? 'Tell Gravit… 打 @ 点名一个 bot' : 'Tell Gravit…', compose: state.compose })}</main>`;
+  return `<main class="main">${draftHead(state)}<div class="thread" id="thread"></div>${renderComposer({ above: limitRow(d, state, now), placeholder: group ? 'Tell Gravit… @ a bot by name' : 'Tell Gravit…', compose: state.compose })}</main>`;
 }
 
 function emptyScreen(state) {
-  const chips = ['小仓位买 BTC', '跟单 Pelosi', '查一个地址'].map(t => `<button type="button" class="btn-sm" data-action="suggest"${attrs({ 'data-text': t })}>${esc(t)}</button>`).join('');
+  const chips = ['Buy a little BTC', 'Follow Pelosi', 'Check an address'].map(t => `<button type="button" class="btn-sm" data-action="suggest"${attrs({ 'data-text': t })}>${esc(t)}</button>`).join('');
   return `<main class="main"><header class="head"><h1 class="head-title">Gravit</h1></header><div class="empty">${avatar('gravit', 56)}` +
-    `<div class="empty-title">还没有交给 Gravit 的事</div><div class="empty-line">在下面说一句你想让它做的事，或者点左上角的 + 先起个名。</div><div class="suggest">${chips}</div></div>${renderComposer({ compose: state.compose })}</main>`;
+    `<div class="empty-title">Nothing handed to Gravit yet</div><div class="suggest">${chips}</div></div>${renderComposer({ compose: state.compose })}</main>`;
 }
 
 export function renderDetails(conv, state) {
@@ -94,23 +94,23 @@ export function renderDetails(conv, state) {
   const btn = (action, label) => `<button type="button" class="btn-sm" data-action="${action}" data-conv="${conv.id}">${label}</button>`;
   const plugs = conv.plugins.map(id => byId(id, state.plugins.uploaded)?.name ?? id);
   const w = state.account.wallet;
-  const title = editing('rename', { convId: conv.id }) ? inlineEdit([{ name: 'title', value: conv.title, label: '这件事叫什么' }], e.error) : `<div class="dsec-title">${esc(conv.title)}</div>`;
+  const title = editing('rename', { convId: conv.id }) ? inlineEdit([{ name: 'title', value: conv.title, label: 'Name this' }], e.error) : `<div class="dsec-title">${esc(conv.title)}</div>`;
   const limit = editing('limit', { convId: conv.id })
-    ? inlineEdit([{ name: 'perOrder', value: L?.perOrder ?? 25, type: 'number', label: '每单上限' }, { name: 'total', value: L?.total ?? 100, type: 'number', label: '总额' }], e.error)
-    : L ? kv([['每单', money(L.perOrder)], ['总额', money(L.total)], ['剩余', money(L.total - L.spent)], ['在', esc(L.venue)]]) : '<div class="dim">没附额度</div>';
-  const wallet = editing('wallet') ? inlineEdit([{ name: 'amount', value: '', type: 'number', label: e.dir === 'in' ? 'Top up 多少' : 'Take back 多少' }], e.error) : '';
+    ? inlineEdit([{ name: 'perOrder', value: L?.perOrder ?? 25, type: 'number', label: 'Per order' }, { name: 'total', value: L?.total ?? 100, type: 'number', label: 'Total' }], e.error)
+    : L ? kv([['Per order', money(L.perOrder)], ['Total', money(L.total)], ['Left', money(L.total - L.spent)], ['On', esc(L.venue)]]) : '<div class="dim">No limit attached</div>';
+  const wallet = editing('wallet') ? inlineEdit([{ name: 'amount', value: '', type: 'number', label: e.dir === 'in' ? 'Amount to top up' : 'Amount to take back' }], e.error) : '';
   return `<aside class="drawer details" aria-label="Details">
   <div class="drawer-head"><h2>Details</h2><button type="button" class="close-key" data-action="toggleDetails" aria-label="Close">×</button></div>
   <div class="drawer-body">
-    <section class="dsec"><div class="dsec-label">这件事</div>${title}<div class="dim">你委托于 ${fmtDate(conv.intent.created)} · 到 ${fmtDate(conv.intent.until)} · ${esc(conv.intent.id)}</div>
-      <div class="btn-row">${asking('withdraw') ? confirmPair('确认撤回') : btn('changeWords', 'Change words') + (isClosed(conv) ? '' : btn('withdraw', 'Withdraw'))}</div></section>
-    <section class="dsec"><div class="dsec-label">额度</div>${limit}
-      <div class="btn-row">${asking('endLimit') ? confirmPair('确认结束额度') : btn('changeLimit', 'Change limit') + (L ? btn('endLimit', 'End limit') : '')}</div></section>
-    <section class="dsec"><div class="dsec-label">插件</div>${plugs.length ? plugs.map(n => `<div class="dsec-line">${esc(n)}</div>`).join('') : '<div class="dim">没有</div>'}<a class="link" href="#/discover">Find more in Discover ›</a></section>
-    <section class="dsec"><div class="dsec-label">Gravit 的钱包</div>${kv([['USDC', money(w.usdc)], ['链', esc(w.chain)], ['地址', `<span class="mono">${esc(w.address)}</span>`]])}${wallet}
+    <section class="dsec"><div class="dsec-label">This task</div>${title}<div class="dim">Delegated ${fmtDate(conv.intent.created)} · until ${fmtDate(conv.intent.until)} · ${esc(conv.intent.id)}</div>
+      <div class="btn-row">${asking('withdraw') ? confirmPair('Yes, withdraw') : btn('changeWords', 'Change words') + (isClosed(conv) ? '' : btn('withdraw', 'Withdraw'))}</div></section>
+    <section class="dsec"><div class="dsec-label">Limit</div>${limit}
+      <div class="btn-row">${asking('endLimit') ? confirmPair('Yes, end the limit') : btn('changeLimit', 'Change limit') + (L ? btn('endLimit', 'End limit') : '')}</div></section>
+    <section class="dsec"><div class="dsec-label">Plugins</div>${plugs.length ? plugs.map(n => `<div class="dsec-line">${esc(n)}</div>`).join('') : '<div class="dim">None</div>'}<a class="link" href="#/discover">Find more in Discover ›</a></section>
+    <section class="dsec"><div class="dsec-label">Gravit’s wallet</div>${kv([['USDC', money(w.usdc)], ['Chain', esc(w.chain)], ['Address', `<span class="mono">${esc(w.address)}</span>`]])}${wallet}
       <div class="btn-row">${btn('topUp', 'Top up…')}${btn('takeBack', 'Take back…')}</div></section>
-    <section class="dsec"><div class="dsec-label">模式</div>${seg(['Guard', 'Beast'], state.account.mode === 'beast' ? 'Beast' : 'Guard', 'setMode')}</section>
-    ${isClosed(conv) ? '' : `<section class="dsec">${asking('stopGravit') ? confirmPair('确认停掉') : `<button type="button" class="btn-danger" data-action="stopGravit" data-conv="${conv.id}">Stop Gravit</button>`}</section>`}
+    <section class="dsec"><div class="dsec-label">Mode</div>${seg(['Guard', 'Beast'], state.account.mode === 'beast' ? 'Beast' : 'Guard', 'setMode')}</section>
+    ${isClosed(conv) ? '' : `<section class="dsec">${asking('stopGravit') ? confirmPair('Yes, stop Gravit') : `<button type="button" class="btn-danger" data-action="stopGravit" data-conv="${conv.id}">Stop Gravit</button>`}</section>`}
   </div>
 </aside>`;
 }
@@ -119,15 +119,15 @@ export function renderMessagesScreen(state, now) {
   if (state.draft) return draftScreen(state, now);
   const conv = currentConversation(state);
   if (!conv) return emptyScreen(state);
-  const placeholder = conv.kind === 'group' ? 'Tell Gravit… 打 @ 点名一个 bot' : 'Tell Gravit…';
+  const placeholder = conv.kind === 'group' ? 'Tell Gravit… @ a bot by name' : 'Tell Gravit…';
   return `<main class="${cls('main', state.detailsOpen && 'with-drawer')}">${renderHead(conv, state)}<div class="thread" id="thread">${renderThread(conv, state, now)}</div>${renderComposer({ placeholder, compose: state.compose })}${state.detailsOpen ? renderDetails(conv, state) : ''}</main>`;
 }
 
 export function renderBanner(b, state) {
   // the thread the banner covers, where its message will land (reducers/messages.js dismissBanner)
   const first = currentConversation(state)?.id ?? '';
-  return `<div class="banner" role="status"><div class="banner-head">${chip('突发', 'down')}<span class="dim">${fmtClock(b.at)}</span><span class="spacer"></span><button type="button" class="close-key small" data-action="dismissBanner" aria-label="Dismiss">×</button></div>` +
-    `<div class="card-title">${esc(b.headline)}</div><div class="dim">${esc(b.body)}</div><a class="link" href="#/messages/${esc(first)}" data-action="dismissBanner">去会话 ›</a></div>`;
+  return `<div class="banner" role="status"><div class="banner-head">${chip('Breaking', 'down')}<span class="dim">${fmtClock(b.at)}</span><span class="spacer"></span><button type="button" class="close-key small" data-action="dismissBanner" aria-label="Dismiss">×</button></div>` +
+    `<div class="card-title">${esc(b.headline)}</div><div class="dim">${esc(b.body)}</div><a class="link" href="#/messages/${esc(first)}" data-action="dismissBanner">Open the conversation ›</a></div>`;
 }
 
 // the call over the page: ringing in (decline, accept), ringing out (hang up), live (a timer, mute, hang up)
@@ -136,16 +136,16 @@ export function renderCall(c, now = Date.now()) {
   let label;
   let inner;
   if (c.status === 'live') {
-    label = '通话';
-    const line = c.dir === 'out' ? 'Gravit：在。BTC 现在 62.8k，要我看着吗？' : `Gravit：${c.about}`;
+    label = 'Call';
+    const line = c.dir === 'out' ? 'Gravit: Here. BTC is at 62.8k now. Want me to watch it?' : `Gravit: ${c.about}`;
     inner = `${avatar('gravit', 44)}<div class="card-title">Gravit</div><div class="call-timer">${fmtDuration(now - c.since)}</div><div class="dim">${esc(line)}</div>` +
       `<div class="call-keys"><button type="button" class="${cls('key', 'big', 'mute', c.muted && 'on')}" data-action="toggleMute" aria-pressed="${c.muted ? 'true' : 'false'}" aria-label="Mute">${icon('mic', 18, 2.1)}</button>${hang}</div>`;
   } else if (c.dir === 'out') {
-    label = '呼叫 Gravit';
-    inner = `${avatar('gravit', 44)}<div class="card-title">正在呼叫 Gravit…</div><div class="call-keys">${hang}</div>`;
+    label = 'Calling Gravit';
+    inner = `${avatar('gravit', 44)}<div class="card-title">Calling Gravit…</div><div class="call-keys">${hang}</div>`;
   } else {
-    label = 'Gravit 来电';
-    inner = `${avatar('gravit', 44)}<div class="card-title">Gravit 来电</div><div class="dim">${esc(c.about)}</div>` +
+    label = 'Gravit is calling';
+    inner = `${avatar('gravit', 44)}<div class="card-title">Gravit is calling</div><div class="dim">${esc(c.about)}</div>` +
       `<div class="call-keys"><button type="button" class="key no big" data-action="answerCall" data-accept="0" aria-label="Decline">${icon('phoneOff', 18, 2.1)}</button>` +
       `<button type="button" class="key yes big" data-action="answerCall" data-accept="1" aria-label="Accept">${icon('phone', 18, 2.1)}</button></div>`;
   }

@@ -6,7 +6,7 @@ import { rowTime } from '../time.js';
 import { avatar, groupMark } from './avatars.js';
 import { renderMailList } from './mail.js';
 
-const NAME = { you: '你', gravit: 'Gravit', system: '' };
+const NAME = { you: 'You', gravit: 'Gravit', system: '' };
 export function senderName(from, state) {
   return NAME[from] ?? byId(from, state?.plugins?.uploaded ?? [])?.name ?? from;
 }
@@ -15,10 +15,10 @@ export function previewOf(conv, state = null) {
   const m = conv.messages.at(-1);
   if (!m) return '';
   const body = {
-    receipt: `${m.data.status} · ${m.text}`, brief: `早报 · ${m.data.date}`, ta: `${m.data.ticker} 技术面`, breaking: m.data.headline ?? m.text, call: 'Gravit 来电',
+    receipt: `${m.data.status} · ${m.text}`, brief: `Morning brief · ${m.data.date}`, ta: `${m.data.ticker} technicals`, breaking: m.data.headline ?? m.text, call: 'Gravit called',
   }[m.kind] ?? m.text;
   const who = m.from === 'you' ? '' : senderName(m.from, state);
-  return conv.kind === 'group' && who ? `${who}：${body}` : body;
+  return conv.kind === 'group' && who ? `${who}: ${body}` : body;
 }
 
 function rowMark(conv, state) {
@@ -38,7 +38,7 @@ function row(conv, state, now) {
 
 function draftRow() {
   return `<a class="row current draft" aria-current="page" href="#/messages/new" data-action="open" data-id="new"><span class="dot"></span><span class="av av-draft">+</span>` +
-    `<span class="row-body"><span class="row-top"><span class="row-title">New message</span><span class="row-time">now</span></span><span class="row-preview">还没发出去</span></span></a>`;
+    `<span class="row-body"><span class="row-top"><span class="row-title">New message</span><span class="row-time">now</span></span><span class="row-preview">Not sent yet</span></span></a>`;
 }
 
 // a first-level key: an icon and its name; collapsed, the name stays as the title and for screen readers
@@ -58,7 +58,7 @@ export function renderNav(state) {
   const mailCurrent = screen === 'mail';
   return `<nav class="${cls('rail', mini && 'mini')}" aria-label="Gravit">
   <div class="brand">${avatar('gravit', 28)}<span class="brand-name">Gravit</span>` +
-    `<button type="button" class="icon-key rail-toggle" data-action="toggleRail" aria-expanded="${mini ? 'false' : 'true'}" aria-label="${mini ? '展开导航' : '收起导航'}">${icon(mini ? 'chevRight' : 'chevLeft', 14, 2.2)}</button></div>
+    `<button type="button" class="icon-key rail-toggle" data-action="toggleRail" aria-expanded="${mini ? 'false' : 'true'}" aria-label="${mini ? 'Expand navigation' : 'Collapse navigation'}">${icon(mini ? 'chevRight' : 'chevLeft', 14, 2.2)}</button></div>
   <div class="rail-group">
     ${navItem(messagesHref, 'chat', 'Messages', screen === 'messages', mini, unread)}
     ${navItem('#/discover', 'compass', 'Discover', screen === 'discover', mini)}
