@@ -10,8 +10,10 @@ spec has a checklist. **2026-10-11:** the operator asked for the whole front end
 (*"我要把这个前端全部转成英文"*): every product string in this spec and in `gravit-ui/` is the English copy;
 the canvas's own annotations (board titles, specimen labels, stickies, F12/F16 notes) stay Chinese.
 **Companion:** the design canvas this spec is the written form of —
-<https://claude.ai/artifact/XwsiQ4VTqzfGdtzBi2LWgb> (Design type; rows 7–10 are the settled boards,
-rows 1–6 the decision history). On a disagreement this spec wins; the canvas is the picture.
+<https://claude.ai/artifact/XwsiQ4VTqzfGdtzBi2LWgb> (Design type, re-laid 2026-10-11: rows 1–4 the settled
+screens on the §13 rail — Messages, Discover with Create, Account, Mail, Markets and Trade — row 5 the message
+specimens and the removed copy, row 6 the parked architecture; the early rounds were removed, their decisions
+are §1). On a disagreement this spec wins; the canvas is the picture.
 **Pins:** repository `main` @ `69225d8`; `demo/` = `linqizhe07/buyer-agent-demo` @ `0ef5131` (its `main`
 after PR #6 and PR #7); the visual tokens are that commit's `demo/src/portfolio/public/ui/tokens.css`
 and `shell.css`.
@@ -79,6 +81,11 @@ bot's one line is "Tech supply-chain analysis" (科技产业链分析).
 
 Every screen is 1280 wide in the boards; the page itself is fluid (Linqi's shell wraps the rail under
 the main column below ~800 px, and nothing here needs more than his breakpoints).
+
+Added 2026-10-11 for §13–§15, all on the two-level rail: F17 (the first level collapsed), F18 (Mail, a letter
+open), F19 and F20 (Create: the Discover MCP dialog waiting for a client, then asked to publish), F21 (Markets),
+F22 (the market drawer), F23 (Trade with the ticket), F24 (the controls of §13.5); F8 now shows Details beside the
+thread with the second level folded away; F12 (the old upload drawer) is gone with §14.3.
 
 ## 3. Visual language
 
