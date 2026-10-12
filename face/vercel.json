@@ -6,6 +6,6 @@
   "outputDirectory": "dist",
   "redirects": [
     { "source": "/market", "destination": "/#product", "permanent": true },
-    { "source": "/account", "destination": "/#product", "permanent": true }
+    { "source": "/account", "destination": "https://linqizhe07.github.io/buyer-agent-demo/", "permanent": false }
   ]
 }
