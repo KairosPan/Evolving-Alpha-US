@@ -51,9 +51,9 @@ test('a card: 44 px logo top-left, kind top-right, name, one line, and no author
 test('a plugin is a page: back to Discover, its head with the key, What you sign, its sections; installed shows Uninstall; no author or price', () => {
   const s = R.nav(disc(), { screen: 'plugin', id: 'news' });
   const h = renderPlugin(s);
-  assert.match(h, /^<main class="main disc plugin-page"><a class="back-link page-back" href="#\/discover">‹ Discover<\/a>/);
+  assert.match(h, /^<main class="main disc plugin-page"><a id="page-back" class="back-link page-back" href="#\/discover">‹ Discover<\/a>/);
   assert.match(h, /<h1 class="plug-name">News sentiment<\/h1>/);
-  assert.match(h, /<div class="plug-key"><button type="button" class="btn-primary" data-action="install" data-id="news">Install<\/button><\/div>/);
+  assert.match(h, /<div class="plug-key"><button type="button" id="plug-key" class="btn-primary" data-action="install" data-id="news">Install<\/button><\/div>/);
   assert.ok(h.indexOf('What you sign') < h.indexOf('What you can ask it'), 'what you sign sits under the key');
   assert.doesNotMatch(h, /class="drawer|closeDrawer/);
   assert.match(renderPlugin(R.nav(R.nav(disc(), { screen: 'discover', id: 'bots' }), { screen: 'plugin', id: 'buffett' })), /href="#\/discover\/bots">‹ Discover</, 'back to the shelf you came from');
@@ -197,7 +197,7 @@ test('a private upload lands first on its shelf, installed, with Open in Message
   assert.match(keyFor(cpi, s), /^<span class="pkey-wait" role="img" aria-label="In review">/);
   const d = pluginPage(cpi, s);
   assert.match(d, /class="dim">Data · In review</);
-  assert.match(d, /<button type="button" class="btn-primary" disabled>In review<\/button>/);
+  assert.match(d, /<button type="button" id="plug-key" class="btn-primary" disabled>In review<\/button>/);
   assert.doesNotMatch(d, /What you sign/);
   assert.match(renderDiscover(s), /class="toast" role="status">CPI quick read uploaded · In review<\/div>/);
   const passed = R.reviewPassed(s, { id: 'cpi', now: NOW });

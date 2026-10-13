@@ -240,7 +240,7 @@ export function marketPage(inst, state, now) {
   right.push(section('On the statement', `<div class="mk-sec-head">${h2('On the statement')}<button type="button" class="link mk-link" data-action="openStatement">Open the Statement →</button></div>`,
     st.length ? `<div class="mk-feed">${st.join('')}</div>` : '<p class="mk-empty">Nothing on the statement about it yet.</p>'));
 
-  return `<main class="main mkts mk-page"><a class="back-link page-back" href="#/markets">‹ Markets</a><div class="mk-pg">` +
+  return `<main class="main mkts mk-page"><a id="page-back" class="back-link page-back" href="#/markets">‹ Markets</a><div class="mk-pg">` +
     `<header class="mk-pg-head">${who}${keys}</header><div class="mk-pg-top">${head}</div>` +
     `<div class="mk-pg-cols">${left.length ? `<div class="mk-pg-col">${left.join('')}</div>` : ''}<div class="mk-pg-col">${right.join('')}</div></div></div></main>`;
 }

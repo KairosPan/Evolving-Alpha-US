@@ -572,7 +572,7 @@ test('after Refuse, the director\'s Plugin upload starts a fresh upload in a new
 
 test('a card opens its plugin page and focus lands on the way back; Escape leaves the page alone', async () => {
   const f = fakeWindow({ hash: '#/discover' });
-  const back = f.withSelector('.page-back', { tagName: 'A', presentIf: /class="back-link page-back"/ });
+  const back = f.withId('page-back', { tagName: 'A', presentIf: /id="page-back"/ });
   const store = boot(f.win);
   try {
     f.click(f.element({ tagName: 'DIV', dataset: { action: 'openPlugin', id: 'buffett' } }));

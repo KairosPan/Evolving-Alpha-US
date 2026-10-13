@@ -59,8 +59,10 @@ export const reducers = {
       ...state, counters, mail: { ...state.mail, items: [letter, ...state.mail.items] },
       plugins: { ...state.plugins, uploaded: state.plugins.uploaded.map(x => (x.id === id ? { ...x, review: null } : x)) },
     };
-    // a toast only where it can be seen; elsewhere the letter carries the news
-    return s.route.screen === 'discover' ? disc(s, { toast: { text: `${p.name} passed review · Public`, action: { label: 'Open', plugin: id } } }) : s;
+    // a toast only where it can be seen (Discover and its plugin pages); elsewhere the letter carries the news; on the plugin's own page Open would lead nowhere
+    if (s.route.screen !== 'discover' && s.route.screen !== 'plugin') return s;
+    const here = s.route.screen === 'plugin' && s.route.id === id;
+    return disc(s, { toast: { text: `${p.name} passed review · Public`, action: here ? null : { label: 'Open', plugin: id } } });
   },
 
   install(state, { id, now }) {

@@ -261,9 +261,16 @@ button.link:disabled { color: var(--dim); cursor: default; }
 .list ~ .banner-zone { left: calc(var(--nav) + var(--list)); }
 .rail.mini ~ .list ~ .banner-zone { left: calc(var(--nav-mini) + var(--list)); }
 .main.with-drawer ~ .banner-zone { right: 400px; }
+.acct.with-drawer ~ .banner-zone { right: 460px; }
+/* Details folds the list away below 1400 px (see the drawers above): the zone then starts at the first level */
+@media (min-width: 861px) and (max-width: 1399px) {
+  .list:has(~ .main.with-drawer) ~ .banner-zone { left: var(--nav); }
+  .rail.mini ~ .list:has(~ .main.with-drawer) ~ .banner-zone { left: var(--nav-mini); }
+}
 @media (min-width: 861px) and (max-width: 1180px) {
   .banner-zone { left: var(--nav-mini); }
   .list ~ .banner-zone { left: calc(var(--nav-mini) + var(--list)); }
+  .list:has(~ .main.with-drawer) ~ .banner-zone { left: var(--nav-mini); }
 }
 .banner.drop { animation: banner-drop 0.24s ease-out; }
 @keyframes banner-drop { from { transform: translateY(-16px); opacity: 0; } }
@@ -508,6 +515,8 @@ button.toast-key { border: 0; font: inherit; font-size: 13px; }
 .mk-facts dt { font-size: 12px; font-weight: 600; color: var(--dim); }
 .mk-facts dd { margin: 0; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .mk-iss-box { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: var(--radius-m); background: var(--bg); }
+/* the drawer was white; a market's page sits on the ground, so its boxes take the surface */
+.mk-page .mk-facts, .mk-page .mk-iss-box { background: var(--surface); border: 1px solid var(--card-border); }
 .mk-outs { display: flex; flex-direction: column; }
 .mk-out { display: flex; align-items: center; gap: 12px; min-height: 56px; border-bottom: 1px solid var(--border); }
 .mk-out:last-child { border-bottom: 0; }

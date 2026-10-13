@@ -148,6 +148,8 @@ function focusKey(el) {
 // which overlay is up: focus moves into it when it opens and back to its opener when it closes
 const overlayOf = s => (s.call ? 'call' : s.discover.create ? 'modal' : s.account.panel || s.detailsOpen || s.settingsOpen ? 'drawer' : null);
 const screenOf = s => `${s.route.screen}/${s.route.id ?? s.route.tab ?? ''}`;
+// a plugin's or a market's own page, opened from a list (Discover's shelves, See all or search; Markets)
+const isPage = key => !!key && (key.startsWith('plugin/') || /^markets\/./.test(key));
 // which editor is open, by what it edits (its error may change; the editor stays the same)
 const editorOf = e => (e ? [e.kind, e.key, e.convId, e.id, e.dir].join('|') : null);
 // which dialog step is up: its body keeps its scroll only while the step stays the same
@@ -167,12 +169,16 @@ export function boot(win) {
   let composerText = '';
   let composing = false;
   let heard = 0;
-  let micRun = 0; // the listen the stream belongs to; a stop or a new listen retires the old one's words
-  let micBase = '';
+  let micRun = 0; // the listen the stream belongs to; a stop, a send or a new listen retires the old one's words
+  let micLeft = []; // the words it has heard but not written yet
   let ticking = false;
   let pending = false;
   let clocking = false;
   let last = { overlay: null, opener: null, screen: null, drawer: null, thread: null, banner: null };
+  // where a list stood when a page opened from it: its scroll, its shelves and the control that opened the page
+  const away = new Map();
+  // the control that asked a two-step confirm: No brings focus back to it
+  let confirmFrom = null;
 
   function applyTheme(theme) {
     if (theme === 'cream' || theme === 'black') doc.documentElement.dataset.theme = theme; else delete doc.documentElement.dataset.theme;
@@ -225,11 +231,16 @@ export function boot(win) {
     // scroll: the second level keeps its rows while it lists the same thing (conversations or letters); the page and the shelves keep theirs
     // on the same screen; a drawer while it stays the same drawer
     const sameScreen = last.screen === screenOf(s);
+    if (!sameScreen && last.screen && !isPage(last.screen) && isPage(screenOf(s))) away.set(last.screen, { main: scrolls.main, shelves: scrolls.shelves, focus: activeKey });
+    const back = !sameScreen && isPage(last.screen) ? away.get(screenOf(s)) ?? null : null;
+    if (back) away.delete(screenOf(s));
     const rows = root.querySelector('.rail-rows');
     if (rows && scrolls.rows != null && last.screen?.split('/')[0] === s.route.screen) rows.scrollTop = scrolls.rows;
     const main = root.querySelector('main');
     if (main && sameScreen && scrolls.main != null) main.scrollTop = scrolls.main;
-    if (sameScreen) [...root.querySelectorAll('.shelf-row')].forEach((e, i) => { if (scrolls.shelves[i] != null) e.scrollLeft = scrolls.shelves[i]; });
+    else if (main && back && back.main != null) main.scrollTop = back.main;
+    const shelves = sameScreen ? scrolls.shelves : back?.shelves;
+    if (shelves) [...root.querySelectorAll('.shelf-row')].forEach((e, i) => { if (shelves[i] != null) e.scrollLeft = shelves[i]; });
     const drawerBody = root.querySelector('.drawer-body');
     if (drawerBody && last.drawer && last.drawer === drawerOf(s) && scrolls.drawer != null) drawerBody.scrollTop = scrolls.drawer;
     // the ticket keeps its own scroll while you type in it; a ticket just opened is brought into view instead
@@ -253,21 +264,27 @@ export function boot(win) {
       opener = activeKey;
       target = overlay === 'call' ? root.querySelector('.call [data-accept="0"]') ?? root.querySelector('.call [data-action="hangUp"]') : overlay === 'modal' ? doc.getElementById('mcp-copy') ?? root.querySelector('.modal .close-key') : root.querySelector('.drawer .close-key');
     } else if (!overlay && last.overlay) {
-      target = find(last.opener) ?? target;
+      // a drawer closed: back to its opener, or, when a page replaced the screen, onto that page's way back
+      target = find(last.opener) ?? (screenOf(s) !== last.screen ? doc.getElementById('page-back') : null) ?? target;
       opener = null;
-    } else if (screenOf(s) !== last.screen && root.querySelector('.page-back')) {
-      target = root.querySelector('.page-back'); // a plugin's or a market's page just opened: focus sits on the way back
+    } else if (back && find(back.focus)) {
+      target = find(back.focus); // back on the list: focus returns to the row or card that opened the page
+    } else if (screenOf(s) !== last.screen && doc.getElementById('page-back')) {
+      target = doc.getElementById('page-back'); // a plugin's or a market's page just opened: focus sits on the way back
     } else if (opened) {
       target = doc.getElementById('tk-amount') ?? root.querySelector('.tk-panel .close-key') ?? target;
     } else if (s.edit && editorOf(s.edit) !== last.editor) {
       target = root.querySelector('.inline-edit [name]') ?? target; // an editor that just opened takes focus
     } else if (s.confirm && s.confirm !== last.confirm) {
+      confirmFrom = last.confirm ? confirmFrom : activeKey;
       target = root.querySelector('.confirm [data-action="confirmYes"]') ?? target; // a confirm that just asked takes focus
+    } else if (!s.confirm && last.confirm && find(confirmFrom)) {
+      target = find(confirmFrom); // No: back on the key that asked
     } else if (!target && activeKey) {
       // the pressed control went away (an answered card's keys, a read mail row): stay inside the overlay if one is up, else the composer
       target = overlay === 'call' ? root.querySelector('.call [data-action="hangUp"]') ?? root.querySelector('.call [data-accept="0"]')
         : overlay === 'modal' ? root.querySelector('.modal .close-key')
-          : overlay === 'drawer' ? root.querySelector('.drawer .close-key') : say;
+          : overlay === 'drawer' ? root.querySelector('.drawer .close-key') : say ?? doc.getElementById('page-back');
     }
     if (target) {
       target.focus();
@@ -338,25 +355,30 @@ export function boot(win) {
   }
   const reset = () => restart(seed(now()), { screen: 'messages', id: 'c-1' });
 
-  // the scripted mic: the words it hears fill the composer as they come, after what was already typed
+  // the scripted mic: each word it hears joins the end of the composer as it comes, after whatever is typed there
+  const micWrite = words => {
+    const t = composerText;
+    composerText = t && !/\s$/.test(t) ? `${t} ${words.join(' ')}` : `${t}${words.join(' ')}`;
+  };
   function startMic() {
     const run = ++micRun;
     const words = HEARD[heard % HEARD.length].split(' ');
-    micBase = composerText.trim();
+    micLeft = [...words];
     store.dispatch('setListening', true);
     words.forEach((_, i) => timers.after(Math.round((LISTEN_MS * (i + 1)) / (words.length + 1)), () => {
-      if (run !== micRun || !store.get().compose.listening) return;
-      composerText = [micBase, ...words.slice(0, i + 1)].filter(Boolean).join(' ');
+      if (run !== micRun || !store.get().compose.listening || !micLeft.length) return;
+      micWrite([micLeft.shift()]);
       render();
     }));
     timers.after(LISTEN_MS, () => { if (run === micRun) stopMic(); });
   }
-  // stopping, by itself or by a press, writes the whole sentence it heard
-  function stopMic() {
+  // stopping by itself or by a press writes the rest of the sentence; a send stops it where it is (written = false)
+  function stopMic(write = true) {
     if (!store.get().compose.listening) return;
     micRun++;
-    const words = HEARD[heard++ % HEARD.length];
-    composerText = micBase ? `${micBase} ${words}` : words;
+    heard++;
+    if (write && micLeft.length) micWrite(micLeft);
+    micLeft = [];
     store.dispatch('setListening', false);
   }
 
@@ -602,6 +624,8 @@ export function boot(win) {
       const text = composerText.trim();
       const files = store.get().compose.files.map(x => x.name);
       if (!text && !files.length) return;
+      // a send ends a listen where it is: what was heard so far goes with the message, nothing more comes back
+      stopMic(false);
       const before = store.get();
       // empty the composer before the render the send causes, so the box is clear the moment the bubble appears
       composerText = '';

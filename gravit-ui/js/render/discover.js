@@ -76,12 +76,12 @@ export function pluginPage(p, state) {
     : [p.kind, p.installs ? `${p.installs} installs` : null].filter(Boolean).join(' · ');
   const writes = [...p.writes.map(esc), ...(p.never.length ? [`<span class="dim">Never: ${esc(p.never.join(', '))}</span>`] : [])];
   const tools = Array.isArray(p.tools) && p.tools.length ? sec('Tools', p.tools.map(t => `<span class="mono">${esc(t)}</span>`), true) : '';
-  // while it is reviewed there is nothing to sign yet
+  // while it is reviewed there is nothing to sign yet; the one key keeps its id, so focus stays on it as Install turns to Uninstall
   const pending = p.review && !installed;
-  const key = pending ? '<button type="button" class="btn-primary" disabled>In review</button>'
-    : installed ? `<button type="button" class="btn-primary" data-action="uninstall" data-id="${esc(p.id)}">Uninstall</button>` : `<button type="button" class="btn-primary" data-action="install" data-id="${esc(p.id)}">Install</button>`;
+  const key = pending ? '<button type="button" id="plug-key" class="btn-primary" disabled>In review</button>'
+    : installed ? `<button type="button" id="plug-key" class="btn-primary" data-action="uninstall" data-id="${esc(p.id)}">Uninstall</button>` : `<button type="button" id="plug-key" class="btn-primary" data-action="install" data-id="${esc(p.id)}">Install</button>`;
   const back = toHash(state.lastDiscover ?? { screen: 'discover', id: null });
-  return `<main class="main disc plugin-page"><a class="back-link page-back" href="${esc(back)}">‹ Discover</a>` +
+  return `<main class="main disc plugin-page"><a id="page-back" class="back-link page-back" href="${esc(back)}">‹ Discover</a>` +
     `<header class="plug-head">${logo(p, 72)}<div class="plug-title"><h1 class="plug-name">${esc(p.name)}</h1><div class="dim">${esc(meta)}</div></div><div class="plug-key">${key}</div></header>` +
     `<div class="plug-body"><p class="plug-blurb">${esc(p.blurb)}.</p>` +
     (pending ? '' : `<div class="dsec"><div class="dsec-label">What you sign</div>${kv(signRows(p, installed, state))}</div>`) +

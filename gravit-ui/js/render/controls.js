@@ -19,10 +19,11 @@ export function sec(label, lines, html = false) {
 }
 
 // an inline editor: its inputs, a ✓ that commits and a × that cancels (app.js reads every [name] inside .inline-edit)
-// fields: { name, value, type = 'text' | 'number', label, word?, options? } — a word is the box's visible name; options make a pick list
+// fields: { name, value, type = 'text' | 'number', label, word?, options? } — a word is the box's visible name, the label its full
+// accessible name (it contains the word); options make a pick list
 export function inlineEdit(fields, error = null) {
   const input = f => {
-    const named = f.word ? {} : { 'aria-label': f.label };
+    const named = { 'aria-label': f.label };
     const box = f.options
       ? `<select${attrs({ id: `edit-${f.name}`, class: 'input small', name: f.name, ...named })}>${f.options.map(o => `<option${attrs({ value: o, selected: o === f.value })}>${esc(o)}</option>`).join('')}</select>`
       : `<input${attrs({ id: `edit-${f.name}`, class: 'input small', name: f.name, type: f.type ?? 'text', value: f.value, ...named })}>`;

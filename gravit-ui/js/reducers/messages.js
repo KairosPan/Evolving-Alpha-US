@@ -67,12 +67,12 @@ export const reducers = {
     if (route.screen === 'messages' && route.id && route.id !== 'new') s.lastConv = route.id;
     // an Account panel belongs to Account
     if (route.screen !== 'account' && s.account.panel) s.account = { ...s.account, panel: null, panelError: null };
-    // a plugin page goes back to the Discover view it was opened from
+    // a plugin page goes back to the Discover view it was opened from; opened from outside Discover (a conversation's +), to Discover itself
     if (route.screen === 'discover') s.lastDiscover = route;
-    // Discover's dialog and toast belong to Discover and its plugin pages; they do not follow you out of them
-    if (route.screen !== 'discover' && route.screen !== 'plugin' && (s.discover.create || s.discover.toast)) {
-      s = { ...s, discover: { ...s.discover, create: null, toast: null } };
-    }
+    else if (route.screen === 'plugin' && state.route.screen !== 'discover' && state.route.screen !== 'plugin') s.lastDiscover = { screen: 'discover', id: null };
+    // Discover's dialog belongs to Discover; its toast also follows you onto a plugin page, and neither leaves with you
+    if (route.screen !== 'discover' && s.discover.create) s = { ...s, discover: { ...s.discover, create: null } };
+    if (route.screen !== 'discover' && route.screen !== 'plugin' && s.discover.toast) s = { ...s, discover: { ...s.discover, toast: null } };
     if (route.screen === 'messages' && route.id && route.id !== 'new') s = upd(s, route.id, c => (c.unread ? { ...c, unread: false } : c));
     if (!(route.screen === 'messages' && route.id === 'new')) s.draft = null;
     return s;

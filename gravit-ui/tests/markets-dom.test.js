@@ -171,7 +171,7 @@ test('the ticket keeps its own scroll while you type, and a new ticket is brough
 
 test('a market row opens the market as a page; the way back takes focus; an unknown market opens Markets', async () => {
   const f = fakeWindow({ ...noDialogs, hash: '#/markets' });
-  const back = f.withSelector('.page-back', { tagName: 'A', presentIf: /class="back-link page-back"/ });
+  const back = f.withId('page-back', { tagName: 'A', presentIf: /id="page-back"/ });
   const store = boot(f.win);
   try {
     f.click(btn(f, 'openMarket', { id: 'BTC' }));

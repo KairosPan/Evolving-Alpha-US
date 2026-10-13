@@ -64,10 +64,10 @@ function limitRow(d, state, now) {
   const days = Math.max(1, Math.round((d.limit.until - now) / DAY));
   const chips = [['perOrder', `$${d.limit.perOrder} an order`], ['total', `$${d.limit.total} in all`], ['until', `until ${fmtDate(d.limit.until)}`], ['venue', `on ${d.limit.venue}`]];
   const editor = k => inlineEdit([{
-    perOrder: { name: 'value', value: d.limit.perOrder, type: 'number', word: 'an order' },
-    total: { name: 'value', value: d.limit.total, type: 'number', word: 'in all' },
-    until: { name: 'value', value: days, type: 'number', word: 'days' },
-    venue: { name: 'value', value: d.limit.venue, word: 'on', options: VENUES },
+    perOrder: { name: 'value', value: d.limit.perOrder, type: 'number', word: 'an order', label: 'Dollars an order' },
+    total: { name: 'value', value: d.limit.total, type: 'number', word: 'in all', label: 'Dollars in all' },
+    until: { name: 'value', value: days, type: 'number', word: 'days', label: 'Days until it ends' },
+    venue: { name: 'value', value: d.limit.venue, word: 'on', label: 'Trade on venue', options: VENUES },
   }[k]], e.error);
   return `<div class="limit-row"><span class="limit-label">Attach a limit</span>` +
     (d.attach ? chips.map(([k, t]) => (e?.key === k ? editor(k) : `<button type="button" class="chip white" data-action="draftLimit" data-key="${k}">${esc(t)} ▾</button>`)).join('') : '') +
@@ -99,9 +99,9 @@ export function renderDetails(conv, state) {
   const moving = editing('wallet');
   const title = renaming ? inlineEdit([{ name: 'title', value: conv.title, label: 'Name this' }], e.error) : `<div class="dsec-title">${esc(conv.title)}</div>`;
   const limit = limiting
-    ? inlineEdit([{ name: 'perOrder', value: L?.perOrder ?? 25, type: 'number', word: 'an order' }, { name: 'total', value: L?.total ?? 100, type: 'number', word: 'in all' }], e.error)
+    ? inlineEdit([{ name: 'perOrder', value: L?.perOrder ?? 25, type: 'number', word: 'an order', label: 'Dollars an order' }, { name: 'total', value: L?.total ?? 100, type: 'number', word: 'in all', label: 'Dollars in all' }], e.error)
     : L ? kv([['Per order', money(L.perOrder)], ['Total', money(L.total)], ['Left', money(L.total - L.spent)], ['On', esc(L.venue)]]) : '<div class="dim">No limit attached</div>';
-  const wallet = moving ? inlineEdit([{ name: 'amount', value: '', type: 'number', word: e.dir === 'in' ? 'Top up' : 'Take back' }], e.error) : '';
+  const wallet = moving ? inlineEdit([{ name: 'amount', value: '', type: 'number', word: e.dir === 'in' ? 'Top up' : 'Take back', label: e.dir === 'in' ? 'Top up amount' : 'Take back amount' }], e.error) : '';
   return `<aside class="drawer details" aria-label="Details">
   <div class="drawer-head"><h2>Details</h2><button type="button" class="close-key" data-action="toggleDetails" aria-label="Close">×</button></div>
   <div class="drawer-body">

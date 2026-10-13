@@ -1,10 +1,13 @@
 // gravit-ui/js/data/plugins.js — the catalogue Discover sells (all free, spec §7) and its shelves
 export const KINDS = ['Data', 'Monitors', 'Bots', 'Crypto', 'Quant'];
 
+// what no plugin ever does, on every plugin's page (spec §16.2)
+export const NEVER = ['moves money', 'pays anyone', 'changes a limit'];
+
 const P = (id, kind, name, blurb, extra = {}) => ({
   id, kind, name, blurb, by: 'Gravit', visibility: 'public', installs: '',
   logo: { type: 'letter', text: name[0].toUpperCase() }, avatar: null,
-  asks: [], writes: [], never: ['moves money', 'pays anyone', 'changes a limit'], needs: 'Nothing.',
+  asks: [], writes: [], never: [...NEVER], needs: 'Nothing.',
   teach: `Hi, I’m ${name}. ${blurb}.`,
   ...extra,
 });
@@ -94,7 +97,7 @@ export function fromManifest(m, visibility, now) {
   return {
     id: m.id, kind: m.kind, name: m.name, blurb: m.blurb, by: '@you', visibility, installs: '',
     logo: m.icon ? { type: 'glyph', icon: m.icon } : { type: 'letter', text: m.name[0].toUpperCase() }, avatar: null,
-    asks: [], writes: m.writes.map(w => WRITES[w] ?? w), never: ['move money', 'pay anyone', 'change limits'], needs: NEEDS[m.needs] ?? 'Nothing.',
+    asks: [], writes: m.writes.map(w => WRITES[w] ?? w), never: [...NEVER], needs: NEEDS[m.needs] ?? 'Nothing.',
     tools: [...m.tools], teach: `Hi, I’m ${m.name}. ${m.blurb}. I have ${m.tools.length} tool${m.tools.length === 1 ? '' : 's'}: ${m.tools.join(', ')}.`, review: null, at: now,
   };
 }

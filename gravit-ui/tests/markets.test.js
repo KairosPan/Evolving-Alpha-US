@@ -103,7 +103,7 @@ test('the BTC page: price and facts, the chart, across venues with the best one,
   const s = R.nav(seed(NOW), { screen: 'markets', id: 'btc' });
   assert.deepEqual(s.route, { screen: 'markets', id: 'BTC' });
   const h = renderMarkets(s, NOW);
-  assert.match(h, /^<main class="main mkts mk-page"><a class="back-link page-back" href="#\/markets">‹ Markets<\/a>/);
+  assert.match(h, /^<main class="main mkts mk-page"><a id="page-back" class="back-link page-back" href="#\/markets">‹ Markets<\/a>/);
   assert.match(h, /<h1 class="head-title">Bitcoin<\/h1>/);
   assert.doesNotMatch(h, /class="drawer|closeMarket|class="mk-tabs"|<table class="mk-t">/, 'the page is the market alone: no drawer, no list behind it');
   assert.match(h, /<div class="mk-d-px"><span class="mk-big">\$62,800\.00<\/span><span class="up">/);

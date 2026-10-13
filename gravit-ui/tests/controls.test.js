@@ -87,7 +87,7 @@ test('Details: Change words, Change limit, Top up and Take back open inline edit
   assert.match(rename, /data-action="commitEdit" aria-label="Save"/);
   assert.match(rename, /data-action="cancelEdit" aria-label="Cancel"/);
   const limit = renderDetails(s.conversations[0], R.startEdit(s, { kind: 'limit', convId: 'c-1' }));
-  assert.match(limit, /<label class="edit-word" for="edit-perOrder">an order<\/label><input id="edit-perOrder" class="input small" name="perOrder" type="number" value="25">/);
+  assert.match(limit, /<label class="edit-word" for="edit-perOrder">an order<\/label><input id="edit-perOrder" class="input small" name="perOrder" type="number" value="25" aria-label="Dollars an order">/);
   assert.match(limit, /name="total" type="number" value="100"/);
   const err = renderDetails(s.conversations[0], R.commitEdit(R.startEdit(s, { kind: 'limit', convId: 'c-1' }), { values: { perOrder: '300', total: '100' }, now: NOW }));
   assert.match(err, /class="field-error">Per order cannot exceed the total</);
@@ -102,9 +102,9 @@ test('Details: Change words, Change limit, Top up and Take back open inline edit
 test('the draft limit chip turns into its editor; the venue is a pick list', () => {
   const d = R.startDraft(fresh(), { now: NOW });
   const per = renderMessagesScreen(R.startEdit(d, { kind: 'draftLimit', key: 'perOrder' }), NOW);
-  assert.match(per, /<span class="inline-edit"><label class="edit-word" for="edit-value">an order<\/label><input id="edit-value" class="input small" name="value" type="number" value="25">/);
+  assert.match(per, /<span class="inline-edit"><label class="edit-word" for="edit-value">an order<\/label><input id="edit-value" class="input small" name="value" type="number" value="25" aria-label="Dollars an order">/);
   const venue = renderMessagesScreen(R.startEdit(d, { kind: 'draftLimit', key: 'venue' }), NOW);
-  assert.match(venue, /<label class="edit-word" for="edit-value">on<\/label><select id="edit-value" class="input small" name="value"><option value="Stand-in Exchange" selected>/);
+  assert.match(venue, /<label class="edit-word" for="edit-value">on<\/label><select id="edit-value" class="input small" name="value" aria-label="Trade on venue"><option value="Stand-in Exchange" selected>/);
 });
 
 test('the composer holds picked files; a send carries them, even with no words, and empties the tray', async () => {
