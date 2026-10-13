@@ -1,0 +1,54 @@
+/* gravit-ui/css/tokens.css — Linqi's tokens.css values (demo @ 0ef5131), Cream and Black, plus the one new edge (spec §3.4) and white words for his equity blue (--alloc-equity) */
+:root,
+:root[data-theme="cream"] {
+  color-scheme: light;
+  --bg: #f6f4ef; --surface: #ffffff; --surface-2: #ece8e0; --text: #121417; --dim: #5d5a53;
+  --border: #e6e1d7; --card-border: #ece8e0; --rule: #121417; --primary: #121417; --on-primary: #ffffff;
+  --warn: #d9741e; --warn-text: #94480c; --warn-fill: #fdf0e3; --warn-edge: #f3d2b4;
+  --up: #0d7a52; --up-fill: #e4efe6; --down: #b4441c; --down-fill: #f6e6df;
+  /* new: the soft red edge of an urgent card, down at a third on the surface (spec §3.4) */
+  --down-edge: #e8c2b4;
+  /* the words on his equity blue (owner bubbles, the send key, Install +); white in every theme, since --on-primary is dark in Black */
+  --on-equity: #ffffff;
+  --hover: rgba(18, 20, 23, 0.05); --scrim: rgba(18, 20, 23, 0.32);
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.05);
+  --shadow-lift: 0 8px 30px rgba(16, 24, 40, 0.1);
+  --shadow: 0 16px 48px rgba(16, 24, 40, 0.16);
+  --rail-bg: #ffffff;
+  --alloc-cash: #c9c3b7; --alloc-stable: #5d5a53; --alloc-crypto: #121417; --alloc-equity: #3b5bdb;
+  --alloc-rwa: #d9741e; --alloc-event: #0d7a52; --area: rgba(18, 20, 23, 0.05);
+}
+:root[data-theme="black"] {
+  color-scheme: dark;
+  --bg: #0e0f11; --surface: #17191c; --surface-2: #212429; --text: #f2f3f5; --dim: #a3a9b4;
+  --border: #2b2e34; --card-border: #25282d; --rule: #f2f3f5; --primary: #f2f3f5; --on-primary: #0e0f11;
+  --warn: #f0a040; --warn-text: #f5b866; --warn-fill: #2b2112; --warn-edge: #f0a040;
+  --up: #4cc38a; --up-fill: #16301f; --down: #f08a6c; --down-fill: #35201a;
+  --down-edge: #f08a6c;
+  --on-equity: #ffffff;
+  --hover: rgba(242, 243, 245, 0.06); --scrim: rgba(0, 0, 0, 0.6);
+  --shadow-card: none; --shadow-lift: none; --shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  --rail-bg: #12151b;
+  --alloc-cash: #4a4e56; --alloc-stable: #a3a9b4; --alloc-crypto: #f2f3f5; --alloc-equity: #5c7cfa; --alloc-rwa: #f0a040; --alloc-event: #4cc38a; --area: rgba(242, 243, 245, 0.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #0e0f11; --surface: #17191c; --surface-2: #212429; --text: #f2f3f5; --dim: #a3a9b4;
+    --border: #2b2e34; --card-border: #25282d; --rule: #f2f3f5; --primary: #f2f3f5; --on-primary: #0e0f11;
+    --warn: #f0a040; --warn-text: #f5b866; --warn-fill: #2b2112; --warn-edge: #f0a040;
+    --up: #4cc38a; --up-fill: #16301f; --down: #f08a6c; --down-fill: #35201a;
+    --down-edge: #f08a6c;
+    --on-equity: #ffffff;
+    --hover: rgba(242, 243, 245, 0.06); --scrim: rgba(0, 0, 0, 0.6);
+    --shadow-card: none; --shadow-lift: none; --shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+    --rail-bg: #12151b;
+    --alloc-cash: #4a4e56; --alloc-stable: #a3a9b4; --alloc-crypto: #f2f3f5; --alloc-equity: #5c7cfa; --alloc-rwa: #f0a040; --alloc-event: #4cc38a; --area: rgba(242, 243, 245, 0.06);
+  }
+}
+:root {
+  --font-sans: "Manrope", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+  --radius-s: 10px; --radius-m: 16px; --radius-l: 20px; --radius-pill: 999px;
+  --rail: 248px;
+}

@@ -1,0 +1,168 @@
+// gravit-ui/tests/css.test.js
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { renderRail } from '../js/render/rail.js';
+import { renderMessagesScreen, renderBanner, renderCall } from '../js/render/messages.js';
+import { renderMarkets } from '../js/render/markets.js';
+import { renderTrade } from '../js/render/trade.js';
+import { renderMailScreen } from '../js/render/mail.js';
+import { renderDiscover, renderPlugin } from '../js/render/discover.js';
+import { renderAccount } from '../js/render/account.js';
+import { director } from '../js/driver.js';
+import { reducers as R } from '../js/reducers/index.js';
+import { seed } from '../js/data/seed.js';
+import { nextUpload } from '../js/driver.js';
+
+const NOW = new Date(2026, 9, 9, 14, 7).getTime();
+
+const D = { screen: 'discover', id: null };
+const run = st => st.discover.create.run;
+const conn = st => R.clientConnected(R.startClient(st, { run: run(st) }), { run: run(st) });
+const atSign = st => R.clientPublishes(conn(st), { run: run(st), manifest: nextUpload(st.plugins.uploaded) });
+
+function everyState() {
+  const s = seed(NOW);
+  const withEvents = ['brief', 'ta'].reduce((st, k) => R.append(st, { convId: 'c-1', msg: director[k](NOW), at: NOW }), s);
+  const withMore = ['breaking', 'call'].reduce((st, k) => R.append(st, { convId: 'c-1', msg: { from: 'gravit', kind: k, text: 'x', data: k === 'breaking' ? director.breaking(NOW) : { about: 'x' }, answer: k === 'call' ? 'missed' : undefined }, at: NOW }), withEvents);
+  return [
+    withMore, R.toggleDetails(s), R.nav(s, { screen: 'messages', id: 'c-4' }), R.startDraft(s, { now: NOW }), R.toggleDraftGroup(R.startDraft(s, { now: NOW })), { ...s, conversations: [], route: { screen: 'messages', id: null } },
+    R.nav(s, { screen: 'discover', id: null }), R.nav(s, { screen: 'plugin', id: 'news' }), R.nav(s, { screen: 'plugin', id: 'buffett' }), R.openCreate(R.nav(s, D)), R.setClient(R.openCreate(R.nav(s, D)), 'Cursor'), R.setClient(R.openCreate(R.nav(s, D)), 'Codex'), R.setCreateCopied(R.openCreate(R.nav(s, D)), true), conn(R.openCreate(R.nav(s, D))), atSign(R.openCreate(R.nav(s, D))), R.setUploadVisibility(atSign(R.openCreate(R.nav(s, D))), 'public'), R.rejectUpload(atSign(R.openCreate(R.nav(s, D)))),
+    ...(() => { const mine = R.publishUpload(atSign(R.openCreate(R.nav(s, D))), { now: NOW }); const pub = R.publishUpload(R.setUploadVisibility(atSign(R.openCreate(mine)), 'public'), { now: NOW }); return [mine, pub, R.nav(pub, { screen: 'plugin', id: 'cpi' }), R.reviewPassed(pub, { id: 'cpi', now: NOW }), R.nav(mine, { screen: 'plugin', id: 'moat' })]; })(), R.nav(R.toggleInstalledOnly(R.install(s, { id: 'news', now: NOW })), D), R.nav(R.setQuery(s, 'bot'), D), R.nav(s, { screen: 'discover', id: 'bots' }),
+    R.nav(R.showBanner(s, director.breaking(NOW)), { screen: 'markets', id: 'NVDA' }), R.nav(s, { screen: 'trade' }),
+    R.toggleDraftBot(R.toggleDraftPicker(R.startDraft(s, { now: NOW })), 'buffett'),
+    ['refusal', 'done'].reduce((st, k) => R.append(st, { convId: 'c-1', msg: director[k](NOW), at: NOW }), s),
+    R.setListening(R.addFiles(s, [{ name: 'a.pdf', size: 1 }]), true), R.send(R.addFiles(s, [{ name: 'a.pdf', size: 1 }]), { text: '', now: NOW }),
+    R.startEdit(R.toggleDetails(s), { kind: 'rename', convId: 'c-1' }), R.askConfirm(R.toggleDetails(s), { action: 'withdraw', id: 'c-1' }),
+    R.startEdit(R.startDraft(s, { now: NOW }), { kind: 'draftLimit', key: 'venue' }),
+    R.startEdit(R.nav(s, { screen: 'account', tab: 'memory' }), { kind: 'memory', id: 'mem-1' }), R.askConfirm(R.openSettings(R.nav(s, { screen: 'account', tab: 'portfolio' })), { action: 'resetDemo' }),
+    R.nav(s, { screen: 'account', tab: 'portfolio' }), R.nav(s, { screen: 'account', tab: 'venues' }), R.nav(s, { screen: 'account', tab: 'memory' }), R.openSettings(R.nav(s, { screen: 'account', tab: 'portfolio' })),
+    ...['move', 'receive', 'statement', 'connect'].map(panel => R.openPanel(R.nav(s, { screen: 'account', tab: 'portfolio' }), panel)),
+    R.moveFunds(R.openPanel(R.nav(s, { screen: 'account', tab: 'portfolio' }), 'move'), { from: 'Stand-in Wallet', to: 'Stand-in Wallet', asset: 'USDC', amount: '1', now: NOW }),
+    R.nav(s, { screen: 'mail', id: null }), R.nav(s, { screen: 'mail', id: 'mail-1' }), { ...R.nav(s, { screen: 'mail', id: null }), railCollapsed: true },
+    ...marketStates(s), ...tradeStates(s),
+  ];
+}
+
+// Markets: every tab, a search and an empty one, each sort, connecting, after Polymarket, and the drawers
+function marketStates(s) {
+  const m = R.nav(s, { screen: 'markets', id: null });
+  const poly = R.venueConnected(m, 'Polymarket');
+  const drawer = (st, id) => R.nav(st, { screen: 'markets', id });
+  return [
+    m, ...['crypto', 'stocks', 'rwas', 'predictions', 'watching'].map(t => R.setMarketsTab(m, t)), R.setMarketsQuery(m, 'sol'), R.setMarketsQuery(m, 'zzz'),
+    R.setMarketsSort(m, 'movers'), R.setMarketsSort(m, 'closing'), R.connectVenue(m, 'Coinbase'), poly, R.setMarketsTab(poly, 'predictions'),
+    drawer(s, 'BTC'), R.askConfirm(drawer(s, 'KO'), { action: 'cancelOrder', id: 'ord-0008' }), drawer(s, 'FED-DEC'), drawer(poly, 'FED-DEC'), drawer(s, 'USDY'), drawer(s, 'USDC'),
+    drawer(s, 'DOGE'), R.connectVenue(drawer(s, 'DOGE'), 'Coinbase'), R.setMarketsInterval(drawer(s, 'BTC'), '5m'), R.setMarketsInterval(drawer(s, 'ETH'), '1d'),
+  ];
+}
+
+// Trade: at rest, each kind, a search, the ticket at each step, a prediction, a waiting card, and fills that add RWA and Predictions to the bar
+function tradeStates(s) {
+  const t = R.nav(s, { screen: 'trade' });
+  const set = (st, f) => Object.entries(f).reduce((x, [field, value]) => R.setTicket(x, { field, value, now: NOW }), st);
+  const ready = set(R.openTicket(t, { id: 'BTC', now: NOW }), { amount: '25' });
+  const placing = R.placeOrder(ready, { now: NOW });
+  const done = id => R.settleOrder(id, { id: id.trade.ticket.placing, now: NOW });
+  const poly = R.venueConnected(t, 'Polymarket');
+  const fed = set(R.openTicket(poly, { id: 'FED-DEC', now: NOW }), { amount: '10' });
+  const usdy = set(R.openTicket(t, { id: 'USDY', now: NOW }), { amount: '50' });
+  const poor = { ...ready, account: { ...ready.account, cash: { ...ready.account.cash, 'Stand-in Exchange': 0 } } };
+  return [
+    t, ...['stocks', 'rwas', 'predictions'].map(k => R.setTradeKind(t, k)), R.setTradeQuery(t, 'sol'), R.setTradeQuery(t, 'zzz'),
+    R.openTicket(t, { id: 'BTC', now: NOW }), ready, R.toggleSigns(ready), set(ready, { amount: '150' }), placing, done(placing),
+    done(R.placeOrder(poor, { now: NOW })), set(ready, { orderType: 'limit', limit: '60000' }), R.openTicket(t, { id: 'DOGE', now: NOW }), R.connectVenue(R.openTicket(t, { id: 'DOGE', now: NOW }), 'Coinbase'),
+    fed, R.toggleSigns(set(fed, { orderType: 'limit', limit: '60' })), R.ticketSide(fed, { side: 'sell', now: NOW }), done(R.placeOrder(fed, { now: NOW })), done(R.placeOrder(usdy, { now: NOW })),
+    R.append(t, { convId: 'c-1', msg: { from: 'gravit', kind: 'card', text: 'x', data: { title: 'x', by: NOW, rows: [] } }, at: NOW }),
+    R.nav(done(R.placeOrder(fed, { now: NOW })), { screen: 'account', tab: 'portfolio' }), R.nav(done(R.placeOrder(usdy, { now: NOW })), { screen: 'account', tab: 'portfolio' }),
+  ];
+}
+
+test('every class the screens emit has a rule in app.css, and app.css names no colour by hex', async () => {
+  const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
+  assert.doesNotMatch(css, /#[0-9a-fA-F]{3,6}\b/, 'colours come from tokens.css');
+  const screen = st => ({ discover: () => renderDiscover(st), plugin: () => renderPlugin(st), account: () => renderAccount(st), mail: () => renderMailScreen(st, NOW), markets: () => renderMarkets(st, NOW), trade: () => renderTrade(st, NOW) })[st.route.screen]?.() ?? renderMessagesScreen(st, NOW);
+  const html = everyState().map(st => renderRail(st, NOW) + screen(st)).join('')
+    + renderBanner(director.breaking(NOW), seed(NOW)) + renderCall(director.call())
+    + renderCall({ from: 'gravit', about: '', dir: 'out', status: 'ringing', since: NOW }, NOW) + renderCall({ from: 'gravit', about: 'x', dir: 'in', status: 'live', since: NOW, muted: true }, NOW)
+    + renderRail(R.startCall(seed(NOW), { now: NOW }), NOW);
+  const classes = new Set(html.match(/class="([^"]+)"/g).flatMap(m => m.slice(7, -1).split(/\s+/)));
+  const missing = [...classes].filter(c => c && !new RegExp(`\\.${c.replace(/[-]/g, '\\-')}(?![\\w-])`).test(css));
+  assert.deepEqual(missing, [], 'classes without a rule');
+  assert.match(css, /--rail/);
+  assert.match(css, /\.key\.yes[^{]*\{[^}]*color: var\(--up\)/);
+  assert.match(css, /\.key\.no[^{]*\{[^}]*color: var\(--down\)/);
+});
+
+test('the layout: one screen tall, the thread scrolls under a pinned composer, the drawer is fixed and the toast sticks to the main column (spec §3.3)', async () => {
+  const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
+  const rule = sel => css.match(new RegExp(`^${sel.replace(/[.]/g, '\\.')} \\{([^}]*)\\}`, 'm'))?.[1] ?? '';
+  assert.match(rule('.main'), /(?:^|;)\s*height: 100vh/, 'a real height, not a minimum');
+  assert.match(rule('.thread'), /min-height: 0/);
+  assert.match(rule('.rail'), /position: sticky/);
+  assert.match(rule('.rail'), /overflow: hidden/, 'the rail never scrolls as a whole: Account stays at the bottom (spec §4)');
+  assert.match(rule('.rail-rows'), /overflow-y: auto/);
+  assert.match(rule('.director'), /bottom: 88px/, 'the director sits above the composer, clear of the send key');
+  assert.match(rule('.drawer'), /position: fixed/);
+  assert.match(rule('.toast'), /position: sticky/, 'at the bottom of the main column, whatever the navigation is doing');
+  assert.doesNotMatch(css, /\.main\.with-drawer \{ overflow: hidden/, 'the page behind a drawer stays usable');
+});
+
+test('narrow windows, the toast under a drawer, and long words that wrap', async () => {
+  const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
+  const narrow = css.match(/@media \(max-width: 860px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+  assert.match(narrow, /\.rail, \.rail\.mini \{[^}]*position: static/, 'below 860 px the first level stops being a sticky column, collapsed or not');
+  assert.match(narrow, /\.main \{[^}]*height: auto/);
+  assert.match(narrow, /\.list \{[^}]*position: static/);
+  assert.match(narrow, /\.list:has\(~ \.main\.mail:not\(\.has-letter\)\) \.rail-rows \{ max-height: none; \}/, 'the inbox standing alone is not cut at 40vh');
+  const z = sel => Number(css.match(new RegExp(`^\\${sel} \\{[^}]*z-index: (\\d+)`, 'm'))?.[1]);
+  assert.ok(z('.toast') < z('.drawer'), 'a toast never covers a drawer');
+  assert.match(css, /\.bubble, \.card \{[^}]*overflow-wrap: anywhere/, 'a pasted address wraps inside its bubble');
+  assert.match(css, /^\.chip \{[^}]*white-space: nowrap/m, 'a chip never breaks one character per line');
+  assert.match(css, /^\.pcard-extra \{[^}]*flex-wrap: wrap/m, 'on a narrow shelf card the link drops under the chip');
+  assert.match(css, /^\.field > \.radio-seg, \.modal-body > \.status \{ align-self: flex-start; \}/m, 'the client switcher and the status pill keep their own width in the dialog');
+  assert.match(css, /^\.modal-scrim \{[^}]*align-items: flex-start;[^}]*padding: max\(16px, 8vh\) 16px 16px/m, 'the dialog hangs from the top, so a taller step does not move what is under the pointer');
+  assert.match(css, /^\.snippet \.btn-sm \{[^}]*background: var\(--surface\);[^}]*border: 1px solid var\(--border\)/m, 'the copy key stands out from the code box');
+});
+
+test('Details never covers the conversation: it makes room, folding the list away on a medium window; the first level folds to icons below 1180 px', async () => {
+  const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
+  const block = q => css.match(new RegExp(`@media ${q.replace(/[()]/g, '\\$&')} \\{([\\s\\S]*?)\\n\\}`))?.[1] ?? '';
+  const wide = block('(min-width: 861px)');
+  assert.match(wide, /\.main\.with-drawer > \.head, \.main\.with-drawer > \.thread, \.main\.with-drawer > \.composer \{ margin-right: 400px; \}/);
+  const medium = block('(min-width: 861px) and (max-width: 1399px)');
+  assert.match(medium, /\.list:has\(~ \.main\.with-drawer\) \{ display: none; \}/);
+  const folded = block('(min-width: 861px) and (max-width: 1180px)');
+  assert.match(folded, /\.rail \{[^}]*flex-basis: var\(--nav-mini\)/);
+  assert.match(css, /^\.head-title \{[^}]*flex: 1 1 0;[^}]*min-width: 0/m, 'a long title shortens instead of pushing Details to a second row');
+  assert.match(css, /^\.head \{[^}]*flex-wrap: nowrap/m);
+  assert.match(css, /^\.head\.centered \{[^}]*padding: 16px 200px 12px/m, 'the group head keeps clear of Working and Details');
+});
+
+test('app.css is well formed: braces never close more than they opened, so no rule is swallowed', async () => {
+  const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
+  let depth = 0;
+  css.split('\n').forEach((line, i) => {
+    for (const ch of line) {
+      if (ch === '{') depth++;
+      else if (ch === '}') { depth--; assert.ok(depth >= 0, `a stray } on line ${i + 1}`); }
+    }
+  });
+  assert.equal(depth, 0);
+});
+
+test('Markets and Trade: the table folds 24h and Volume when narrow, a link button looks like a link, selects use the page font', async () => {
+  const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
+  assert.match(css, /@container \(max-width: 620px\) \{[^}]*\.mk-t \.mk-c-chg, \.mk-t \.mk-c-vol \{ display: none; \}/);
+  assert.match(css, /^button\.link \{[^}]*border: 0;[^}]*background: none;/m);
+  assert.match(css, /^button, input, textarea, select \{ font: inherit; color: inherit; \}/m);
+});
+
+test('the equity blue goes by Linqi\'s own name: no --blue, which his tokens use for the orange RWA colour', async () => {
+  const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
+  const tokens = await readFile(new URL('../css/tokens.css', import.meta.url), 'utf8');
+  assert.doesNotMatch(css, /var\(--blue\)|var\(--on-blue\)/);
+  assert.doesNotMatch(tokens, /--blue:|--on-blue:/);
+  assert.match(css, /var\(--alloc-equity\)/);
+  assert.equal((tokens.match(/--on-equity: #ffffff;/g) ?? []).length, 3, 'white words on the blue, in all three theme blocks');
+});
