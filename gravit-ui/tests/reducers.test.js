@@ -100,11 +100,11 @@ test('details, stop, withdraw, banner, call', () => {
 });
 
 test('discover: install adds the plugin, a teaching conversation and a toast; uninstall removes', () => {
-  const s0 = R.openPlugin(fresh(), 'news');
-  assert.equal(s0.discover.drawer, 'news');
+  const s0 = R.nav(fresh(), { screen: 'plugin', id: 'news' });
+  assert.deepEqual(s0.route, { screen: 'plugin', id: 'news' });
+  assert.deepEqual(R.nav(fresh(), { screen: 'plugin', id: 'nope' }).route, { screen: 'discover', id: null }, 'a plugin that is not there opens Discover');
   const s1 = R.install(s0, { id: 'news', now: NOW });
   assert.ok(s1.plugins.installed.includes('news'));
-  assert.equal(s1.discover.drawer, null);
   assert.match(s1.discover.toast.text, /News sentiment installed/);
   assert.equal(s1.conversations[0].title, 'News sentiment: how to use me');
   assert.equal(s1.conversations[0].unread, true);
@@ -190,8 +190,8 @@ test('a call leaves a call card; dismissing a banner leaves the breaking message
 const atSign = (s, manifest) => { const r = s.discover.create.run; return R.clientPublishes(R.clientConnected(R.startClient(s, { run: r }), { run: r }), { run: r, manifest }); };
 
 test('Create runs a scripted client against Discover\'s MCP face: every step checks its run and the step it expects', () => {
-  let s = R.openCreate(R.openPlugin(fresh(), 'news'));
-  assert.equal(s.discover.drawer, null, 'one dialog at a time');
+  let s = R.openCreate(R.toggleDetails(fresh()));
+  assert.equal(s.detailsOpen, false, 'one dialog at a time');
   assert.deepEqual(s.discover.create, { run: 'run-1', step: 'wait', client: 'Claude Code', started: false, copied: false, manifest: null, visibility: 'private' });
   assert.equal(R.setClient(s, 'Cursor').discover.create.client, 'Cursor');
   assert.equal(R.setClient(s, 'Vim'), s, 'an unknown client is refused');
@@ -280,14 +280,14 @@ test('installing answers every waiting ask for that plugin and tells the convers
   assert.match(c1.messages.at(-1).text, /News sentiment installed/);
 });
 
-test('leaving Discover clears its drawer, ask and toast', () => {
-  let s = R.install(R.nav(fresh(), { screen: 'discover', id: null }), { id: 'news', now: NOW });
-  s = R.openCreate(R.openPlugin(s, 'buffett'));
-  s = R.openPlugin(s, 'buffett');
+test('leaving Discover and its plugin pages clears its dialog and toast; moving between them keeps the toast', () => {
+  const s = R.install(R.nav(fresh(), { screen: 'discover', id: null }), { id: 'news', now: NOW });
   const away = R.nav(R.openCreate(s), { screen: 'messages', id: 'c-1' });
-  assert.deepEqual([away.discover.drawer, away.discover.create, away.discover.toast], [null, null, null]);
-  const stay = R.nav(s, { screen: 'discover', id: 'bots' });
-  assert.equal(stay.discover.drawer, 'buffett', 'moving inside Discover keeps it');
+  assert.deepEqual([away.discover.create, away.discover.toast], [null, null]);
+  const page = R.nav(s, { screen: 'plugin', id: 'news' });
+  assert.ok(page.discover.toast, 'the toast follows you onto the plugin page');
+  assert.ok(R.nav(page, { screen: 'discover', id: 'bots' }).discover.toast, 'and back');
+  assert.deepEqual(R.nav(R.nav(fresh(), { screen: 'discover', id: 'bots' }), { screen: 'messages', id: 'c-1' }).lastDiscover, { screen: 'discover', id: 'bots' });
 });
 
 test('the new-message draft picks bots one by one', () => {

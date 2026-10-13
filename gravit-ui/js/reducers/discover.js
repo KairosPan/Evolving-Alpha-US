@@ -16,8 +16,6 @@ const withCreate = (s, patch) => disc(s, { create: { ...s.discover.create, ...pa
 export const reducers = {
   setQuery: (s, query) => disc(s, { query: query ?? '' }),
   toggleInstalledOnly: s => disc(s, { installedOnly: !s.discover.installedOnly }),
-  openPlugin: (s, id) => disc(closeOverlays(s), { drawer: id }),
-  closeDrawer: s => disc(s, { drawer: null }),
   dismissToast: s => (s.discover.toast ? disc(s, { toast: null }) : s),
 
   // Create: Discover's MCP face, waiting for a client to connect
@@ -87,13 +85,12 @@ export const reducers = {
         messages: [...x.messages.map(m => (m.kind === 'install' && m.data?.plugin === id && !m.answer ? { ...m, answer: 'installed' } : m)), said.msg],
       })) };
     }
-    return disc(s, { drawer: null, toast: { text: `${p.name} installed · Gravit opened a conversation to show you how`, action: { label: 'Open', route: { screen: 'messages', id: conv.id } } } });
+    return disc(s, { toast: { text: `${p.name} installed · Gravit opened a conversation to show you how`, action: { label: 'Open', route: { screen: 'messages', id: conv.id } } } });
   },
 
   uninstall(s, id) {
     if (!s.plugins.installed.includes(id)) return s;
-    const next = { ...s, plugins: { ...s.plugins, installed: s.plugins.installed.filter(x => x !== id) } };
-    return next.discover.drawer === id ? disc(next, { drawer: null }) : next;
+    return { ...s, plugins: { ...s.plugins, installed: s.plugins.installed.filter(x => x !== id) } };
   },
 
 };

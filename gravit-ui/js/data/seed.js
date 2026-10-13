@@ -82,7 +82,7 @@ export function seed(now = Date.now()) {
     settingsOpen: false,
     counters: { intent: 4, ord: 9, card: 1, pay: 7, ledger: 58, msg: n, conv: 4, plugin: 0, mem: 9, mail: 3 },
     conversations: [btc, pelosi, addr, group],
-    discover: { query: '', installedOnly: false, drawer: null, create: null, toast: null },
+    discover: { query: '', installedOnly: false, create: null, toast: null },
     // Markets' view and watchlist, and Trade's kind, search and ticket (the ticket is moment-only)
     markets: { tab: 'all', sort: 'volume', q: '', interval: '1h', watch: ['BTC', 'FED-DEC', 'DOGE'] },
     trade: { kind: 'crypto', q: '', ticket: null },

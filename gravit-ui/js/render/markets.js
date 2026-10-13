@@ -93,6 +93,8 @@ function sorted(insts, sort) {
 }
 
 export function renderMarkets(state, now) {
+  const open = state.route.screen === 'markets' && state.route.id ? instrument(state.route.id) : null;
+  if (open) return marketPage(open, state, now);
   const m = state.markets;
   const q = m.q;
   const found = LISTED.filter(i => matches(i, q));
@@ -122,13 +124,12 @@ export function renderMarkets(state, now) {
     body = (events.length ? `<section class="mk-cards" aria-label="Predictions">${events.map(i => card(i, state, now, tab === 'predictions')).join('')}</section>` : '') + (insts.length ? table(insts, state, now) : '');
   }
   const tabsHtml = `<div class="mk-tabs" role="group" aria-label="Markets">${tabs.map(([id, label]) => `<button type="button" class="mk-tab" data-action="mkTab" data-value="${id}" aria-pressed="${id === tab}">${label}</button>`).join('')}</div>`;
-  const open = state.route.screen === 'markets' && state.route.id ? instrument(state.route.id) : null;
-  return `<main class="${cls('main', 'mkts', open && 'with-drawer')}"><div class="mk-head"><h1 class="head-title">Markets</h1>` +
+  return `<main class="main mkts"><div class="mk-head"><h1 class="head-title">Markets</h1>` +
     `<div class="search"><label for="mq" class="sr-only">Search markets</label>${icon('search', 18, 2)}<input id="mq" type="search" autocomplete="off" placeholder="Search markets" data-action="mkQuery"${attrs({ value: q })}></div></div>` +
-    `<div class="mk">${tabsHtml}${bar}${body}</div>${open ? marketDrawer(open, state, now) : ''}</main>`;
+    `<div class="mk">${tabsHtml}${bar}${body}</div></main>`;
 }
 
-// ---- the drawer: head, price, across venues, what you hold, Gravit on it, the statement
+// ---- a market's page: its head and keys, price and facts, then the chart and venues beside what you hold, Gravit on it and the statement
 
 function chart(inst, interval, venue, now) {
   const series = seriesOf(inst, interval, now);
@@ -150,7 +151,7 @@ const line = (mark, t1, t2, extra = '', markClass = '') => `<div class="mk-line"
 const section = (label, head, inner) => `<section class="dsec" aria-label="${label}">${head}${inner}</section>`;
 const h2 = text => `<div class="mk-h2">${text}</div>`;
 
-export function marketDrawer(inst, state, now) {
+export function marketPage(inst, state, now) {
   const a = state.account;
   const ev = inst.kind === 'event';
   const stable = inst.kind === 'stable';
@@ -161,8 +162,8 @@ export function marketDrawer(inst, state, now) {
   const yes = ev ? inst.outcomes[0] : null;
 
   const kindSub = { coin: `Crypto · ${inst.base}`, stock: `Stock · ${inst.base}`, rwa: 'Tokenized asset', stable: 'Stablecoin', event: inst.category }[inst.kind];
-  let head = `<div class="mk-who">${mkAv(inst, 'lg')}<div><b>${esc(inst.name)}</b><span class="mk-sub">${esc(kindSub)}</span></div></div>`;
-  if (ev) head += closeSpan(inst, now);
+  const who = `<div class="mk-who">${mkAv(inst, 'lg')}<div><h1 class="head-title">${esc(inst.name)}</h1><span class="mk-sub">${esc(kindSub)}</span></div></div>`;
+  let head = ev ? closeSpan(inst, now) : '';
   head += ev ? `<div class="mk-d-px"><span class="mk-big">${cents(yes.price)}</span><span class="dim">Yes</span>${chgHtml(centsChg(yes.chg), '¢')}</div>`
     : `<div class="mk-d-px"><span class="mk-big">${usd(inst.price)}</span>${stable ? '' : chgHtml(inst.chg)}</div>`;
   if (!stable) {
@@ -179,6 +180,7 @@ export function marketDrawer(inst, state, now) {
       return `<div class="mk-out"><span class="mk-out-lbl">${o.label}</span><span class="mk-out-px">${cents(o.ask)}</span>${chgHtml(centsChg(o.chg), '¢')}${key}</div>`;
     }).join('')}</div>`;
   }
+  let keys = '';
   if (!stable) {
     const heldAble = a.holdings.find(h => h.name === inst.base && legsOf(inst, a, ev ? Math.max(0, inst.outcomes.findIndex(o => o.label === h.outcome)) : 0).some(l => l.state === 'able' && l.venue === h.venue));
     const heldOut = ev && heldAble ? inst.outcomes.findIndex(o => o.label === heldAble.outcome) : -1;
@@ -188,12 +190,13 @@ export function marketDrawer(inst, state, now) {
       `<button type="button" class="btn" data-action="handToGravit" data-id="${inst.id}">${icon('agent', 16, 2)}Hand to Gravit</button>`,
       `<button type="button" class="${cls('btn', watched && 'mk-on')}" data-action="toggleWatch" data-id="${inst.id}" aria-pressed="${watched}">${icon('star', 16, 2)}${watched ? 'Watching' : 'Watch'}</button>`,
     ];
-    head += `<div class="mk-d-acts">${acts.join('')}</div>`;
+    keys = `<div class="mk-d-acts">${acts.join('')}</div>`;
   }
 
-  const parts = [head];
+  const left = [];
+  const right = [];
   if (!stable) {
-    parts.push(section('Price history', `<div class="mk-sec-head">${h2('Price')}${seg(['5m', '1h', '1d'], state.markets.interval, 'mkInterval')}</div>`, chart(inst, state.markets.interval, first?.venue ?? '', now)));
+    left.push(section('Price history', `<div class="mk-sec-head">${h2('Price')}${seg(['5m', '1h', '1d'], state.markets.interval, 'mkInterval')}</div>`, chart(inst, state.markets.interval, first?.venue ?? '', now)));
     const able = legs.some(l => l.state === 'able');
     const rows = legs.map(l => {
       const tag = l.best ? ' <span class="mk-tag up">Best</span>' : l.state === 'public' ? ' <span class="mk-tag">Public</span>' : '';
@@ -204,7 +207,7 @@ export function marketDrawer(inst, state, now) {
     }).join('');
     const headRow = ev ? '<tr><th scope="col">Venue</th><th scope="col" class="r">Price</th><th scope="col" class="r"><span class="sr-only">Actions</span></th></tr>'
       : '<tr><th scope="col">Venue</th><th scope="col" class="r">Buy at</th><th scope="col" class="r">Spread</th><th scope="col" class="r"><span class="sr-only">Actions</span></th></tr>';
-    parts.push(section('Across venues', h2('Across venues'), `<div class="mk-wrap"><table class="mk-t mk-across"><thead>${headRow}</thead><tbody>${rows}</tbody></table></div>`));
+    left.push(section('Across venues', h2('Across venues'), `<div class="mk-wrap"><table class="mk-t mk-across"><thead>${headRow}</thead><tbody>${rows}</tbody></table></div>`));
   }
 
   // what you hold of it, then every order on it still on its way or on a book, by you or by Gravit
@@ -213,7 +216,7 @@ export function marketDrawer(inst, state, now) {
   const orders = a.orders.filter(o => o.inst === inst.id && (o.status === 'open' || o.status === 'pending')).map(o => line(o.side === 'buy' ? '+' : '−',
     orderWords(o, inst), `${esc(o.venue)} · ${o.by === 'gravit' ? 'Gravit' : 'you'} · 0 of ${qtyFmt(o.qty)} filled`, cancelKey(o, state)));
   const mine = [...held, ...orders];
-  parts.push(section('You hold', h2('You hold'), mine.length ? `<div class="mk-feed">${mine.join('')}</div>` : '<p class="mk-empty">You don’t hold any.</p>'));
+  right.push(section('You hold', h2('You hold'), mine.length ? `<div class="mk-feed">${mine.join('')}</div>` : '<p class="mk-empty">You don’t hold any.</p>'));
 
   if (!stable) {
     // the conversations about it: Gravit's orders on it, or the market named in a title, a message or a card row
@@ -227,16 +230,17 @@ export function marketDrawer(inst, state, now) {
       return `<a class="mk-line" href="#/messages/${c.id}" data-action="open" data-id="${c.id}"><span class="mk-mark">→</span><div class="mk-line-b"><div class="mk-t1">${esc(c.title)}</div><div class="mk-t2">${STATUS[c.status] ?? 'Working'} · ${room} · until ${fmtDate(c.intent.until)}</div></div></a>`;
     });
     const lines = [...asks, ...convs];
-    parts.push(section('Gravit on it', h2('Gravit on it'), lines.length ? `<div class="mk-feed">${lines.join('')}</div>` : '<p class="mk-empty">Gravit isn’t working on it.</p>'));
+    right.push(section('Gravit on it', h2('Gravit on it'), lines.length ? `<div class="mk-feed">${lines.join('')}</div>` : '<p class="mk-empty">Gravit isn’t working on it.</p>'));
   }
 
   const st = a.activity.filter(x => mentions(x.text, inst.base)).slice(0, 8).map(x => {
     const fill = x.text.startsWith('Fill');
     return line(fill ? '✓' : '·', esc(x.text), `${fmtDate(x.at)} ${fmtClock(x.at)}${x.amount ? ` · ${dollars(x.amount)}` : ''}`, '', fill ? 'ok' : '');
   });
-  parts.push(section('On the statement', `<div class="mk-sec-head">${h2('On the statement')}<button type="button" class="link mk-link" data-action="openStatement">Open the Statement →</button></div>`,
+  right.push(section('On the statement', `<div class="mk-sec-head">${h2('On the statement')}<button type="button" class="link mk-link" data-action="openStatement">Open the Statement →</button></div>`,
     st.length ? `<div class="mk-feed">${st.join('')}</div>` : '<p class="mk-empty">Nothing on the statement about it yet.</p>'));
 
-  return `<aside class="drawer mk-drawer" aria-label="${esc(inst.name)}"><div class="drawer-head"><h2>${esc(inst.name)}</h2><button type="button" class="close-key" data-action="closeMarket" aria-label="Close">×</button></div>` +
-    `<div class="drawer-body mk-d">${parts.join('')}</div></aside>`;
+  return `<main class="main mkts mk-page"><a class="back-link page-back" href="#/markets">‹ Markets</a><div class="mk-pg">` +
+    `<header class="mk-pg-head">${who}${keys}</header><div class="mk-pg-top">${head}</div>` +
+    `<div class="mk-pg-cols">${left.length ? `<div class="mk-pg-col">${left.join('')}</div>` : ''}<div class="mk-pg-col">${right.join('')}</div></div></div></main>`;
 }

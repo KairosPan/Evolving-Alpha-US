@@ -1,5 +1,6 @@
-// gravit-ui/js/render/discover.js — Discover as an App Store (spec §7): shelves, cards, the drawer that signs, My plugins, and Create: Discover's own MCP face
+// gravit-ui/js/render/discover.js — Discover as an App Store (spec §7): shelves, cards, a page per plugin that signs, My plugins, and Create: Discover's own MCP face
 import { esc, attrs, cls } from '../html.js';
+import { toHash } from '../router.js';
 import { icon } from '../icons.js';
 import { PLUGINS, SHELVES, SHOP_MCP, byId, search, likeFor, fromManifest } from '../data/plugins.js';
 import { logo } from './avatars.js';
@@ -14,10 +15,11 @@ export function keyFor(p, state) {
     `<button type="button"${attrs({ class: 'pkey uninstall', 'data-action': 'uninstall', 'data-id': p.id, 'aria-label': `Uninstall ${p.name}` })}>${icon('trash', 15, 2.1)}</button></span>`;
 }
 
-export function card(p, state, { view = 'shelf', pressed = false, openIn = null } = {}) {
-  // the link carries its own action so a click opens the conversation, not the card's drawer
+// a card opens its plugin's page; its key installs or uninstalls in place
+export function card(p, state, { view = 'shelf', openIn = null } = {}) {
+  // the link carries its own action so a click opens the conversation, not the plugin's page
   const extra = openIn ? `<div class="pcard-extra"><a class="link" data-action="open" data-id="${esc(openIn)}" href="#/messages/${esc(openIn)}">Open in Messages ›</a></div>` : '';
-  return `<div${attrs({ class: cls('pcard', pressed && 'pressed', view === 'grid' && 'in-grid'), 'data-action': 'openPlugin', 'data-id': p.id, role: 'button', tabindex: '0' })}>${logo(p, 44)}` +
+  return `<div${attrs({ class: cls('pcard', view === 'grid' && 'in-grid'), 'data-action': 'openPlugin', 'data-id': p.id, role: 'button', tabindex: '0' })}>${logo(p, 44)}` +
     `<div class="pcard-body"><div class="pcard-name">${esc(p.name)}</div><div class="pcard-blurb">${esc(p.blurb)}</div>${extra}</div>` +
     `<div class="pcard-side"><span class="pcard-kind">${esc(p.kind.toUpperCase())}</span>${keyFor(p, state)}</div></div>`;
 }
@@ -42,12 +44,12 @@ const MAY = {
 const shelfIds = (s, state) => (s.id === 'like' ? likeFor(state.memory) : [...state.plugins.uploaded.filter(p => p.kind === s.kind).map(p => p.id).reverse(), ...s.ids]);
 
 function shelf(s, state) {
-  const cards = shelfIds(s, state).map(id => byId(id, state.plugins.uploaded)).filter(Boolean).map(p => card(p, state, { pressed: state.discover.drawer === p.id, openIn: openInFor(p, state) })).join('');
+  const cards = shelfIds(s, state).map(id => byId(id, state.plugins.uploaded)).filter(Boolean).map(p => card(p, state, { openIn: openInFor(p, state) })).join('');
   return `<section class="shelf"><div class="shelf-head"><div class="shelf-title">${esc(s.title)}</div><a class="link" href="#/discover/${s.id}">See all ›</a></div><div class="shelf-row">${cards}</div></section>`;
 }
 
 function grid(title, plugins, state, back = false) {
-  const cards = plugins.map(p => card(p, state, { view: 'grid', pressed: state.discover.drawer === p.id, openIn: openInFor(p, state) })).join('');
+  const cards = plugins.map(p => card(p, state, { view: 'grid', openIn: openInFor(p, state) })).join('');
   return `<section class="grid-sec">${back ? '<a class="back-link" href="#/discover">‹ Discover</a>' : ''}<div class="grid-title">${esc(title)}</div><div class="grid">${cards}</div></section>`;
 }
 
@@ -65,7 +67,8 @@ function signRows(p, installed, state) {
   return installed ? what : [...what, ['May', esc(MAY[p.kind] ?? MAY.Data)], ['May not', 'pay anyone · move money'], ['Until', 'you uninstall']];
 }
 
-export function pluginDrawer(p, state) {
+// a plugin's own page: the way back, its head with the one key, what you sign under it, then what it does
+export function pluginPage(p, state) {
   const installed = state.plugins.installed.includes(p.id);
   // your own plugin says where it stands; a catalogue plugin, how many installed it
   const meta = state.plugins.mine.includes(p.id)
@@ -75,13 +78,20 @@ export function pluginDrawer(p, state) {
   const tools = Array.isArray(p.tools) && p.tools.length ? sec('Tools', p.tools.map(t => `<span class="mono">${esc(t)}</span>`), true) : '';
   // while it is reviewed there is nothing to sign yet
   const pending = p.review && !installed;
-  const foot = pending ? '<button type="button" class="btn-primary" disabled>In review</button>'
+  const key = pending ? '<button type="button" class="btn-primary" disabled>In review</button>'
     : installed ? `<button type="button" class="btn-primary" data-action="uninstall" data-id="${esc(p.id)}">Uninstall</button>` : `<button type="button" class="btn-primary" data-action="install" data-id="${esc(p.id)}">Install</button>`;
-  return `<aside class="drawer"${attrs({ 'aria-label': p.name })}><div class="drawer-head"><h2>${esc(p.name)}</h2><button type="button" class="close-key" data-action="closeDrawer" aria-label="Close">×</button></div><div class="drawer-body">` +
-    `<div class="plug-id">${logo(p, 56)}<div><div class="plug-name">${esc(p.name)}</div><div class="dim">${esc(meta)}</div></div></div><p class="plug-blurb">${esc(p.blurb)}.</p>` +
-    (p.asks.length ? sec('What you can ask it', p.asks) : '') + (writes.length ? sec('What it writes', writes, true) : '') + tools + sec('What it needs from you', [p.needs]) +
+  const back = toHash(state.lastDiscover ?? { screen: 'discover', id: null });
+  return `<main class="main disc plugin-page"><a class="back-link page-back" href="${esc(back)}">‹ Discover</a>` +
+    `<header class="plug-head">${logo(p, 72)}<div class="plug-title"><h1 class="plug-name">${esc(p.name)}</h1><div class="dim">${esc(meta)}</div></div><div class="plug-key">${key}</div></header>` +
+    `<div class="plug-body"><p class="plug-blurb">${esc(p.blurb)}.</p>` +
     (pending ? '' : `<div class="dsec"><div class="dsec-label">What you sign</div>${kv(signRows(p, installed, state))}</div>`) +
-    `<div class="drawer-foot">${foot}</div></div></aside>`;
+    (p.asks.length ? sec('What you can ask it', p.asks) : '') + (writes.length ? sec('What it writes', writes, true) : '') + tools + sec('What it needs from you', [p.needs]) +
+    `</div>${state.discover.toast ? renderToast(state.discover.toast) : ''}</main>`;
+}
+
+// the plugin page the route names (nav sends an unknown one back to Discover)
+export function renderPlugin(state) {
+  return pluginPage(byId(state.route.id, state.plugins.uploaded), state);
 }
 
 const radio = (name, action, value, checked, label = value) => `<label class="radio-item"><input type="radio" name="${name}" value="${esc(value)}" data-action="${action}"${checked ? ' checked' : ''}><span>${esc(label)}</span></label>`;
@@ -126,12 +136,10 @@ export function renderCreate(state) {
   return `<div class="modal-scrim"><div class="modal wide" role="dialog" aria-label="Discover MCP">${head}<div class="modal-body">${body}</div></div></div>`;
 }
 
-// a toast's key opens a conversation (a link) or a plugin's drawer (a button)
+// a toast's key opens a conversation or a plugin's page
 export function renderToast(t) {
   const a = t.action;
-  const act = !a ? '' : a.plugin
-    ? `<button type="button" class="toast-key" data-action="openPlugin" data-id="${esc(a.plugin)}">${esc(a.label)}</button>`
-    : `<a class="toast-key" href="#/messages/${esc(a.route.id)}">${esc(a.label)}</a>`;
+  const act = !a ? '' : `<a class="toast-key" href="${a.plugin ? `#/plugin/${esc(a.plugin)}` : `#/messages/${esc(a.route.id)}`}">${esc(a.label)}</a>`;
   return `<div class="toast" role="status">${esc(t.text)}${act}<button type="button" class="toast-x" data-action="dismissToast" aria-label="Dismiss">×</button></div>`;
 }
 
@@ -152,7 +160,6 @@ export function renderDiscover(state) {
   } else {
     body = SHELVES.map(s => shelf(s, state)).join('');
   }
-  const drawer = d.drawer ? pluginDrawer(byId(d.drawer, state.plugins.uploaded) ?? { id: d.drawer, name: d.drawer, kind: '', blurb: '', installs: '', logo: { type: 'letter', text: '?' }, asks: [], writes: [], never: [], needs: '' }, state) : '';
   const toast = d.toast ? renderToast(d.toast) : '';
-  return `<main class="${cls('main', 'disc', d.drawer && 'with-drawer')}">${header(state)}${body}${drawer}${toast}${renderCreate(state)}</main>`;
+  return `<main class="main disc">${header(state)}${body}${toast}${renderCreate(state)}</main>`;
 }

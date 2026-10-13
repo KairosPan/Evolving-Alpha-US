@@ -12,7 +12,7 @@ import { closeIn, leftWords } from './market-fmt.js';
 import { handOver } from './trade.js';
 import { VENUES } from './data/seed.js';
 import { renderMailScreen } from './render/mail.js';
-import { renderDiscover } from './render/discover.js';
+import { renderDiscover, renderPlugin } from './render/discover.js';
 import { renderAccount } from './render/account.js';
 import { replyTo, followUp, director, nextUpload } from './driver.js';
 import { SHOP_MCP } from './data/plugins.js';
@@ -50,7 +50,7 @@ const usable = saved => !!saved && saved.v === SEED_VERSION && Array.isArray(sav
 // a banner, a ringing call, an open drawer, a trash-key ask and a toast belong to their moment: a reload starts without them
 const withoutMoments = s => ({
   ...s, banner: null, call: null, edit: null, confirm: null,
-  discover: { ...s.discover, drawer: null, create: null, toast: null },
+  discover: { ...s.discover, create: null, toast: null },
   compose: { files: [], listening: false },
   account: { ...s.account, panel: null, connecting: null, copied: false, panelError: null },
   trade: s.trade ? { ...s.trade, ticket: null } : s.trade,
@@ -146,18 +146,15 @@ function focusKey(el) {
 }
 
 // which overlay is up: focus moves into it when it opens and back to its opener when it closes
-// a market's drawer is its route (#/markets/<id>)
-const marketDrawer = s => s.route.screen === 'markets' && !!s.route.id;
-const overlayOf = s => (s.call ? 'call' : s.discover.create ? 'modal' : s.account.panel || s.detailsOpen || s.settingsOpen || s.discover.drawer || marketDrawer(s) ? 'drawer' : null);
-// Markets keeps its scroll while a drawer opens and closes over it
-const screenOf = s => (s.route.screen === 'markets' ? 'markets/' : `${s.route.screen}/${s.route.id ?? s.route.tab ?? ''}`);
+const overlayOf = s => (s.call ? 'call' : s.discover.create ? 'modal' : s.account.panel || s.detailsOpen || s.settingsOpen ? 'drawer' : null);
+const screenOf = s => `${s.route.screen}/${s.route.id ?? s.route.tab ?? ''}`;
 // which editor is open, by what it edits (its error may change; the editor stays the same)
 const editorOf = e => (e ? [e.kind, e.key, e.convId, e.id, e.dir].join('|') : null);
 // which dialog step is up: its body keeps its scroll only while the step stays the same
 // the ticket on Trade, by market: a new one is brought into view with its amount ready
 const ticketOf = s => (s.route.screen === 'trade' && s.trade.ticket?.id ? s.trade.ticket.id : null);
 const dialogOf = s => (s.discover.create ? `${s.discover.create.run}:${s.discover.create.step}` : null);
-const drawerOf = s => (s.account.panel ? `panel:${s.account.panel}` : null) ?? s.discover.drawer ?? (s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null) ?? (marketDrawer(s) ? `market:${s.route.id}` : null);
+const drawerOf = s => (s.account.panel ? `panel:${s.account.panel}` : null) ?? (s.detailsOpen ? 'details' : s.settingsOpen ? 'settings' : null);
 
 export function boot(win) {
   const doc = win.document;
@@ -197,7 +194,7 @@ export function boot(win) {
     const threadAt = thread0 ? { top: thread0.scrollTop, bottom: thread0.scrollHeight - thread0.scrollTop - thread0.clientHeight < 40 } : null;
     const scrolls = { main: root.querySelector('main')?.scrollTop, rows: root.querySelector('.rail-rows')?.scrollTop, drawer: root.querySelector('.drawer-body')?.scrollTop, dialog: root.querySelector('.modal-body')?.scrollTop, panel: root.querySelector('.tk-panel')?.scrollTop, shelves: [...root.querySelectorAll('.shelf-row')].map(e => e.scrollLeft) };
 
-    const screen = s.route.screen === 'discover' ? renderDiscover(s) : s.route.screen === 'account' ? renderAccount(s) : s.route.screen === 'mail' ? renderMailScreen(s, now())
+    const screen = s.route.screen === 'discover' ? renderDiscover(s) : s.route.screen === 'plugin' ? renderPlugin(s) : s.route.screen === 'account' ? renderAccount(s) : s.route.screen === 'mail' ? renderMailScreen(s, now())
       : s.route.screen === 'markets' ? renderMarkets(s, now()) : s.route.screen === 'trade' ? renderTrade(s, now()) : renderMessagesScreen(s, now());
     const overlays = (s.banner ? renderBanner(s.banner, s) : '') + (s.call ? renderCall(s.call, now()) : '') +
       (directorOpen ? `<div class="director" role="menu">${DIRECTOR.map(([l, k]) => `<button type="button" class="director-key" data-action="director" data-key="${k}">${l}</button>`).join('')}</div>` : '');
@@ -255,6 +252,8 @@ export function boot(win) {
     } else if (!overlay && last.overlay) {
       target = find(last.opener) ?? target;
       opener = null;
+    } else if (screenOf(s) !== last.screen && root.querySelector('.page-back')) {
+      target = root.querySelector('.page-back'); // a plugin's or a market's page just opened: focus sits on the way back
     } else if (opened) {
       target = doc.getElementById('tk-amount') ?? root.querySelector('.tk-panel .close-key') ?? target;
     } else if (s.edit && editorOf(s.edit) !== last.editor) {
@@ -357,12 +356,6 @@ export function boot(win) {
     setTimeout(() => win.URL.revokeObjectURL(href), REVOKE_MS);
   }
 
-  // closing a market's drawer replaces its history entry, so Back does not open it again
-  function closeMarket() {
-    win.history.replaceState(null, '', '#/markets');
-    store.dispatch('nav', { screen: 'markets', id: null });
-  }
-
   // the scripted client on Discover's MCP face: it connects a moment after its line is used, calls shop.mine, then asks shop.publish
   function runClient() {
     const c = store.get().discover.create;
@@ -449,11 +442,8 @@ export function boot(win) {
     cancelConfirm: () => store.dispatch('cancelConfirm'),
     suggest: el => { composerText = el.dataset.text; render(); doc.getElementById('say')?.focus(); },
     answer: el => answerFlow(store, timers, el.dataset, now),
-    // + on an install request opens the plugin's drawer; the request is answered when the install happens (reducers/discover.js)
-    installAsk: el => {
-      store.dispatch('openPlugin', el.dataset.plugin);
-      go({ screen: 'discover', id: null });
-    },
+    // + on an install request opens the plugin's page; the request is answered when the install happens (reducers/discover.js)
+    installAsk: el => go({ screen: 'plugin', id: el.dataset.plugin }),
     toggleDetails: () => store.dispatch('toggleDetails'),
     setMode: el => store.dispatch('setMode', el.dataset.value === 'Beast' ? 'beast' : 'guard'),
     // the banner's link dismisses it and still goes to the thread it names
@@ -468,8 +458,8 @@ export function boot(win) {
     hangUp: () => store.dispatch('hangUp', { now: now() }),
     toggleMute: () => store.dispatch('toggleMute'),
     // Discover
-    openPlugin: el => store.dispatch('openPlugin', el.dataset.id),
-    closeDrawer: () => store.dispatch('closeDrawer'),
+    // a card opens its plugin's own page
+    openPlugin: el => go({ screen: 'plugin', id: el.dataset.id }),
     install: el => store.dispatch('install', { id: el.dataset.id, now: now() }),
     uninstall: el => store.dispatch('uninstall', el.dataset.id),
     toggleInstalledOnly: () => store.dispatch('toggleInstalledOnly'),
@@ -522,7 +512,6 @@ export function boot(win) {
     },
     // Markets: tabs, sort, the chart interval, the watchlist; a market's drawer is its route
     openMarket: el => go({ screen: 'markets', id: el.dataset.id }),
-    closeMarket: () => closeMarket(),
     mkTab: el => store.dispatch('setMarketsTab', el.dataset.value),
     mkSort: el => store.dispatch('setMarketsSort', el.dataset.value),
     mkInterval: el => store.dispatch('setMarketsInterval', el.dataset.value),
@@ -657,9 +646,7 @@ export function boot(win) {
       if (s.edit) { store.dispatch('cancelEdit'); return; }
       if (s.account.panel) { store.dispatch('closePanel'); return; }
       if (s.confirm) { store.dispatch('cancelConfirm'); return; }
-      if (marketDrawer(s)) { closeMarket(); return; }
       if (s.discover.create) store.dispatch('closeCreate');
-      else if (s.discover.drawer) store.dispatch('closeDrawer');
       else if (s.detailsOpen) store.dispatch('toggleDetails');
       else if (s.settingsOpen) store.dispatch('closeSettings');
       else if (directorOpen) { directorOpen = false; render(); }

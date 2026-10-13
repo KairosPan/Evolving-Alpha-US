@@ -202,7 +202,7 @@ button.link:disabled { color: var(--dim); cursor: default; }
 .drawer.details { width: min(400px, 100%); }
 /* the page behind a drawer stays usable (spec §3.3): on a wide screen it makes room instead of hiding under it */
 @media (min-width: 1100px) {
-  .disc.with-drawer, .acct.with-drawer, .mkts.with-drawer { padding-right: 488px; }
+  .acct.with-drawer { padding-right: 488px; }
 }
 /* Details never lies over the conversation: the thread and the composer make room for it */
 @media (min-width: 861px) {
@@ -275,7 +275,6 @@ button.toast-key { border: 0; font: inherit; font-size: 13px; }
 .shelf-row { display: flex; gap: 12px; overflow-x: auto; margin: 0 -28px; padding: 2px 28px 6px; scrollbar-width: none; }
 .shelf-row::-webkit-scrollbar { display: none; }
 .pcard { flex: 0 0 300px; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; background: var(--surface); border: 1px solid var(--card-border); border-radius: var(--radius-m); padding: 16px; box-shadow: var(--shadow-card); cursor: pointer; }
-.pcard.pressed { border-color: var(--rule); }
 /* a card in a grid: not "grid", which is the container's own class and would stack the card's columns */
 .pcard.in-grid { flex: none; }
 .pcard-body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -295,8 +294,25 @@ button.toast-key { border: 0; font: inherit; font-size: 13px; }
 .grid-title { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 12px; }
 .back-link { color: var(--dim); font-size: 13px; font-weight: 600; }
+/* a plugin's and a market's own page: the way back, the head with its keys, then the body */
+.main.plugin-page, .main.mk-page { gap: 18px; }
+.page-back { align-self: flex-start; min-height: 32px; display: inline-flex; align-items: center; }
+.plug-head { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.plug-title { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.plug-key { flex: none; }
+.plug-key > * { min-width: 140px; }
+.plug-body { display: flex; flex-direction: column; gap: 16px; max-width: 760px; }
+.plug-body > .plug-blurb { font-size: 15px; color: var(--text); }
+.mk-pg { container-type: inline-size; display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.mk-pg-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.mk-pg-head .mk-d-acts { flex: 0 1 auto; }
+.mk-pg-head .mk-d-acts > * { flex: 0 0 auto; padding: 0 16px; }
+.mk-pg-top { display: flex; flex-direction: column; gap: 16px; max-width: 760px; }
+.mk-pg-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
+.mk-pg-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+@container (min-width: 900px) { .mk-pg-cols { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; } }
 .plug-id { display: flex; align-items: center; gap: 14px; }
-.plug-name { font-size: 17px; font-weight: 700; }
+.plug-name { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.01em; }
 .plug-blurb { margin: 0; font-size: 14px; color: var(--dim); }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-size: 12px; font-weight: 600; color: var(--dim); }
@@ -454,10 +470,8 @@ button.toast-key { border: 0; font: inherit; font-size: 13px; }
 .mk-empty { margin: 0; padding: 12px 0 4px; color: var(--dim); font-size: 14px; }
 
 /* the market drawer */
-.mk-drawer .mk-t td, .mk-drawer .mk-t th { padding-left: 6px; padding-right: 6px; }
-.mk-d { gap: 18px; }
 .mk-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.mk-who b { font-size: 17px; font-weight: 700; line-height: 1.3; }
+.mk-who .head-title { flex: none; font-size: 28px; font-weight: 800; letter-spacing: -0.01em; white-space: normal; }
 .mk-d-px { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .mk-big { font-size: 28px; font-weight: 800; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .mk-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 0; padding: 14px 16px; border-radius: var(--radius-m); background: var(--bg); }

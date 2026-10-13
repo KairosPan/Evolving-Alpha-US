@@ -47,18 +47,15 @@ test('a re-render keeps the thread where the person was reading; a new message i
   store.timers.clear();
 });
 
-test('a re-render keeps the scroll of the page, the rail rows, a drawer and each shelf row', () => {
+test('a re-render keeps the scroll of the page, the rail rows and each shelf row', () => {
   const f = fakeWindow({ hash: '#/discover' });
   const main = f.withSelector('main');
   const rows = f.withSelector('.rail-rows');
-  const drawer = f.withSelector('.drawer-body');
   const shelf = f.withSelector('.shelf-row');
   const store = boot(f.win);
-  store.dispatch('openPlugin', 'news');
-  assert.equal(drawer.scrollTop, 0, 'a drawer that just opened starts at its top');
-  main.scrollTop = 300; rows.scrollTop = 40; drawer.scrollTop = 120; shelf.scrollLeft = 260;
+  main.scrollTop = 300; rows.scrollTop = 40; shelf.scrollLeft = 260;
   store.dispatch('setQuery', ''); store.dispatch('toggleInstalledOnly'); store.dispatch('toggleInstalledOnly'); // re-renders while the same drawer stays open
-  assert.deepEqual([main.scrollTop, rows.scrollTop, drawer.scrollTop, shelf.scrollLeft], [300, 40, 120, 260]);
+  assert.deepEqual([main.scrollTop, rows.scrollTop, shelf.scrollLeft], [300, 40, 260]);
   store.timers.clear();
 });
 
@@ -107,8 +104,7 @@ test('+ on an install request opens the drawer and leaves the request waiting', 
   f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'installAsk', conv: 'c-1', msg: ask.id, plugin: 'news' } }));
   await f.tick();
   assert.equal(store.get().conversations[0].messages.find(m => m.id === ask.id).answer, undefined);
-  assert.equal(store.get().route.screen, 'discover');
-  assert.equal(store.get().discover.drawer, 'news');
+  assert.deepEqual(store.get().route, { screen: 'plugin', id: 'news' }, 'the plugin opens as its own page');
   store.timers.clear();
 });
 
@@ -567,6 +563,26 @@ test('after Refuse, the director\'s Plugin upload starts a fresh upload in a new
     const c = store.get().discover.create;
     assert.notEqual(c.run, run);
     assert.deepEqual([c.step, c.started], ['wait', true]);
+  } finally {
+    store.timers.clear();
+  }
+});
+
+// ---- plugins and markets are pages
+
+test('a card opens its plugin page and focus lands on the way back; Escape leaves the page alone', async () => {
+  const f = fakeWindow({ hash: '#/discover' });
+  const back = f.withSelector('.page-back', { tagName: 'A', presentIf: /class="back-link page-back"/ });
+  const store = boot(f.win);
+  try {
+    f.click(f.element({ tagName: 'DIV', dataset: { action: 'openPlugin', id: 'buffett' } }));
+    await f.tick();
+    assert.deepEqual(store.get().route, { screen: 'plugin', id: 'buffett' });
+    assert.match(f.html(), /<main class="main disc plugin-page">/);
+    assert.equal(f.doc.activeElement, back);
+    f.fire('doc', 'keydown', { key: 'Escape' });
+    await f.tick();
+    assert.deepEqual(store.get().route, { screen: 'plugin', id: 'buffett' });
   } finally {
     store.timers.clear();
   }

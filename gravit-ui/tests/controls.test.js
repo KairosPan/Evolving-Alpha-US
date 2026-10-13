@@ -258,7 +258,6 @@ test('one drawer at a time: each opener closes the others, and an Account panel 
   const panel = R.openPanel(R.nav(fresh(), { screen: 'account', tab: 'portfolio' }), 'receive');
   const mailed = R.nav(R.askConfirm(panel, { action: 'forgetAll' }), { screen: 'mail', id: null });
   assert.deepEqual([mailed.account.panel, mailed.confirm], [null, null], 'going to Mail closes a panel and drops a pending confirm');
-  assert.equal(R.toggleDetails(R.openPlugin(fresh(), 'news')).discover.drawer, null, 'Details replaces a plugin drawer');
   assert.equal(R.openSettings(panel).account.panel, null);
   assert.equal(R.nav(panel, { screen: 'discover', id: null }).account.panel, null, 'leaving Account closes its panel');
   assert.equal(R.nav(panel, { screen: 'account', tab: 'venues' }).account.panel, 'receive', 'moving inside Account keeps it');

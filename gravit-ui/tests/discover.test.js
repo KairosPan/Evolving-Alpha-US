@@ -1,7 +1,7 @@
 // gravit-ui/tests/discover.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderDiscover, card, keyFor, pluginDrawer, renderCreate, renderToast } from '../js/render/discover.js';
+import { renderDiscover, renderPlugin, card, keyFor, pluginPage, renderCreate, renderToast } from '../js/render/discover.js';
 import { byId } from '../js/data/plugins.js';
 import { nextUpload } from '../js/driver.js';
 import { reducers as R } from '../js/reducers/index.js';
@@ -45,20 +45,24 @@ test('a card: 44 px logo top-left, kind top-right, name, one line, and no author
   assert.doesNotMatch(installed, />Installed</, 'the ✓ carries no text label');
   assert.match(keyFor(byId('news'), s), /^<button type="button" class="pkey install" data-action="install" data-id="news" aria-label="Install News sentiment">/);
   assert.doesNotMatch(card(byId('pairs'), s), /Free|by @you/);
-  assert.match(card(byId('news'), s, { pressed: true }), /class="pcard pressed"/);
+  assert.doesNotMatch(card(byId('news'), s), /pressed/, 'a card opens its page; nothing stays pressed');
 });
 
-test('the drawer: sections, the signature table inline, Install at the foot; installed shows Uninstall; no author, price or How it is paid', () => {
-  const s = R.openPlugin(disc(), 'news');
-  const h = renderDiscover(s);
-  assert.match(h, /<aside class="drawer" aria-label="News sentiment">/);
-  assert.match(h, /class="pcard pressed" data-action="openPlugin" data-id="news"/);
-  const d = pluginDrawer(byId('news'), s);
+test('a plugin is a page: back to Discover, its head with the key, What you sign, its sections; installed shows Uninstall; no author or price', () => {
+  const s = R.nav(disc(), { screen: 'plugin', id: 'news' });
+  const h = renderPlugin(s);
+  assert.match(h, /^<main class="main disc plugin-page"><a class="back-link page-back" href="#\/discover">‹ Discover<\/a>/);
+  assert.match(h, /<h1 class="plug-name">News sentiment<\/h1>/);
+  assert.match(h, /<div class="plug-key"><button type="button" class="btn-primary" data-action="install" data-id="news">Install<\/button><\/div>/);
+  assert.ok(h.indexOf('What you sign') < h.indexOf('What you can ask it'), 'what you sign sits under the key');
+  assert.doesNotMatch(h, /class="drawer|closeDrawer/);
+  assert.match(renderPlugin(R.nav(R.nav(disc(), { screen: 'discover', id: 'bots' }), { screen: 'plugin', id: 'buffett' })), /href="#\/discover\/bots">‹ Discover</, 'back to the shelf you came from');
+  const d = pluginPage(byId('news'), s);
   assert.match(d, /class="dsec-label">What you can ask it</);
   assert.match(d, /class="dsec-label">What it writes</);
   assert.match(d, /Never: move money, pay anyone, change limits/);
   assert.doesNotMatch(d, /How it is paid|Free|by Gravit/);
-  assert.match(pluginDrawer(byId('buffett'), s), /class="dim">Bots · 1\.2k installs</);
+  assert.match(pluginPage(byId('buffett'), s), /class="dim">Bots · 1\.2k installs</);
   assert.match(d, /class="dsec-label">What it needs from you</);
   assert.match(d, /class="dsec-label">What you sign</);
   assert.match(d, /install news/);
@@ -66,7 +70,7 @@ test('the drawer: sections, the signature table inline, Install at the foot; ins
   assert.match(d, /you uninstall/);
   assert.match(d, /class="btn-primary" data-action="install" data-id="news">Install</);
   assert.doesNotMatch(d, /sign this/);
-  const inst = pluginDrawer(byId('buffett'), s);
+  const inst = pluginPage(byId('buffett'), s);
   assert.match(inst, /uninstall buffett/);
   assert.match(inst, /class="btn-primary" data-action="uninstall" data-id="buffett">Uninstall</);
 });
@@ -96,13 +100,13 @@ test('the just-installed card keeps Open in Messages, with no Just installed chi
 
 test('the signature follows the plugin: only a bot may propose; uninstalling signs only what and for; empty sections are left out', () => {
   const s = disc();
-  assert.match(pluginDrawer(byId('news'), s), /May<\/span><span class="kv-v">answer when asked · write into the conversation/);
-  assert.match(pluginDrawer(byId('telegram'), s), /May<\/span><span class="kv-v">read what you point it at · write signals, never orders/);
-  assert.match(pluginDrawer(byId('politician'), { ...s, plugins: { ...s.plugins, installed: [] } }), /May<\/span><span class="kv-v">read Portfolio · propose in your limit/);
-  const inst = pluginDrawer(byId('buffett'), s);
+  assert.match(pluginPage(byId('news'), s), /May<\/span><span class="kv-v">answer when asked · write into the conversation/);
+  assert.match(pluginPage(byId('telegram'), s), /May<\/span><span class="kv-v">read what you point it at · write signals, never orders/);
+  assert.match(pluginPage(byId('politician'), { ...s, plugins: { ...s.plugins, installed: [] } }), /May<\/span><span class="kv-v">read Portfolio · propose in your limit/);
+  const inst = pluginPage(byId('buffett'), s);
   assert.match(inst, /uninstall buffett/);
   assert.doesNotMatch(inst, />May</);
-  const bare = pluginDrawer(byId('onchain'), s);
+  const bare = pluginPage(byId('onchain'), s);
   assert.doesNotMatch(bare, /has not written/);
   assert.doesNotMatch(bare, /What you can ask it/);
 });
@@ -184,22 +188,22 @@ test('a private upload lands first on its shelf, installed, with Open in Message
   assert.match(data, /data-id="moat"[\s\S]*?Open in Messages ›[\s\S]*?class="pkey uninstall" data-action="uninstall" data-id="moat"/);
   assert.match(h, /class="toast" role="status">Moat score uploaded · Private<a class="toast-key" href="#\/messages\/c-5">Open<\/a>/);
   const moat = byId('moat', s.plugins.uploaded);
-  assert.match(pluginDrawer(moat, s), /class="dim">Data · Private</);
-  assert.match(pluginDrawer(moat, s), /<div class="dsec-label">Tools<\/div><div class="dsec-line"><span class="mono">moat\.score<\/span><\/div>/);
-  assert.match(pluginDrawer(byId('pairs'), s), /class="dim">Quant · Private</, 'your own plugin says where it is, not who made it');
+  assert.match(pluginPage(moat, s), /class="dim">Data · Private</);
+  assert.match(pluginPage(moat, s), /<div class="dsec-label">Tools<\/div><div class="dsec-line"><span class="mono">moat\.score<\/span><\/div>/);
+  assert.match(pluginPage(byId('pairs'), s), /class="dim">Quant · Private</, 'your own plugin says where it is, not who made it');
   assert.match(renderDiscover(R.nav(s, { screen: 'discover', id: 'data' })), /<div class="grid"><div class="pcard in-grid" data-action="openPlugin" data-id="moat"/, 'and first in See all');
   s = R.publishUpload(R.setUploadVisibility(atSign(R.openCreate(s), nextUpload(s.plugins.uploaded)), 'public'), { now: NOW });
   const cpi = byId('cpi', s.plugins.uploaded);
   assert.match(keyFor(cpi, s), /^<span class="pkey-wait" role="img" aria-label="In review">/);
-  const d = pluginDrawer(cpi, s);
+  const d = pluginPage(cpi, s);
   assert.match(d, /class="dim">Data · In review</);
   assert.match(d, /<button type="button" class="btn-primary" disabled>In review<\/button>/);
   assert.doesNotMatch(d, /What you sign/);
   assert.match(renderDiscover(s), /class="toast" role="status">CPI quick read uploaded · In review<button type="button" class="toast-x"/);
   const passed = R.reviewPassed(s, { id: 'cpi', now: NOW });
   assert.match(keyFor(byId('cpi', passed.plugins.uploaded), passed), /class="pkey install" data-action="install" data-id="cpi"/);
-  assert.match(pluginDrawer(byId('cpi', passed.plugins.uploaded), passed), /class="dim">Data · Public</);
-  assert.match(renderToast(passed.discover.toast), /<button type="button" class="toast-key" data-action="openPlugin" data-id="cpi">Open<\/button>/);
+  assert.match(pluginPage(byId('cpi', passed.plugins.uploaded), passed), /class="dim">Data · Public</);
+  assert.match(renderToast(passed.discover.toast), /<a class="toast-key" href="#\/plugin\/cpi">Open<\/a>/);
   for (const st of [s, passed]) assert.doesNotMatch(renderDiscover(R.toggleInstalledOnly(st)) + renderDiscover(st), /Free|by @|by Gravit|by community|Just installed/);
 });
 

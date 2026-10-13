@@ -7,7 +7,7 @@ import { renderMessagesScreen, renderBanner, renderCall } from '../js/render/mes
 import { renderMarkets } from '../js/render/markets.js';
 import { renderTrade } from '../js/render/trade.js';
 import { renderMailScreen } from '../js/render/mail.js';
-import { renderDiscover } from '../js/render/discover.js';
+import { renderDiscover, renderPlugin } from '../js/render/discover.js';
 import { renderAccount } from '../js/render/account.js';
 import { director } from '../js/driver.js';
 import { reducers as R } from '../js/reducers/index.js';
@@ -27,8 +27,8 @@ function everyState() {
   const withMore = ['breaking', 'call'].reduce((st, k) => R.append(st, { convId: 'c-1', msg: { from: 'gravit', kind: k, text: 'x', data: k === 'breaking' ? director.breaking(NOW) : { about: 'x' }, answer: k === 'call' ? 'missed' : undefined }, at: NOW }), withEvents);
   return [
     withMore, R.toggleDetails(s), R.nav(s, { screen: 'messages', id: 'c-4' }), R.startDraft(s, { now: NOW }), R.toggleDraftGroup(R.startDraft(s, { now: NOW })), { ...s, conversations: [], route: { screen: 'messages', id: null } },
-    R.nav(s, { screen: 'discover', id: null }), R.openPlugin(R.nav(s, { screen: 'discover', id: null }), 'news'), R.openCreate(R.nav(s, D)), R.setClient(R.openCreate(R.nav(s, D)), 'Cursor'), R.setClient(R.openCreate(R.nav(s, D)), 'Codex'), R.setCreateCopied(R.openCreate(R.nav(s, D)), true), conn(R.openCreate(R.nav(s, D))), atSign(R.openCreate(R.nav(s, D))), R.setUploadVisibility(atSign(R.openCreate(R.nav(s, D))), 'public'), R.rejectUpload(atSign(R.openCreate(R.nav(s, D)))),
-    ...(() => { const mine = R.publishUpload(atSign(R.openCreate(R.nav(s, D))), { now: NOW }); const pub = R.publishUpload(R.setUploadVisibility(atSign(R.openCreate(mine)), 'public'), { now: NOW }); return [mine, pub, R.openPlugin(pub, 'cpi'), R.reviewPassed(pub, { id: 'cpi', now: NOW }), R.openPlugin(mine, 'moat')]; })(), R.nav(R.toggleInstalledOnly(R.install(s, { id: 'news', now: NOW })), D), R.nav(R.setQuery(s, 'bot'), D), R.nav(s, { screen: 'discover', id: 'bots' }),
+    R.nav(s, { screen: 'discover', id: null }), R.nav(s, { screen: 'plugin', id: 'news' }), R.nav(s, { screen: 'plugin', id: 'buffett' }), R.openCreate(R.nav(s, D)), R.setClient(R.openCreate(R.nav(s, D)), 'Cursor'), R.setClient(R.openCreate(R.nav(s, D)), 'Codex'), R.setCreateCopied(R.openCreate(R.nav(s, D)), true), conn(R.openCreate(R.nav(s, D))), atSign(R.openCreate(R.nav(s, D))), R.setUploadVisibility(atSign(R.openCreate(R.nav(s, D))), 'public'), R.rejectUpload(atSign(R.openCreate(R.nav(s, D)))),
+    ...(() => { const mine = R.publishUpload(atSign(R.openCreate(R.nav(s, D))), { now: NOW }); const pub = R.publishUpload(R.setUploadVisibility(atSign(R.openCreate(mine)), 'public'), { now: NOW }); return [mine, pub, R.nav(pub, { screen: 'plugin', id: 'cpi' }), R.reviewPassed(pub, { id: 'cpi', now: NOW }), R.nav(mine, { screen: 'plugin', id: 'moat' })]; })(), R.nav(R.toggleInstalledOnly(R.install(s, { id: 'news', now: NOW })), D), R.nav(R.setQuery(s, 'bot'), D), R.nav(s, { screen: 'discover', id: 'bots' }),
     R.nav(R.showBanner(s, director.breaking(NOW)), { screen: 'markets', id: 'NVDA' }), R.nav(s, { screen: 'trade' }),
     R.toggleDraftBot(R.toggleDraftPicker(R.startDraft(s, { now: NOW })), 'buffett'),
     ['refusal', 'done'].reduce((st, k) => R.append(st, { convId: 'c-1', msg: director[k](NOW), at: NOW }), s),
@@ -81,7 +81,7 @@ function tradeStates(s) {
 test('every class the screens emit has a rule in app.css, and app.css names no colour by hex', async () => {
   const css = await readFile(new URL('../css/app.css', import.meta.url), 'utf8');
   assert.doesNotMatch(css, /#[0-9a-fA-F]{3,6}\b/, 'colours come from tokens.css');
-  const screen = st => ({ discover: () => renderDiscover(st), account: () => renderAccount(st), mail: () => renderMailScreen(st, NOW), markets: () => renderMarkets(st, NOW), trade: () => renderTrade(st, NOW) })[st.route.screen]?.() ?? renderMessagesScreen(st, NOW);
+  const screen = st => ({ discover: () => renderDiscover(st), plugin: () => renderPlugin(st), account: () => renderAccount(st), mail: () => renderMailScreen(st, NOW), markets: () => renderMarkets(st, NOW), trade: () => renderTrade(st, NOW) })[st.route.screen]?.() ?? renderMessagesScreen(st, NOW);
   const html = everyState().map(st => renderRail(st, NOW) + screen(st)).join('')
     + renderBanner(director.breaking(NOW), seed(NOW)) + renderCall(director.call())
     + renderCall({ from: 'gravit', about: '', dir: 'out', status: 'ringing', since: NOW }, NOW) + renderCall({ from: 'gravit', about: 'x', dir: 'in', status: 'live', since: NOW, muted: true }, NOW)

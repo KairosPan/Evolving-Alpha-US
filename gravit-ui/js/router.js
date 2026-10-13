@@ -1,10 +1,11 @@
-// gravit-ui/js/router.js — hash routes: #/messages/<id> · #/mail[/<letter>] · #/discover[/<shelf>] · #/account/<tab> · #/markets[/<ticker>] · #/trade
+// gravit-ui/js/router.js — hash routes: #/messages/<id> · #/mail[/<letter>] · #/discover[/<shelf>] · #/plugin/<id> · #/account/<tab> · #/markets[/<ticker>] · #/trade
 const TABS = ['portfolio', 'venues', 'memory'];
 
 export function parseHash(hash) {
   const [screen, a] = (hash ?? '').replace(/^#\/?/, '').split('/').filter(Boolean);
   switch (screen) {
     case 'discover': return { screen: 'discover', id: a ?? null };
+    case 'plugin': return { screen: 'plugin', id: a ?? null };
     case 'account': return { screen: 'account', tab: TABS.includes(a) ? a : 'portfolio' };
     case 'markets': return { screen: 'markets', id: a ?? null };
     case 'trade': return { screen: 'trade' };

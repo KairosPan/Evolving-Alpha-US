@@ -99,12 +99,13 @@ test('Watching: the starred markets without Volume; a search with All results an
   assert.match(renderMarkets(unstar, NOW), /data-value="all" aria-pressed="true">All</, 'with nothing starred Watching goes and All shows');
 });
 
-test('the BTC drawer: price and facts, the chart, across venues with the best one, what you hold, Gravit on it, the statement', () => {
+test('the BTC page: price and facts, the chart, across venues with the best one, what you hold, Gravit on it, the statement', () => {
   const s = R.nav(seed(NOW), { screen: 'markets', id: 'btc' });
   assert.deepEqual(s.route, { screen: 'markets', id: 'BTC' });
   const h = renderMarkets(s, NOW);
-  assert.match(h, /^<main class="main mkts with-drawer">/);
-  assert.match(h, /<aside class="drawer mk-drawer" aria-label="Bitcoin"><div class="drawer-head"><h2>Bitcoin<\/h2><button type="button" class="close-key" data-action="closeMarket" aria-label="Close">×<\/button>/);
+  assert.match(h, /^<main class="main mkts mk-page"><a class="back-link page-back" href="#\/markets">‹ Markets<\/a>/);
+  assert.match(h, /<h1 class="head-title">Bitcoin<\/h1>/);
+  assert.doesNotMatch(h, /class="drawer|closeMarket|class="mk-tabs"|<table class="mk-t">/, 'the page is the market alone: no drawer, no list behind it');
   assert.match(h, /<div class="mk-d-px"><span class="mk-big">\$62,800\.00<\/span><span class="up">/);
   for (const dt of ['Bid', 'Ask', 'Volume 24h']) assert.match(h, new RegExp(`<dt>${dt}</dt>`));
   assert.match(h, /<svg class="mk-chart" viewBox="0 0 400 140" preserveAspectRatio="none" role="img" aria-label="Price at Stand-in Exchange, 1h bars[^"]*"><path class="mk-chart-area" d="M/);
@@ -123,7 +124,7 @@ test('the BTC drawer: price and facts, the chart, across venues with the best on
   assert.match(h, /class="btn mk-on" data-action="toggleWatch" data-id="BTC" aria-pressed="true">[\s\S]*?Watching<\/button>/);
 });
 
-test('the KO drawer: Gravit\'s order on the book can be cancelled, and asks first', () => {
+test('the KO page: Gravit\'s order on the book can be cancelled, and asks first', () => {
   const s = R.nav(seed(NOW), { screen: 'markets', id: 'KO' });
   const h = renderMarkets(s, NOW);
   assert.match(h, /<div class="mk-t1">Buy 0\.4295 KO · limit 58\.2<\/div><div class="mk-t2">Stand-in Broker · Gravit · 0 of 0\.4295 filled<\/div><\/div><button type="button" class="btn-sm" data-action="cancelOrder" data-id="ord-0008">Cancel<\/button>/);
@@ -133,7 +134,7 @@ test('the KO drawer: Gravit\'s order on the book can be cancelled, and asks firs
   assert.match(h, /href="#\/messages\/c-4"/);
 });
 
-test('the Fed drawer: two outcomes, Connect to trade until Polymarket connects, then Buy Yes and Buy No; USDC has no chart', () => {
+test('the Fed page: two outcomes, Connect to trade until Polymarket connects, then Buy Yes and Buy No; USDC has no chart', () => {
   const s = R.nav(seed(NOW), { screen: 'markets', id: 'FED-DEC' });
   const h = renderMarkets(s, NOW);
   assert.equal(count(h, /class="mk-out"/g), 2);
@@ -144,7 +145,7 @@ test('the Fed drawer: two outcomes, Connect to trade until Polymarket connects, 
   assert.match(on, /class="mk-yes mk-buy" data-action="tradeFrom" data-id="FED-DEC" data-outcome="0">Buy Yes<\/button>/);
   assert.match(on, /class="mk-no mk-buy" data-action="tradeFrom" data-id="FED-DEC" data-outcome="1">Buy No<\/button>/);
   const page = renderMarkets(R.nav(seed(NOW), { screen: 'markets', id: 'USDC' }), NOW);
-  const usdc = page.slice(page.indexOf('<aside class="drawer mk-drawer"'));
+  const usdc = page;
   assert.doesNotMatch(usdc, /aria-label="Price history"|aria-label="Across venues"|data-action="tradeFrom"/);
   assert.match(usdc, /<div class="mk-t1">2,490 USDC · \$2,490\.00<\/div>/);
   assert.equal(R.nav(seed(NOW), { screen: 'markets', id: 'NOPE' }).route.id, null);

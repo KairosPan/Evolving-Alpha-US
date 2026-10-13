@@ -20,6 +20,8 @@ test('parseHash and toHash round-trip, unknown screens fall back to messages', (
   assert.deepEqual(parseHash('#/account/nope'), { screen: 'account', tab: 'portfolio' });
   assert.deepEqual(parseHash('#/markets/NVDA'), { screen: 'markets', id: 'NVDA' });
   assert.deepEqual(parseHash('#/mail'), { screen: 'mail', id: null });
+  assert.deepEqual(parseHash('#/plugin/buffett'), { screen: 'plugin', id: 'buffett' });
+  assert.equal(toHash({ screen: 'plugin', id: 'buffett' }), '#/plugin/buffett');
   assert.deepEqual(parseHash('#/mail/mail-2'), { screen: 'mail', id: 'mail-2' });
   assert.equal(toHash({ screen: 'mail', id: null }), '#/mail');
   assert.equal(toHash({ screen: 'mail', id: 'mail-2' }), '#/mail/mail-2');
@@ -169,7 +171,7 @@ test('a saved state boots without the moment-only overlays: banner, call, drawer
   const s = seed(NOW);
   const saved = { ...s, banner: { id: 'b', headline: 'h', body: 'b', at: NOW }, call: { from: 'gravit', about: 'x' }, discover: { ...s.discover, drawer: 'news', create: { step: 'form', form: {}, tools: [], error: null }, toast: { text: 't', action: null } }, trade: { ...s.trade, ticket: { id: 'BTC', amount: '25' } } };
   const st = initialState({ getItem: () => JSON.stringify(saved), setItem() {} }, NOW);
-  assert.deepEqual([st.banner, st.call, st.discover.drawer, st.discover.create, st.discover.toast, st.trade.ticket], [null, null, null, null, null, null]);
+  assert.deepEqual([st.banner, st.call, st.discover.create, st.discover.toast, st.trade.ticket], [null, null, null, null, null]);
   const store = makeStore({ getItem: () => JSON.stringify(saved), setItem() {} }, NOW);
   assert.equal(store.get().banner, null);
 });

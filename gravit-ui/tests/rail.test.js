@@ -98,3 +98,8 @@ test('on Mail the mail key is current, Messages is not, and the second level lis
   assert.match(reading, /<span class="nav-badge">1<\/span><\/a>/, 'one letter left unread');
   assert.match(renderRail({ ...s, railCollapsed: true }, NOW), /<a id="mail-key" class="line-key current" href="#\/mail" aria-label="Mail" aria-current="page" title="Mail">/);
 });
+
+test('on a plugin page Discover stays current', () => {
+  const h = renderRail(R.nav(seed(NOW), { screen: 'plugin', id: 'buffett' }), NOW);
+  assert.match(h, /class="nav-item current" aria-current="page" href="#\/discover"/);
+});

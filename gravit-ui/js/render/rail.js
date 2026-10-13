@@ -61,7 +61,7 @@ export function renderNav(state) {
     `<button type="button" class="icon-key rail-toggle" data-action="toggleRail" aria-expanded="${mini ? 'false' : 'true'}" aria-label="${mini ? 'Expand navigation' : 'Collapse navigation'}">${icon(mini ? 'chevRight' : 'chevLeft', 14, 2.2)}</button></div>
   <div class="rail-group">
     ${navItem(messagesHref, 'chat', 'Messages', screen === 'messages', mini, unread)}
-    ${navItem('#/discover', 'compass', 'Discover', screen === 'discover', mini)}
+    ${navItem('#/discover', 'compass', 'Discover', screen === 'discover' || screen === 'plugin', mini)}
     ${navItem('#/markets', 'markets', 'Markets', screen === 'markets', mini)}
     ${navItem('#/trade', 'trade', 'Trade', screen === 'trade', mini)}
   </div>

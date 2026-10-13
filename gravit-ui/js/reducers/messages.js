@@ -11,7 +11,7 @@ const closed = isClosed;
 export const closeOverlays = s => ({
   ...s, detailsOpen: false, settingsOpen: false, edit: null, confirm: null,
   account: { ...s.account, panel: null, panelError: null },
-  discover: { ...s.discover, drawer: null, create: null },
+  discover: { ...s.discover, create: null },
 });
 const installedBots = s => s.plugins.installed.filter(id => byId(id, s.plugins.uploaded)?.kind === 'Bots');
 const upd = (state, id, fn) => ({ ...state, conversations: state.conversations.map(c => (c.id === id ? fn(c) : c)) });
@@ -54,7 +54,9 @@ export const reducers = {
     if (route.screen === 'messages' && !(route.id === 'new' && state.draft) && !state.conversations.some(c => c.id === route.id)) {
       route = { screen: 'messages', id: state.conversations[0]?.id ?? null };
     }
-    // a market id is matched without case; one that is not a market opens Markets without a drawer
+    // a plugin that is not in the shop opens Discover
+    if (route.screen === 'plugin' && !byId(route.id, state.plugins.uploaded)) route = { screen: 'discover', id: null };
+    // a market id is matched without case; one that is not a market opens Markets
     if (route.screen === 'markets' && route.id) route = { screen: 'markets', id: instrument(route.id)?.id ?? null };
     // a letter that is not in the mailbox opens the inbox
     if (route.screen === 'mail' && route.id && !state.mail.items.some(m => m.id === route.id)) route = { screen: 'mail', id: null };
@@ -65,9 +67,11 @@ export const reducers = {
     if (route.screen === 'messages' && route.id && route.id !== 'new') s.lastConv = route.id;
     // an Account panel belongs to Account
     if (route.screen !== 'account' && s.account.panel) s.account = { ...s.account, panel: null, panelError: null };
-    // Discover's drawer, trash-key ask and toast belong to Discover; they do not follow you out of it
-    if (route.screen !== 'discover' && (s.discover.drawer || s.discover.create || s.discover.toast)) {
-      s = { ...s, discover: { ...s.discover, drawer: null, create: null, toast: null } };
+    // a plugin page goes back to the Discover view it was opened from
+    if (route.screen === 'discover') s.lastDiscover = route;
+    // Discover's dialog and toast belong to Discover and its plugin pages; they do not follow you out of them
+    if (route.screen !== 'discover' && route.screen !== 'plugin' && (s.discover.create || s.discover.toast)) {
+      s = { ...s, discover: { ...s.discover, create: null, toast: null } };
     }
     if (route.screen === 'messages' && route.id && route.id !== 'new') s = upd(s, route.id, c => (c.unread ? { ...c, unread: false } : c));
     if (!(route.screen === 'messages' && route.id === 'new')) s.draft = null;

@@ -10,29 +10,6 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const noDialogs = { prompt: () => { throw new Error('prompt() is gone'); }, confirm: () => { throw new Error('confirm() is gone'); } };
 const btn = (f, action, data = {}) => f.element({ tagName: 'BUTTON', dataset: { action, ...data } });
 
-test('a market opens its drawer by its route, focus goes in, Escape closes it and focus returns to the row', async () => {
-  const f = fakeWindow({ ...noDialogs, hash: '#/markets' });
-  const opener = f.withSelector('[data-action="openMarket"][data-id="BTC"]', { tagName: 'BUTTON', dataset: { action: 'openMarket', id: 'BTC' } });
-  const close = f.withSelector('.drawer .close-key', { tagName: 'BUTTON', presentIf: /class="drawer/ });
-  const store = boot(f.win);
-  try {
-    assert.match(f.html(), /<main class="main mkts">/);
-    opener.focus();
-    f.click(opener);
-    await f.tick();
-    assert.deepEqual(store.get().route, { screen: 'markets', id: 'BTC' });
-    assert.equal(f.doc.activeElement, close);
-    f.fire('doc', 'keydown', { key: 'Escape' });
-    await f.tick();
-    assert.equal(store.get().route.id, null);
-    assert.equal(f.doc.activeElement, opener);
-    assert.equal(settle(store, '#/markets/btc'), '#/markets/BTC');
-    assert.equal(settle(store, '#/markets/nope'), '#/markets');
-  } finally {
-    store.timers.clear();
-  }
-});
-
 test('a hand trade: Trade on a row opens the ticket, the amount is typed, Sign and place, the stand-in fills it a moment later', async () => {
   const f = fakeWindow({ ...noDialogs, hash: '#/markets' });
   const amount = f.withId('tk-amount', { tagName: 'INPUT', name: 'amount', dataset: { action: 'ticketField' } });
@@ -170,38 +147,6 @@ test('after Reset demo the signature clock still runs on Trade', async () => {
   }
 });
 
-test('closing a market drawer replaces its history entry, so Back does not reopen it', async () => {
-  const f = fakeWindow({ ...noDialogs, hash: '#/markets/BTC' });
-  const replaced = [];
-  const replace = f.win.history.replaceState;
-  f.win.history.replaceState = (a, b, h) => { replaced.push(h); replace(a, b, h); };
-  const store = boot(f.win);
-  try {
-    f.click(btn(f, 'closeMarket'));
-    await f.tick();
-    assert.deepEqual(store.get().route, { screen: 'markets', id: null });
-    assert.ok(replaced.includes('#/markets'));
-  } finally {
-    store.timers.clear();
-  }
-});
-
-test('Watch inside the drawer keeps focus inside the drawer', () => {
-  const f = fakeWindow({ ...noDialogs, hash: '#/markets/BTC' });
-  const star = f.withSelector('[data-action="toggleWatch"][data-id="BTC"]', { tagName: 'BUTTON', dataset: { action: 'toggleWatch', id: 'BTC' } });
-  const inDrawer = f.withSelector('.drawer [data-action="toggleWatch"][data-id="BTC"]', { tagName: 'BUTTON', dataset: { action: 'toggleWatch', id: 'BTC' }, closestMap: { '.drawer': {} } });
-  const store = boot(f.win);
-  try {
-    inDrawer.focus();
-    f.click(inDrawer);
-    assert.equal(store.get().markets.watch.includes('BTC'), false);
-    assert.equal(f.doc.activeElement, inDrawer);
-    assert.notEqual(f.doc.activeElement, star);
-  } finally {
-    store.timers.clear();
-  }
-});
-
 test('the ticket keeps its own scroll while you type, and a new ticket is brought into view with the amount ready', async () => {
   const f = fakeWindow({ ...noDialogs, hash: '#/markets' });
   let shown = 0;
@@ -219,6 +164,23 @@ test('the ticket keeps its own scroll while you type, and a new ticket is brough
     f.fire('root', 'input', { target: amount });
     assert.equal(panel.scrollTop, 200, 'typing does not jump the ticket back to its top');
     assert.equal(shown, 1, 'and does not scroll it into view again');
+  } finally {
+    store.timers.clear();
+  }
+});
+
+test('a market row opens the market as a page; the way back takes focus; an unknown market opens Markets', async () => {
+  const f = fakeWindow({ ...noDialogs, hash: '#/markets' });
+  const back = f.withSelector('.page-back', { tagName: 'A', presentIf: /class="back-link page-back"/ });
+  const store = boot(f.win);
+  try {
+    f.click(btn(f, 'openMarket', { id: 'BTC' }));
+    await f.tick();
+    assert.deepEqual(store.get().route, { screen: 'markets', id: 'BTC' });
+    assert.match(f.html(), /<main class="main mkts mk-page">/);
+    assert.equal(f.doc.activeElement, back);
+    assert.equal(settle(store, '#/markets/btc'), '#/markets/BTC');
+    assert.equal(settle(store, '#/markets/nope'), '#/markets');
   } finally {
     store.timers.clear();
   }
