@@ -58,7 +58,7 @@ export function renderNav(state) {
   const mailCurrent = screen === 'mail';
   return `<nav class="${cls('rail', mini && 'mini')}" aria-label="Gravit">
   <div class="brand">${avatar('gravit', 28)}<span class="brand-name">Gravit</span>` +
-    `<button type="button" class="icon-key rail-toggle" data-action="toggleRail" aria-expanded="${mini ? 'false' : 'true'}" aria-label="${mini ? 'Expand navigation' : 'Collapse navigation'}">${icon(mini ? 'chevRight' : 'chevLeft', 14, 2.2)}</button></div>
+    `<button type="button" class="rail-toggle" data-action="toggleRail" aria-expanded="${mini ? 'false' : 'true'}" aria-label="${mini ? 'Expand navigation' : 'Collapse navigation'}">${icon(mini ? 'chevRight' : 'chevLeft', 16, 2.2)}</button></div>
   <div class="rail-group">
     ${navItem(messagesHref, 'chat', 'Messages', screen === 'messages', mini, unread)}
     ${navItem('#/discover', 'compass', 'Discover', screen === 'discover' || screen === 'plugin', mini)}
@@ -79,7 +79,7 @@ export function renderList(state, now) {
   if (state.route.screen !== 'messages') return '';
   const rows = (state.draft ? draftRow() : '') + state.conversations.map(c => row(c, state, now)).join('');
   return `<aside class="list" aria-label="Messages"><div class="list-head"><h2 class="list-title">Messages</h2>` +
-    `<button type="button" class="icon-key" data-action="startDraft" aria-label="New message">${icon('plus', 16, 2.2)}</button></div>` +
+    `<button type="button" class="new-key" data-action="startDraft" aria-label="New message">${icon('plus', 18, 2.2)}</button></div>` +
     `${rows ? `<div class="rail-rows">${rows}</div>` : ''}</aside>`;
 }
 

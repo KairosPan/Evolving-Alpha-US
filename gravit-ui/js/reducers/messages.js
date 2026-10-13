@@ -198,7 +198,7 @@ export const reducers = {
   // calls (spec §6, kind 14): an incoming one rings; you ring Gravit from the rail's phone key; one call at a time
   incomingCall: (s, call) => (s.call ? s : { ...s, call: { ...call, dir: 'in', status: 'ringing' } }),
   startCall: (s, { now }) => (s.call ? s : { ...s, call: { from: 'gravit', about: '', dir: 'out', status: 'ringing', since: now, muted: false } }),
-  connectCall: (s, { now }) => (s.call?.dir === 'out' && s.call.status === 'ringing' ? { ...s, call: { ...s.call, status: 'live', since: now } } : s),
+  connectCall: (s, { now }) => (s.call?.dir === 'out' && s.call.status === 'ringing' ? { ...s, call: { ...s.call, ...PICKED_UP, status: 'live', since: now } } : s),
   toggleMute: s => (s.call?.status === 'live' ? { ...s, call: { ...s.call, muted: !s.call.muted } } : s),
   // accepting an incoming call puts it live; declining leaves a missed-call card
   answerCall(s, { accept, now }) {
@@ -217,10 +217,13 @@ export const reducers = {
   },
 };
 
+// what Gravit talks about when you ring it, once it picks up
+const PICKED_UP = { about: 'About BTC', said: 'BTC is at 62.8k now; it watches it and calls if it moves.' };
+
 // the call card lands in the conversation on screen, else the first (spec §6, kind 14)
 function callCard(s, call, { text, answer, duration }, now) {
   const convId = targetConv(s);
   if (!convId) return s;
-  const r = stampMessage(s, { from: call.from ?? 'gravit', kind: 'call', text, data: { about: call.about ?? '', dir: call.dir ?? 'in', duration }, answer }, now);
+  const r = stampMessage(s, { from: call.from ?? 'gravit', kind: 'call', text, data: { about: call.about ?? '', dir: call.dir ?? 'in', duration, said: call.said ?? '' }, answer }, now);
   return push(r.state, convId, r.msg);
 }

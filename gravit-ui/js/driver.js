@@ -123,8 +123,14 @@ export const director = {
     'My advice: nothing moves before CPI.',
   ] }),
   ta: () => G('ta', 'NVDA technicals', { ticker: 'NVDA', tf: '4h', support: 178, resistance: 192, candles: CANDLES, lines: ['Top of the range, volume rising. Support 178, resistance 192.', 'Verdict: to chase, wait for a pullback to 182; do not buy at the top.'] }),
-  breaking: now => ({ id: 'b-' + now, headline: 'SEC sues Stand-in Exchange (stand-in news)', body: 'You hold BTC $3,740 there. Gravit has paused orders at this venue and waits for your word.', at: now }),
-  call: () => ({ from: 'gravit', about: 'About BTC, 30 seconds' }),
+  breaking: now => ({ id: 'b-' + now, headline: 'SEC sues Stand-in Exchange (stand-in news)', body: 'You hold {{BTC}} $3,740 there. Gravit has paused orders at this venue and waits for your word.', at: now }),
+  // a call Gravit places: its topic, how long it needs, and what it says once you pick up
+  call: () => ({ from: 'gravit', about: 'About BTC', length: '30 seconds', said: 'Hold until CPI is out; raise the order cap to $50 after.' }),
+  // kind 7: a monitor posts a read-only signal; Gravit answers it in plain talk
+  monitor: () => [
+    ev(300, message('telegram', 'signal', 'SOL is about to take off, get in', { source: 'Telegram monitor · group “Alpha” · @kol_x' })),
+    ev(1500, G('text', 'Seen. Not chasing.')),
+  ],
   bot: () => message('buffett', 'text', 'One more thing: KO at this price I would buy.'),
   // kind 8, the door's refusal, and kind 10, the close (spec §6)
   refusal: () => G('refusal', 'Tried to place $30; the venue refused: above this limit’s $25 an order.', { code: 'E_MANDATE_PER_ORDER_CAP' }),

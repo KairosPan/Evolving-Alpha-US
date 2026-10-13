@@ -19,18 +19,22 @@ export function sec(label, lines, html = false) {
 }
 
 // an inline editor: its inputs, a ✓ that commits and a × that cancels (app.js reads every [name] inside .inline-edit)
-// fields: { name, value, type = 'text' | 'number', label, options? } — options make a pick list
+// fields: { name, value, type = 'text' | 'number', label, word?, options? } — a word is the box's visible name; options make a pick list
 export function inlineEdit(fields, error = null) {
-  const input = f => f.options
-    ? `<select${attrs({ id: `edit-${f.name}`, class: 'input small', name: f.name, 'aria-label': f.label })}>${f.options.map(o => `<option${attrs({ value: o, selected: o === f.value })}>${esc(o)}</option>`).join('')}</select>`
-    : `<input${attrs({ id: `edit-${f.name}`, class: 'input small', name: f.name, type: f.type ?? 'text', value: f.value, 'aria-label': f.label })}>`;
+  const input = f => {
+    const named = f.word ? {} : { 'aria-label': f.label };
+    const box = f.options
+      ? `<select${attrs({ id: `edit-${f.name}`, class: 'input small', name: f.name, ...named })}>${f.options.map(o => `<option${attrs({ value: o, selected: o === f.value })}>${esc(o)}</option>`).join('')}</select>`
+      : `<input${attrs({ id: `edit-${f.name}`, class: 'input small', name: f.name, type: f.type ?? 'text', value: f.value, ...named })}>`;
+    return (f.word ? `<label class="edit-word" for="edit-${esc(f.name)}">${esc(f.word)}</label>` : '') + box;
+  };
   return `<span class="inline-edit">${fields.map(input).join('')}` +
-    `<button type="button" class="key yes small" data-action="commitEdit" aria-label="Save">${icon('check', 12, 2.4)}</button>` +
-    `<button type="button" class="key no small" data-action="cancelEdit" aria-label="Cancel">${icon('x', 12, 2.4)}</button>` +
+    `<button type="button" class="key yes" data-action="commitEdit" aria-label="Save">${icon('check', 14, 2.4)}</button>` +
+    `<button type="button" class="key no" data-action="cancelEdit" aria-label="Cancel">${icon('x', 14, 2.4)}</button>` +
     `${error ? `<span class="field-error">${esc(error)}</span>` : ''}</span>`;
 }
 
 // the second step of a confirm, in place of the button that asked
 export function confirmPair(label) {
-  return `<span class="confirm"><button type="button" class="btn-danger small" data-action="confirmYes">${esc(label)}</button><button type="button" class="btn-sm" data-action="cancelConfirm">No</button></span>`;
+  return `<span class="confirm"><button type="button" class="btn-danger" data-action="confirmYes">${esc(label)}</button><button type="button" class="btn-sm" data-action="cancelConfirm">No</button></span>`;
 }

@@ -13,7 +13,7 @@ export function mark(spec, size, radius, name) {
 }
 
 export function avatar(who, size = 28, state = null) {
-  if (who === 'you') return `<span class="av av-you" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.43)}px">You</span>`;
+  if (who === 'you') return `<span class="av av-you" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.36)}px">You</span>`;
   if (who === 'gravit') return `<span class="av av-g" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.46)}px">G</span>`;
   const p = byId(who, state?.plugins?.uploaded ?? []);
   const spec = p?.avatar ?? (p?.logo?.type === 'portrait' ? p.logo : null) ?? { type: 'letter', text: (p?.name ?? who).slice(0, 1).toUpperCase(), tone: 'grey' };

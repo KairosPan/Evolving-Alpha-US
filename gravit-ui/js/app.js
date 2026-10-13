@@ -129,7 +129,7 @@ export function watchToast(store, timers, ms = TOAST_MS) {
   });
 }
 
-const DIRECTOR = [['Morning brief', 'brief'], ['Technicals', 'ta'], ['Breaking', 'breaking'], ['Call', 'call'], ['Bot chimes in', 'bot'], ['Refusal', 'refusal'], ['Done', 'done'], ['Plugin upload', 'upload'], ['First run', 'firstRun'], ['Reset demo', 'reset']];
+const DIRECTOR = [['Morning brief', 'brief'], ['Technicals', 'ta'], ['Breaking', 'breaking'], ['Call', 'call'], ['Bot chimes in', 'bot'], ['Monitor', 'monitor'], ['Refusal', 'refusal'], ['Done', 'done'], ['Plugin upload', 'upload'], ['First run', 'firstRun'], ['Reset demo', 'reset']];
 
 // a key that finds "the same control" after a re-render: its id, or every data-* attribute it carries
 function focusKey(el) {
@@ -167,10 +167,12 @@ export function boot(win) {
   let composerText = '';
   let composing = false;
   let heard = 0;
+  let micRun = 0; // the listen the stream belongs to; a stop or a new listen retires the old one's words
+  let micBase = '';
   let ticking = false;
   let pending = false;
   let clocking = false;
-  let last = { overlay: null, opener: null, screen: null, drawer: null, thread: null };
+  let last = { overlay: null, opener: null, screen: null, drawer: null, thread: null, banner: null };
 
   function applyTheme(theme) {
     if (theme === 'cream' || theme === 'black') doc.documentElement.dataset.theme = theme; else delete doc.documentElement.dataset.theme;
@@ -196,7 +198,8 @@ export function boot(win) {
 
     const screen = s.route.screen === 'discover' ? renderDiscover(s) : s.route.screen === 'plugin' ? renderPlugin(s) : s.route.screen === 'account' ? renderAccount(s) : s.route.screen === 'mail' ? renderMailScreen(s, now())
       : s.route.screen === 'markets' ? renderMarkets(s, now()) : s.route.screen === 'trade' ? renderTrade(s, now()) : renderMessagesScreen(s, now());
-    const overlays = (s.banner ? renderBanner(s.banner, s) : '') + (s.call ? renderCall(s.call, now()) : '') +
+    // the banner drops in the first time it shows; later renders keep it still
+    const overlays = (s.banner ? renderBanner(s.banner, s, { enter: s.banner.id !== last.banner }) : '') + (s.call ? renderCall(s.call, now()) : '') +
       (directorOpen ? `<div class="director" role="menu">${DIRECTOR.map(([l, k]) => `<button type="button" class="director-key" data-action="director" data-key="${k}">${l}</button>`).join('')}</div>` : '');
     root.innerHTML = renderRail(s, now()) + screen + overlays;
 
@@ -270,7 +273,7 @@ export function boot(win) {
       target.focus();
       if (caret && target === find(activeKey) && typeof target.setSelectionRange === 'function') target.setSelectionRange(caret[0], caret[1]);
     }
-    last = { overlay, opener, screen: screenOf(s), drawer: drawerOf(s), dialog: dialogOf(s), ticket: ticketOf(s), thread: threadSig, editor: editorOf(s.edit), confirm: s.confirm };
+    last = { overlay, opener, screen: screenOf(s), drawer: drawerOf(s), dialog: dialogOf(s), ticket: ticketOf(s), thread: threadSig, editor: editorOf(s.edit), confirm: s.confirm, banner: s.banner?.id ?? null };
     if (s.call?.status === 'live' && !ticking) tick();
     if ((s.route.screen === 'markets' || s.route.screen === 'trade') && !clocking) clock();
   }
@@ -335,11 +338,25 @@ export function boot(win) {
   }
   const reset = () => restart(seed(now()), { screen: 'messages', id: 'c-1' });
 
-  // the scripted mic: what it heard joins what is already in the composer
+  // the scripted mic: the words it hears fill the composer as they come, after what was already typed
+  function startMic() {
+    const run = ++micRun;
+    const words = HEARD[heard % HEARD.length].split(' ');
+    micBase = composerText.trim();
+    store.dispatch('setListening', true);
+    words.forEach((_, i) => timers.after(Math.round((LISTEN_MS * (i + 1)) / (words.length + 1)), () => {
+      if (run !== micRun || !store.get().compose.listening) return;
+      composerText = [micBase, ...words.slice(0, i + 1)].filter(Boolean).join(' ');
+      render();
+    }));
+    timers.after(LISTEN_MS, () => { if (run === micRun) stopMic(); });
+  }
+  // stopping, by itself or by a press, writes the whole sentence it heard
   function stopMic() {
     if (!store.get().compose.listening) return;
+    micRun++;
     const words = HEARD[heard++ % HEARD.length];
-    composerText = composerText.trim() ? `${composerText.trim()} ${words}` : words;
+    composerText = micBase ? `${micBase} ${words}` : words;
     store.dispatch('setListening', false);
   }
 
@@ -423,14 +440,10 @@ export function boot(win) {
     takeBack: () => store.dispatch('startEdit', { kind: 'wallet', dir: 'out' }),
     editMemory: el => store.dispatch('startEdit', { kind: 'memory', id: el.dataset.id }),
     commitEdit: () => commitEdit(),
-    // the composer: + opens the hidden file input; the mic listens a moment, then writes what it heard
+    // the composer: + opens the hidden file input; the mic listens a moment, writing what it hears
     pickFile: () => doc.getElementById('attach-input')?.click(),
     removeFile: el => store.dispatch('removeFile', Number(el.dataset.id)),
-    toggleMic: () => {
-      if (store.get().compose.listening) return stopMic();
-      store.dispatch('setListening', true);
-      timers.after(LISTEN_MS, stopMic);
-    },
+    toggleMic: () => (store.get().compose.listening ? stopMic() : startMic()),
     cancelEdit: () => store.dispatch('cancelEdit'),
     // two-step confirms (they replaced confirm): the first press asks in place, the second acts
     withdraw: el => store.dispatch('askConfirm', { action: 'withdraw', id: el.dataset.conv }),
@@ -565,6 +578,7 @@ export function boot(win) {
       if (k === 'firstRun') return restart(firstRun(now()), { screen: 'messages', id: null });
       if (k === 'breaking') return showBreaking(store, timers, director.breaking(now()), now);
       if (k === 'call') return store.dispatch('incomingCall', director.call());
+      if (k === 'monitor') return convId ? scheduleEvents(store, timers, convId, director.monitor(), now) : undefined;
       if (convId && director[k]) store.dispatch('append', { convId, msg: director[k](now()), at: now() });
     },
   };

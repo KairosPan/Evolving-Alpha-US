@@ -52,7 +52,7 @@ test('the first level: brand and its collapse key, Messages · Discover · Marke
 
 test('the second level opens with Messages: its title, the new-message key, the rows, the current one, the unread dot', () => {
   const h = renderRail(seed(NOW), NOW);
-  assert.match(h, /<aside class="list" aria-label="Messages"><div class="list-head"><h2 class="list-title">Messages<\/h2><button type="button" class="icon-key" data-action="startDraft" aria-label="New message">/);
+  assert.match(h, /<aside class="list" aria-label="Messages"><div class="list-head"><h2 class="list-title">Messages<\/h2><button type="button" class="new-key" data-action="startDraft" aria-label="New message">/);
   assert.equal(count(h, /class="row(?: current)?"/g), 4);
   assert.equal(count(h, /class="row current" aria-current="page" href="#\/messages\/c-1"/g), 1);
   assert.equal(count(h, /class="dot on"/g), 1, 'one unread conversation');

@@ -87,14 +87,14 @@ test('Details: Change words, Change limit, Top up and Take back open inline edit
   assert.match(rename, /data-action="commitEdit" aria-label="Save"/);
   assert.match(rename, /data-action="cancelEdit" aria-label="Cancel"/);
   const limit = renderDetails(s.conversations[0], R.startEdit(s, { kind: 'limit', convId: 'c-1' }));
-  assert.match(limit, /name="perOrder" type="number" value="25"/);
+  assert.match(limit, /<label class="edit-word" for="edit-perOrder">an order<\/label><input id="edit-perOrder" class="input small" name="perOrder" type="number" value="25">/);
   assert.match(limit, /name="total" type="number" value="100"/);
   const err = renderDetails(s.conversations[0], R.commitEdit(R.startEdit(s, { kind: 'limit', convId: 'c-1' }), { values: { perOrder: '300', total: '100' }, now: NOW }));
   assert.match(err, /class="field-error">Per order cannot exceed the total</);
   const wallet = renderDetails(s.conversations[0], R.startEdit(s, { kind: 'wallet', dir: 'out' }));
   assert.match(wallet, /name="amount" type="number"/);
   const asking = renderDetails(s.conversations[0], R.askConfirm(s, { action: 'withdraw', id: 'c-1' }));
-  assert.match(asking, /<span class="confirm"><button type="button" class="btn-danger small" data-action="confirmYes">Yes, withdraw<\/button><button type="button" class="btn-sm" data-action="cancelConfirm">No<\/button><\/span>/);
+  assert.match(asking, /<span class="confirm"><button type="button" class="btn-danger" data-action="confirmYes">Yes, withdraw<\/button><button type="button" class="btn-sm" data-action="cancelConfirm">No<\/button><\/span>/);
   assert.match(renderDetails(s.conversations[0], R.askConfirm(s, { action: 'stopGravit', id: 'c-1' })), />Yes, stop Gravit</);
   assert.match(renderDetails(s.conversations[0], R.askConfirm(s, { action: 'endLimit', id: 'c-1' })), />Yes, end the limit</);
 });
@@ -102,9 +102,9 @@ test('Details: Change words, Change limit, Top up and Take back open inline edit
 test('the draft limit chip turns into its editor; the venue is a pick list', () => {
   const d = R.startDraft(fresh(), { now: NOW });
   const per = renderMessagesScreen(R.startEdit(d, { kind: 'draftLimit', key: 'perOrder' }), NOW);
-  assert.match(per, /<span class="inline-edit"><input id="edit-value" class="input small" name="value" type="number" value="25" aria-label="Per order">/);
+  assert.match(per, /<span class="inline-edit"><label class="edit-word" for="edit-value">an order<\/label><input id="edit-value" class="input small" name="value" type="number" value="25">/);
   const venue = renderMessagesScreen(R.startEdit(d, { kind: 'draftLimit', key: 'venue' }), NOW);
-  assert.match(venue, /<select id="edit-value" class="input small" name="value" aria-label="Venue"><option value="Stand-in Exchange" selected>/);
+  assert.match(venue, /<label class="edit-word" for="edit-value">on<\/label><select id="edit-value" class="input small" name="value"><option value="Stand-in Exchange" selected>/);
 });
 
 test('the composer holds picked files; a send carries them, even with no words, and empties the tray', async () => {
@@ -132,7 +132,7 @@ test('the mic key shows it is listening and the placeholder says so', async () =
   const on = R.setListening(fresh(), true);
   assert.equal(on.compose.listening, true);
   const c = renderComposer({ compose: on.compose });
-  assert.match(c, /class="round-key mic on" data-action="toggleMic" aria-pressed="true" aria-label="Voice input"/);
+  assert.match(c, /class="round-key mic on" data-action="toggleMic" aria-pressed="true" aria-label="Stop listening"/);
   assert.match(c, /placeholder="Listening…"/);
   assert.match(renderComposer({ compose: fresh().compose }), /class="round-key mic" data-action="toggleMic" aria-pressed="false"/);
 });
@@ -146,7 +146,7 @@ test('calls: you ring Gravit, it picks up, you hang up and a card stays; an acce
   s = R.connectCall(s, { now: NOW });
   assert.deepEqual([s.call.status, s.call.since], ['live', NOW]);
   const live = renderCall(s.call, NOW + 75_000);
-  assert.match(live, /class="call-timer">01:15</);
+  assert.match(live, /class="call-timer">1:15</);
   assert.match(live, /data-action="toggleMute" aria-pressed="false" aria-label="Mute"/);
   assert.equal(R.toggleMute(s).call.muted, true);
   const ended = R.hangUp(s, { now: NOW + 75_000 });
@@ -165,7 +165,7 @@ test('the call card says how it went', async () => {
   const { renderMessage } = await import('../js/render/thread.js');
   const s = fresh();
   const r = m => renderMessage({ id: 'm-x', at: NOW, from: 'gravit', kind: 'call', text: '', ...m }, s.conversations[0], s);
-  assert.match(r({ answer: 'accepted', data: { dir: 'out', duration: 75_000 } }), /Called Gravit[\s\S]*class="chip up">Connected · 01:15</);
+  assert.match(r({ answer: 'accepted', data: { dir: 'out', duration: 75_000 } }), /Called Gravit[\s\S]*class="chip up">Connected · 1:15</);
   assert.match(r({ answer: 'missed', data: { dir: 'in', about: 'x' } }), /Gravit called[\s\S]*>Missed</);
   assert.match(r({ answer: 'cancelled', data: { dir: 'out' } }), />Did not connect</);
 });

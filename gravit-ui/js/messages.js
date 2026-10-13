@@ -6,7 +6,8 @@ export const LEVELS = {
   receipt: 'green', done: 'green',
 };
 
-export const levelOf = m => LEVELS[m.kind] ?? 'grey';
+// a call is red while it rings or once it is missed; one that connected, or that you placed and cancelled, is plain white
+export const levelOf = m => (m.kind === 'call' && (m.answer === 'accepted' || m.answer === 'cancelled') ? 'white' : LEVELS[m.kind] ?? 'grey');
 
 export const needsAnswer = m => ['card', 'limit', 'install', 'call'].includes(m.kind) && !m.answer;
 

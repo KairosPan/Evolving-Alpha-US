@@ -246,7 +246,7 @@ test('the phone key rings Gravit, it picks up, the timer runs, hang up leaves th
     await sleep(1600);
     assert.equal(store.get().call.status, 'live');
     await sleep(1100);
-    assert.match(timer.textContent, /^00:0[12]$/, 'the timer runs');
+    assert.match(timer.textContent, /^0:0[12]$/, 'the timer runs');
     f.click(f.element({ tagName: 'BUTTON', dataset: { action: 'hangUp' } }));
     assert.equal(store.get().call, null);
     const card = store.get().conversations[0].messages.at(-1);
@@ -493,7 +493,7 @@ test('a live call updates only its timer each second; the page is not redrawn un
     const writes = f.writes;
     await sleep(1100);
     assert.equal(f.writes, writes, 'no full redraw while the call runs');
-    assert.match(timer.textContent, /^01:0[12]$/);
+    assert.match(timer.textContent, /^1:0[12]$/);
   } finally {
     store.timers.clear(); // a live call ticks every second: a failed assertion must not leave it running
   }

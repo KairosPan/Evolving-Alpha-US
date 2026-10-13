@@ -15,7 +15,7 @@ export function key(type, label, data = {}) {
 
 export const ticker = t => `<a class="ticker" href="#/markets/${esc(t)}">${esc(t)}${icon('chevRight', 12, 2.4)}</a>`;
 
-const withTickers = text => esc(text).replace(/\{\{([A-Z]+)\}\}/g, (_, t) => ticker(t));
+export const withTickers = text => esc(text).replace(/\{\{([A-Z]+)\}\}/g, (_, t) => ticker(t));
 
 export function candles(data) {
   const bars = data.candles.map(([o, c, l, h], i) => {
@@ -51,7 +51,7 @@ function body(m, conv) {
   switch (m.kind) {
     case 'card':
       return `<div class="card orange"><div class="card-head"><div class="card-title">${esc(d.title ?? m.text)}</div>${cardChip(m)}</div>` +
-        (d.venue ? `<div class="dim">${esc([d.venue, d.type, d.about, d.cardId].filter(Boolean).join(' · '))}</div>` : '') +
+        (d.venue ? `<div class="dim">${esc([d.venue, d.type, d.about].filter(Boolean).join(' · '))}</div>` : '') +
         (d.rows ? `<div class="orders">${d.rows.map(r => `<div class="order-row"><span class="order-t">${esc(r.t)}</span><span class="dim">${esc(r.why)}</span><span class="num">${esc(r.amt)}</span></div>`).join('')}</div>` : '') +
         (d.note ? `<div class="dim">${esc(d.note)}</div>` : '') + keysFor(m, conv) + `</div>`;
     case 'limit':
@@ -60,7 +60,7 @@ function body(m, conv) {
     case 'signal':
       return `<div class="card white"><div class="dim">${esc(d.source ?? '')}</div><div class="quote">${esc(m.text)}</div></div>`;
     case 'ta':
-      return `<div class="card white"><div class="card-head"><span class="ticker-lead">${ticker(d.ticker)}</span><span class="dim">${esc(d.tf)} · technicals</span></div>${candles(d)}` +
+      return `<div class="card white"><div class="card-head"><span class="ticker-lead">${ticker(d.ticker)}</span><span class="dim">${esc([`${d.tf} · technicals`, m.at && fmtClock(m.at)].filter(Boolean).join(' · '))}</span></div>${candles(d)}` +
         (d.lines ?? []).map((l, i) => `<div${i ? ' class="dim"' : ''}>${esc(l)}</div>`).join('') + `<a class="link" href="#/markets/${esc(d.ticker)}">See in Markets ›</a></div>`;
     case 'brief':
       return `<div class="card white"><div class="card-head"><div class="card-title">Morning brief · ${esc(d.date)}</div><span class="dim">${esc(d.time)} · daily</span></div>` +
@@ -72,10 +72,12 @@ function body(m, conv) {
     case 'breaking':
       return `<div class="card red"><div class="card-head">${chip('Breaking', 'down')}<span class="dim">${fmtClock(m.at)}</span></div><div class="card-title">${esc(d.headline ?? m.text)}</div>${d.body ? `<div class="dim">${withTickers(d.body)}</div>` : ''}</div>`;
     case 'call': {
-      // how the call went: connected and for how long, missed, or never got through
+      // how the call went: connected and for how long, missed, or never got through; then its topic and time, and what was said
       const title = d.dir === 'out' ? 'Called Gravit' : 'Gravit called';
       const [label, tone] = { accepted: [`Connected · ${fmtDuration(d.duration ?? 0)}`, 'up'], cancelled: ['Did not connect', 'grey'] }[m.answer] ?? ['Missed', 'down'];
-      return `<div class="card red"><div class="card-head"><div class="card-title">${title}</div>${chip(label, tone)}</div>${d.about ? `<div class="dim">${esc(d.about)}</div>` : ''}</div>`;
+      const topic = [d.about, m.at && fmtClock(m.at)].filter(Boolean).join(' · ');
+      return `<div class="card ${levelOf(m)}"><div class="card-head"><div class="card-title">${title}</div>${chip(label, tone)}</div>${topic ? `<div class="dim">${esc(topic)}</div>` : ''}` +
+        (m.answer === 'accepted' && d.said ? `<div>Said: ${esc(d.said)}</div>` : '') + `</div>`;
     }
     case 'receipt':
       return `<div class="bubble green"><div class="line">${chip(d.status ?? 'filled', 'up')}<span>${esc(m.text)}</span></div>${d.more ? `<div>${esc(d.more)}</div>` : ''}</div>`;
@@ -95,7 +97,8 @@ export function renderMessage(m, conv, state) {
     return `<div class="msg you"><div class="bubble you">${files}${m.text ? esc(m.text) : ''}</div>${avatar('you', 28)}</div>`;
   }
   const name = conv.kind === 'group' ? `<div class="sender-name">${esc(senderName(m.from, state))}</div>` : '';
-  const wide = ['card', 'ta', 'brief', 'breaking', 'signal'].includes(m.kind);
+  // plain talk keeps a bubble's width; every card and green bubble runs wider (spec §16)
+  const wide = m.kind !== 'text';
   return `<div class="msg left">${name}<div class="msg-row">${avatar(m.from, 28, state)}<div class="${cls('msg-body', wide && 'wide')}">${body(m, conv)}</div></div></div>`;
 }
 
