@@ -85,7 +85,9 @@ the main column below ~800 px, and nothing here needs more than his breakpoints)
 Added 2026-10-11 for §13–§15, all on the two-level rail: F17 (the first level collapsed), F18 (Mail, a letter
 open), F19 and F20 (Create: the Discover MCP dialog waiting for a client, then asked to publish), F21 (Markets),
 F22 (the market drawer), F23 (Trade with the ticket), F24 (the controls of §13.5); F8 now shows Details beside the
-thread with the second level folded away; F12 (the old upload drawer) is gone with §14.3.
+thread with the second level folded away; F12 (the old upload drawer) is gone with §14.3. Since §16
+(2026-10-13) F10 is the KOL bot's page and F22 the BTC market's page, not drawers, and the boards were corrected
+against the build (§16.8).
 
 ## 3. Visual language
 
@@ -250,6 +252,7 @@ The fifteen kinds (F3 1–10, F15 11–15), who speaks, the level, the keys, and
 | 13 | breaking news | banner | red edge | × | a banner over the thread for 5 s, then a red-edged message in it |
 | 14 | an incoming call | card | red edge | decline ✗ accept ✓ (44 px phones) | the rail's phone line; a declined call becomes a message |
 | 15 | a group-chat message | bot | grey | — | the sender's name above the bubble |
+| 16 | an alert (§16.3) | G | red edge | — | a check's bad verdict in one sentence |
 
 ## 7. Discover, the store
 
@@ -521,3 +524,86 @@ gravit-ui's render functions on his tokens, with stand-in data. Nothing is impor
    amend, Cancel all, wallet sends, live price ticks (quotes hold still, so a resting limit stays open), his
    top-bar search, lens and statement modal, and his explanatory sentences (kept for F16 and the onboarding
    guide). The back end of §9 gains the venues' real quotes and order endpoints behind the same ticket.
+
+## 16. Amendment, 2026-10-13 (round 5): the re-laid canvas against the build
+
+The operator's words: "画布更新了，你再看看" — compare the re-laid canvas (§2's rows 1–5) with `gravit-ui/`. The
+comparison found 132 differences: 30 where the code was wrong, 65 where a board was drawn wrong, 37 for the
+operator. The operator answered four: a plugin or a market opens as its own page and Back returns to Discover or
+Markets ("点击插件/股票之后就完全是插件和股票的页面，点击退回就回到discover和market的页面"); Details keeps label/value
+rows; Venues stay on their own segment; and "改代码那 30 处，改正画布上画错的板，spec 和 ledger 跟着更新". The other
+operator items took the defaults announced with the comparison: what is appearance follows the boards, what is
+behaviour stays as built. Where this section and §4–§8, §13, §14 or §15 disagree, this section wins.
+
+1. **A plugin and a market are pages (replaces the drawers of §7.4, §14.2 and §15.2).** A card opens
+   `#/plugin/<id>`: "‹ Discover" (back to the shelf, See all or search it came from), then the head — the 72 px
+   logo, the name 28/800, the meta line of §14.2, and the one key (Install, Uninstall, or a disabled In review)
+   at its right — then the blurb, What you sign, What you can ask it, What it writes, its tools and What it needs
+   from you. A market opens `#/markets/<id>` as a page: "‹ Markets", the head with the market's name 28/800 and its
+   keys (Buy, Sell where held, Hand to Gravit, Watch), price and facts, then Price history and Across venues
+   beside You hold, Gravit on it and On the statement (one column on a narrow page). Focus lands on the way
+   back; an unknown id opens Discover or Markets; Escape leaves a page alone. Kind 5's + and a toast's Open lead
+   to the plugin's page; a ticker leads to the market's page. §13.1's one drawer at a time now covers Details,
+   Create, Settings and the Account panels.
+2. **The catalogue fills the page.** Every catalogue plugin has What you can ask it, What it writes, an install
+   count and what it needs (KOL bot as F10 draws it: "Bots · 640 installs", three questions, two lines it writes,
+   "Nothing. Reads Portfolio and Markets."). What you sign names the manifest's slug (`install kol-bot`,
+   `install buffett-bot`). The never line reads "Never: moves money, pays anyone, changes a limit". My plugins
+   lists Installed in install order. The toast has no ×; it leaves by itself (§14.3).
+3. **Conversations.**
+   - Plain talk is 66% of the thread wide; every card and green bubble 80%. A chip inside a card hugs its words.
+   - An order card's line is venue · type · amount; its card id stays in the record (F16, "record fields moved to
+     Details").
+   - The quote bar of a signal and the K-line's dashed rules are `--alloc-cash`; the technicals head carries the
+     time of the read ("4h · technicals · 14:20").
+   - Time dividers stay as built: one only after a 15-minute gap (§5.2's "14:04" is an example of the format).
+     The list keeps its order; a new conversation goes on top.
+   - Kind 7 now happens: the director's Monitor posts a Telegram monitor signal and Gravit answers "Seen. Not
+     chasing." (the seed does not install Telegram monitor; the director is stage machinery).
+   - **A sixteenth kind, alert:** Gravit, red edge, one sentence, no keys — the verdict of a check that found
+     something bad ("The address is on a scam list. Nothing was sent."). It joins §6's table after kind 15.
+   - Kind 13: the banner drops in over the main column (not the window), its head names the conversation the
+     message will land in ("14:52 · Small BTC position under $70k"), and its ticker is a link, in the banner and in
+     the message that lands.
+   - Kind 14: only a call coming in, or one missed, is red-edged; a call that connected, or one you placed, is
+     white. Ringing out shows "Calling Gravit…" and "Ringing"; a live call shows Gravit, the timer (m:ss, 20/800),
+     mute and hang up, and no transcript line. The card after a call carries its title and chip, the topic with
+     its time ("About BTC · 14:52"), and for a call that connected what was said ("Said: Hold until CPI is out;
+     raise the order cap to $50 after."). When you ring Gravit, it picks up about BTC.
+   - The group head's members line is 12 px (§5.1). Details (§5.6) keeps label/value rows; each plugin row
+     carries its kind at the right; Stop Gravit hugs its label.
+   - F6 carries no hint line: decision 9 wins over §2's and §5.7's "one line"; the sentence is on F16.
+4. **Controls (amends §13.5).** An editor names each box ("an order", "in all"; "Top up" or "Take back"; the
+   draft's chips "an order", "in all", "days", "on") and stands in place of the buttons that opened it; boxes are
+   36 px, its ✓ and × 32 px round keys with 14 px glyphs. A confirm's two keys share one height. Picked files sit
+   inside the composer, above the words, as chips with their names only. The mic, listening, is an ink key named
+   "Stop listening", and the words fill the composer as it hears them.
+5. **The two levels (amends §13.1).** The list titles (Messages, Mail) are 22/800; the new-message + is a 32 px
+   round ink key with an 18 px glyph; a badge is 20 px and hangs over its key's corner; "You" is 10 px in its
+   28 px ring; collapsed, the first level is a column of 44 px squares, Account included; the collapse key is a
+   28 px round key with a 16 px chevron.
+6. **Account, Mail, Create, Trade.**
+   - Portfolio is the net-worth card alone; Venues stay on their own segment (§8). "Net worth" is a 12 px 600
+     label; a holding's change is coloured at regular weight.
+   - **Receive takes money into the owner's own Stand-in Wallet** (`0x9a7c…d41e`), not Gravit's: the drawer is
+     titled "Receive · USDC" with a Base chip, an 88 px QR left of the address, and Copy address. Gravit's wallet is
+     reached from Details' Top up (§13.5).
+   - Memory's entries read as F13 words them ("Value over hype", "No order over $25; real money passes me first",
+     "Telegram calls: read, never chase", "Ask before adding; never widen a limit alone", "BTC on the exchange,
+     cheaper than the DEX", "Brief at 7:30; hold before CPI"); the sources are §8's, plus "Learned when you
+     declined"; Where it is used names Group chats ("Who speaks first, whose word is discounted").
+   - An unread letter's subject is 700; a letter's file chip has even padding.
+   - Create's Client and Where segments are 38 px like every segment; pill and small-button words are 600.
+   - The Trade picker marks the market whose ticket is open; a resting order reads "on Stand-in Broker’s book".
+   - The seed moves to version 5 (the owner's wallet, Memory's words), so a saved demo resets once.
+7. **Kept as built, the boards follow.** Change limit edits per order and total, not the end date; an order row's
+   first press reads Cancel; the Data and Quant shelves keep their fifth card (the HFT-style Like shelf needs
+   them); after Refuse, Create keeps the run with a red ✗ on `shop.publish`.
+8. **The canvas.** The boards drawn against this spec were corrected on 2026-10-13: the F1 thread (and its
+   copies on F17, F8, F9) with the receipt and the two requests as their own messages at their levels and the
+   answered card carrying its answer; F8's Details as the 400 px drawer with label/value rows and the seed's facts;
+   F6 without the hint; F7 with the group row; F14 in the seed's words; F3 and F15 in the code's sentences, with a
+   fill receipt for kind 9 and the alert as specimen 16; F10 redrawn as the KOL bot page and F22 as the BTC page;
+   F4, F11, F19 and F20 as Discover and Create render; F5, F13 and F18; F21, F23 and F24. F16 gained the sentences
+   taken off in this round and in §15.5 (Linqi's explanatory lines), and its notes now cite F19/F20, My plugins and
+   the page.
