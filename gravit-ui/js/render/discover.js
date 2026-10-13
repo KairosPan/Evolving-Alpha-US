@@ -2,7 +2,7 @@
 import { esc, attrs, cls } from '../html.js';
 import { toHash } from '../router.js';
 import { icon } from '../icons.js';
-import { PLUGINS, SHELVES, SHOP_MCP, byId, search, likeFor, fromManifest } from '../data/plugins.js';
+import { PLUGINS, SHELVES, SHOP_MCP, byId, search, likeFor, fromManifest, slugOf } from '../data/plugins.js';
 import { logo } from './avatars.js';
 import { kv, sec } from './controls.js';
 
@@ -63,7 +63,7 @@ function header(state) {
 
 // the signature table: installing grants what MAY says until you uninstall; uninstalling signs only what and for
 function signRows(p, installed, state) {
-  const what = [['What you sign', `<b>${installed ? 'uninstall' : 'install'} ${esc(p.id)}</b>`], ['For', `Gravit · ${esc(state.account.wallet.address)}`]];
+  const what = [['What you sign', `<b>${installed ? 'uninstall' : 'install'} ${esc(slugOf(p))}</b>`], ['For', `Gravit · ${esc(state.account.wallet.address)}`]];
   return installed ? what : [...what, ['May', esc(MAY[p.kind] ?? MAY.Data)], ['May not', 'pay anyone · move money'], ['Until', 'you uninstall']];
 }
 
@@ -140,7 +140,7 @@ export function renderCreate(state) {
 export function renderToast(t) {
   const a = t.action;
   const act = !a ? '' : `<a class="toast-key" href="${a.plugin ? `#/plugin/${esc(a.plugin)}` : `#/messages/${esc(a.route.id)}`}">${esc(a.label)}</a>`;
-  return `<div class="toast" role="status">${esc(t.text)}${act}<button type="button" class="toast-x" data-action="dismissToast" aria-label="Dismiss">×</button></div>`;
+  return `<div class="toast" role="status">${esc(t.text)}${act}</div>`;
 }
 
 export function renderDiscover(state) {
@@ -152,7 +152,8 @@ export function renderDiscover(state) {
     body = grid(`${found.length} result${found.length === 1 ? '' : 's'}`, found, state);
   } else if (d.installedOnly) {
     const mine = all.filter(p => state.plugins.mine.includes(p.id));
-    const installed = all.filter(p => state.plugins.installed.includes(p.id) && !state.plugins.mine.includes(p.id));
+    // what you installed, in the order you installed it
+    const installed = state.plugins.installed.map(id => byId(id, state.plugins.uploaded)).filter(p => p && !state.plugins.mine.includes(p.id));
     body = grid('Installed', installed, state) + (mine.length ? grid('Yours', mine, state) : '');
   } else if (state.route.id) {
     const s = SHELVES.find(x => x.id === state.route.id);

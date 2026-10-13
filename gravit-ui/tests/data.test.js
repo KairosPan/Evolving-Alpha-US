@@ -17,6 +17,8 @@ test('the catalogue: unique ids, known kinds, every shelf id resolves, Serenity 
   for (const s of SHELVES.filter(s => s.id !== 'like')) for (const id of s.ids) assert.ok(byId(id), id);
   assert.equal(byId('serenity').blurb, 'Tech supply-chain analysis');
   assert.equal(plugins.byline, undefined, 'no author or price line is made any more');
+  assert.deepEqual(['buffett', 'kol', 'politician', 'pricefeed'].map(id => plugins.slugOf(byId(id))), ['buffett-bot', 'kol-bot', 'us-politician-bot', 'price-feed']);
+  assert.deepEqual(byId('kol').never, ['moves money', 'pays anyone', 'changes a limit']);
   assert.equal(byId('nope'), null);
   assert.equal(byId('p-1', [{ id: 'p-1', name: 'Mine' }]).name, 'Mine');
 });

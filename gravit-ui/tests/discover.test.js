@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderDiscover, renderPlugin, card, keyFor, pluginPage, renderCreate, renderToast } from '../js/render/discover.js';
-import { byId } from '../js/data/plugins.js';
+import { byId, PLUGINS } from '../js/data/plugins.js';
 import { nextUpload } from '../js/driver.js';
 import { reducers as R } from '../js/reducers/index.js';
 import { seed } from '../js/data/seed.js';
@@ -60,18 +60,18 @@ test('a plugin is a page: back to Discover, its head with the key, What you sign
   const d = pluginPage(byId('news'), s);
   assert.match(d, /class="dsec-label">What you can ask it</);
   assert.match(d, /class="dsec-label">What it writes</);
-  assert.match(d, /Never: move money, pay anyone, change limits/);
+  assert.match(d, /Never: moves money, pays anyone, changes a limit/);
   assert.doesNotMatch(d, /How it is paid|Free|by Gravit/);
   assert.match(pluginPage(byId('buffett'), s), /class="dim">Bots · 1\.2k installs</);
   assert.match(d, /class="dsec-label">What it needs from you</);
   assert.match(d, /class="dsec-label">What you sign</);
-  assert.match(d, /install news/);
+  assert.match(d, /<b>install news-sentiment<\/b>/);
   assert.match(d, /Gravit · 0xec4c…16c1/);
   assert.match(d, /you uninstall/);
   assert.match(d, /class="btn-primary" data-action="install" data-id="news">Install</);
   assert.doesNotMatch(d, /sign this/);
   const inst = pluginPage(byId('buffett'), s);
-  assert.match(inst, /uninstall buffett/);
+  assert.match(inst, /<b>uninstall buffett-bot<\/b>/);
   assert.match(inst, /class="btn-primary" data-action="uninstall" data-id="buffett">Uninstall</);
 });
 
@@ -104,9 +104,9 @@ test('the signature follows the plugin: only a bot may propose; uninstalling sig
   assert.match(pluginPage(byId('telegram'), s), /May<\/span><span class="kv-v">read what you point it at · write signals, never orders/);
   assert.match(pluginPage(byId('politician'), { ...s, plugins: { ...s.plugins, installed: [] } }), /May<\/span><span class="kv-v">read Portfolio · propose in your limit/);
   const inst = pluginPage(byId('buffett'), s);
-  assert.match(inst, /uninstall buffett/);
+  assert.match(inst, /<b>uninstall buffett-bot<\/b>/);
   assert.doesNotMatch(inst, />May</);
-  const bare = pluginPage(byId('onchain'), s);
+  const bare = pluginPage({ ...byId('onchain'), asks: [] }, s);
   assert.doesNotMatch(bare, /has not written/);
   assert.doesNotMatch(bare, /What you can ask it/);
 });
@@ -199,7 +199,7 @@ test('a private upload lands first on its shelf, installed, with Open in Message
   assert.match(d, /class="dim">Data · In review</);
   assert.match(d, /<button type="button" class="btn-primary" disabled>In review<\/button>/);
   assert.doesNotMatch(d, /What you sign/);
-  assert.match(renderDiscover(s), /class="toast" role="status">CPI quick read uploaded · In review<button type="button" class="toast-x"/);
+  assert.match(renderDiscover(s), /class="toast" role="status">CPI quick read uploaded · In review<\/div>/);
   const passed = R.reviewPassed(s, { id: 'cpi', now: NOW });
   assert.match(keyFor(byId('cpi', passed.plugins.uploaded), passed), /class="pkey install" data-action="install" data-id="cpi"/);
   assert.match(pluginPage(byId('cpi', passed.plugins.uploaded), passed), /class="dim">Data · Public</);
@@ -207,6 +207,34 @@ test('a private upload lands first on its shelf, installed, with Open in Message
   for (const st of [s, passed]) assert.doesNotMatch(renderDiscover(R.toggleInstalledOnly(st)) + renderDiscover(st), /Free|by @|by Gravit|by community|Just installed/);
 });
 
-test('renderToast', () => {
-  assert.equal(renderToast({ text: 'x', action: null }), '<div class="toast" role="status">x<button type="button" class="toast-x" data-action="dismissToast" aria-label="Dismiss">×</button></div>');
+test('renderToast: the words and Open; it leaves by itself', () => {
+  assert.equal(renderToast({ text: 'x', action: null }), '<div class="toast" role="status">x</div>');
+});
+
+// ---- the canvas round (2026-10-13)
+
+test('every catalogue plugin says what you can ask it, what it writes, how many installed it and what it needs', () => {
+  for (const p of PLUGINS.filter(x => x.by !== '@you')) {
+    assert.ok(p.asks.length >= 1, `${p.id} asks`);
+    assert.ok(p.writes.length >= 1, `${p.id} writes`);
+    assert.ok(p.installs, `${p.id} installs`);
+    assert.ok(p.needs && p.needs !== 'Nothing.', `${p.id} needs`);
+  }
+});
+
+test('the KOL bot page, as F10 draws it', () => {
+  const s = R.nav(disc(), { screen: 'plugin', id: 'kol' });
+  const h = renderPlugin(s);
+  assert.match(h, /<div class="dim">Bots · 640 installs<\/div>/);
+  for (const q of ['“What did @kol_x buy this week?”', '“Follow their SOL call?”', '“How did their last ten calls do?”']) assert.ok(h.includes(`<div class="dsec-line">${q}</div>`), q);
+  assert.match(h, /<div class="dsec-line">Proposals: inside your limit they fill; beyond it you get a card to answer<\/div><div class="dsec-line">One line per call it sees, into this conversation<\/div>/);
+  assert.match(h, /<div class="dsec-line">Nothing\. Reads Portfolio and Markets\.<\/div>/);
+  assert.match(h, /<b>install kol-bot<\/b>/);
+});
+
+test('My plugins lists what you installed in the order you installed it', () => {
+  const s = R.toggleInstalledOnly(R.install(disc(), { id: 'news', now: NOW }));
+  const h = renderDiscover(s);
+  const grid = h.slice(h.indexOf('grid-title">Installed'), h.indexOf('grid-title">Yours'));
+  assert.deepEqual([...grid.matchAll(/data-action="openPlugin" data-id="([^"]+)"/g)].map(m => m[1]), ['pricefeed', 'fraud', 'politician', 'buffett', 'news']);
 });
