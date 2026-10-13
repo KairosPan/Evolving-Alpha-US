@@ -15,8 +15,8 @@ const held = (s, name, venue) => s.account.holdings.find(h => h.name === name &&
 const ticket = (s, id, fields = {}, open = {}) => Object.entries(fields).reduce((st, [field, value]) => R.setTicket(st, { field, value, now: NOW }), R.openTicket(s, { id, now: NOW, ...open }));
 const filled = s => { const t = s.trade.ticket.placing; return R.settleOrder(s, { id: t, now: NOW }); };
 
-test('seed 4: holdings carry quantities, the venues hold cash, the account has orders; revalue agrees with the numbers shown', () => {
-  assert.equal(SEED_VERSION, 4);
+test('seed 5: holdings carry quantities, the venues hold cash, the account has orders; revalue agrees with the numbers shown', () => {
+  assert.equal(SEED_VERSION, 5);
   const s = fresh();
   assert.equal(s.account.holdings.length, 4);
   assert.deepEqual(held(s, 'BTC'), { key: 'crypto:BTC', name: 'BTC', venue: 'Stand-in Exchange', qty: 0.05955, value: 3739.74, chg: 1.2 });
@@ -117,9 +117,9 @@ test('a market buy fills at the ask: holding, cash, statement, net worth and the
 
 test('limits rest on the book below the ask and fill at the ask above it', () => {
   const rest = filled(R.placeOrder(ticket(fresh(), 'BTC', { amount: '25', orderType: 'limit', limit: '60000' }), { now: NOW }));
-  assert.deepEqual([rest.account.orders[0].status, rest.account.orders[0].qty, rest.account.orders[0].note], ['open', 0.00041, "on Stand-in Exchange's book at 60,000"]);
+  assert.deepEqual([rest.account.orders[0].status, rest.account.orders[0].qty, rest.account.orders[0].note], ['open', 0.00041, 'on Stand-in Exchange’s book at 60,000']);
   assert.equal(held(rest, 'BTC').qty, 0.05955);
-  assert.equal(rest.trade.ticket.said.text, "Placed: ord-0010 · on Stand-in Exchange's book at 60,000");
+  assert.equal(rest.trade.ticket.said.text, 'Placed: ord-0010 · on Stand-in Exchange’s book at 60,000');
   const fill = filled(R.placeOrder(ticket(fresh(), 'BTC', { amount: '25', orderType: 'limit', limit: '63000' }), { now: NOW }));
   assert.deepEqual([fill.account.orders[0].status, fill.account.orders[0].price], ['filled', 62803.6]);
 });
@@ -198,7 +198,7 @@ test('Trade at rest: the head with the cap, the four kinds, the picker, Under wa
   assert.equal(count(most.slice(0, most.indexOf('</ul>')), /class="tk-row"/g), 6);
   assert.doesNotMatch(h, /tk-pg-h">Recent</);
   assert.match(h, /<b>Buy 0\.4295 KO · limit 58\.2<\/b>[\s\S]*?by Gravit, approved by you · <a class="link" href="#\/messages\/c-4" data-action="open" data-id="c-4">/);
-  assert.match(h, /<span class="tk-st">Open<\/span><span class="tk-why">on Stand-in Broker&#39;s book at 58\.2<\/span>/);
+  assert.match(h, /<span class="tk-st">Open<\/span><span class="tk-why">on Stand-in Broker’s book at 58\.2<\/span>/);
   assert.match(h, /data-action="cancelOrder" data-id="ord-0008">Cancel</);
   assert.match(h, /<h2 class="tk-title">Pick a market<\/h2>/);
   assert.match(h, /data-action="handToGravit">[\s\S]*?Hand to Gravit instead<\/button>/);
@@ -301,7 +301,7 @@ test('a held prediction sells from its drawer and from the picker', async () => 
   const d = renderMarkets(R.nav(yes, { screen: 'markets', id: 'FED-DEC' }), NOW);
   assert.match(d, /data-action="tradeFrom" data-id="FED-DEC" data-side="sell" data-venue="Polymarket" data-outcome="0">Sell<\/button>/);
   const t = renderTrade(R.setTradeKind(R.nav(yes, { screen: 'trade' }), 'predictions'), NOW);
-  assert.match(t, /<div class="tk-pg-h">You hold<\/div><ul class="tk-list"><li><button type="button" class="tk-row" data-action="pickMarket" data-id="FED-DEC" data-venue="Polymarket" data-side="sell" data-outcome="0">/);
+  assert.match(t, /<div class="tk-pg-h">You hold<\/div><ul class="tk-list"><li><button type="button" class="tk-row on" aria-current="true" data-action="pickMarket" data-id="FED-DEC" data-venue="Polymarket" data-side="sell" data-outcome="0">/);
   const sell = R.openTicket(yes, { id: 'FED-DEC', side: 'sell', outcome: 0, venue: 'Polymarket', now: NOW });
   assert.deepEqual([sell.trade.ticket.side, sell.trade.ticket.venue], ['sell', 'Polymarket']);
 });

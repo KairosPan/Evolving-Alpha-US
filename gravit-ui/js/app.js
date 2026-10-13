@@ -514,8 +514,8 @@ export function boot(win) {
       if (store.get().account.connecting === name) timers.after(CONNECT_MS, () => store.dispatch('venueConnected', name));
     },
     copyAddress: () => {
-      const w = store.get().account.wallet;
-      try { win.navigator?.clipboard?.writeText(w.full ?? w.address); } catch { /* the label still says copied: the demo has no clipboard to fail loudly */ }
+      const r = store.get().account.receive;
+      try { win.navigator?.clipboard?.writeText(r.full ?? r.address); } catch { /* the label still says copied: the demo has no clipboard to fail loudly */ }
       store.dispatch('setCopied', true);
       timers.after(COPIED_MS, () => store.dispatch('setCopied', false));
     },

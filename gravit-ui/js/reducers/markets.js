@@ -104,7 +104,7 @@ export const reducers = {
     const price = fillPrice(o, inst);
     let account = s.account;
     let done;
-    if (price == null) done = { ...o, status: 'open', note: `on ${o.venue}'s book at ${inst.kind === 'event' ? cents(o.limit) : px(o.limit)}` };
+    if (price == null) done = { ...o, status: 'open', note: `on ${o.venue}’s book at ${inst.kind === 'event' ? cents(o.limit) : px(o.limit)}` };
     else {
       const bp = buyingPower(account, o.venue);
       const cost = round2(o.qty * price);

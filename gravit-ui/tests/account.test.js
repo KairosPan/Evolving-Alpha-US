@@ -43,7 +43,7 @@ test('Memory: entries grouped with their source and two keys, the add box, where
   const m = renderMemory(s);
   assert.deepEqual([...m.matchAll(/class="mem-label">([^<]+)</g)].map(x => x[1]), ['Style', 'Rules', 'Venues and people']);
   assert.equal(count(m, /class="mem-entry"/g), 9);
-  assert.match(m, /class="mem-text">Prefers value, does not chase hype<\/div><div class="mem-source">You said · Oct 2</);
+  assert.match(m, /class="mem-text">Value over hype<\/div><div class="mem-source">You said · Oct 2</);
   assert.equal(count(m, /data-action="editMemory" data-id="mem-\d+"/g), 9);
   assert.equal(count(m, /data-action="forgetMemory" data-id="mem-\d+"/g), 9);
   assert.match(m, /<form class="mem-add" data-action="addMemory">/);

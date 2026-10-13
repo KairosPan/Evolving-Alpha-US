@@ -11,12 +11,19 @@ import { chip } from './thread.js';
 import { mkAv, closeSpan, orderWords, cancelKey } from './markets.js';
 
 const QTY_WORD = { coin: null, stock: 'Shares', rwa: null, event: 'Contracts' };
-const pick = (inst, sub, right = '', venue = null, sell = null) => `<li><button type="button"${attrs({ class: 'tk-row', 'data-action': 'pickMarket', 'data-id': inst.id, 'data-venue': venue, 'data-side': sell == null ? null : 'sell', 'data-outcome': sell })}>${mkAv(inst, 'sm')}` +
+const pick = (inst, sub, right = '', venue = null, sell = null, on = false) => `<li><button type="button"${attrs({ class: cls('tk-row', on && 'on'), 'aria-current': on ? 'true' : null, 'data-action': 'pickMarket', 'data-id': inst.id, 'data-venue': venue, 'data-side': sell == null ? null : 'sell', 'data-outcome': sell })}>${mkAv(inst, 'sm')}` +
   `<span class="tk-rn"><b>${esc(inst.name)}</b><span class="mk-sub">${sub}</span></span>${right ? `<span class="tk-rp">${right}</span>` : ''}</button></li>`;
 const group = (title, rows) => (rows.length ? `<div class="tk-pg"><div class="tk-pg-h">${title}</div><ul class="tk-list">${rows.join('')}</ul></div>` : '');
 
 function picker(state, now) {
   const a = state.account;
+  // the market whose ticket is open is marked once, on the first row that names it
+  let open = state.trade.ticket?.id ?? null;
+  const row = (inst, sub, right, venue, sell) => {
+    const on = inst.id === open;
+    if (on) open = null;
+    return pick(inst, sub, right, venue, sell, on);
+  };
   const K = KINDS.find(k => k.id === state.trade.kind);
   const q = state.trade.q;
   const ofKind = INSTRUMENTS.filter(i => listed(i) && kindOf(i) === K.id);
@@ -31,16 +38,16 @@ function picker(state, now) {
   if (q.trim()) {
     const s = q.trim().toLowerCase();
     const found = ofKind.filter(i => `${i.name} ${i.base} ${i.category ?? ''}`.toLowerCase().includes(s)).slice(0, 12);
-    groups = found.length ? group(`Results for “${esc(q)}”`, found.map(i => pick(i, esc(whereWords(i)), priced(i)))) : `<p class="mk-empty">Nothing matches “${esc(q)}” under ${K.label}.</p>`;
+    groups = found.length ? group(`Results for “${esc(q)}”`, found.map(i => row(i, esc(whereWords(i)), priced(i)))) : `<p class="mk-empty">Nothing matches “${esc(q)}” under ${K.label}.</p>`;
   } else {
-    const held = a.holdings.map(h => [h, instrument(h.name)]).filter(([, i]) => i && kindOf(i) === K.id).map(([h, i]) => pick(i,
+    const held = a.holdings.map(h => [h, instrument(h.name)]).filter(([, i]) => i && kindOf(i) === K.id).map(([h, i]) => row(i,
       i.kind === 'event' ? `${qtyFmt(h.qty)} contracts · ${esc(h.outcome)} · ${esc(h.venue)}` : `${qtyFmt(h.qty ?? 0)} · ${esc(h.venue)}`, `<span class="num">${usd(h.value)}</span>${chgHtml(h.chg)}`, h.venue,
       // a prediction you hold opens as a sell of that outcome, as Linqi's does
       i.kind === 'event' ? String(Math.max(0, i.outcomes.findIndex(o => o.label === h.outcome))) : null));
     const seen = new Set();
     const recent = a.orders.filter(o => o.by === 'you' && kindOf(instrument(o.inst)) === K.id && !seen.has(o.inst) && seen.add(o.inst)).slice(0, 6)
-      .map(o => pick(instrument(o.inst), `${esc(o.venue)} · ${fmtDate(o.at)}`));
-    const most = [...ofKind].sort((x, y) => y.vol - x.vol).slice(0, 6).map(i => pick(i, esc(whereWords(i)), priced(i)));
+      .map(o => row(instrument(o.inst), `${esc(o.venue)} · ${fmtDate(o.at)}`));
+    const most = [...ofKind].sort((x, y) => y.vol - x.vol).slice(0, 6).map(i => row(i, esc(whereWords(i)), priced(i)));
     groups = group('You hold', held) + group('Recent', recent) + group('Most traded', most);
   }
   return `<section class="cardbox tk-pick"><div class="tk-pick-head"><h2 class="tk-h2">${K.label}</h2><div class="tk-pfind">${icon('search', 16, 2)}` +

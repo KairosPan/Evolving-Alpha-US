@@ -27,7 +27,7 @@ function qr(text) {
 export function renderPanel(state) {
   const a = state.account;
   if (!a.panel) return '';
-  const drawer = (label, inner) => `<aside class="drawer" aria-label="${label}"><div class="drawer-head"><h2>${label}</h2><button type="button" class="close-key" data-action="closePanel" aria-label="Close">×</button></div><div class="drawer-body">${inner}</div></aside>`;
+  const drawer = (label, inner, tag = '') => `<aside class="drawer" aria-label="${label}"><div class="drawer-head">${tag ? `<div class="drawer-title"><h2>${label}</h2>${tag}</div>` : `<h2>${label}</h2>`}<button type="button" class="close-key" data-action="closePanel" aria-label="Close">×</button></div><div class="drawer-body">${inner}</div></aside>`;
   const error = a.panelError ? `<div class="field-error">${esc(a.panelError)}</div>` : '';
   if (a.panel === 'move') {
     const froms = [...new Set(a.holdings.map(h => h.venue))];
@@ -41,9 +41,10 @@ export function renderPanel(state) {
       `<div class="btn-row grow"><button type="button" class="btn" data-action="closePanel">Cancel</button><button type="submit" class="btn-primary">Move</button></div></form>`);
   }
   if (a.panel === 'receive') {
-    const w = a.wallet;
-    return drawer('Receive', `<div class="receive">${qr(w.full ?? w.address)}<div class="mono">${esc(w.address)}</div><div class="dim">USDC · ${esc(w.chain)}</div>` +
-      `<button type="button" class="btn-sm" data-action="copyAddress">${a.copied ? 'Copied' : 'Copy address'}</button></div>`);
+    // into the owner's own wallet: the asset in the title, the chain beside it, the QR left of the address
+    const r = a.receive;
+    return drawer(`Receive · ${esc(r.asset)}`, `<div class="receive">${qr(r.full ?? r.address)}<div class="receive-side"><div><span class="mono">${esc(r.address)}</span><span class="dim"> · ${esc(r.venue)}</span></div>` +
+      `<button type="button" class="btn-sm" data-action="copyAddress">${a.copied ? 'Copied' : 'Copy address'}</button></div></div>`, chip(r.chain, 'grey'));
   }
   if (a.panel === 'statement') {
     const rows = a.activity.map(x => `<div class="activity-row"><span class="dim">${fmtDate(x.at)} ${fmtClock(x.at)}</span><span class="activity-text">${esc(x.text)}</span>` +
@@ -63,7 +64,7 @@ function portfolio(a) {
   const legend = a.alloc.map(x => `<span>${esc(x.name)} ${x.pct}%</span>`).join('');
   const rows = a.holdings.map(h => `<div class="holding"><span>${ticker(h.name)}<span class="dim"> · ${esc(h.venue)}</span></span><span class="num">${money(h.value)}</span>` +
     `<span class="${h.chg == null ? 'dim' : h.chg >= 0 ? 'up' : 'down'}">${h.chg == null ? '—' : (h.chg >= 0 ? '+' : '−') + Math.abs(h.chg).toFixed(1) + '%'}</span></div>`).join('');
-  return `<div class="cards">` + box(`<div class="dim">Net worth</div><div class="networth">${money(a.netWorth)}</div><div class="delta"><span class="up">+${money(a.today)} · ${a.todayPct}%</span><span class="dim">today</span></div>` +
+  return `<div class="cards">` + box(`<div class="label">Net worth</div><div class="networth">${money(a.netWorth)}</div><div class="delta"><span class="up">+${money(a.today)} · ${a.todayPct}%</span><span class="dim">today</span></div>` +
     `<div class="spark"></div><div class="alloc-bar">${alloc}</div><div class="alloc-legend">${legend}</div><div class="holdings">${rows}</div>` +
     `<div class="btn-row">${panelKey('move', 'Move')}${panelKey('receive', 'Receive')}${panelKey('statement', 'Statement')}</div>`) + `</div>`;
 }
@@ -85,7 +86,7 @@ export function renderMemory(state) {
     `<button type="button" class="small-key danger" data-action="forgetMemory" data-id="${esc(e.id)}" aria-label="Forget">${icon('trash', 13, 2.2)}</button></div></div>`).join('') + `</div>`).join('');
   const left = box(`<div class="card-head"><div class="cardbox-title">What Gravit remembers about you</div><span class="dim">${M.entries.length} ${M.entries.length === 1 ? 'entry' : 'entries'}</span></div>${list}` +
     `<form class="mem-add" data-action="addMemory"><label for="mem-new" class="sr-only">Add one</label><input id="mem-new" class="input" name="text" type="text" autocomplete="off" placeholder="Add something it should remember…"><button type="submit" class="btn-primary small">Add</button></form>`);
-  const where = [['Discover', 'The Like shelf follows your style: value → Buffett, Broker research, US politician bot'], ['Morning brief', 'What to show you, and when'], ['New message', 'The default limit and venue'], ['Group chat', 'Who speaks first, whose word to discount']]
+  const where = [['Discover', 'The Like shelf follows your style: value → Buffett, Broker research, US politician bot'], ['Morning brief', 'What to show you, and when'], ['New message', 'The default limit and venue'], ['Group chats', 'Who speaks first, whose word is discounted']]
     .map(([k, v]) => `<div class="where-row">${chip(k, 'grey')}<span>${esc(v)}</span></div>`).join('');
   const right = box(`<div class="cardbox-title">Where it is used</div><div class="where">${where}</div>`) +
     box(`<div class="cardbox-title">Switches</div>${switchRow('Let Gravit remember new things', 'remember', M.remember)}${switchRow('Ask me before it keeps what it learned', 'askFirst', M.askFirst)}${switchRow('Bots in group chats can read Memory', 'botsRead', M.botsRead)}` +

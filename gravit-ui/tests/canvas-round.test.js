@@ -232,3 +232,58 @@ test('the after-call card: white once it connected, red when missed; the topic w
   const cancelled = R.hangUp(R.startCall(seed(NOW), { now: NOW }), { now: NOW + 2000 });
   assert.match(renderMessage(cancelled.conversations[0].messages.at(-1), btc, cancelled), /<div class="card white">[\s\S]*>Did not connect<\/span><\/div><div class="dim">14:07<\/div><\/div>/);
 });
+
+// ---- Account, Memory, Mail, Create, Trade (F5, F13, F18, F19, F20, F23, F24 6)
+
+test('Net worth is a 12 px label; a holding’s change is coloured, not bold', async () => {
+  const { renderAccount } = await import('../js/render/account.js');
+  const h = renderAccount(R.nav(seed(NOW), { screen: 'account', tab: 'portfolio' }));
+  assert.match(h, /<div class="label">Net worth<\/div>/);
+  assert.match(rule('.label'), /font-size: 12px; font-weight: 600; color: var\(--dim\);/);
+  assert.match(rule('.holding > .up, .holding > .down'), /font-weight: 400/);
+});
+
+test('Receive takes money into the owner’s Stand-in Wallet: USDC on Base, the QR beside the address', async () => {
+  const { renderAccount } = await import('../js/render/account.js');
+  const h = renderAccount(R.openPanel(R.nav(seed(NOW), { screen: 'account', tab: 'portfolio' }), 'receive'));
+  assert.match(h, /<aside class="drawer" aria-label="Receive · USDC"><div class="drawer-head"><div class="drawer-title"><h2>Receive · USDC<\/h2><span class="chip grey">Base<\/span><\/div>/);
+  assert.match(h, /<div class="receive"><svg class="qr"[\s\S]*<\/svg><div class="receive-side"><div><span class="mono">0x9a7c…d41e<\/span><span class="dim"> · Stand-in Wallet<\/span><\/div><button type="button" class="btn-sm" data-action="copyAddress">Copy address<\/button><\/div><\/div>/);
+  assert.doesNotMatch(h, /0xec4c/, 'Gravit’s own wallet is reached through Details’ Top up, not Account');
+  assert.match(rule('.receive .qr'), /width: 88px; height: 88px;/);
+});
+
+test('Memory reads as the boards word it, with the sources spec §8 lists', async () => {
+  const { renderMemory } = await import('../js/render/account.js');
+  const s = seed(NOW);
+  const texts = Object.fromEntries(s.memory.entries.map(e => [e.id, [e.text, e.source]]));
+  assert.deepEqual(texts['mem-1'], ['Value over hype', 'You said']);
+  assert.deepEqual(texts['mem-4'], ['No order over $25; real money passes me first', 'From your limit']);
+  assert.deepEqual(texts['mem-5'], ['Telegram calls: read, never chase', 'You said']);
+  assert.deepEqual(texts['mem-6'], ['Ask before adding; never widen a limit alone', 'Learned when you declined']);
+  assert.deepEqual(texts['mem-7'], ['BTC on the exchange, cheaper than the DEX', 'Compared on its own']);
+  assert.deepEqual(texts['mem-9'], ['Brief at 7:30; hold before CPI', 'You said']);
+  assert.match(renderMemory(s), /<span class="chip grey">Group chats<\/span><span>Who speaks first, whose word is discounted<\/span>/);
+});
+
+test('an unread letter’s subject is bold at 700', () => {
+  assert.match(css, /\n\.row\.unread \.row-preview \{ color: var\(--text\); font-weight: 700; \}/);
+});
+
+test('Create’s Client and Where segments are 38 px like every other segment; header pills are weight 600', () => {
+  assert.match(rule('.radio-item span'), /min-height: 38px;/);
+  assert.match(css, /\n\.btn-sm, \.pill \{[^}]*font-weight: 600;/);
+});
+
+test('an order on a book says so with the product’s apostrophe', () => {
+  assert.equal(seed(NOW).account.orders.find(o => o.id === 'ord-0008').note, 'on Stand-in Broker’s book at 58.2');
+});
+
+test('the picker marks the market whose ticket is open', async () => {
+  const { renderTrade } = await import('../js/render/trade.js');
+  const s = R.openTicket(R.nav(seed(NOW), { screen: 'trade' }), { id: 'BTC', venue: 'Stand-in Exchange', side: 'buy', now: NOW });
+  const h = renderTrade(s, NOW);
+  assert.equal((h.match(/class="tk-row on"/g) ?? []).length, 1, 'one row, the first that names it');
+  assert.match(h, /<button type="button" class="tk-row on" aria-current="true" data-action="pickMarket" data-id="BTC"/);
+  assert.match(rule('.tk-row.on'), /background: var\(--bg\)/);
+  assert.doesNotMatch(renderTrade(R.nav(seed(NOW), { screen: 'trade' }), NOW), /tk-row on/);
+});

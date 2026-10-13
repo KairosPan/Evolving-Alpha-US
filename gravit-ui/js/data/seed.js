@@ -4,7 +4,7 @@ import { MIN, DAY } from '../time.js';
 // 2: the controls round added edit, confirm, compose, mail, account activity and panels
 // 3: round 3 made the mailbox a screen and Create Discover's own MCP face
 // 4: Markets and Trade: holdings with quantities, cash at the venues, the account's orders, the watchlist, the ticket
-export const SEED_VERSION = 4;
+export const SEED_VERSION = 5;
 
 // the places Gravit may trade, as the draft's venue pick list and the Move form offer them
 export const VENUES = ['Stand-in Exchange', 'Stand-in Broker', 'Stand-in Wallet'];
@@ -89,9 +89,9 @@ export function seed(now = Date.now()) {
     plugins: { installed: ['pricefeed', 'fraud', 'politician', 'buffett', 'pairs'], mine: ['pairs'], uploaded: [] },
     memory: {
       entries: [
-        mem(1, 'Style', 'Prefers value, does not chase hype', 'You said', 7), mem(2, 'Style', 'No leverage', 'You said', 7), mem(3, 'Style', 'Watches the tech supply chain', 'Learned from your questions', 3),
-        mem(4, 'Rules', 'No more than $25 an order; real money goes through me first', 'From your limit', 1), mem(5, 'Rules', 'Telegram group calls: watch, never chase', 'You said', 1), mem(6, 'Rules', 'Ask before adding; never raise the limit alone', 'Learned from the time you said no', 0),
-        mem(7, 'Venues and people', 'BTC on the exchange; cheaper than the DEX', 'Learned by comparing', 1), mem(8, 'Venues and people', 'Follow Pelosi’s disclosures, pick like Buffett', 'From installed bots', 0), mem(9, 'Venues and people', 'Morning brief at 7:30; nothing moves before CPI', 'You said', 0),
+        mem(1, 'Style', 'Value over hype', 'You said', 7), mem(2, 'Style', 'No leverage', 'You said', 7), mem(3, 'Style', 'Watches the tech supply chain', 'Learned from your questions', 3),
+        mem(4, 'Rules', 'No order over $25; real money passes me first', 'From your limit', 1), mem(5, 'Rules', 'Telegram calls: read, never chase', 'You said', 1), mem(6, 'Rules', 'Ask before adding; never widen a limit alone', 'Learned when you declined', 0),
+        mem(7, 'Venues and people', 'BTC on the exchange, cheaper than the DEX', 'Compared on its own', 1), mem(8, 'Venues and people', 'Follow Pelosi’s disclosures, pick like Buffett', 'From installed bots', 0), mem(9, 'Venues and people', 'Brief at 7:30; hold before CPI', 'You said', 0),
       ],
       remember: true, askFirst: false, botsRead: false,
     },
@@ -111,7 +111,7 @@ export function seed(now = Date.now()) {
       orders: [
         { id: 'ord-0001', at: ago(2.5), inst: 'BTC', venue: 'Stand-in Exchange', symbol: 'BTC/USDT', side: 'buy', type: 'market', qty: 0.00008, limit: null, outcome: null, status: 'filled', price: 62500, usd: 5, fee: 0, by: 'gravit', how: 'approved', conv: 'c-1', note: 'filled at 62,500' },
         { id: 'ord-0009', at: ago(20.5), inst: 'NVDA', venue: 'Stand-in Broker', symbol: 'NVDA', side: 'buy', type: 'market', qty: 0.1334, limit: null, outcome: null, status: 'filled', price: 187.4, usd: 25, fee: 0, by: 'gravit', how: 'approved', conv: 'c-4', note: 'filled at 187.4' },
-        { id: 'ord-0008', at: ago(20.5), inst: 'KO', venue: 'Stand-in Broker', symbol: 'KO', side: 'buy', type: 'limit', qty: 0.4295, limit: 58.2, outcome: null, status: 'open', price: null, usd: null, fee: 0, by: 'gravit', how: 'approved', conv: 'c-4', note: "on Stand-in Broker's book at 58.2" },
+        { id: 'ord-0008', at: ago(20.5), inst: 'KO', venue: 'Stand-in Broker', symbol: 'KO', side: 'buy', type: 'limit', qty: 0.4295, limit: 58.2, outcome: null, status: 'open', price: null, usd: null, fee: 0, by: 'gravit', how: 'approved', conv: 'c-4', note: 'on Stand-in Broker’s book at 58.2' },
         { id: 'ord-0004', at: ago(26), inst: 'NVDA', venue: 'Stand-in Broker', symbol: 'NVDA', side: 'buy', type: 'market', qty: 0.1068, limit: null, outcome: null, status: 'filled', price: 187.2, usd: 20, fee: 0, by: 'gravit', how: 'limit', conv: 'c-2', note: 'filled at 187.2' },
       ],
       venues: [
@@ -121,6 +121,8 @@ export function seed(now = Date.now()) {
         { name: 'Kalshi', line: 'Asked it first, without a key', state: 'Not served here' },
       ],
       wallet: { usdc: 12.4, chain: 'Base', address: '0xec4c…16c1', full: '0xec4c3e9d5b7a2f1c8e6d4b2a9f7c5e3d1b8a16c1' },
+      // the owner's own Stand-in Wallet: where Account's Receive takes money in (Gravit's wallet is topped up from Details)
+      receive: { venue: 'Stand-in Wallet', asset: 'USDC', chain: 'Base', address: '0x9a7c…d41e', full: '0x9a7c5e2b8f1d4a6c3e9b7f2d5a8c1e4b6d3fd41e' },
       // the statement, newest first: fills, moves, top-ups
       activity: [
         { at: ago(2.5), text: 'Fill · 0.00008 BTC @ 62,500 · ord-0001', amount: -5 },

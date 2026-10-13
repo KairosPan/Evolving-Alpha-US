@@ -12,7 +12,7 @@ const fresh = () => seed(NOW);
 const conv = (s, id) => s.conversations.find(c => c.id === id);
 
 test('the state shape grew, so the seed version moved on', () => {
-  assert.equal(SEED_VERSION, 4);
+  assert.equal(SEED_VERSION, 5);
   const s = fresh();
   assert.deepEqual([s.edit, s.confirm], [null, null]);
 });
@@ -229,7 +229,7 @@ test('Connect an account: a venue connects after a moment and joins the list; Re
   for (const n of ['from', 'asset', 'to', 'amount']) assert.match(move, new RegExp(`name="${n}"`), n);
   const receive = renderAccount(R.openPanel(p, 'receive'));
   assert.match(receive, /<svg class="qr"/);
-  assert.match(receive, /0xec4c…16c1/);
+  assert.match(receive, /0x9a7c…d41e/);
   assert.match(receive, /data-action="copyAddress">Copy address</);
   assert.match(renderAccount(R.setCopied(R.openPanel(p, 'receive'), true)), />Copied</);
   const statement = renderAccount(R.openPanel(p, 'statement'));
@@ -265,7 +265,7 @@ test('one drawer at a time: each opener closes the others, and an Account panel 
 
 test('Memory edits in place, Forget all asks first, and Reset demo asks first', () => {
   const s = R.nav(fresh(), { screen: 'account', tab: 'memory' });
-  assert.match(renderMemory(R.startEdit(s, { kind: 'memory', id: 'mem-1' })), /<span class="inline-edit"><input id="edit-text" class="input small" name="text" type="text" value="Prefers value, does not chase hype" aria-label="Change to">/);
+  assert.match(renderMemory(R.startEdit(s, { kind: 'memory', id: 'mem-1' })), /<span class="inline-edit"><input id="edit-text" class="input small" name="text" type="text" value="Value over hype" aria-label="Change to">/);
   assert.match(renderMemory(R.askConfirm(s, { action: 'forgetAll' })), /data-action="confirmYes">Yes, forget all</);
   assert.match(renderSettings(R.askConfirm(s, { action: 'resetDemo' })), /data-action="confirmYes">Yes, reset</);
 });

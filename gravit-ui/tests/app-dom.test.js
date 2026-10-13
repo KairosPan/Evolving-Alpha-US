@@ -291,7 +291,7 @@ test('Account panels: Move submits its form; Connect connects after a moment; Re
   assert.equal(store.get().account.venues.at(-1).name, 'Polymarket');
   click('openPanel', { panel: 'receive' });
   click('copyAddress');
-  assert.equal(copied, '0xec4c3e9d5b7a2f1c8e6d4b2a9f7c5e3d1b8a16c1');
+  assert.equal(copied, '0x9a7c5e2b8f1d4a6c3e9b7f2d5a8c1e4b6d3fd41e', 'Receive copies the owner’s wallet, not Gravit’s');
   assert.equal(store.get().account.copied, true);
   click('openPanel', { panel: 'statement' });
   click('exportStatement');

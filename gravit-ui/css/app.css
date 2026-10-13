@@ -8,6 +8,7 @@ a { color: inherit; text-decoration: none; }
 h1, h2 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .dim { color: var(--dim); font-size: 13px; }
+.label { font-size: 12px; font-weight: 600; color: var(--dim); }
 .num { font-variant-numeric: tabular-nums; }
 .mono { font-family: var(--font-mono); font-size: 13px; }
 .up { color: var(--up); font-weight: 700; }
@@ -123,7 +124,7 @@ button.link:disabled { color: var(--dim); cursor: default; }
 /* ---- buttons, pills, chips, segs ---- */
 .btn, .btn-sm, .btn-primary, .btn-danger, .pill { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: var(--radius-pill); font-size: 13px; white-space: nowrap; }
 .btn { min-height: 44px; padding: 0 18px; background: var(--surface-2); color: var(--text); font-size: 15px; }
-.btn-sm, .pill { min-height: 36px; padding: 0 14px; background: var(--surface-2); color: var(--text); }
+.btn-sm, .pill { min-height: 36px; padding: 0 14px; background: var(--surface-2); color: var(--text); font-weight: 600; }
 .btn-sm.pressed, .pill.pressed { background: var(--primary); color: var(--on-primary); }
 .btn-primary { min-height: 44px; padding: 0 18px; background: var(--primary); color: var(--on-primary); font-size: 15px; font-weight: 600; }
 .btn-primary:disabled { background: var(--surface-2); color: var(--dim); cursor: default; }
@@ -279,7 +280,7 @@ button.link:disabled { color: var(--dim); cursor: default; }
 /* Gravit's mailbox */
 /* Mail: the letters sit in the second level; an unread letter's subject is bold; the open letter fills the main column */
 .list-sub { margin-top: 2px; font-size: 12px; color: var(--dim); }
-.row.unread .row-preview { color: var(--text); font-weight: 600; }
+.row.unread .row-preview { color: var(--text); font-weight: 700; }
 .mail-letter { flex: 1 1 auto; display: flex; flex-direction: column; gap: 14px; padding: 20px 28px 28px; overflow-y: auto; }
 .mail-meta { font-size: 13px; }
 .mail-body { margin: 0; max-width: 640px; font-size: 15px; line-height: 1.6; }
@@ -384,7 +385,7 @@ button.toast-key { border: 0; font: inherit; font-size: 13px; }
 .field > .radio-seg, .modal-body > .status { align-self: flex-start; }
 .radio-item { display: inline-flex; }
 .radio-item input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-.radio-item span { display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border-radius: var(--radius-pill); color: var(--dim); font-size: 13px; font-weight: 600; cursor: pointer; }
+.radio-item span { display: inline-flex; align-items: center; min-height: 38px; padding: 0 14px; border-radius: var(--radius-pill); color: var(--dim); font-size: 13px; font-weight: 600; cursor: pointer; }
 .radio-item input:checked + span { background: var(--surface); color: var(--text); font-weight: 700; box-shadow: var(--shadow-card); }
 
 /* ---- Account ---- */
@@ -401,6 +402,7 @@ button.toast-key { border: 0; font: inherit; font-size: 13px; }
 .alloc-cash { background: var(--alloc-cash); } .alloc-stable { background: var(--alloc-stable); } .alloc-crypto { background: var(--alloc-crypto); } .alloc-equity { background: var(--alloc-equity); } .alloc-rwa { background: var(--alloc-rwa); } .alloc-event { background: var(--alloc-event); }
 .alloc-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--dim); }
 .holdings { display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.holding > .up, .holding > .down { font-weight: 400; }
 .holding { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
 .venues { display: flex; flex-direction: column; gap: 10px; }
 .venue { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-s); }
@@ -562,6 +564,7 @@ a.mk-line:hover .mk-t1 { text-decoration: underline; text-underline-offset: 3px;
 .tk-list li + li { border-top: 1px solid var(--border); }
 .tk-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 8px; border: 0; border-radius: var(--radius-s); background: transparent; color: var(--text); text-align: left; }
 .tk-row:hover { background: var(--hover); }
+.tk-row.on { background: var(--bg); }
 .tk-rn { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .tk-rn b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tk-rp { display: flex; flex-direction: column; align-items: flex-end; font-size: 13px; white-space: nowrap; }
@@ -639,7 +642,10 @@ button.tk-at:hover { border-color: var(--dim); }
 
 /* ---- Account's panels: Move, Receive, Statement, Connect an account ---- */
 .move-form { display: flex; flex-direction: column; gap: 16px; }
-.receive { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.receive { display: flex; align-items: center; gap: 16px; }
+.receive-side { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; overflow-wrap: anywhere; }
+.receive .qr { width: 88px; height: 88px; flex: none; }
+.drawer-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .qr { width: 184px; height: 184px; padding: 8px; border-radius: var(--radius-s); background: var(--surface); border: 1px solid var(--border); fill: var(--text); }
 .activity { display: flex; flex-direction: column; }
 .activity-row { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
