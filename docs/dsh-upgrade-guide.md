@@ -61,7 +61,7 @@ inventory's PART 2, so a step can be cited.
 4. `npm install` first; the sweep reads the installed tree. Keep the lockfile committed.
 5. `npm test`: `version.test.ts` fails first on any disagreement; `policy.test.ts` re-pins every
    policy target against the new dsh-base; `boot.test.ts` and `overlay.test.ts` re-pin the layer
-   order and the twelve overlay rows. Green is the precondition, not the evidence.
+   order and the thirteen overlay rows. Green is the precondition, not the evidence.
 6. `npm run typecheck`: `skipLibCheck: false`, the overlay's `satisfies` checks against the
    plugins' own `Config` types, every named import (A11, A13).
 7. Re-diff `src/boot.ts` against the CLI's current `profile-boot-*.js` chunk (`npm pack
@@ -173,9 +173,10 @@ disabled (`boot.test.ts`); B6 the persona patch restating every inherited `syste
 `prepare` provides (every boot); B11 `appReady` last, unary `/api` live mid-boot
 (`smoke.test.ts`, `order-gate-midboot-smoke`); B12 every enabled entry ACTIVE
 (`smoke.test.ts`); B13 the four required service keys (`smoke.test.ts`); B16 `bootFace`
-materializes `$DSH_HOME` once per process (`boot.test.ts`); B17 exactly twelve overlay rows in
-order (`overlay.test.ts`); B18 the four storage rows composed once, from dsh-base
-(`boot.test.ts`); B19–B23 each overlay row's config and inject (tsc, `overlay.test.ts`, every
+materializes `$DSH_HOME` once per process (`boot.test.ts`); B17 exactly thirteen overlay rows in
+order, the thirteenth `preset-kairos`, the alias of the default (`overlay.test.ts`); B18 the four
+storage rows composed once, from dsh-base (`boot.test.ts`);
+B19–B23 each overlay row's config and inject (tsc, `overlay.test.ts`, every
 boot); B24–B30 the policy rows D3–D7 and D9, each pinned against the installed dsh-base
 (`policy.test.ts`, `smoke.test.ts`); B31 the policy guard reports a missing target on stderr
 (`policy.test.ts`); B32 the `extraPatches` seam the dry run uses (`check-home.test.ts`); B34
@@ -254,7 +255,8 @@ join, read-only pin (`room-smoke`); F3 cold rooms resumed through `sessionContro
 (`room-engine`); F8 member discovery from persisted snapshots, resume-not-recreate
 (`room-engine`); F9 room facts on known event types only (`room-projection.test.ts`,
 `room-smoke`); F10 a member's pending gate read off its log (`room-engine`); F11 the channel's
-instruction chain reaches a member (`room-smoke`; becomes `GRAVIT.md` with the redesign); F12
+instruction chain reaches a member (`room-smoke`; landed in plan 1 as the `GRAVIT.md` chain,
+`dbbd19a` and the patch `8983555`); F12
 members attached to the channel workspace (`room-smoke`); F13 the legacy-format wording matched
 by error name (`room-engine`); F14 the caps sentence generated from `ROOM_CAPS`
 (`room-rules.test.ts`).
@@ -355,7 +357,7 @@ arc and in `DEVELOPMENT.md` §4.
 
 **What the face did** (branch `worktree-dsh-0.2.0-rc.2`, five commits 3bbaa25..a6a6f45,
 merged to local `main @ 23827c0`, pushed 2026-10-06 as part of `a6126d1`): S0 the pins; S1 the
-boot mirror with its ten divergences; S2 the twelve overlay rows; S3 the browser-cookie sign-in;
+boot mirror with its ten divergences; S2 the overlay rows (now thirteen); S3 the browser-cookie sign-in;
 S4 the policy layer restoring the 0.1.1 posture (D3–D7, D9); S5 the server modules on the new
 services; S6 bots as face-declared presets with `bot.js` re-expanding its mask on `tools/change`;
 S7 Gate 2 on `snapshotEvents()`, armed inside `prepare` after a review proved the mid-boot
@@ -416,8 +418,9 @@ listed in §7.3 and enter §3 as their plans merge. The doc debts the compilatio
   C17 (`client/subagents.js`, `client/mapper.js`, `subagents-smoke`) and every prose that
   describes the settlement notice (the persona, `DEVELOPMENT.md` §3.6).
 - `agent-instructions` drops the per-row `dshHome`; the user-global file is read via
-  `DSH_AGENTS_HOME`. Re-check H6 and, once the redesign's plan 1 has landed, the face's own
-  `instructionFileCandidates` patch — whether the global file follows the candidate names.
+  `DSH_AGENTS_HOME`. Re-check H6 and the face's own `instructionFileCandidates` patch (H10,
+  landed in plan 1: the patch `8983555`, the smoke `2c494a1`) — whether the global file follows
+  the candidate names.
 - API-key precedence changes for headless runs: re-check I5 against `dsh/README.md` step 4.
 - The chunk name (`lib/profile-boot-BZ2ZjNWi.js`) will be wrong: four places (§1).
 
@@ -455,9 +458,9 @@ listed in §7.3 and enter §3 as their plans merge. The doc debts the compilatio
 
 ### 7.4 Doc debts found while compiling the inventory (fix in the next docs pass, after the rename lands)
 
-- Fixed in plan 1: `face/README.md` "Tests" said eleven real boots in one line and twelve in
-  the next, and its table had eleven rows without `order-gate-midboot-smoke.test.ts`. It now
-  counts thirteen (the code's twelve and the instructions smoke) and its table has thirteen rows.
+- Fixed in plan 1: `face/README.md` "Tests" disagreed with itself on the number of real boots,
+  and its table omitted `order-gate-midboot-smoke.test.ts`. It now says thirteen, the code's
+  count with the instructions smoke, and its table lists thirteen files.
 - The go-live of 2026-10-01 is recorded nowhere in the repo: `DEVELOPMENT.md` §10 item 14 and
   §7.4, `ROADMAP.md`, the runbook §1 (still "the global `dsh` (0.1.1-rc.2 …)") and
   `dsh/README.md` "Installed state" read as if pending; the runbook's §3 expected-findings table
@@ -468,7 +471,9 @@ listed in §7.3 and enter §3 as their plans merge. The doc debts the compilatio
   reconciles them.
 - `DEVELOPMENT.md` Appendix A and §4.6 omit `DSH_WEB_FETCH_PROVIDER`, `DSH_TELEMETRY_MODE` and
   `PLAYWRIGHT_CLI_PATH`.
-- `DEVELOPMENT.md` §4's size line: measured 31 files, 9,759 lines on 2026-10-15.
+- Fixed in plan 1: `DEVELOPMENT.md` §4's size line (31 files, 9,759 lines measured on
+  2026-10-15, one plain `.js` file) now reads 32 files, some 9,900 lines (9,866 measured on
+  2026-10-18) and two plain `.js` files.
 - `face/README.md` "What boot refuses" names three required rows "in this tree"; `boot.ts`
   cites upstream's seven; the three are a derived claim to re-derive at every pin.
 - `face/README.md`'s "The Gate-2 drill" heading and its "Channels" line citations are the open

@@ -309,7 +309,8 @@ keys. dsh 0.2.0's DeepSeek catalog is `deepseek-flash` and `deepseek-v4-pro`;
    in-memory layer (`bootFace`'s `extraPatches`; `scripts/check-home.ts` uses
    it, `npm start` never does);
 6. the face's switches: the telemetry opt-out (only while
-   `DSH_TELEMETRY_DISABLED` is set), `hmr` disabled, and Gravit's persona;
+   `DSH_TELEMETRY_DISABLED` is set), `hmr` disabled, Gravit's persona, and
+   the instruction files (the `agent-instructions` row);
 7. the face's own host rows (`src/overlay.ts`), last.
 
 A row of yours therefore wins over layers 1–3 — the storage chain, the
@@ -329,10 +330,11 @@ Two things about that directory are NOT yours:
   `file-upload`, `workspace`, `session-controller`, `workspace-controller`,
   `settings-controller`, `directory-picker`, `tool-ask-user`,
   `agent-preset-registry`, `preset-gravit`, `preset-kairos` — or at the `hmr`
-  switch, at `system-prompt`'s `personaPrefix`, or (while
-  `DSH_TELEMETRY_DISABLED` is set) at `session-telemetry-otel` is accepted,
-  overridden, and NEVER reported. Change those in the face — `src/overlay.ts`,
-  `src/boot.ts`, `../dsh/profile/persona.md`. The same warning is in the patch
+  switch, at `system-prompt`'s `personaPrefix`, at the `agent-instructions`
+  row, or (while `DSH_TELEMETRY_DISABLED` is set) at `session-telemetry-otel`
+  is accepted, overridden, and NEVER reported. Change those in the face —
+  `src/overlay.ts`, `src/boot.ts`, `src/instructions.ts`,
+  `../dsh/profile/persona.md`. The same warning is in the patch
   file's own header, which is where an operator would actually look.
 
 The persona is narrower than it was. dsh 0.2.0 renamed the key: the face sets
@@ -2218,7 +2220,7 @@ restart the cold listing carried the room's title and its `room` value from the 
 the strip's coarse states survived. Three observations, none a failure: the landing page lists the
 member sessions as plain `untitled` rows (shown and counted, not yet labelled by voice); Gravit,
 handed an un-rostered `@` as a prompt, assumed the voice would answer — `GRAVIT.md` should say that
-such an `@` named nobody (the sentence landed the same day, in the Rooms paragraph of `AGENTS.md`, then Gravit's file); the peer-`@` continuation was superseded by the operator's next `@` before
+such an `@` named nobody (the sentence landed the same day and sits in `GRAVIT.md`'s Rooms paragraph); the peer-`@` continuation was superseded by the operator's next `@` before
 it ran (by design), so that path stands on the engine tests, not on this drill. That run was on
 the 0.1.1 face; **on 0.2.0-rc.2 step 0 passes at `8f0dedb`, and the live run is still owed**
 (go-live runbook).

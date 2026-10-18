@@ -282,5 +282,5 @@ projects/aqr-r1000/              # 拟议，不是已创建目录
 
 - 原题：`/Users/pan/Desktop/qishi-ccc/aqr_takehome-project.pdf`，4页，已逐页提取并渲染核对。
 - 方法借鉴：[AutoScientist-Quant 原文](https://arxiv.org/html/2608.28632v1)。角色和本题模型选择为本方案设计。
-- 本地事实：[AGENTS.md](../AGENTS.md)、[face README](../face/README.md)、[agents.ts](../face/src/agents.ts)、[room-contract.ts](../face/src/room-contract.ts)、[room-rules.ts](../face/src/room-rules.ts)。
+- 本地事实：[GRAVIT.md](../GRAVIT.md)、[face README](../face/README.md)、[agents.ts](../face/src/agents.ts)、[room-contract.ts](../face/src/room-contract.ts)、[room-rules.ts](../face/src/room-rules.ts)。
 - 本次只做设计与静态核查；不代表已经选出25只股票、获得历史数据、测得绩效、创建room或验证了实时bot/CLI权限。

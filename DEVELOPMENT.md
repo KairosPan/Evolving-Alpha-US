@@ -590,9 +590,10 @@ like one is not a member (§9, R16).
 
 ## 4. Frontend: the face server (`face/src`)
 
-Some 9,600 lines of TypeScript across 31 files, run directly by `tsx` — no build step, plus one
-plain `.js` file outside `src/` (`face/plugins/bot.js`, §3.7 — a bot's composition names it by a
-relative path the face rebases to an absolute `file:` URL, and it must import nothing). Pins:
+Some 9,900 lines of TypeScript across 32 files, run directly by `tsx` — no build step, plus two
+plain `.js` files outside `src/` (`face/plugins/bot.js` and `face/plugins/gravit.js`, §3.7 — a
+composition names each by a relative path the face rebases to an absolute `file:` URL, and each
+must import nothing). Pins:
 `DSH_PIN = 0.2.0-rc.2` (every `@deepseek-ai/dsh-*` dependency, declared exactly and installed),
 `CORDIS_PIN = 4.0.4` (`@deepseek-ai/cordis` rides its own 4.x track; the dsh packages peer it with
 a tilde range) and `CORDIS_INCLUDE_PIN = 1.0.9` (the one cordis plugin the face imports itself);
@@ -650,7 +651,8 @@ row audit; and the policy layer.
    `scripts/check-home.ts` disables a home copy's MCP rows with it) — apply the guarded
    switches (`session-telemetry-otel` disabled when `DSH_TELEMETRY_DISABLED` is non-empty and
    the row is composed; `hmr` disabled whenever composed), patch Gravit's persona into
-   `system-prompt` (`personaPrefix` only, §4.3), then push **the face overlay last**. This
+   `system-prompt` (`personaPrefix` only, §4.3), restate the `agent-instructions` row after it
+   (`instructionsPatch`, §4.3), then push **the face overlay last**. This
    inverts the CLI's layering deliberately: loopback-only binding must survive an operator
    patch, so face rows win silently; the policy layer is the other way round and yields to an
    operator row with the same id.
