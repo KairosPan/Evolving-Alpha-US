@@ -410,11 +410,11 @@ findings never overrule them. Style yields to findings, but the conflict is repo
 ### 3.3 `GRAVIT.md`
 
 The workspace map every dsh agent in the tree reads on its first request — Gravit, its role
-children (plan 2 of the 2026-10-15 redesign) and the bots alike — so it states facts only: the
-three layers and where each lives, the PIT rule, the strategy directory contract and lifecycle,
-the bed windows (its table is pinned row for row to `docs/backtest-rules.md`), the room caps
-sentence (pinned to `ROOM_CAPS`), the never-edit list. Budget 4,500 bytes, no `{{`
-(`face/tests/gravit-md.test.ts`).
+children (plan 2 of the 2026-10-15 redesign) and the bots alike — so it states facts and rules
+only, never identity or persona: the three layers and where each lives, the PIT rule, the
+strategy directory contract and lifecycle, the bed windows (its table is pinned row for row to
+`docs/backtest-rules.md`), the room caps sentence (pinned to `ROOM_CAPS`), the never-edit list.
+Budget 4,500 bytes, no `{{` (`face/tests/gravit-md.test.ts`).
 
 Discovery is dsh's (`dsh-agent-instructions`, the `agent-instructions` row dsh-base mounts,
 64 KiB budget), but the candidates are the face's: `composeFace` sets the row's two lists
