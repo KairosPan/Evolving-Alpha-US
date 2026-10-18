@@ -60,6 +60,16 @@ export interface FacePatchEntry {
 export const BOTS_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "bots");
 /** The inert preset every session that names none joins (spec S3). */
 export const DEFAULT_PRESET = "gravit";
+/** The agent's preset id before the 2026-10-08 rename. Sessions created before it
+ * persist this id, and dsh resolves a session's stored preset through
+ * `AgentPresetRegistry.retain` (pkg/dsh-agent-preset-registry/lib/index.js), which
+ * throws `agent-preset/not-found` for an id no row declares - so the face
+ * declares it as a hidden alias of the default (rename spec 2026-10-18 §5.1). */
+export const LEGACY_PRESET = "kairos";
+/** The alias row's description; its name and composition are the default's. */
+export const LEGACY_PRESET_DESCRIPTION = "Gravit under its id before 2026-10-08, kept so sessions created before the rename still open";
+/** Whether a preset id is the host's: the default, or its pre-rename alias. */
+export const isHostPreset = (id: unknown): boolean => id === DEFAULT_PRESET || id === LEGACY_PRESET;
 /** The preset registry's row id. Load-bearing beyond addressing: the row id is
  * also the registry's settings namespace (NEW apps/cli/tests/
  * web-agent-presets.e2e.ts:25-26), so it must match web-app's own row
@@ -78,7 +88,8 @@ export const SYSTEM_PROMPT_ROW_ID = "system-prompt";
  * The face's patch layer: the host rows dsh-base does not mount.
  * @param port - the webserver's TCP port; `0` asks the OS for a free one.
  * @param defaultPreset - the `gravit` preset definition, declared statically
- * so the default exists AT BOOT: `session/create` without a preset resolves
+ * - and once more under {@link LEGACY_PRESET}, the alias archived sessions
+ * name - so the default exists AT BOOT: `session/create` without a preset resolves
  * `defaultId` and fails `agent-preset/not-found` when it is absent (NEW
  * packages/api/session-controller/src/agent.ts:380-397). Passed in rather
  * than read here so the composition stays pure and a test can hand it a
@@ -204,6 +215,11 @@ export function faceOverlay(port: number, defaultPreset: AgentPresetConfig): Fac
        * definition object out of the composed tree. */
       { id: presetRowId(defaultPreset.id), name: "@deepseek-ai/dsh-agent-preset",
         config: { ...defaultPreset } satisfies AgentPresetConfig },
+      /* The pre-rename alias: the same definition under the id archived
+       * sessions persist, so they resume as Gravit instead of failing
+       * `agent-preset/not-found`. No `bots/` directory backs it. */
+      { id: presetRowId(LEGACY_PRESET), name: "@deepseek-ai/dsh-agent-preset",
+        config: { ...defaultPreset, id: LEGACY_PRESET, description: LEGACY_PRESET_DESCRIPTION } satisfies AgentPresetConfig },
     ],
   }];
 }

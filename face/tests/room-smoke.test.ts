@@ -264,6 +264,11 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       const text = (outside.content ?? []).map((c) => c.text ?? "").join("\n");
       assert.match(text, /sandbox: file access denied/, "a home cannot rewrite its own SOUL.md");
       assert.equal(await readFile(join(bots, "alpha", "SOUL.md"), "utf8"), soulBefore);
+
+      /* The pre-rename id: a room created under `kairos` is the host and keeps dispatch. */
+      const legacyRoom = await rpc<{ sessionId: string; agentPreset?: string }>("session/create", { request: { workspaceId: ws.id, agentPreset: "kairos" } });
+      assert.equal(legacyRoom.agentPreset, "kairos");
+      assert.ok(tools.schemas(agents.get(String(legacyRoom.sessionId)) as object).some((s) => s.name === "dispatch"), "a pre-rename room keeps dispatch");
     } finally {
       await dispose();
     }

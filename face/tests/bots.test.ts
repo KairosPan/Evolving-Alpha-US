@@ -18,11 +18,28 @@ import { HttpError } from "../src/http.ts";
 
 const noPresets = async () => [] as { id: string; broken?: string }[];
 
-test("isBotId is the retired dsh preset-id grammar - now the face's only gate - minus the two names the face reserves", () => {
+test("isBotId is the retired dsh preset-id grammar - now the face's only gate - minus the names the face reserves", () => {
   for (const ok of ["buffett", "a", "spec-2", "x".repeat(64)]) assert.equal(isBotId(ok), true, ok);
-  for (const bad of ["", "Buffett", "_template", "gravit", "-lead", "a_b", "a.b", "a b", "巴菲特", "x".repeat(65), 42, null]) {
+  for (const bad of ["", "Buffett", "_template", "gravit", "kairos", "-lead", "a_b", "a.b", "a b", "巴菲特", "x".repeat(65), 42, null]) {
     assert.equal(isBotId(bad), false, JSON.stringify(bad));
   }
+});
+
+test("createBot refuses both host ids and names them in its error", async () => {
+  const root = await makeBotsRoot();
+  for (const id of ["gravit", "kairos"]) {
+    await assert.rejects(createBot(root, { id, name: "X" }),
+      (err: HttpError) => err.status === 400 && /not gravit, kairos or _template/.test(err.message), id);
+  }
+});
+
+test("listBots never lists a directory named after the pre-rename id", async () => {
+  const root = await makeBotsRoot();
+  await mkdir(join(root, "kairos"));
+  await writeFile(join(root, "kairos", "preset.yml"), "name: Stray\n");
+  const rows = await listBots(root, noPresets);
+  assert.equal(rows.some((row) => row.id === "kairos"), false);
+  assert.equal(rows.find((row) => row.id === "gravit")?.isDefault, true);
 });
 
 test("rejectSoul refuses an empty or templated persona and returns the trimmed text", () => {

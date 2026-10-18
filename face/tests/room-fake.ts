@@ -211,8 +211,8 @@ export class FakeTree {
   }
   script(bot: string, fn: (message: MessageLike, turn: number) => Script): void { this.scripts.set(bot, fn); }
   /** A room: Gravit's live session in a channel. */
-  newRoom(id: string, cwd: string): FakeAgent {
-    const session = new FakeSession(id, { id, cwd, agentPreset: "gravit", createdAt: this.createdAt++ });
+  newRoom(id: string, cwd: string, agentPreset = "gravit"): FakeAgent {
+    const session = new FakeSession(id, { id, cwd, agentPreset, createdAt: this.createdAt++ });
     session.tree = this;
     const agent = new FakeAgent(this, session);
     this.sessions.set(id, session);

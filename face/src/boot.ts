@@ -119,7 +119,7 @@ import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import { DSH_LAUNCH_ENVIRONMENT_KEY } from "@deepseek-ai/dsh-launch-environment";
 import { provideCmdline, type AppReady } from "@deepseek-ai/dsh-cmdline";
 import type { Config as SystemPromptConfig } from "@deepseek-ai/dsh-system-prompt";
-import { BOTS_ROOT, DEFAULT_PRESET, SYSTEM_PROMPT_ROW_ID, faceOverlay } from "./overlay.ts";
+import { BOTS_ROOT, DEFAULT_PRESET, LEGACY_PRESET, SYSTEM_PROMPT_ROW_ID, faceOverlay } from "./overlay.ts";
 import { declareBots, definitionFor, type BotPresets } from "./bot-presets.ts";
 import { PERSONA_PATH, readPersona } from "./persona.ts";
 import { aksharePatches } from "./akshare.ts";
@@ -936,6 +936,16 @@ export async function bootFace(opts: FaceBootOptions): Promise<BootedFace> {
             ? `not in the roster (${roster.map((p) => p.id).join(", ") || "empty"})`
             : `broken: ${fallback.broken}`) +
           ` - every session/create would fail at resolution`,
+      );
+    }
+    /* The pre-rename alias (src/overlay.ts LEGACY_PRESET): a missing or broken
+     * alias refuses the boot here rather than every archived session at resume. */
+    const legacy = roster.find((preset) => preset.id === LEGACY_PRESET);
+    if (legacy === undefined || legacy.broken !== undefined) {
+      throw new Error(
+        `${BIN}: legacy agent preset "${LEGACY_PRESET}" is ` +
+          (legacy === undefined ? "not in the roster" : `broken: ${legacy.broken}`) +
+          " - sessions created before 2026-10-08 would not open",
       );
     }
     /* Every bot this boot declared must be LISTED - the registry is what

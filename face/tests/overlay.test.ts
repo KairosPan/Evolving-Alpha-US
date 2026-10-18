@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Config as AgentPresetConfig } from "@deepseek-ai/dsh-agent-preset";
-import { AGENT_PRESET_REGISTRY_ROW_ID, DEFAULT_PRESET, faceOverlay, presetRowId } from "../src/overlay.ts";
+import {
+  AGENT_PRESET_REGISTRY_ROW_ID, DEFAULT_PRESET, LEGACY_PRESET, LEGACY_PRESET_DESCRIPTION, faceOverlay, isHostPreset, presetRowId,
+} from "../src/overlay.ts";
 
 /** The default preset a composition hands the overlay: `bots/gravit` as a definition. */
 const GRAVIT: AgentPresetConfig = {
@@ -11,7 +13,7 @@ const GRAVIT: AgentPresetConfig = {
   plugins: [],
 };
 
-/** The twelve host rows, in the order the overlay inserts them, with the
+/** The thirteen host rows, in the order the overlay inserts them, with the
  * package each must name (PLAN S2's table). The order is not load semantics -
  * activation is service-driven - but it is the reviewable contract, and a
  * silently re-ordered or re-named row is exactly the drift this pins. */
@@ -28,6 +30,7 @@ const ROWS: ReadonlyArray<readonly [id: string, pkg: string]> = [
   ["tool-ask-user", "@deepseek-ai/dsh-tool-ask-user"],
   ["agent-preset-registry", "@deepseek-ai/dsh-agent-preset-registry"],
   ["preset-gravit", "@deepseek-ai/dsh-agent-preset"],
+  ["preset-kairos", "@deepseek-ai/dsh-agent-preset"],
 ];
 
 function rowsById() {
@@ -36,7 +39,7 @@ function rowsById() {
   return new Map(patches[0]!.insert!.map((r) => [r.id, r]));
 }
 
-test("overlay inserts exactly the twelve host rows, in order, each naming its package", () => {
+test("overlay inserts exactly the thirteen host rows, in order, each naming its package", () => {
   const rows = faceOverlay(3090, GRAVIT)[0]!.insert!;
   assert.deepEqual(rows.map((r) => [r.id, r.name]), ROWS.map(([id, pkg]) => [id, pkg]));
 });
@@ -79,6 +82,21 @@ test("preset-gravit declares exactly the definition it was handed", () => {
   assert.equal(presetRowId("gravit"), "preset-gravit");
   assert.deepEqual(row.config, GRAVIT);
   assert.notEqual(row.config, GRAVIT, "the overlay must not alias the caller's definition");
+});
+
+test("preset-kairos re-declares the default's definition under the pre-rename id", () => {
+  assert.equal(LEGACY_PRESET, "kairos");
+  assert.equal(LEGACY_PRESET_DESCRIPTION, "Gravit under its id before 2026-10-08, kept so sessions created before the rename still open");
+  const row = rowsById().get(presetRowId(LEGACY_PRESET))!;
+  assert.equal(row.name, "@deepseek-ai/dsh-agent-preset");
+  assert.deepEqual(row.config, { ...GRAVIT, id: "kairos", description: LEGACY_PRESET_DESCRIPTION });
+});
+
+test("isHostPreset accepts exactly the default and the pre-rename id", () => {
+  for (const id of ["gravit", "kairos"]) assert.equal(isHostPreset(id), true, id);
+  for (const id of ["gravit-2", "gravits", "kairos-2", "kaiross", "Gravit", "KAIROS", " gravit", "", "drill-bull", undefined, null, 42]) {
+    assert.equal(isHostPreset(id), false, JSON.stringify(id));
+  }
 });
 
 /* These rows take the plugins' own defaults. An empty `config: {}` is not the

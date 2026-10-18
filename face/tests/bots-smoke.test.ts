@@ -90,7 +90,7 @@ test("bots smoke: roster, mask, persona, an inert default, the shipped plugin pa
 
       const presets = ctx.get("agentPresets") as { defaultId: string; list(): Promise<{ id: string; broken?: string }[]> };
       const roster = await presets.list();
-      assert.deepEqual(roster.map((p) => p.id).sort(), ["cracked", "gravit", "probe", "shipped", "trader"], "listed - and never _template");
+      assert.deepEqual(roster.map((p) => p.id).sort(), ["cracked", "gravit", "kairos", "probe", "shipped", "trader"], "listed - and never _template");
       assert.equal(presets.defaultId, "gravit");
       assert.match(roster.find((p) => p.id === "cracked")!.broken ?? "", /list/, "a broken preset carries dsh's reason (Rule 5)");
 
@@ -207,6 +207,15 @@ test("bots smoke: roster, mask, persona, an inert default, the shipped plugin pa
       const broken = await remoteResult(base, cookie, "session/create", { request: { cwd: home, agentPreset: "cracked" } });
       assert.equal(broken.ok, false);
       assert.match(broken.ok ? "" : broken.error.code, /agent-preset/);
+
+      /* The pre-rename id: an archived session names `kairos` and must join the host composition. */
+      assert.equal(roster.find((p) => p.id === "kairos")?.broken, undefined, "the legacy alias is listed and whole");
+      const l = await create({ cwd: home, agentPreset: "kairos" });
+      assert.equal(l.agentPreset, "kairos");
+      const legacy = agentOf(l.sessionId);
+      assert.equal(legacy.session.header.agentPreset, "kairos");
+      assert.deepEqual(names(tools.schemas(legacy)), names(tools.schemas()), "the alias adds and removes nothing");
+      assert.ok((await promptOf(legacy)).includes(readPersona(PERSONA_PATH).split("{{")[0]), "the alias is told it is Gravit");
     } finally {
       await dispose();
     }

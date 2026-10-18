@@ -52,7 +52,7 @@ import { createUserMessage, type ReasoningEffortId } from "@deepseek-ai/dsh-llm"
 import type { BotRow } from "./bots.ts";
 import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 import { FORBIDDEN, HttpError, readBody } from "./http.ts";
-import { DEFAULT_PRESET } from "./overlay.ts";
+import { isHostPreset } from "./overlay.ts";
 import { readRosters } from "./roster.ts";
 import { registerRoomProjection } from "./room-projection.ts";
 import { BRIEF_SCHEMA, formatDiscussionSummary, parseMemberView, type DiscussionSummary, type RoomBrief } from "./room-contract.ts";
@@ -990,7 +990,7 @@ export function dispatchToolDefinition(engine: RoomEngine, deps: Pick<RoomDeps, 
       /* The 0.1.1 check read the header only. Both records are checked now and
        * EITHER naming a bot refuses - strictly narrower, never wider. The mask
        * already keeps `dispatch` out of a voice's roster; this is the second lock. */
-      if (presetsOf(agent.session, deps.ctx?.sessionProjections).some((preset) => preset !== DEFAULT_PRESET)) throw new Error("dispatch is Gravit's tool; a voice does not dispatch");
+      if (presetsOf(agent.session, deps.ctx?.sessionProjections).some((preset) => !isHostPreset(preset))) throw new Error("dispatch is Gravit's tool; a voice does not dispatch");
       const channel = await deps.channelFor(agent.session.header.cwd);
       if (channel === null) throw new Error("dispatch works in a channel session; this session is in no channel");
       const roster = await engine.rosterFor(channel);

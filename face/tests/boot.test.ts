@@ -11,6 +11,7 @@ import { AKSHARE_MCP_ROW_ID } from "../src/akshare.ts";
 import { PERSONA_PATH, readPersona } from "../src/persona.ts";
 import { facePolicyPatches } from "../src/policy.ts";
 import { definitionFor } from "../src/bot-presets.ts";
+import { LEGACY_PRESET_DESCRIPTION } from "../src/overlay.ts";
 import { makeBotsRoot } from "./bots-fixture.ts";
 
 /** Every row id {@link faceOverlay} owns, as the composed tree should show them. */
@@ -370,6 +371,9 @@ test("composeFace takes the static preset-gravit row from bots/gravit", async ()
   assert.equal(row?.name, "@deepseek-ai/dsh-agent-preset");
   assert.deepEqual(row?.config, definitionFor(bots, "gravit"));
   assert.deepEqual(row?.config, { id: "gravit", name: "Gravit Fixture", description: "the default, from the fixture", plugins: [] });
+
+  const legacy = composeEntries([patches]).find((entry) => entry.id === "preset-kairos");
+  assert.deepEqual(legacy?.config, { id: "kairos", name: "Gravit Fixture", description: LEGACY_PRESET_DESCRIPTION, plugins: [] });
 });
 
 /* 0.1.1's roster check refused a boot whose default preset could not be read;

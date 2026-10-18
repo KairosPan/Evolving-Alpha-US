@@ -33,6 +33,7 @@ import { entryListSchema } from "@deepseek-ai/cordis-plugin-include";
 import { dump, load } from "js-yaml";
 import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 import { FORBIDDEN, HttpError, readBody } from "./http.ts";
+import { DEFAULT_PRESET, LEGACY_PRESET } from "./overlay.ts";
 import type { RouteRegistrar } from "./static.ts";
 
 const BIN = "gravit-face";
@@ -41,8 +42,9 @@ export const TEMPLATE = "_template";
 /** The retired dsh-agent-presets preset-id grammar (OLD preset.ts:18), bounded
  *  to 64 code points - kept as the face's own gate now that dsh has none. */
 export const BOT_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
-/** Ids the grammar admits but the face refuses: the default preset is not a bot. */
-export const RESERVED_IDS: ReadonlySet<string> = new Set(["gravit"]);
+/** Ids the grammar admits but the face refuses: the default preset and its
+ *  pre-rename alias are the host, never a bot. */
+export const RESERVED_IDS: ReadonlySet<string> = new Set([DEFAULT_PRESET, LEGACY_PRESET]);
 export const isBotId = (value: unknown): value is string =>
   typeof value === "string" && BOT_ID_RE.test(value) && !RESERVED_IDS.has(value);
 
@@ -231,7 +233,7 @@ async function rowFor(
   const soul = files["SOUL.md"]?.trim() ?? "";
   let compositionSoul: string | null = null;
   let allow: string[] = [];
-  if (id !== "gravit") {
+  if (id !== DEFAULT_PRESET) {
     if (soul === "") setupIssues.push("SOUL.md is empty or missing.");
     try {
       const rows: unknown = load(files["agent.cordis.yml"] ?? "", { schema: entryListSchema });
@@ -262,7 +264,7 @@ async function rowFor(
     id, name: typeof meta.name === "string" ? meta.name : id, description: typeof meta.description === "string" ? meta.description : "", dir, homeCwd: join(dir, "journal"), soul,
     revision: configRevision(files), allow, compositionSoul, soulInSync: compositionSoul !== null && compositionSoul.trim() === soul, skills, setupIssues,
     ...(typeof meta.model === "string" ? { model: meta.model } : {}),
-    isDefault: id === "gravit",
+    isDefault: id === DEFAULT_PRESET,
     ...(broken === undefined ? {} : { broken }),
     listed: preset !== undefined,
   };
@@ -285,7 +287,7 @@ export async function listBots(root: string, presets: PresetLister, declarationE
   }
   const reported = new Map((await presets()).map((p) => [p.id, p] as const));
   const ids = entries
-    .filter((e) => e.isDirectory() && BOT_ID_RE.test(e.name))
+    .filter((e) => e.isDirectory() && BOT_ID_RE.test(e.name) && e.name !== LEGACY_PRESET)
     .map((e) => e.name)
     .sort((a, b) => a.localeCompare(b));
   return Promise.all(ids.map((id) => withBotLock(join(root, id), () => rowFor(root, id, reported, declarationErrors))));
@@ -348,7 +350,7 @@ export async function createBot(root: string, body: Record<string, unknown>): Pr
   const name = typeof body.name === "string" && body.name.trim() !== "" ? body.name.trim() : undefined;
   const id = body.id !== undefined ? body.id : (name === undefined ? undefined : proposeBotId(name));
   if (!isBotId(id)) {
-    throw new HttpError(400, "invalid bot id (lowercase letters, digits and -; starts with a letter or digit; up to 64; not gravit or _template)");
+    throw new HttpError(400, "invalid bot id (lowercase letters, digits and -; starts with a letter or digit; up to 64; not gravit, kairos or _template)");
   }
   const description = typeof body.description === "string" ? body.description.trim() : "";
   const soul = rejectSoul(body.soul === undefined ? TEMPLATE_SOUL.replace("<bot name>", () => name ?? id) : body.soul);

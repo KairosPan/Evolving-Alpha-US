@@ -727,6 +727,33 @@ test("the dispatch tool: global, Gravit-only, channel-only, roster-checked; vali
   assert.equal(tree.listeners.length, 0, "and the bus listener");
 });
 
+test("the dispatch lock admits the pre-rename host id, alone or beside the new one, and still refuses a voice", async () => {
+  const tree = makeFakeTree();
+  const home = await mkdtemp(join(tmpdir(), "face-room-"));
+  await setBots(home, CHANNEL.workspaceId, ["buffett", "speculator"]);
+  tree.script("buffett", () => ({ kind: "answer", text: "b" }));
+  const engine = installRoom({
+    ctx: fakeRoomContext(tree), home,
+    channelFor: async (cwd) => (cwd === CHANNEL.dir ? CHANNEL : null),
+    listBots: async () => roster, clock: tree.clock, installModelSelection: () => () => {}, log: () => {},
+  });
+  assert.deepEqual(tree.registeredTools.map((t) => t.name), ["dispatch"]);
+  const tool = tree.registeredTools[0] as unknown as ReturnType<typeof dispatchToolDefinition>;
+  const exec = (agent: unknown) => ({ agent, signal: new AbortController().signal }) as never;
+  const legacy = tree.newRoom("session-legacy", CHANNEL.dir, "kairos");
+  assert.equal((await tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "legacy" }, exec(legacy)) as { round: number }).round, 1);
+  const mixed = tree.newRoom("session-mixed", CHANNEL.dir, "kairos");
+  tree.emit(mixed.session, { type: "agent-preset/selected", seq: mixed.session.seq, data: { agentPreset: "gravit" } });
+  assert.equal((await tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "mixed" }, exec(mixed)) as { round: number }).round, 1);
+  const voice = tree.newRoom("session-voice", CHANNEL.dir, "kairos");
+  tree.emit(voice.session, { type: "agent-preset/selected", seq: voice.session.seq, data: { agentPreset: "buffett" } });
+  await assert.rejects(tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, exec(voice)), /Gravit's tool/);
+  await tree.clock.advance(100);
+  engine.dispose();
+  assert.equal(tree.registeredTools.length, 0, "dispose unregisters the tool");
+  assert.equal(tree.listeners.length, 0, "and the bus listener");
+});
+
 test("the two routes: say and state, fenced like every /data route", async () => {
   const tree = makeFakeTree();
   const home = await mkdtemp(join(tmpdir(), "face-room-"));
