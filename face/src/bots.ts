@@ -350,7 +350,7 @@ export async function createBot(root: string, body: Record<string, unknown>): Pr
   const name = typeof body.name === "string" && body.name.trim() !== "" ? body.name.trim() : undefined;
   const id = body.id !== undefined ? body.id : (name === undefined ? undefined : proposeBotId(name));
   if (!isBotId(id)) {
-    throw new HttpError(400, "invalid bot id (lowercase letters, digits and -; starts with a letter or digit; up to 64; not gravit, kairos or _template)");
+    throw new HttpError(400, `invalid bot id (lowercase letters, digits and -; starts with a letter or digit; up to 64; not ${DEFAULT_PRESET}, ${LEGACY_PRESET} or ${TEMPLATE})`);
   }
   const description = typeof body.description === "string" ? body.description.trim() : "";
   const soul = rejectSoul(body.soul === undefined ? TEMPLATE_SOUL.replace("<bot name>", () => name ?? id) : body.soul);
