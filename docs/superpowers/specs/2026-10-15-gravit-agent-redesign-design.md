@@ -447,6 +447,44 @@ the schema block is unmeasured per tool, the goal resume path); §10 the measure
   8,192 characters to head 4,096 + tail 1,024 once compaction triggers — role reports stay under
   that by their four-heading shape).
 
+### 11.1 Answers (2026-10-18, from the installed dsh 0.2.0-rc.2 `lib/`)
+
+- **(a)** `toolFilter` is `{ allow?: string[]; deny?: string[] }` of **exact global tool
+  names** — no patterns — applied as `childCtx.tools.restrict()` in the child's creation
+  window, so an unknown name fails the delegation, not the row mount. Role allow-lists are
+  therefore written as exact names (`mcp__alpaca-kit__screen`), the operator's server name
+  included; a disconnected server fails every delegation that names its tools, loudly. The row's
+  `persona` registers a child-scoped `deployment:persona-prefix` at order 0 that shadows both the
+  deployment persona and a preset's — §5.4's rule holds with no change to `composeFace`. The
+  spawn backend declares `persona`, `toolFilter`, `agentOptions`, `outputSchema`, `depthLimit`.
+  Correction to §5.1 and §5.4: a child **joins Gravit's preset** (`agentPresets.composeFrom`), so
+  it sees the preset layer's `role_*` tools and `gravit:*` sections unless the role's allow-list
+  omits the tools (it does) and the sections resolve to empty text for delegated children
+  (`gravit.js` returns `""` when the assembled agent's session `origin` is `subagent`).
+  `dsh-tool-subagent` has no description key; the `gravit:roles` section carries the summaries.
+- **(b)** The registry's mount audit rejects failed rows and services leaked into the root
+  realm; a `dsh-tool-subagent` row provides no service and passes. A failed row marks the preset
+  `broken`, every `session/create` on it fails `agent-preset/invalid`, and `bootFace`'s roster
+  audit refuses the boot — the fail-loud contract stands.
+- **(c)** `instructionFileCandidates` and `localInstructionFileCandidates` are real keys with the
+  defaults the README states (candidates with a path separator are dropped); the user-global file
+  is hard-coded `$DSH_HOME/AGENTS.md`; changing the candidates changes the baseline identity, so
+  resumed sessions get one replacement baseline.
+- **(d)** Orders: `DEPLOYMENT_PERSONA_PREFIX` 0, `PLAN_POLICY` 500, the tool sections 1000–3000
+  (`TOOL_SUBAGENT` 2800), `MCP_SERVERS` 3100, `HARNESS_SOURCE` 10000, `WEB_SURFACE` 10100,
+  `DEPLOYMENT_PERSONA_SUFFIX` 10200. `Section.text` is `string | (context) => string`;
+  `interpolate: false` is honoured. `deployment:today` sits at 1, `gravit:roles` at
+  `TOOL_SUBAGENT + 1`, `gravit:cycle` at `DEPLOYMENT_PERSONA_SUFFIX − 50`.
+- **(e)** Nothing re-arms a goal after a restart by itself. The model's `update_goal
+  {action: "resume"}` is accepted only inside a direct human turn on a root agent, which is
+  exactly the operator's next message in the channel; a *paused* goal is the operator's alone
+  (`/goal resume`). The tools are `get_goal`, `create_goal(objective, max_goal_rounds)`,
+  `update_goal(goal_id, revision, action ∈ edit|pause|resume|complete|blocked, …)`; the blocked
+  `code` on the model path is always `model-reported`, so §6's vocabulary (`child-limit`,
+  `bed-window`, `data-missing`, `needs-operator`) is the first word of `blocked_reason`;
+  `round-limit` is the driver's own code. An automatic round may not block before round 3.
+- **(f)** unchanged: the cycle drill measures it.
+
 ## 12. Plans, in order
 
 0. **The rename** — the other arc's spec and branch; this branch rebases onto it.

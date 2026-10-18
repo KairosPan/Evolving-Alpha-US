@@ -174,7 +174,10 @@ reserved until the order gate opens). Three optional headline keys the channel p
 first, then letters, digits, `-` and `_`, at most 41 code points, no spaces or dots — the name
 becomes a path typed into shell by hand, and `cd x y` is zsh's two-argument form, exit 0 in the
 wrong directory whenever the substituted path exists. Commit your own iterations; git log is the
-audit trail.
+audit trail. A new strategy starts with one batched `ask_user_question`, not with code: the
+thesis and the falsification terms that would retire it, which bed and which window (warmup
+moves the honest start), and what the operator wants measured; a brief that already answers
+those is the answer.
 
 ## Rooms
 
@@ -672,7 +675,11 @@ Discovery is dsh's (`dsh-agent-instructions`, the `agent-instructions` row dsh-b
 agents' file now, `CLAUDE.md` Claude Code's. The loader walks from the `.git` root down to the
 session's cwd, so a channel session also reads any `strategies/<name>/GRAVIT.md`; a gitignored
 `GRAVIT.local.md` beside the root file is the operator's machine-local overlay
-(`tests/instructions-smoke.test.ts` pins all three readers and both exclusions). The facts
+(`tests/instructions-smoke.test.ts` pins all three readers and both exclusions). Two dsh facts
+the patch does not change (installed `dsh-agent-instructions/lib/index.js`, `USER_GLOBAL_FILE`
+and the baseline identity): the user-global file is hard-coded `$DSH_HOME/AGENTS.md` and still
+loads when the operator has one, and the candidate list is part of the baseline's identity, so
+a session resumed across this change receives one replacement baseline. The facts
 `GRAVIT.md` shares with `CLAUDE.md` (beds, RAW, warmup) are repeated in `docs/backtest-rules.md`,
 both mechanics skills, `scripts/face_data.py`, `strategies/_template/backtest.py` and §2.4; when a
 bed changes, all of them move.
