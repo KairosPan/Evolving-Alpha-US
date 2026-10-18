@@ -16,7 +16,7 @@ are `alpaca_kit` — one Python package, two faces: importable library and MCP s
 | `Gravit-Design.md` | the product charter — intent, principles, write map, debts, revisit triggers; outranks everything on intent |
 | `DEVELOPMENT.md` | the as-built front/back-end reference — processes, contracts, gates, tests, drills, residuals, forward list; on mechanism the code is the fact and this document follows it |
 | `AGENTS.md` | for coding agents (Claude Code and Codex read it); Gravit does not — see `GRAVIT.md` |
-| `GRAVIT.md` | the workspace instructions every dsh agent in the tree reads on its first request — facts only, ≤ 4,500 bytes (`face/tests/gravit-md.test.ts`); the face patches dsh's agent-instructions row to read it and `GRAVIT.local.md`, nothing else |
+| `GRAVIT.md` | the workspace instructions every dsh agent in the tree reads on its first request — facts and rules only, ≤ 4,500 bytes (`face/tests/gravit-md.test.ts`); the face patches dsh's agent-instructions row to read it and `GRAVIT.local.md`, nothing else |
 | `ROADMAP.md` | the five-item forward index from the reset plus a built log; `DEVELOPMENT.md` §10 is the ordered detail and cites its items by number |
 | `alpaca_kit/{source,firewall}.py` | MarketDataSource Protocol + FakeSource; the AsOfGuard/GuardedSource lookahead firewall (six surfaces pinned by name in `tests/test_us0_firewall_surfaces.py`) |
 | `alpaca_kit/{alpaca,registry,composite,account}.py` | Alpaca REST + corp-action normalization · source selection · per-capability routing · the paper-pinned trading host (the order functions live here; Gate 1 is in `mcp/tools.py`) |
