@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { composeEntries } from "@deepseek-ai/dsh-app-boot";
 import { setupFaceProfile } from "../src/setup.ts";
 import { composeFace } from "../src/boot.ts";
@@ -13,7 +14,7 @@ import { AGENT_INSTRUCTIONS_ROW_ID, INSTRUCTIONS_CONFIG } from "../src/instructi
 import { facePolicyPatches } from "../src/policy.ts";
 import { definitionFor } from "../src/bot-presets.ts";
 import { LEGACY_PRESET_DESCRIPTION } from "../src/overlay.ts";
-import { makeBotsRoot } from "./bots-fixture.ts";
+import { GRAVIT_PLUGIN_ABS, makeBotsRoot } from "./bots-fixture.ts";
 
 /** Every row id {@link faceOverlay} owns, as the composed tree should show them. */
 const OVERLAY_ROW_IDS = [
@@ -372,10 +373,14 @@ test("composeFace takes the static preset-gravit row from bots/gravit", async ()
   const row = composeEntries([patches]).find((entry) => entry.id === "preset-gravit");
   assert.equal(row?.name, "@deepseek-ai/dsh-agent-preset");
   assert.deepEqual(row?.config, definitionFor(bots, "gravit"));
-  assert.deepEqual(row?.config, { id: "gravit", name: "Gravit Fixture", description: "the default, from the fixture", plugins: [] });
+  /* The fixture's gravit composes the one gravit-plugin row, by absolute path
+   * (a temp root rebases the shipped relative one to nowhere): the face rebases
+   * it to a `file:` URL, and the alias below carries the very same row. */
+  const gravitRows = [{ id: "gravit", name: pathToFileURL(GRAVIT_PLUGIN_ABS).href, config: {} }];
+  assert.deepEqual(row?.config, { id: "gravit", name: "Gravit Fixture", description: "the default, from the fixture", plugins: gravitRows });
 
   const legacy = composeEntries([patches]).find((entry) => entry.id === "preset-kairos");
-  assert.deepEqual(legacy?.config, { id: "kairos", name: "Gravit Fixture", description: LEGACY_PRESET_DESCRIPTION, plugins: [] });
+  assert.deepEqual(legacy?.config, { id: "kairos", name: "Gravit Fixture", description: LEGACY_PRESET_DESCRIPTION, plugins: gravitRows });
 });
 
 /* 0.1.1's roster check refused a boot whose default preset could not be read;

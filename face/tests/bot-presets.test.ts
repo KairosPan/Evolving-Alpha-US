@@ -20,7 +20,7 @@ import { Context } from "@deepseek-ai/cordis";
 import { entryListProblem, type PresetDefinition } from "@deepseek-ai/dsh-agent-preset-registry";
 import { declareBots, definitionFor } from "../src/bot-presets.ts";
 import { BOT_PLUGIN_RELATIVE, DEFAULT_ALLOW, createBot, isBotId, renderComposition, updateSoul } from "../src/bots.ts";
-import { makeBotsRoot, PLUGIN_ABS, REPO } from "./bots-fixture.ts";
+import { GRAVIT_PLUGIN_ABS, makeBotsRoot, PLUGIN_ABS, REPO } from "./bots-fixture.ts";
 
 const SKILLS_PLUGIN = "@deepseek-ai/dsh-skill-filesystem";
 type Row = { id?: string; name?: unknown; group?: boolean; config?: Record<string, unknown> };
@@ -95,13 +95,17 @@ test("every shipped bot's plugin row lands on the real face/plugins/bot.js, and 
     }
   }
   const gravit = definitionFor(botsRoot, "gravit");
-  assert.deepEqual(gravit.plugins, [], "the shipped default composes nothing: Gravit keeps the host's flat roster");
+  assert.deepEqual(gravit.plugins, [{ id: "gravit", name: pathToFileURL(GRAVIT_PLUGIN_ABS).href, config: {} }],
+    "the shipped default composes the gravit plugin and nothing else; the host roster is untouched because the plugin masks no tool");
   assert.equal(typeof gravit.name, "string");
 });
 
-test("the gravit definition is exactly its id, published metadata and an empty plugin list", async () => {
+test("the gravit definition is exactly its id, published metadata and the one gravit plugin row", async () => {
   const root = await makeBotsRoot();
-  assert.deepEqual(definitionFor(root, "gravit"), { id: "gravit", name: "Gravit", description: "the principal agent", plugins: [] });
+  assert.deepEqual(definitionFor(root, "gravit"), {
+    id: "gravit", name: "Gravit", description: "the principal agent",
+    plugins: [{ id: "gravit", name: pathToFileURL(GRAVIT_PLUGIN_ABS).href, config: {} }],
+  });
 });
 
 test("preset.yml is read as 0.1.1's dsh read it: trimmed, blank omitted, order kept, model never published", async () => {

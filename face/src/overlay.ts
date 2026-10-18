@@ -5,8 +5,9 @@
  * registry), minus every frontend/client-ui row — the face serves its own UI
  * (spec section 3.2) — and MINUS web-app's agent-plane disable set (:447-556).
  * That set exists because every web-app session mounts a full preset that
- * re-declares the tools; Gravit's `gravit` preset is empty, so the face keeps
- * dsh-base's flat host roster and Gravit keeps its tools (MAP overlay-rows §5).
+ * re-declares the tools; Gravit's `gravit` preset masks no tool (it composes
+ * only plugins/gravit.js, the date section), so the face keeps dsh-base's flat
+ * host roster and Gravit keeps its tools (MAP overlay-rows §5).
  * Static config replaces the webStartup/webRuntime `!!js` expressions: no
  * dsh-web-app row is mounted, so neither service exists here.
  *
@@ -58,8 +59,17 @@ export interface FacePatchEntry {
  * packages/preset/agent-preset-registry/README.md "Minimal configuration").
  * Module-relative. */
 export const BOTS_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "bots");
-/** The inert preset every session that names none joins (spec S3). */
+/** The preset every session that names none joins (spec S3). Its one row is
+ * the face's gravit plugin, which masks no tool, so Gravit's roster stays the
+ * host's flat roster. */
 export const DEFAULT_PRESET = "gravit";
+/** The plugin row `bots/gravit/agent.cordis.yml` ships, spelled as that file
+ * spells it: relative from `bots/gravit/`, as `BOT_PLUGIN_RELATIVE` is from
+ * `bots/<id>/`. dsh resolves a preset's rows against the DECLARING context's
+ * base, not the preset's directory (NEW agent-preset-registry/src/index.ts:108,
+ * src/mount.ts:258-264), so `definitionFor` (src/bot-presets.ts) rebases it to
+ * an absolute `file:` URL when it builds the declaration. */
+export const GRAVIT_PLUGIN_RELATIVE = "../../face/plugins/gravit.js";
 /** The agent's preset id before the 2026-10-08 rename. Sessions created before it
  * persist this id, and dsh resolves a session's stored preset through
  * `AgentPresetRegistry.retain` (pkg/dsh-agent-preset-registry/lib/index.js), which
@@ -208,9 +218,11 @@ export function faceOverlay(port: number, defaultPreset: AgentPresetConfig): Fac
       { id: AGENT_PRESET_REGISTRY_ROW_ID, name: "@deepseek-ai/dsh-agent-preset-registry",
         config: { default: DEFAULT_PRESET } satisfies Pick<AgentPresetRegistryConfig, "default"> },
       /* The default preset, declared STATICALLY so it exists before the first
-       * `session/create`. Its plugins are `[]` — the host composition itself —
-       * which the registry accepts (NEW packages/preset/agent-preset-registry/
-       * src/definition.ts:18-39; agent-preset README's own minimal example).
+       * `session/create`. Its plugins are what bots/gravit/agent.cordis.yml
+       * lists: the gravit plugin's date section, which masks no tool, so the
+       * host composition's roster is untouched. (An empty list is accepted too:
+       * NEW packages/preset/agent-preset-registry/src/definition.ts:18-39;
+       * agent-preset README's own minimal example.)
        * Row id = `presetRowId(config.id)`; the spread keeps the caller's
        * definition object out of the composed tree. */
       { id: presetRowId(defaultPreset.id), name: "@deepseek-ai/dsh-agent-preset",

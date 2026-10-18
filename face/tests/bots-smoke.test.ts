@@ -14,8 +14,9 @@
  *     packages/preset/agent-preset-registry/src/index.ts:80-118), and
  *     plugins/bot.js re-expands on `tools/change`, so a tool registered after
  *     the declaration is admitted when the allow list names it.
- * S3: `gravit` is an empty composition and Gravit's sessions join it: their
- *     tool set is byte-identical to the host's global view.
+ * S3: `gravit` composes the face's gravit plugin (the date section, no mask)
+ *     and Gravit's sessions join it: their tool set is byte-identical to the
+ *     host's global view, their prompt carries the date, and a bot's does not.
  * Also: the roster lists a broken fixture with its reason and never `_template`;
  * a session created through the session controller with `agentPreset` carries
  * it on its header; and Gate 2 is tree-wide, refusing an order tool the bot's
@@ -53,7 +54,7 @@ const STAND_IN = "mcp__drill__submit_order";
  *  after a burst of `tools/change`. */
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 50));
 
-test("bots smoke: roster, mask, persona, an inert default, the shipped plugin path, and Gate 2 from a bot", {
+test("bots smoke: roster, mask, persona, a default that masks nothing, the shipped plugin path, and Gate 2 from a bot", {
   skip: gated && "set FACE_SMOKE=1",
 }, async () => {
   const bots = await makeRepoBotsRoot();
@@ -122,12 +123,13 @@ test("bots smoke: roster, mask, persona, an inert default, the shipped plugin pa
       assert.equal(k.agentPreset, "gravit");
       const gravit = agentOf(k.sessionId);
       assert.equal(gravit.session.header.agentPreset, "gravit");
-      assert.deepEqual(names(tools.schemas(gravit)), names(tools.schemas()), "the inert default adds and removes nothing");
+      assert.deepEqual(names(tools.schemas(gravit)), names(tools.schemas()), "the gravit plugin masks nothing");
       /* Compared up to the persona's first `{{`, not its first LINE: line 1 ends
        * `... your working directory is {{cwd}}.` and renderPrompt substitutes it
        * (measured: the rendered text carries this session's cwd). The prefix is
        * still read from the FILE, so rewriting the persona moves this assertion. */
       assert.ok((await promptOf(gravit)).includes(readPersona(PERSONA_PATH).split("{{")[0]), "D11 closed: Gravit is told who it is");
+      assert.match(await promptOf(gravit), /\nToday is \d{4}-\d{2}-\d{2}, [A-Z][a-z]+ \(.+\)\.\n/, "the date section is in Gravit's prompt (plan 1)");
 
       /* S1 + S2 - a bot: the session controller mounts the preset; the mask and the persona hold. */
       const p = await create({ cwd: join(bots, "probe", "journal"), agentPreset: "probe" });
@@ -139,6 +141,7 @@ test("bots smoke: roster, mask, persona, an inert default, the shipped plugin pa
       assert.ok(probePrompt.includes("You are Probe, a test voice."), "the bot's persona shadows Gravit's (S1)");
       assert.equal(probePrompt.includes("You are Gravit"), false,
         "and Gravit's text is gone from the bot's prompt: bot.js's `deployment:persona-prefix` shadows the global prefix");
+      assert.equal(probePrompt.includes("Today is "), false, "the section is scoped to Gravit's preset: a bot never sees it");
 
       /* S1, the SHIPPED form. `shipped`'s composition is untouched since
        * `createBot` wrote it, so its plugin row is the relative path every real
