@@ -331,7 +331,7 @@ Two things about that directory are NOT yours:
   `settings-controller`, `directory-picker`, `tool-ask-user`,
   `agent-preset-registry`, `preset-gravit`, `preset-kairos` — or at the `hmr`
   switch, at `system-prompt`'s `personaPrefix`, at the `agent-instructions`
-  row, or (while `DSH_TELEMETRY_DISABLED` is set) at `session-telemetry-otel`
+  row's two candidate lists, or (while `DSH_TELEMETRY_DISABLED` is set) at `session-telemetry-otel`
   is accepted, overridden, and NEVER reported. Change those in the face —
   `src/overlay.ts`, `src/boot.ts`, `src/instructions.ts`,
   `../dsh/profile/persona.md`. The same warning is in the patch

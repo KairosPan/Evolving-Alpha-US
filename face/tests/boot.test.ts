@@ -454,7 +454,8 @@ test("instructionsPatch: an absent or non-object inherited config leaves the def
   patch.config.projectRootMarkers?.push(".git");
   patch.config.instructionFileCandidates.push("X.md");
   assert.deepEqual(inherited, { projectRootMarkers: [".hg"] }, "the caller's config is cloned, not rewritten");
-  assert.deepEqual(instructionsPatch().config, INSTRUCTIONS_CONFIG, "the next call starts from the constants");
+  assert.deepEqual(instructionsPatch().config, { maxBytes: 65536, instructionFileCandidates: ["GRAVIT.md"], localInstructionFileCandidates: ["GRAVIT.local.md"] },
+    "the next call starts from the constants - compared against literals, so an aliased constant cannot hide a leak");
 });
 
 /* Spec §9: a composition without the row gets no patch and boot says nothing.

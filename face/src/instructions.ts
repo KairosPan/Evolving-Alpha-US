@@ -38,7 +38,8 @@ export const AGENT_INSTRUCTIONS_ROW_ID = "agent-instructions";
 /** The one base instruction file, read in every directory of the chain. */
 export const INSTRUCTION_FILE = "GRAVIT.md";
 
-/** Its local overlay, loaded after the base file in the same directory; gitignored. */
+/** Its local overlay, loaded after the base file in the same directory. Only the
+ * root one is gitignored (`/GRAVIT.local.md`); a nested one is tracked like any file. */
 export const LOCAL_INSTRUCTION_FILE = "GRAVIT.local.md";
 
 /** The row's config when no layer below set a key of its own: dsh-base's

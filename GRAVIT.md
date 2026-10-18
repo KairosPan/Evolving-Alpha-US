@@ -73,5 +73,5 @@ ordinary prompt; no voice answers it, so the answer is Gravit's own.
 ## Never edit
 
 `data/pit/` contents; the installed dsh profile copies under the harness home; anything under
-`bots/` (a bot's own `journal/` aside) or `roles/` (propose in conversation — the operator
-authors them); `docs/research/`.
+`bots/` (a bot may write its own `journal/`) or `roles/` (propose in conversation — the
+operator authors them); `docs/research/`.
