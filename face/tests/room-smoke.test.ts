@@ -30,7 +30,7 @@ import { mountClient, remote, signIn } from "./remote.ts";
 import { StubAdapter, type StubReply } from "./stub-llm.ts";
 
 const gated = process.env.FACE_SMOKE !== "1";
-const MARKER = "ROOM-SMOKE-AGENTS-MARKER";
+const MARKER = "ROOM-SMOKE-GRAVIT-MARKER";
 
 interface Ev { type: string; seq: number; data?: Record<string, unknown> }
 const sourceOf = (e: Ev): Record<string, unknown> | undefined => (e.data?.source ?? (e.data?.message as { source?: unknown } | undefined)?.source) as Record<string, unknown> | undefined;
@@ -59,10 +59,10 @@ test("room smoke: dispatch → two members → answers in the room log → one w
     const channelDir = await realpath(await (async () => { const d = join(root, "strategies", "room-test"); await mkdir(d, { recursive: true }); return d; })());
     /* `.git`, then the file: `findProjectRoot` walks up for a marker and falls
      * back to the cwd itself, so without one the chain would be the channel
-     * directory alone and `root/AGENTS.md` would never be read. The marker is
+     * directory alone and `root/GRAVIT.md` would never be read. The marker is
      * what makes this a CHAIN assertion (root → strategies → the channel). */
     await mkdir(join(root, ".git"), { recursive: true });
-    await writeFile(join(root, "AGENTS.md"), `# smoke\n${MARKER}\n`);
+    await writeFile(join(root, "GRAVIT.md"), `# smoke\n${MARKER}\n`);
     setupFaceProfile(home);
     const patchPath = join(home, "profiles", "face", "cordis.patch.yml");
     const patch = readFileSync(patchPath, "utf8").replace(/^\[\][ \t]*$/m, "");
@@ -181,7 +181,7 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       assert.equal(roundEnd.outcome, "settled");
       assert.deepEqual(Object.fromEntries(roundEnd.turns.map((t) => [t.bot, t.state])), { alpha: "answered", beta: "passed", gamma: "failed" }, "a failing model is failed and the round settles");
 
-      /* The members: parented, preset-joined, read-only before their first prompt, AGENTS.md in the chain, no dispatch. */
+      /* The members: parented, preset-joined, read-only before their first prompt, GRAVIT.md in the chain, no dispatch. */
       /* dsh 0.2's `SessionSummary` carries no `agentPreset` (NEW packages/api/session-controller/src/types.ts:177-188);
        * the preset a member runs is its `agentPreset` projection, read here off the live session's header
        * (members are never re-selected, so header and projection agree). */
@@ -213,7 +213,7 @@ test("room smoke: dispatch → two members → answers in the room log → one w
          * message is only a content carrier - what dsh-agent-instructions publishes
          * onto the log is the `agent-instructions`/`instructions` source. */
         const chain = agent.session.snapshotEvents().find((e) => e.type === "user/message" && sourceOf(e)?.kind === "agent-instructions" && JSON.stringify(e.data).includes(MARKER));
-        assert.ok(chain !== undefined, `${m.agentPreset}: the channel's AGENTS.md chain reached the member; user/message sources seen: ${JSON.stringify(agent.session.snapshotEvents().filter((e) => e.type === "user/message").map((e) => sourceOf(e)?.kind))}`);
+        assert.ok(chain !== undefined, `${m.agentPreset}: the channel's GRAVIT.md chain reached the member; user/message sources seen: ${JSON.stringify(agent.session.snapshotEvents().filter((e) => e.type === "user/message").map((e) => sourceOf(e)?.kind))}`);
       }
       const alpha = members.find((m) => m.agentPreset === "alpha")!;
       const alphaDelta = agents.get(alpha.sessionId)!.session.snapshotEvents().find((e) => sourceOf(e)?.form === "delta");

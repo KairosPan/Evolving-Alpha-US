@@ -69,3 +69,14 @@ test("refuses to overwrite an existing profile", () => {
   assert.equal(existsSync(join(dir, "package.json")), false);
   assert.equal(existsSync(join(dir, "pnpm-workspace.yaml")), false);
 });
+
+// The header is the only place the operator is told that a patch on the
+// agent-instructions row is overridden silently (composeFace restates the row
+// whole), so the row and its two candidates are pinned in the text they read.
+test("the written patch header names the agent-instructions row the face owns", () => {
+  const home = mkdtempSync(join(tmpdir(), "face-home-"));
+  setupFaceProfile(home);
+  const header = readFileSync(join(home, "profiles", "face", "cordis.patch.yml"), "utf8");
+  assert.match(header, /agent-instructions row/);
+  assert.match(header, /GRAVIT\.md and GRAVIT\.local\.md/);
+});

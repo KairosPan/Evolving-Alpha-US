@@ -9,6 +9,7 @@ import { setupFaceProfile } from "../src/setup.ts";
 import { composeFace } from "../src/boot.ts";
 import { AKSHARE_MCP_ROW_ID } from "../src/akshare.ts";
 import { PERSONA_PATH, readPersona } from "../src/persona.ts";
+import { AGENT_INSTRUCTIONS_ROW_ID, INSTRUCTIONS_CONFIG } from "../src/instructions.ts";
 import { facePolicyPatches } from "../src/policy.ts";
 import { definitionFor } from "../src/bot-presets.ts";
 import { LEGACY_PRESET_DESCRIPTION } from "../src/overlay.ts";
@@ -64,9 +65,10 @@ test("composeFace: patch order ends with the face overlay; root is rewritten emp
 /* The exact layer count, so a lost or duplicated layer is a failure rather
  * than a silent change of shape. With the telemetry switch unset the stack is:
  * dsh-base insert + the policy layer (src/policy.ts) + AKShare insert + hmr
- * disable + system-prompt persona + face overlay. The policy layer is pinned
- * both by size (8 id patches + 1 insert against 0.2.0-rc.2's dsh-base) and by
- * POSITION - directly after the bundle layer, below the operator's. */
+ * disable + system-prompt persona + agent-instructions + face overlay. The
+ * policy layer is pinned both by size (8 id patches + 1 insert against
+ * 0.2.0-rc.2's dsh-base) and by POSITION - directly after the bundle layer,
+ * below the operator's. */
 test("composeFace stacks exactly the layers it means to", () => {
   const home = freshHome();
   const previous = process.env.DSH_TELEMETRY_DISABLED;
@@ -79,7 +81,7 @@ test("composeFace stacks exactly the layers it means to", () => {
     );
     const policy = facePolicyPatches(baseRows);
     assert.equal(policy.length, 9, "8 id patches + 1 insert at dsh-base 0.2.0-rc.2");
-    assert.equal(patches.length, 5 + policy.length, patches.map((p) => p.id ?? "insert").join(","));
+    assert.equal(patches.length, 6 + policy.length, patches.map((p) => p.id ?? "insert").join(","));
     assert.deepEqual(patches.slice(1, 1 + policy.length), policy, "the policy layer sits right above the bundle layer");
   } finally {
     if (previous === undefined) delete process.env.DSH_TELEMETRY_DISABLED;
@@ -387,4 +389,21 @@ test("composeFace refuses a default preset whose composition is missing", async 
     () => composeFace({ profileName: "face", port: 3090, dshHome: home, botsRoot: bots }),
     /gravit\/agent\.cordis\.yml is missing/,
   );
+});
+
+/* Spec §4.1 L3: dsh-base's default candidates are AGENTS.md and CLAUDE.md; the
+ * face restates the row's whole config (a named config replaces the row's) so
+ * Gravit reads GRAVIT.md and its local twin and nothing else. Composed AFTER
+ * the operator layers, like the persona patch, and guarded like it. */
+test("composeFace patches agent-instructions to GRAVIT.md and GRAVIT.local.md, after the operator layers", () => {
+  const home = freshHome();
+  const { patches } = composeFace({ profileName: "face", port: 3090, dshHome: home });
+  const row = composeEntries([patches]).find((entry) => entry.id === AGENT_INSTRUCTIONS_ROW_ID);
+  assert.equal(row?.name, "@deepseek-ai/dsh-agent-instructions");
+  assert.deepEqual(row?.config, { maxBytes: 65536, instructionFileCandidates: ["GRAVIT.md"], localInstructionFileCandidates: ["GRAVIT.local.md"] });
+  assert.deepEqual(row?.config, INSTRUCTIONS_CONFIG);
+  const index = patches.findIndex((patch) => (patch as { id?: string }).id === AGENT_INSTRUCTIONS_ROW_ID);
+  const persona = patches.findIndex((patch) => (patch as { id?: string }).id === "system-prompt");
+  assert.ok(index > persona, "the instructions patch follows the persona patch");
+  assert.equal(index, patches.length - 2, "and precedes only the face overlay");
 });

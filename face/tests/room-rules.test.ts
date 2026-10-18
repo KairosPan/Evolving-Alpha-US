@@ -111,7 +111,7 @@ test("roomLinesOf: operator prompts, Gravit replies and member answers, in order
     user("u1", "开个会", 1),
     /* dsh 0.2's context sources (the 0.1.1 `plugin` kind is gone): instructions,
      * the runtime-context snapshot and the model-change notice are never conversation. */
-    user("ctx", "Instructions from AGENTS.md", 2, { kind: "agent-instructions", form: "instructions" }),
+    user("ctx", "Instructions from GRAVIT.md", 2, { kind: "agent-instructions", form: "instructions" }),
     user("rt", "runtime context", 2, { kind: "runtime-context", form: "snapshot", sections: [] }),
     user("ms", "[model changed: …]", 2, { kind: "model-selection", form: "notice", summary: "a → b" }),
     msg(1, "让大家先说", 3),

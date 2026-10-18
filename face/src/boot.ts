@@ -122,6 +122,7 @@ import type { Config as SystemPromptConfig } from "@deepseek-ai/dsh-system-promp
 import { BOTS_ROOT, DEFAULT_PRESET, LEGACY_PRESET, SYSTEM_PROMPT_ROW_ID, faceOverlay } from "./overlay.ts";
 import { declareBots, definitionFor, type BotPresets } from "./bot-presets.ts";
 import { PERSONA_PATH, readPersona } from "./persona.ts";
+import { AGENT_INSTRUCTIONS_ROW_ID, instructionsPatch } from "./instructions.ts";
 import { aksharePatches } from "./akshare.ts";
 import { facePolicyPatches } from "./policy.ts";
 import {
@@ -220,9 +221,9 @@ export interface FaceBootOptions {
   deferReady?: boolean;
   /** An in-memory patch layer composed directly AFTER the operator's layers
    * (the profile's `cordis.patch.yml`, then the home's) and BEFORE the face's
-   * own switches, persona and host rows - so it wins over every operator row
-   * and loses to every face-owned one. It exists for tools that must change an
-   * operator's composition without writing the operator's files:
+   * own switches, persona, instructions and host rows - so it wins over every
+   * operator row and loses to every face-owned one. It exists for tools that
+   * must change an operator's composition without writing the operator's files:
    * `scripts/check-home.ts` disables the MCP rows of a harness-home COPY this
    * way instead of appending rows to the copy's patch file. `main.ts` never
    * sets it; unset, the stack is exactly what it was without the option. */
@@ -265,7 +266,8 @@ function composedRowIds(layers: readonly FacePatchList[]): Set<string> {
  * layer, the machine-local home layer (`$DSH_HOME/cordis.patch.yml`, which
  * outranks the per-profile one), the caller's in-memory
  * {@link FaceBootOptions.extraPatches} (usually none), the telemetry switch,
- * the hmr switch, Gravit's persona, then the face's host rows last.
+ * the hmr switch, Gravit's persona, the instructions patch (src/instructions.ts),
+ * then the face's host rows last.
  *
  * Pure with respect to the environment — the home is threaded explicitly into
  * every dsh-app-boot call rather than materialized into `$DSH_HOME` — but NOT
@@ -376,6 +378,10 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
       },
     });
   }
+  /* The instructions patch (spec §4.1 L3): the row's whole config restated —
+   * a named config REPLACES the row's — so the candidates are exactly ours.
+   * Guarded like the persona patch: an unmatched patch is silent. */
+  if (rows.has(AGENT_INSTRUCTIONS_ROW_ID)) patches.push(instructionsPatch());
   /* The static `preset-gravit` row IS `bots/gravit` (src/bot-presets.ts
    * `definitionFor`): its preset.yml name/description and its `[]`
    * composition - the host composition itself, no mask, no shadowed persona.

@@ -65,7 +65,7 @@ test("native subagents: continuable and foreground calls, parent notices, read-o
   let stop: (() => Promise<void>) | undefined;
   try {
     await mkdir(join(root, ".git"));
-    await writeFile(join(root, "AGENTS.md"), "# Fixture\nComplete only the scripted subtask.\n");
+    await writeFile(join(root, "GRAVIT.md"), "# Fixture\nComplete only the scripted subtask.\n");
     setupFaceProfile(home);
     const patchPath = join(home, "profiles", "face", "cordis.patch.yml");
     const patch = readFileSync(patchPath, "utf8").replace(/^\[\][ \t]*$/m, "");

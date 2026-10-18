@@ -47,10 +47,12 @@ const PATCH_HEADER = `# face profile patch layer. The face's own host rows (webs
 # workspace, session-controller, workspace-controller, settings-controller,
 # directory-picker, tool-ask-user, agent-preset-registry, preset-gravit,
 # preset-kairos, the system-prompt persona (personaPrefix only - other
-# system-prompt keys set here are kept), or the hmr / session-telemetry-otel
-# switches (the latter is DSH_TELEMETRY_DISABLED, applied only while it is
-# set) is accepted, overridden, and never reported. Change those in
-# gravit-face's overlay, not here.
+# system-prompt keys set here are kept), the agent-instructions row
+# (restated whole: GRAVIT.md and GRAVIT.local.md are the only candidates),
+# or the hmr / session-telemetry-otel switches (the latter is
+# DSH_TELEMETRY_DISABLED, applied only while it is set) is accepted,
+# overridden, and never reported. Change those in gravit-face's overlay,
+# not here.
 #
 # The storage chain (storage, storage-json, storage-domain) and
 # session-projection-cache now come from dsh-base, and a patch here reaches
