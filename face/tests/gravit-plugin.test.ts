@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import SystemPrompt from "@deepseek-ai/dsh-system-prompt";
-import { TODAY_SECTION, apply, inject, name, todayText, validateGravitConfig } from "../plugins/gravit.js";
+import { TODAY_SECTION, apply, inject, name, resolveZone, todayText, validateGravitConfig } from "../plugins/gravit.js";
 
 const dshSectionOrder = (slot: "DEPLOYMENT_PERSONA_PREFIX"): number => SystemPrompt.prototype.getSectionOrder(slot);
 
@@ -49,6 +49,7 @@ test("apply registers exactly one scoped, uninterpolated section right after the
   assert.equal(tree.sections.length, 1);
   const [section] = tree.sections;
   assert.equal(section.name, TODAY_SECTION);
+  assert.ok(Number.isFinite(section.order), "the persona slot exists in the installed SECTION_ORDERS");
   assert.equal(section.order, dshSectionOrder("DEPLOYMENT_PERSONA_PREFIX") + 1);
   assert.equal(section.interpolate, false);
   assert.equal(typeof section.text, "function");
@@ -59,4 +60,33 @@ test("apply registers exactly one scoped, uninterpolated section right after the
 
 test("apply refuses a bad config with its reason", () => {
   assert.throws(() => apply(fakeScope().ctx, { cycle: 7 }), /gravit: .*cycle/);
+});
+
+/* The text function runs at every assembly and `apply` never calls it, so an
+ * unusable TZ - "" resolves to "Etc/Unknown", which Intl refuses; "Foo/Bar"
+ * resolves to undefined - would mount cleanly and then throw (or print
+ * "(undefined)") in every Gravit prompt. Node re-reads TZ on assignment, so the
+ * real resolution is exercised; the key is put back (or deleted) in `finally`. */
+test("an unusable TZ is rendered in UTC and labelled, never thrown at assembly", () => {
+  const saved = process.env.TZ;
+  try {
+    for (const unusable of ["", "Foo/Bar"]) {
+      process.env.TZ = unusable;
+      assert.equal(resolveZone(), "UTC", `TZ=${JSON.stringify(unusable)}`);
+      const tree = fakeScope();
+      apply(tree.ctx, {});
+      const text = (tree.sections[0].text as () => string)();
+      assert.match(text, /^Today is \d{4}-\d{2}-\d{2}, [A-Z][a-z]+ \(UTC\)\.$/, `TZ=${JSON.stringify(unusable)}`);
+      tree.unload();
+    }
+    process.env.TZ = "America/New_York";
+    assert.equal(resolveZone(), "America/New_York");
+    const tree = fakeScope();
+    apply(tree.ctx, {});
+    assert.match((tree.sections[0].text as () => string)(), /\(America\/New_York\)\.$/);
+    tree.unload();
+  } finally {
+    if (saved === undefined) delete process.env.TZ;
+    else process.env.TZ = saved;
+  }
 });

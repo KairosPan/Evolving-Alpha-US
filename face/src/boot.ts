@@ -378,10 +378,16 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
       },
     });
   }
-  /* The instructions patch (spec §4.1 L3): the row's whole config restated —
-   * a named config REPLACES the row's — so the candidates are exactly ours.
-   * Guarded like the persona patch: an unmatched patch is silent. */
-  if (rows.has(AGENT_INSTRUCTIONS_ROW_ID)) patches.push(instructionsPatch());
+  /* The instructions patch (spec §4.1 L3): the face owns the row's two
+   * candidate lists and nothing else. A named config REPLACES the row's, so -
+   * like the persona patch above - it spreads the config the layers below left
+   * (`projectRootMarkers`, `maxSourceBytes`, `dshHome`, an operator's
+   * `maxBytes`) and applies the lists last; `disabled` is not in the patch, so
+   * an operator's survives it. Guarded like the persona patch: an unmatched
+   * patch is silent. */
+  if (rows.has(AGENT_INSTRUCTIONS_ROW_ID)) {
+    patches.push(instructionsPatch(below.find((row) => row.id === AGENT_INSTRUCTIONS_ROW_ID)?.config));
+  }
   /* The static `preset-gravit` row IS `bots/gravit` (src/bot-presets.ts
    * `definitionFor`): its preset.yml name/description and its one row, the
    * face's `gravit.js` (the date section) - no mask, no shadowed persona.

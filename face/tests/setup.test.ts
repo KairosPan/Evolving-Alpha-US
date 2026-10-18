@@ -71,12 +71,15 @@ test("refuses to overwrite an existing profile", () => {
 });
 
 // The header is the only place the operator is told that a patch on the
-// agent-instructions row is overridden silently (composeFace restates the row
-// whole), so the row and its two candidates are pinned in the text they read.
+// agent-instructions row has its two candidate lists overridden silently while
+// every other key of theirs is kept (composeFace spreads the inherited config,
+// as the persona patch does), so the row, its two candidates and the keep-the-
+// rest promise are pinned in the text they read.
 test("the written patch header names the agent-instructions row the face owns", () => {
   const home = mkdtempSync(join(tmpdir(), "face-home-"));
   setupFaceProfile(home);
   const header = readFileSync(join(home, "profiles", "face", "cordis.patch.yml"), "utf8");
   assert.match(header, /agent-instructions row/);
   assert.match(header, /GRAVIT\.md and GRAVIT\.local\.md/);
+  assert.match(header, /every other key of yours and disabled are kept/);
 });

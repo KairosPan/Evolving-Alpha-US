@@ -10,7 +10,7 @@ import { setupFaceProfile } from "../src/setup.ts";
 import { composeFace } from "../src/boot.ts";
 import { AKSHARE_MCP_ROW_ID } from "../src/akshare.ts";
 import { PERSONA_PATH, readPersona } from "../src/persona.ts";
-import { AGENT_INSTRUCTIONS_ROW_ID, INSTRUCTIONS_CONFIG } from "../src/instructions.ts";
+import { AGENT_INSTRUCTIONS_ROW_ID, INSTRUCTIONS_CONFIG, instructionsPatch } from "../src/instructions.ts";
 import { facePolicyPatches } from "../src/policy.ts";
 import { definitionFor } from "../src/bot-presets.ts";
 import { LEGACY_PRESET_DESCRIPTION } from "../src/overlay.ts";
@@ -397,9 +397,10 @@ test("composeFace refuses a default preset whose composition is missing", async 
 });
 
 /* Spec §4.1 L3: dsh-base's default candidates are AGENTS.md and CLAUDE.md; the
- * face restates the row's whole config (a named config replaces the row's) so
- * Gravit reads GRAVIT.md and its local twin and nothing else. Composed AFTER
- * the operator layers, like the persona patch, and guarded like it. */
+ * face sets the row's two candidate lists (the patch carries dsh-base's
+ * `maxBytes` beside them, a named config replaces the row's) so Gravit reads
+ * GRAVIT.md and its local twin and nothing else. Composed AFTER the operator
+ * layers, like the persona patch, and guarded like it. */
 test("composeFace patches agent-instructions to GRAVIT.md and GRAVIT.local.md, after the operator layers", () => {
   const home = freshHome();
   const { patches } = composeFace({ profileName: "face", port: 3090, dshHome: home });
@@ -411,4 +412,72 @@ test("composeFace patches agent-instructions to GRAVIT.md and GRAVIT.local.md, a
   const persona = patches.findIndex((patch) => (patch as { id?: string }).id === "system-prompt");
   assert.ok(index > persona, "the instructions patch follows the persona patch");
   assert.equal(index, patches.length - 2, "and precedes only the face overlay");
+});
+
+/* The face owns the row's two candidate lists and nothing else. The patch
+ * composes after the operator's layers and a patch replaces the row's whole
+ * config, so - like the persona patch above - it spreads what the layers below
+ * left and applies the lists last. A patch carrying only the face's own keys
+ * would discard `projectRootMarkers` (on a checkout with no `.git` an operator's
+ * fix for it is what lets a channel session read the root GRAVIT.md at all),
+ * `maxSourceBytes` and `dshHome`; `disabled` was never touched, the include
+ * assigns only the keys the patch carries. */
+test("the instructions patch keeps the operator's other agent-instructions keys and disabled; only the two candidate lists are the face's", () => {
+  const home = freshHome();
+  const { patches } = composeFace({
+    profileName: "face", port: 3090, dshHome: home,
+    extraPatches: [{
+      id: AGENT_INSTRUCTIONS_ROW_ID,
+      config: { maxBytes: 1, projectRootMarkers: [".hg"], instructionFileCandidates: ["X.md"] },
+      disabled: true,
+    }],
+  });
+  const row = composeEntries([patches]).find((entry) => entry.id === AGENT_INSTRUCTIONS_ROW_ID);
+  assert.deepEqual(row?.config, {
+    maxBytes: 1,
+    projectRootMarkers: [".hg"],
+    instructionFileCandidates: ["GRAVIT.md"],
+    localInstructionFileCandidates: ["GRAVIT.local.md"],
+  });
+  assert.equal(row?.disabled, true);
+});
+
+/* The branches composeFace does not reach with dsh-base's own `{ maxBytes }`
+ * row: nothing inherited, or something that is not a plain object, and the
+ * rule that the patch shares no object with its input or with its next call. */
+test("instructionsPatch: an absent or non-object inherited config leaves the defaults, and nothing is shared", () => {
+  for (const inherited of [undefined, null, "x", ["a"]]) {
+    assert.deepEqual(instructionsPatch(inherited).config, INSTRUCTIONS_CONFIG);
+  }
+  const inherited = { projectRootMarkers: [".hg"] };
+  const patch = instructionsPatch(inherited);
+  patch.config.projectRootMarkers?.push(".git");
+  patch.config.instructionFileCandidates.push("X.md");
+  assert.deepEqual(inherited, { projectRootMarkers: [".hg"] }, "the caller's config is cloned, not rewritten");
+  assert.deepEqual(instructionsPatch().config, INSTRUCTIONS_CONFIG, "the next call starts from the constants");
+});
+
+/* Spec §9: a composition without the row gets no patch and boot says nothing.
+ * An id patch that matches nothing is inert and silent, so the `rows.has(...)`
+ * guard in composeFace is all that stops the face claiming "GRAVIT.md only" for
+ * a row that is not there. A profile that bundles nothing composes without any
+ * of dsh-base's rows (its policy warnings, on stderr, name other rows). */
+test("a composition without an agent-instructions row gets no instructions patch, and boot prints nothing about it", () => {
+  const home = freshHome();
+  const manifestPath = join(home, "profiles", "face", "package.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { dsh: { profile: { bundles: string[] } } };
+  manifest.dsh.profile.bundles = [];
+  writeFileSync(manifestPath, JSON.stringify(manifest));
+  const printed: string[] = [];
+  const stderrWrite = process.stderr.write;
+  process.stderr.write = ((chunk: unknown) => { printed.push(String(chunk)); return true; }) as typeof process.stderr.write;
+  try {
+    const { patches } = composeFace({ profileName: "face", port: 3090, dshHome: home });
+    assert.equal(patches.some((patch) => (patch as { id?: string }).id === AGENT_INSTRUCTIONS_ROW_ID), false);
+    assert.equal(composeEntries([patches]).some((entry) => entry.id === AGENT_INSTRUCTIONS_ROW_ID), false);
+  } finally {
+    process.stderr.write = stderrWrite;
+  }
+  assert.ok(printed.length > 0, "the stderr hook is live: the policy layer warns about each of its missing targets");
+  assert.deepEqual(printed.filter((line) => line.includes(AGENT_INSTRUCTIONS_ROW_ID) || line.includes("GRAVIT")), []);
 });

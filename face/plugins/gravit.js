@@ -16,7 +16,9 @@
  * context-resolved text"; `assemble` in the installed lib) - so a session that
  * runs past midnight is told the new day on its next request, and the date is
  * never frozen at the mount. The zone is the process's own, named in the
- * sentence so "today" is never ambiguous.
+ * sentence so "today" is never ambiguous; a `TZ` Intl cannot format in (empty,
+ * or not a zone name) is rendered in UTC and labelled `(UTC)` - see
+ * {@link resolveZone}.
  *
  * This file imports nothing ON PURPOSE, like plugins/bot.js: the composition
  * names it by a relative path, the face rebases that to an absolute `file:` URL
@@ -79,6 +81,25 @@ export function todayText(now, timeZone) {
   return `Today is ${date}, ${weekday} (${timeZone}).`;
 }
 
+/** The zone the sentence names: the process's own when Intl will format in it,
+ *  `"UTC"` when it will not. `Intl.DateTimeFormat().resolvedOptions().timeZone`
+ *  is NOT always usable - measured on Node 22, `TZ=` (empty) resolves to
+ *  `"Etc/Unknown"`, which `new Intl.DateTimeFormat(locale, { timeZone })` refuses
+ *  with a RangeError, and `TZ=Foo/Bar` or `TZ=:/etc/localtime` resolve to
+ *  `undefined`. `apply` never calls the text function, so the mount would
+ *  succeed and every Gravit prompt would then fail at assembly; the fallback
+ *  keeps the date sentence total. */
+export function resolveZone() {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (typeof zone !== "string" || zone === "" || zone === "Etc/Unknown") return "UTC";
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return zone;
+  } catch {
+    return "UTC";
+  }
+}
+
 export function apply(ctx, config) {
   const problem = validateGravitConfig(config);
   if (problem !== undefined) throw new Error(`gravit: ${problem}`);
@@ -88,6 +109,6 @@ export function apply(ctx, config) {
     name: TODAY_SECTION,
     order: ctx.systemPrompt.getSectionOrder("DEPLOYMENT_PERSONA_PREFIX") + 1,
     interpolate: false,
-    text: () => todayText(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone),
+    text: () => todayText(new Date(), resolveZone()),
   }));
 }

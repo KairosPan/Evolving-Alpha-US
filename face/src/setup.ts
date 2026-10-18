@@ -48,7 +48,8 @@ const PATCH_HEADER = `# face profile patch layer. The face's own host rows (webs
 # directory-picker, tool-ask-user, agent-preset-registry, preset-gravit,
 # preset-kairos, the system-prompt persona (personaPrefix only - other
 # system-prompt keys set here are kept), the agent-instructions row
-# (restated whole: GRAVIT.md and GRAVIT.local.md are the only candidates),
+# (its two candidate lists are the face's: GRAVIT.md and GRAVIT.local.md;
+# every other key of yours and disabled are kept),
 # or the hmr / session-telemetry-otel switches (the latter is
 # DSH_TELEMETRY_DISABLED, applied only while it is set) is accepted,
 # overridden, and never reported. Change those in gravit-face's overlay,
