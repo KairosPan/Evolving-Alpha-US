@@ -100,7 +100,8 @@ test("GRAVIT.md fits its budget and contains no template group", () => {
 });
 
 test("GRAVIT.md's bed table is docs/backtest-rules.md's, row for row", () => {
-  const rows = (file: string) => readFileSync(file, "utf8").split("\n").filter((line) => /^\| `data\/pit\//.test(line));
+  /* trimmed: docs/backtest-rules.md indents its table inside a list item */
+  const rows = (file: string) => readFileSync(file, "utf8").split("\n").map((line) => line.trim()).filter((line) => /^\| `data\/pit\//.test(line));
   const expected = rows(RULES_MD);
   assert.equal(expected.length, 2, "backtest-rules.md has the two bed rows");
   assert.deepEqual(rows(GRAVIT_MD), expected, "a bed window changed in one file and not the other");
