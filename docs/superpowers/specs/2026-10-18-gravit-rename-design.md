@@ -86,11 +86,15 @@ after §6.1 removes its 42 files: 171 files, 1,364 lines, §4's lines included.
   carries a comment saying why.
 - This spec is the rename's record and names the old name.
 
-### 4.3 Dropped, not renamed
+### 4.3 Dead citations: dropped in code, relabelled in the history
 
-Three Python comments cite `kairos-mining` (`alpaca_kit/integrity.py`, `alpaca_kit/feeds/offerings.py`,
-`tests/test_integrity.py`), a findings document that exists neither in this repository nor in the sibling
-one. The dead citation is removed, not renamed into a document that never existed.
+`kairos-mining` labels a findings document that exists neither in this repository nor in the sibling one.
+Three Python comments cite it (`alpaca_kit/integrity.py`, `alpaca_kit/feeds/offerings.py`,
+`tests/test_integrity.py`); there the citation is removed, not renamed into a document that never existed.
+Nine citations in five dated specs of 2026-07-13 (p1, p2, p3, p5b short-interest/offerings, p6) carry
+section numbers that are part of their record; there the label becomes `design-mining` (for example
+`design-mining §2.5`), which names neither an agent nor a file. A dry run of the history pass found these
+nine on 2026-10-18.
 
 ### 4.4 Never touched
 
