@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
-   KAIROS · R3 — SESSION TIMELINE KIT (shared)
+   GRAVIT · R3 — SESSION TIMELINE KIT (shared)
    The conversation ledger: numbered turn entries in three voice
-   registers (operator sans · kairos serif · tool mono instrument
+   registers (operator sans · gravit serif · tool mono instrument
    cards), a session header with the attendance stamp, and the one
    inert composer. Everything is styled in shell vocabulary — every
    color/font is a var(--…) token from ../r2/shell.css; the only
@@ -91,7 +91,7 @@
   letter-spacing:.26em; text-transform:uppercase;
 }
 .tl-turn-operator .tl-role{ color:var(--fg-dim); }
-.tl-turn-kairos   .tl-role{ color:var(--brass); }
+.tl-turn-gravit   .tl-role{ color:var(--brass); }
 .tl-turn-tool     .tl-role{ color:var(--washout); }
 .tl-prod{
   font-family:var(--mono); font-size:9.5px; color:var(--faint); letter-spacing:.06em;
@@ -104,7 +104,7 @@
   margin:0; font-family:var(--sans); font-size:14.5px; line-height:1.78;
   color:var(--fg); max-width:56ch;
 }
-/* kairos — serif argued prose, comfortable reading measure, read critically */
+/* gravit — serif argued prose, comfortable reading measure, read critically */
 .tl-text-k{
   margin:0; font-family:var(--serif); font-weight:350; font-size:16.5px;
   line-height:1.66; color:var(--fg); max-width:60ch;

@@ -168,7 +168,7 @@ export function createSymbolSearch(options: { fetch?: SearchFetch; now?: () => n
     });
     const request = async (): Promise<ProviderResult> => {
       const response = await fetcher(url, { signal: controller.signal, redirect: "error",
-        headers: { accept: "application/json, text/plain, */*", "user-agent": "Mozilla/5.0 Kairos-Symbol-Search" } });
+        headers: { accept: "application/json, text/plain, */*", "user-agent": "Mozilla/5.0 Gravit-Symbol-Search" } });
       const body = await readProvider(response, id === "tencent" ? "gb18030" : "utf-8");
       return id === "tencent" ? parseTencentSearch(body) : parseYahooSearch(body, market === "cn" ? "all" : market);
     };

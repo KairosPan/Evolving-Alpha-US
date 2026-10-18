@@ -190,7 +190,7 @@ Never Enters*. Replaces today's env-var custody where the arena shell inherits `
 
 ### 2.1 The two classes
 
-- **Class A — the work token** (repo-scoped, *contained not secret*). For a repo Kairos edits as a
+- **Class A — the work token** (repo-scoped, *contained not secret*). For a repo Gravit edits as a
   task. It is sandbox-resident and readable there (containment, per charter — "the agent never sees
   the token" is retired). Two boundaries make containment load-bearing: (1) **repo-scoped** to the
   work repo only; (2) **physically incapable of reaching the Body remote**.

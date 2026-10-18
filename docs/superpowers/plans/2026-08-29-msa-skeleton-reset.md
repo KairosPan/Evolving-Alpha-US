@@ -82,7 +82,8 @@ git rm -r -q alpha/agent alpha/arena alpha/converse alpha/eval alpha/guard alpha
   alpha/llm alpha/loop alpha/mcp alpha/memory alpha/meta alpha/refine alpha/regime \
   alpha/sizing alpha/state
 git rm -q alpha/redact.py alpha/settings.py alpha/trace.py
-git rm -r -q alpha_web sonia workbench seeds reference spikes third_party
+# this step also removed the retired meta-agent's package
+git rm -r -q alpha_web workbench seeds reference spikes third_party
 git rm -q alpha/data/sector_map.py
 git rm -q alpha/features/builder.py alpha/features/earnings.py alpha/features/sentiment.py \
   alpha/features/theme_breadth.py alpha/features/theme_breadth_types.py
@@ -100,9 +101,10 @@ cd scripts && git rm -q calibrate_growth_clock.py calibrate_stock_clock.py calib
 - [ ] **Step 3: Delete old tests (keep the island's tests)**
 
 ```bash
+# this step also removed the retired meta-agent's tests
 git rm -r -q tests/agent tests/arena tests/converse tests/eval tests/guard tests/harness \
   tests/llm tests/loop tests/mcp tests/memory tests/meta tests/refine tests/regime \
-  tests/sizing tests/sonia tests/state tests/web tests/workbench 2>/dev/null
+  tests/sizing tests/state tests/web tests/workbench 2>/dev/null
 git rm -q tests/data/test_sector_map.py tests/universe/test_short_squeeze_activation.py
 git rm -q tests/features/test_builder.py tests/features/test_earnings.py \
   tests/features/test_sentiment.py tests/features/test_theme_breadth.py
@@ -113,7 +115,8 @@ ls tests/*.py   # inspect: keep __init__.py, conftest.py, test_us0_firewall_surf
 - [ ] **Step 4: Delete old-concept top-level docs and artifacts**
 
 ```bash
-git rm -q tcb.lock Backend-Design.md Evolving-Agent-Design-SoniaKairos.md ROADMAP.md CLAUDE.md
+# this step also removed the previous product's charter file
+git rm -q tcb.lock Backend-Design.md ROADMAP.md CLAUDE.md
 git rm -q docs/blueprint.md
 git rm -r -q docs/doctrine docs/findings 2>/dev/null
 ```
@@ -135,7 +138,7 @@ Keep the module header, imports, and the `fake_source` fixture EXACTLY as-is. De
 
 - [ ] **Step 8: Drop stale deny rules from .claude/settings.json**
 
-Open `.claude/settings.json` and remove permission-deny entries that reference `reference/`, `spikes/`, or the sibling `Sonia-Kairos` repo (those trees are gone). Keep the file valid JSON; if nothing else remains, leave `{}`-level structure intact.
+Open `.claude/settings.json` and remove permission-deny entries that reference `reference/`, `spikes/`, or the previous product's sibling repository (those trees are gone). Keep the file valid JSON; if nothing else remains, leave `{}`-level structure intact.
 
 - [ ] **Step 9: Run the reduced suite**
 
@@ -1119,10 +1122,10 @@ git commit -m "feat: strategy template, backtest rules, workspace docs"
 
 ---
 
-### Task 10: dsh/ config + skills (mechanics + style-kairos from seeds_v2)
+### Task 10: dsh/ config + skills (mechanics + style-gravit from seeds_v2)
 
 **Files:**
-- Create: `dsh/README.md`, `dsh/profile/cordis.yml`, `dsh/skills/mechanics/backtest-rules/SKILL.md`, `dsh/skills/mechanics/alpaca-kit-guide/SKILL.md`, `dsh/skills/style-kairos/{doctrine,signals,lessons}/SKILL.md`, `scripts/convert_seeds.py`
+- Create: `dsh/README.md`, `dsh/profile/cordis.yml`, `dsh/skills/mechanics/backtest-rules/SKILL.md`, `dsh/skills/mechanics/alpaca-kit-guide/SKILL.md`, `dsh/skills/style-gravit/{doctrine,signals,lessons}/SKILL.md`, `scripts/convert_seeds.py`
 - Delete: `seeds_v2/` (after conversion)
 
 **Interfaces:**
@@ -1132,7 +1135,7 @@ git commit -m "feat: strategy template, backtest rules, workspace docs"
 - [ ] **Step 1: Write scripts/convert_seeds.py**
 
 ```python
-"""One-shot: convert seeds_v2 JSON packs into style-kairos SKILL.md files."""
+"""One-shot: convert seeds_v2 JSON packs into style-gravit SKILL.md files."""
 from __future__ import annotations
 
 import json
@@ -1143,7 +1146,7 @@ STYLE_HEADER = """> **Scope: operator style, not market law.** These are the ope
 > conflict with an entry here, REPORT the conflict; do not silently defer.
 
 """
-ROOT = Path("dsh/skills/style-kairos")
+ROOT = Path("dsh/skills/style-gravit")
 
 
 def main() -> None:
@@ -1185,7 +1188,7 @@ If a JSON field name differs (inspect the files first: `python -c "import json; 
 
 ```bash
 python scripts/convert_seeds.py
-head -30 dsh/skills/style-kairos/doctrine/SKILL.md
+head -30 dsh/skills/style-gravit/doctrine/SKILL.md
 ```
 Expected: 39 doctrine sections, 6 signals, 21 lessons, each file opening with the style-scope header.
 
@@ -1247,7 +1250,7 @@ git rm -r -q seeds_v2
 ```bash
 python -m pytest -q
 git add dsh scripts/convert_seeds.py
-git commit -m "feat: dsh profile template and skills - mechanics plus style-kairos from seeds_v2"
+git commit -m "feat: dsh profile template and skills - mechanics plus style-gravit from seeds_v2"
 ```
 
 ---

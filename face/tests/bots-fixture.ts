@@ -12,12 +12,12 @@ export const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
  *  composition made there names this path instead (rebased to a `file:` URL). */
 export const PLUGIN_ABS = join(REPO, "face", "plugins", "bot.js");
 
-/** The repo's real `_template`, an inert `kairos`, and nothing else. */
+/** The repo's real `_template`, an inert `gravit`, and nothing else. */
 export async function populateBotsRoot(root: string): Promise<string> {
   await cp(join(REPO, "bots", "_template"), join(root, "_template"), { recursive: true });
-  await mkdir(join(root, "kairos"));
-  await writeFile(join(root, "kairos", "agent.cordis.yml"), "[]\n");
-  await writeFile(join(root, "kairos", "preset.yml"), "name: Kairos\ndescription: the principal agent\n");
+  await mkdir(join(root, "gravit"));
+  await writeFile(join(root, "gravit", "agent.cordis.yml"), "[]\n");
+  await writeFile(join(root, "gravit", "preset.yml"), "name: Gravit\ndescription: the principal agent\n");
   return root;
 }
 

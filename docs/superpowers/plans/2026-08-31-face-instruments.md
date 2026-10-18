@@ -661,13 +661,13 @@ test("instrument pages are registered as exact routes", () => {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Market — KAIROS</title>
+<title>Market — GRAVIT</title>
 <link rel="stylesheet" href="/client/chat.css">
 </head>
 <body class="inst-body">
 <main class="inst-wrap">
   <header class="inst-head">
-    <a class="inst-mark" href="/">KAIROS</a>
+    <a class="inst-mark" href="/">GRAVIT</a>
     <span class="inst-title">Market</span>
     <span id="asof" class="inst-note"></span>
     <span id="stamp" class="inst-note"></span>
@@ -859,13 +859,13 @@ git commit -m "feat(face): /market instrument page - tape, maturity rail, breadt
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Account — KAIROS</title>
+<title>Account — GRAVIT</title>
 <link rel="stylesheet" href="/client/chat.css">
 </head>
 <body class="inst-body">
 <main class="inst-wrap">
   <header class="inst-head">
-    <a class="inst-mark" href="/">KAIROS</a>
+    <a class="inst-mark" href="/">GRAVIT</a>
     <span class="inst-title">Account</span>
     <span id="stamp" class="inst-note"></span>
     <button id="refresh" class="inst-refresh" title="re-fetch">refresh</button>
@@ -1022,7 +1022,7 @@ git commit -m "feat(face): /account instrument page - summary, positions, orders
     for (const path of ["/market", "/account"]) {
       const page = await fetch(`${base}${path}`);
       assert.equal(page.status, 200, path);
-      assert.match(await page.text(), /KAIROS/);
+      assert.match(await page.text(), /GRAVIT/);
     }
     // data plumbing through a stub producer - fast, deterministic, no bed
     const stub = join(home, "stub.sh");

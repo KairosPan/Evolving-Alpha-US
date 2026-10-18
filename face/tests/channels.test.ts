@@ -521,11 +521,11 @@ test("routes: the listing carries channels, the ungrouped count, the archive set
 
 test("presetHintsOf: every head that names a preset, by session id; blank and absent are left out", () => {
   assert.deepEqual(presetHintsOf([
-    { sessionId: "room", cwd: "/c", agentPreset: "kairos" },
+    { sessionId: "room", cwd: "/c", agentPreset: "gravit" },
     { sessionId: "m1", cwd: "/c", agentPreset: "buffett" },
     { sessionId: "plain", cwd: "/c" },
     { sessionId: "blank", cwd: "/c", agentPreset: "" },
-  ]), { room: "kairos", m1: "buffett" });
+  ]), { room: "gravit", m1: "buffett" });
   assert.deepEqual(presetHintsOf([]), {});
 });
 
@@ -546,7 +546,7 @@ test("routes: the listing's presets come from the same merged heads the reconcil
     listSessions: () => listSessionHeads(
       async () => [
         { sessionId: "cold-bot", cwd: join(root, "strategies", "alpha"), agentPreset: "buffett" },
-        { sessionId: "re-pointed", cwd: root, agentPreset: "kairos" },
+        { sessionId: "re-pointed", cwd: root, agentPreset: "gravit" },
       ],
       () => [{ sessionId: "re-pointed", cwd: root, agentPreset: "speculator" }, { sessionId: "live-host", cwd: root }],
       () => { throw new Error("the durable listing did not fail here"); },

@@ -212,7 +212,7 @@ test("native subagents: continuable and foreground calls, parent notices, read-o
     assert.equal(recorded.meta.origin, "subagent");
     assert.equal(recorded.meta.parentSession, parentId);
     assert.equal(recorded.meta.cwd, root);
-    assert.equal(recorded.meta.agentPreset, "kairos");
+    assert.equal(recorded.meta.agentPreset, "gravit");
     assert.equal(recorded.meta.delegationDepth, 1);
     assert.ok(recorded.events.some((event) => event.type === "sandbox/mode" && JSON.stringify(event.data).includes('"source":"delegation"') && JSON.stringify(event.data).includes('"mode":"read-only"')));
     assert.ok(recorded.events.some((event) => event.type === "approval/policy" && JSON.stringify(event.data).includes('"source":"delegation"') && JSON.stringify(event.data).includes('"policy":"never"')));
@@ -288,7 +288,7 @@ test("native subagents: continuable and foreground calls, parent notices, read-o
     assert.equal(countAgents(), coldCount, "cold catalog and history remain read-only");
     const coldSend = await rawRpc("subagents/prompt", promptChild(address, "FOLLOWUP_COLD"));
     assert.equal(coldSend.ok ? undefined : coldSend.error.code, "subagent/parent-unavailable");
-    assert.equal((await rpc<{ sessionId: string }>("session/create", { request: { sessionId: parentId, cwd: root, agentPreset: "kairos" } })).sessionId, parentId);
+    assert.equal((await rpc<{ sessionId: string }>("session/create", { request: { sessionId: parentId, cwd: root, agentPreset: "gravit" } })).sessionId, parentId);
     assert.equal((await catalogOf(parentId)).parentAvailable, true);
     await followup("FOLLOWUP_COLD_RESUMED");
     const restoredParent = ctx.agents.get(parentId)!;

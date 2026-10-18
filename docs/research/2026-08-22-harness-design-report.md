@@ -1,9 +1,9 @@
-# Harness Design Report: DeepSeek Harness × Prime Agent × the SoniaKairos Charter
+# Harness Design Report: DeepSeek Harness × Prime Agent × the Previous Product's Charter
 
 **Date:** 2026-08-22, rev. 2026-08-23 (added §6, the fused-stack reading, and candidate S1) ·
 **Status:** discussion input for charter amendments — nothing here is landed.
 **Inputs (frozen surveys, same directory):** `2026-08-22-deepseek-harness-dsh-survey.md` (8-reader sweep: landing page, repo docs, 33 subsystem pages, generated catalogs, full packages map, and the 88-page Cordis paper) · `2026-08-22-prime-agent-survey.md` (3-reader sweep: blog + full repo docs + RLM paper in full + the pi foundation).
-**Charter under discussion:** `Evolving-Agent-Design-SoniaKairos.md`.
+**Charter under discussion:** the previous product's charter, retired with it.
 
 ---
 
@@ -53,12 +53,12 @@ site.
 
 ## 2. The three designs at a glance
 
-| Dimension | DeepSeek Harness (dsh) | Prime Agent | SoniaKairos charter |
+| Dimension | DeepSeek Harness (dsh) | Prime Agent | previous product's charter |
 |---|---|---|---|
-| One-line identity | "Everything is a plugin. Every run is traceable." | "A self-improving RLM agent" — the Continual Harness paper, productionized | "Kairos acts, Sonia evolves" — governance-first evolving agent |
+| One-line identity | "Everything is a plugin. Every run is traceable." | "A self-improving RLM agent" — the Continual Harness paper, productionized | "Gravit acts, the meta-agent evolves" — governance-first evolving agent |
 | Substrate | Cordis kernel (vendored, formally specified) | pi (TypeScript harness) + persistent IPython kernel | own kernel (`alpha/*`), Continual Harness paper as doctrine source |
 | Core abstraction | microkernel: kernel owns only mount/unmount, DI, typed events, reversible effects; *everything* else (loop included) is a plugin | everything is programmatic: one tool (persistent IPython REPL); tools, sub-agents, context ops are function calls; context is a variable | seven decoupled components; Harness = Kernel ∪ Body; evolution rewrites Body only |
-| Who modifies the harness | the operator, via layered declarative config (profiles/bundles/patches); Creator preset ≈ shell access, and says so | **the agent itself, live, ungated** — `/refine` applies CRUD to H=(ρ,G,K,M) from its own trajectory; auto-refine behind a cheap LLM gate | Sonia proposes → user approves → Applier lands; or user-direct edit through the same Applier; Kairos: never |
+| Who modifies the harness | the operator, via layered declarative config (profiles/bundles/patches); Creator preset ≈ shell access, and says so | **the agent itself, live, ungated** — `/refine` applies CRUD to H=(ρ,G,K,M) from its own trajectory; auto-refine behind a cheap LLM gate | the retired meta-agent proposes → user approves → Applier lands; or user-direct edit through the same Applier; Gravit: never |
 | Immutable stratum | Cordis kernel + host-plane composition rules | base system prompt (built in code; single choke point `validateEdit` rejects edits to it) | Immutable Kernel enumeration (mechanisms + governed data rows), kernel prompt stub |
 | Self-mod evidence trail | n/a (operator acts) | RefinementEvent {trigger, changes, evidence, outcome} + before/after snapshots + rollback by ID | deliberation packet (behavior diff + replay fidelity + cost + rollback point + kernel-generated delta declarations) + hash-chained EditLog |
 | Traceability | **"Model-visible means logged"** — runtime-asserted; one append-only event stream powers resume/fork/search/replay; token-level chunk fidelity | append-only JSONL session *tree* (branching via leaf pointers in one file); kernel state snapshots; child usage folded back into parent turns | append-only session log, hash-chained, principal-origin-stamped; context window = per-call projection |
@@ -243,7 +243,7 @@ Continual Harness paper (arXiv 2605.09998, Karten et al.)
         ├─► Prime Agent (same authors) ──── capability-first productionization:
         │      substrate: pi + IPython       live ungated /refine, H CRUD'd in-trajectory
         │
-        └─► SoniaKairos charter ──────────── governance-first response:
+        └─► the previous charter ─────────── governance-first response:
                substrate: own kernel          H = Body, written only through the Applier,
                                               proposer ≠ approver ≠ executor
 
@@ -339,7 +339,7 @@ guarantees — it has to be imposed from outside the loop that produces the edit
 reading therefore doesn't dilute the charter; it isolates, layer by layer, exactly what the
 charter contributes and why no amount of better engineering below makes it redundant.
 
-### 6.3 SoniaKairos mapped onto the fused stack
+### 6.3 The previous product mapped onto the fused stack
 
 | Layer | Our instance today | Delta the fusion suggests |
 |---|---|---|
@@ -347,7 +347,7 @@ charter contributes and why no amount of better engineering below makes it redun
 | L1 | seams in practice (`make_client`, `make_source`, connector registry), PIT-guarded sources, session log + hash chain + origin stamps | A (runtime-assert model-visible ⟺ logged + log the rendered request); D (seam vocabulary in the placement tests) |
 | L2 | converse/arena tiered tools; context assembly is kernel code (fixed point 5) | P6 (read-only programmatic view over `getEvents()` — RLM-class leverage as world-capability, zero self-authority) |
 | L3 | the Body six components, mutation grammars, "declarative only" C/W/A — the same ledger-not-execution-engine discipline Prime Agent states | B (capability manifests — the load-bearing import); C (satisfaction semantics); P4 (smallest relevant edit) |
-| L4 | **the charter itself** — Sonia proposes → user approves → Applier lands; provenance, curation, spend, scope checks | P1 (Factorio as evidence), P2 (independent reinvention note), P3 (A2A defaults) |
+| L4 | **the charter itself** — the retired meta-agent proposes → user approves → Applier lands; provenance, curation, spend, scope checks | P1 (Factorio as evidence), P2 (independent reinvention note), P3 (A2A defaults) |
 
 Two structural readings fall out. First, our deliberate coarseness at L0 is not a gap: at
 single-user session cadence, session-boundary reconcile buys confluence without hot-swap
@@ -452,7 +452,7 @@ S1 from the fused reading (§6). Ordered by recommendation strength within each 
   mechanism, it is governance — but the revisit entry should name the donor. (P1 below adds
   counter-evidence to weigh at revisit time.)
 - **G — optional. Face-level intent vs enforcement.** Any UI bundling of security knobs
-  (future sonia/workbench permission presets) records intent and writes through each knob's
+  (future meta-agent/workbench permission presets) records intent and writes through each knob's
   canonical setter; "custom" is derived-only, never an enforcement path. Charter one-liner in
   *Operations*, or Backend-Design only.
 
@@ -476,13 +476,13 @@ S1 from the fused reading (§6). Ordered by recommendation strength within each 
   point 2) noting the convergence; it strengthens the claim that this shape is a fixed point of
   the design space, not our idiosyncrasy.
 - **P3 — adopt. A2A hardening defaults, recorded now for the deferred outward phase.** When
-  Kairos's A2A endpoint goes live: (i) topology restriction as default posture (Prime Agent's
+  Gravit's A2A endpoint goes live: (i) topology restriction as default posture (Prime Agent's
   nuclear-family rule — reach limited to parent/siblings/children; no broadcast primitive at
   all); (ii) counterparty identity assigned by the platform intake, never self-asserted
   (already implied by our stamp contract — make it explicit for `a2a-party`); (iii) hard
   per-channel size/queue/rate caps as kernel quota rows. Lands as three bullets in *The
   External Channel*'s deferred tenant-machinery block — nearly free now, expensive to retrofit.
-- **P4 — adopt (one line). "Smallest relevant edit" as proposal doctrine.** Sonia's triage
+- **P4 — adopt (one line). "Smallest relevant edit" as proposal doctrine.** The retired meta-agent's triage
   already cites charter clauses; add that a proposal should be the *minimal* diff its evidence
   supports — large rewrites need proportionally broader cited evidence. We have atomic groups
   and re-derivation but never stated minimality. Lands in *Deliberation packet* or *Triage*.
@@ -497,7 +497,7 @@ S1 from the fused reading (§6). Ordered by recommendation strength within each 
   split.** RLM moves context assembly *into the model's action space* — in tension with fixed
   point 5 (assembly is kernel code) if adopted wholesale, but its safe core is separable: a
   **read-only programmatic view over `getEvents()`** (slice/grep/transform, results as
-  variables) is a world-capability tool, not self-authority, and would give Kairos RLM-class
+  variables) is a world-capability tool, not self-authority, and would give Gravit RLM-class
   long-horizon leverage with zero governance change. Record as a located-donor note under
   *Session Is Not the Context Window* ("the loop can transform events however it wants" —
   donor for eventually letting the *agent* request transformations); no build commitment.

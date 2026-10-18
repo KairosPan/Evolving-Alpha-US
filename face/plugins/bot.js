@@ -1,6 +1,6 @@
 // face/plugins/bot.js
 /**
- * `kairos-bot` — the one plugin every bot composition mounts.
+ * `gravit-bot` — the one plugin every bot composition mounts.
  *
  * A bot is a dsh agent preset the FACE declares (src/bot-presets.ts): dsh
  * 0.2.0 scans no directory and reads no preset file (NEW
@@ -19,9 +19,9 @@
  * — so they cover every agent joined to that revision and nothing else.
  * dsh-subagent composes a child the same way. The persona section is named
  * `deployment:persona-prefix` at the central prefix order: a scoped section of
- * that name SHADOWS the deployment's global prefix, which is Kairos's persona
+ * that name SHADOWS the deployment's global prefix, which is Gravit's persona
  * (NEW packages/core/system-prompt/src/index.ts:125-127, 179, 251-253), as
- * 0.1.1's `deployment:persona` did. Kairos's `personaSuffix` is not touched;
+ * 0.1.1's `deployment:persona` did. Gravit's `personaSuffix` is not touched;
  * the face sets none (PLAN S1).
  *
  * ACTIVATION IS EAGER. dsh 0.2.0 mounts a preset when it is DECLARED, not at
@@ -48,14 +48,14 @@
  * `mcp__…__place_order` is excluded the same way, by OMISSION from the allow
  * list, exactly as a deny list would have to name it.
  */
-export const name = "kairos-bot";
+export const name = "gravit-bot";
 export const inject = ["systemPrompt", "tools"];
 
 /** dsh-system-prompt's `PERSONA_PREFIX_SECTION` (NEW
  *  packages/core/system-prompt/src/index.ts:179), restated rather than imported
  *  because this file imports nothing (see the header). tests/bot-plugin.test.ts
  *  pins it to the installed constant, so a rename upstream fails a test instead
- *  of silently turning the bot's persona into a SECOND persona beside Kairos's. */
+ *  of silently turning the bot's persona into a SECOND persona beside Gravit's. */
 export const PERSONA_PREFIX_SECTION = "deployment:persona-prefix";
 
 /** The dsh system prompt is a strict `{{…}}` template with no escape; a bot's
@@ -110,7 +110,7 @@ const globalNames = (ctx) => new Set(ctx.tools.schemas().map((schema) => schema.
 
 export function apply(ctx, config) {
   const problem = validateBotConfig(config);
-  if (problem !== undefined) throw new Error(`kairos-bot: ${problem}`);
+  if (problem !== undefined) throw new Error(`gravit-bot: ${problem}`);
   /** The allow list in force, as a key; null until the first mask lands. */
   let applied = null;
   /** The disposer that lifts the mask in force. */
@@ -127,7 +127,7 @@ export function apply(ctx, config) {
      * MCP reconnect, or every tool unregistering while the face shuts down -
      * and a line per bot there would be noise, not a diagnosis. */
     if (applied === null && missing.length > 0) {
-      ctx.logger?.warn?.(`kairos-bot: allow names not (yet) in this tree: ${missing.join(", ")}`);
+      ctx.logger?.warn?.(`gravit-bot: allow names not (yet) in this tree: ${missing.join(", ")}`);
     }
     /* Never lift to "no mask": when every allowed tool is gone the mask in
      * force stays, naming tools that no longer exist - which admits nothing. */
@@ -153,7 +153,7 @@ export function apply(ctx, config) {
     old?.();
   };
   sync();
-  if (applied === null) throw new Error("kairos-bot: none of the allowed tools exist in this tree; the bot would have no hands at all");
+  if (applied === null) throw new Error("gravit-bot: none of the allowed tools exist in this tree; the bot would have no hands at all");
   ctx.effect(() => ctx.systemPrompt.section({
     name: PERSONA_PREFIX_SECTION,
     order: ctx.systemPrompt.getSectionOrder("DEPLOYMENT_PERSONA_PREFIX"),
@@ -175,7 +175,7 @@ export function apply(ctx, config) {
       try {
         sync();
       } catch (error) {
-        ctx.logger?.warn?.(`kairos-bot: the tool mask could not follow a tool change; the previous mask stays in force: ${error instanceof Error ? error.message : String(error)}`);
+        ctx.logger?.warn?.(`gravit-bot: the tool mask could not follow a tool change; the previous mask stays in force: ${error instanceof Error ? error.message : String(error)}`);
       }
     }, 0);
     /* A queued re-expansion is never a reason for the process to stay up. */

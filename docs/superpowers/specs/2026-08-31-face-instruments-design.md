@@ -1,7 +1,7 @@
 # face v2 — /market and /account instrument pages (real data, light minimal)
 
 **Date:** 2026-08-31 · **Status:** approved direction, spec for implementation
-**Authority:** mechanism authority for this increment; `Kairos-Design.md` outranks on intent;
+**Authority:** mechanism authority for this increment; `Gravit-Design.md` outranks on intent;
 the v1 face spec (`2026-08-30-face-chat-light-design.md`) governs everything it already covers.
 Design lineage: the R2 instrument prototypes (`docs/design/prototypes/r2/{market,account}.html`)
 are the content architecture; the operator chose **light-minimal unified** (chat-light tokens)

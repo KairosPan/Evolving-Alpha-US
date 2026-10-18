@@ -1,4 +1,4 @@
-# Copy to ../.env.ifind, enter values locally, export it, then restart Kairos.
+# Copy to ../.env.ifind, enter values locally, export it, then restart Gravit.
 # Do not put credentials in browser JavaScript or commit the configured file.
 IFIND_ACCESS_TOKEN=
 # Alternatively, supply a refresh token instead of an access token:

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  STORAGE_KEY, filterWatchlist, normalizeAsset, number, percent, price, quoteTime,
+  LEGACY_STORAGE_KEY, STORAGE_KEY, filterWatchlist, normalizeAsset, number, percent, price, quoteTime,
   readWatchlist, saveWatchlist, signed, sortWatchlist,
 } from "../client/market-model.js";
 
@@ -9,14 +9,19 @@ const us = normalizeAsset({ market: "us", symbol: "BTC", name: "Bitcoin ETF", ex
 const cn = normalizeAsset({ market: "cn", symbol: "000001", name: "平安银行", aliases: ["Ping An Bank"] })!;
 const crypto = normalizeAsset({ market: "crypto", symbol: "BTC/USD", name: "比特币", aliases: ["Bitcoin"] })!;
 
-function memory(initial: string | null = null) {
-  let value = initial;
+/** A two-key store: the watchlist key and its pre-rename key. Saves may only ever
+ *  write the new key; reads may ask for either. */
+function memory(initial: string | null = null, legacy: string | null = null) {
+  const values = new Map<string, string>();
+  if (initial !== null) values.set(STORAGE_KEY, initial);
+  if (legacy !== null) values.set(LEGACY_STORAGE_KEY, legacy);
   let writes = 0;
   return {
-    get value() { return value; },
+    get value() { return values.get(STORAGE_KEY) ?? null; },
+    get legacy() { return values.get(LEGACY_STORAGE_KEY) ?? null; },
     get writes() { return writes; },
-    getItem(key: string) { assert.equal(key, STORAGE_KEY); return value; },
-    setItem(key: string, next: string) { assert.equal(key, STORAGE_KEY); value = next; writes += 1; },
+    getItem(key: string) { assert.ok(key === STORAGE_KEY || key === LEGACY_STORAGE_KEY, key); return values.get(key) ?? null; },
+    setItem(key: string, next: string) { assert.equal(key, STORAGE_KEY); values.set(key, next); writes += 1; },
   };
 }
 
@@ -139,4 +144,30 @@ test("quote timestamps distinguish instants, dates and unspecified timezone with
   assert.match(local, /GMT/);
   assert.match(local, /（本地）$/);
   assert.equal(quoteTime("2026-09-15T10:30:00-04:00"), local);
+});
+
+test("a list saved under the pre-rename key is read until the first save, which writes only the new key", () => {
+  assert.equal(STORAGE_KEY, "gravit.market.watchlist.v1");
+  assert.equal(LEGACY_STORAGE_KEY, "kairos.market.watchlist.v1");
+  const old = JSON.stringify({ version: 1, items: [us, cn] });
+  const storage = memory(null, old);
+  assert.deepEqual(readWatchlist(storage), { items: [us, cn], error: null });
+  assert.equal(storage.writes, 0);
+  assert.equal(saveWatchlist(storage, [crypto]), null);
+  assert.deepEqual(readWatchlist(storage), { items: [crypto], error: null });
+  assert.equal(storage.legacy, old, "the pre-rename entry is never rewritten");
+});
+
+test("the new key wins whenever it exists, even holding an empty list", () => {
+  const storage = memory(JSON.stringify({ version: 1, items: [] }), JSON.stringify({ version: 1, items: [us] }));
+  assert.deepEqual(readWatchlist(storage), { items: [], error: null });
+});
+
+test("a malformed pre-rename entry is reported and left untouched", () => {
+  const storage = memory(null, "invalid JSON");
+  const loaded = readWatchlist(storage);
+  assert.deepEqual(loaded.items, []);
+  assert.ok(loaded.error);
+  assert.equal(storage.legacy, "invalid JSON");
+  assert.equal(storage.writes, 0);
 });

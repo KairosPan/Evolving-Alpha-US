@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KAIROS · LANDING — R2</title>
+<title>GRAVIT · LANDING — R2</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2305070b'/%3E%3Cpath d='M8 2 L11 8 L8 14 L5 8 Z' fill='%23c8a552'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="shell.css">
 <style>
@@ -164,7 +164,7 @@
 
 <header class="masthead">
   <div class="wrap mast-top">
-    <a class="wordmark" href="landing.html"><span class="dia" aria-hidden="true"></span>KAIROS</a>
+    <a class="wordmark" href="landing.html"><span class="dia" aria-hidden="true"></span>GRAVIT</a>
     <span class="facename">LANDING</span>
     <span class="spacer"></span>
     <span class="seg">as of <b id="k-asof" class="mono">—</b></span>
@@ -188,10 +188,10 @@
   <section class="hero">
     <div class="nameplate settle">
       <p class="kicker">A single-operator trading-research observatory</p>
-      <h1>KAIROS</h1>
+      <h1>GRAVIT</h1>
       <div class="plate-rule" aria-hidden="true"><hr class="rule"><span class="dia"></span><hr class="rule"></div>
       <p class="lede">One agent at the instruments; one operator holding every key.
-      Kairos works a three-deck bench — <em>point-in-time market data</em>, a <em>strategy
+      Gravit works a three-deck bench — <em>point-in-time market data</em>, a <em>strategy
       arena under git</em>, and a <em>paper account behind two gates</em> — researching what
       the operator then judges. Every panel on this bench is a numbered entry, signed by the
       function that produced it.</p>
@@ -237,7 +237,7 @@
           <div class="num">P·II<small>teaching</small></div>
           <div><h3>The operator is the only teacher.</h3>
           <p>Trading style lives in an operator-owned pack. When research conflicts with a
-          style entry, Kairos <b>reports the conflict</b> — never silently defers, never
+          style entry, Gravit <b>reports the conflict</b> — never silently defers, never
           silently overrides.</p></div>
         </article>
         <article class="principle">
@@ -264,10 +264,10 @@
     </div>
     <div class="signed-rule settle d2">
       <hr class="rule">
-      <a class="sig" href="#" onclick="return false" title="raw ▸ Kairos-Design.md">
+      <a class="sig" href="#" onclick="return false" title="raw ▸ Gravit-Design.md">
         <span class="sig-mono" aria-hidden="true">KD</span>
         <span class="sig-body">
-          <span class="sig-fn">Kairos-Design.md</span>
+          <span class="sig-fn">Gravit-Design.md</span>
           <span class="sig-raw">the charter — on intent it outranks the spec</span>
         </span>
       </a>
@@ -335,9 +335,9 @@
 
 <footer class="foot-band">
   <div class="wrap foot">
-    <span>KAIROS · <b>LANDING</b> — round-2 face prototype · zero authority · read-only</span>
+    <span>GRAVIT · <b>LANDING</b> — round-2 face prototype · zero authority · read-only</span>
     <span class="spacer"></span>
-    <span>intent · <b>Kairos-Design.md</b></span>
+    <span>intent · <b>Gravit-Design.md</b></span>
     <span>mechanism · <b>the skeleton spec &amp; code</b></span>
   </div>
 </footer>
@@ -347,7 +347,7 @@
 /* ── shell fill — shared across all R2 faces ── */
 (function(){
   "use strict";
-  var D = window.KAIROS_DATA || null;
+  var D = window.GRAVIT_DATA || null;
   if(!D) return; // dashes stand: no reading, never fake
   function t(id, s){ var el = document.getElementById(id); if(el) el.textContent = s; }
   t("k-asof", D.as_of);
@@ -370,7 +370,7 @@
 /* ── page: signatures, tile readouts, the bearing dial ── */
 (function(){
   "use strict";
-  var D = window.KAIROS_DATA || null;
+  var D = window.GRAVIT_DATA || null;
   if(!D) return; // no data → the dial mount stays empty, dashes stand
   var $ = function(id){ return document.getElementById(id); };
   function txt(id, s){ var el=$(id); if(el) el.textContent=s; }

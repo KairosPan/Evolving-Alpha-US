@@ -1,4 +1,4 @@
-"""alpaca_kit.integrity — the one hashing utility (kairos-mining §6 order-3)."""
+"""alpaca_kit.integrity — the one hashing utility."""
 import hashlib
 from alpaca_kit.integrity import sha256_bytes, sha256_file, canonical_json, sha256_canonical_json
 

@@ -101,7 +101,7 @@ test("invalid UTF-8 is unavailable, including an incomplete character in a compl
 test("bot id validation refuses path traversal and reserved or malformed ids", async (t) => {
   const f = await fixture(t);
   await writeFile(f.file, "private notes");
-  for (const id of ["../probe", "probe/..", "/probe", "probe\\..", "", "kairos", "_template", "Probe", "a".repeat(65)]) {
+  for (const id of ["../probe", "probe/..", "/probe", "probe\\..", "", "gravit", "_template", "Probe", "a".repeat(65)]) {
     const snapshot = await readBotJournal(f.root, id);
     assert.equal(snapshot.status, "unavailable", id);
     assert.equal(snapshot.text, "", id);

@@ -1,11 +1,11 @@
-/** Kairos's deployment persona — the order-0 `deployment:persona-prefix`
+/** Gravit's deployment persona — the order-0 `deployment:persona-prefix`
  * section of every prompt the face assembles, set as `personaPrefix` on
  * dsh-base's `system-prompt` row by the patch `composeFace` pushes (boot.ts).
  * dsh 0.2.0 renamed the key and the section (`persona` / `deployment:persona`
  * at 0.1.1; NEW packages/core/system-prompt/src/index.ts:125-127, 179,
  * 409-436; commit 40792330c0) without moving the slot: order 0, after the
  * harness identity line. Before this file existed the row's persona was `''`
- * and the model was never told it was Kairos (charter D11).
+ * and the model was never told it was Gravit (charter D11).
  *
  * The renderer is STRICT (NEW packages/core/system-prompt/src/index.ts:
  * 268-279, 325-347: complete `{{…}}` groups are interpreted against the
@@ -54,6 +54,6 @@ export function validatePersonaTemplate(text: string): string | undefined {
 export function readPersona(path: string): string {
   const text = readFileSync(path, "utf8");
   const problem = validatePersonaTemplate(text);
-  if (problem !== undefined) throw new Error(`kairos-face: ${path}: ${problem}`);
+  if (problem !== undefined) throw new Error(`gravit-face: ${path}: ${problem}`);
   return text.trim();
 }

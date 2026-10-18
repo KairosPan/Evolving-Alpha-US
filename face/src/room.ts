@@ -12,7 +12,7 @@
  * outside its generated catalog, so there are no `room/*` events. Membership
  * is the member's own header (`parentSession` + `agentPreset`); the dispatch is
  * the tool's own `tool/call`/`tool/result`; an answer is a `user/message` in
- * Kairos's session with `source.kind === 'room'`; the member's cursor is the
+ * Gravit's session with `source.kind === 'room'`; the member's cursor is the
  * delta message in ITS log.
  *
  * `kind: 'room'` is a native v4 message source (dsh 0.2 admits any non-empty
@@ -31,12 +31,12 @@
  * through `eventsOf`/`unreadableLog`, so a later pin that drops it too fails
  * closed and says so instead of iterating `undefined`.
  *
- * HOW AN ANSWER REACHES KAIROS (deviation 2): appended straight onto the room
+ * HOW AN ANSWER REACHES GRAVIT (deviation 2): appended straight onto the room
  * session's log with `surfaceOp: 'append'` - visible at once, seq now, in the
  * next request's history - but ONLY while the room log is quiet (no open turn),
  * because a user message dropped between an assistant tool-call message and
  * its tool result breaks the running request. Otherwise it waits in the room's
- * outbox for the next `turn/end`. Kairos is woken only by the round-end
+ * outbox for the next `turn/end`. Gravit is woken only by the round-end
  * `followup`, issued in the same synchronous block as the last flush.
  *
  * WHAT THIS IS NOT. Dispatch grants nothing: a member's tools are its mask,
@@ -52,7 +52,7 @@ import { createUserMessage, type ReasoningEffortId } from "@deepseek-ai/dsh-llm"
 import type { BotRow } from "./bots.ts";
 import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 import { FORBIDDEN, HttpError, readBody } from "./http.ts";
-import { DEFAULT_PRESET } from "./overlay.ts";
+import { isHostPreset } from "./overlay.ts";
 import { readRosters } from "./roster.ts";
 import { registerRoomProjection } from "./room-projection.ts";
 import { BRIEF_SCHEMA, formatDiscussionSummary, parseMemberView, type DiscussionSummary, type RoomBrief } from "./room-contract.ts";
@@ -65,7 +65,7 @@ import {
 import { SESSION_ID_RE } from "./sessions.ts";
 import type { RouteRegistrar } from "./static.ts";
 
-const BIN = "kairos-face";
+const BIN = "gravit-face";
 
 /* ---------- what the engine reads of the tree, stated structurally ---------- */
 
@@ -116,7 +116,7 @@ export interface PersistedSnapshotLike { readonly header: PersistedHeaderLike }
 /** The session domain's resolve result (NEW packages/api/session-controller/src/agent.ts:61-66):
  * the live agent, or a `RemoteError` with a slash-namespaced `code`. */
 export type ResolveAgentResultLike = { readonly agent: AgentLike } | { readonly error: { readonly code?: string; readonly message: string } };
-/** dsh-tools' `ToolRunContext`, narrowed: the calling agent and Kairos's TURN signal (which the round must not run on). */
+/** dsh-tools' `ToolRunContext`, narrowed: the calling agent and Gravit's TURN signal (which the round must not run on). */
 export interface RoomToolExec { agent?: AgentLike; signal: AbortSignal }
 /** dsh-tools' `ToolDefinition`, stated the way agents.ts states it. */
 export interface RoomToolDefinition {
@@ -368,11 +368,11 @@ export class RoomEngine {
       const message = event.data as MessageLike | undefined;
       if (message?.source?.kind !== "user") return;
       /* `say` posts the operator's `@` and resets the caps in the same breath,
-       * but when Kairos is mid-turn that message waits in the outbox and lands
-       * on the log a turn LATER - after a round Kairos dispatched in between.
+       * but when Gravit is mid-turn that message waits in the outbox and lands
+       * on the log a turn LATER - after a round Gravit dispatched in between.
        * Log order is not wall order here, so an engine-posted message is never
        * read back as a fresh send: it would supersede a round that in fact came
-       * after it and hand Kairos a second set of caps. */
+       * after it and hand Gravit a second set of caps. */
       if (typeof message.id === "string" && room.posted.delete(message.id)) return;
       queueMicrotask(() => this.guard(room, "record the operator's send", () => this.onOperatorSend(room)));
     }
@@ -536,7 +536,7 @@ export class RoomEngine {
         } catch (err) {
           /* Never fall back to a fresh member here: that would fork the voice's
            * memory silently. The turn fails with the reason (the round-end text
-           * carries it to Kairos) and the log line tells the operator what to do. */
+           * carries it to Gravit) and the log line tells the operator what to do. */
           const reason = memberResumeFailure(bot.id, existing, err);
           this.log(`${reason} (channel ${room.channel.name})`);
           throw new Error(reason);
@@ -684,7 +684,7 @@ export class RoomEngine {
   }
 
   /**
-   * Start a round for Kairos and return at once (the tool result tells the model
+   * Start a round for Gravit and return at once (the tool result tells the model
    * to end its turn). Refuses on the round cap and while a round is unsettled.
    */
   async dispatch(agentId: string, channel: RoomChannel, args: DispatchArgs, roster: readonly RosterBot[]): Promise<{ round: number; remainingRounds: number; notCalled: string[]; notes: string[] }> {
@@ -747,7 +747,7 @@ export class RoomEngine {
     const drive = async (member: Member, trig: TurnTrigger): Promise<void> => {
       /* A member turn that THROWS (an unreadable log, say) is that member's
        * failed turn with its reason - never a rejected round, which would skip
-       * `finishRound` and leave Kairos asleep with no round-end at all. */
+       * `finishRound` and leave Gravit asleep with no round-end at all. */
       const result = await this.enqueue(member, () => this.runMemberTurn(room, member, roster, trig, brief))
         .catch((err: unknown): MemberTurnResult => ({ record: { bot: member.bot, name: member.name, sessionId: member.agent.id, state: "failed", reason: errText(err) }, text: "" }));
       round.turns.push(result.record);
@@ -833,7 +833,7 @@ export class RoomEngine {
    * `sessionController.resolveAgent` resumes it with the model selection and
    * preset join the session domain gives every session and changes nothing
    * else (NEW packages/api/session-controller/src/index.ts:215-221; agent.ts:147-230),
-   * so the face never composes Kairos's session itself. Its failures are
+   * so the face never composes Gravit's session itself. Its failures are
    * results, not throws; each becomes the route's status with dsh's reason. */
   private async ensureLive(sessionId: string): Promise<AgentLike> {
     const live = this.deps.ctx.agents.get(sessionId);
@@ -851,7 +851,7 @@ export class RoomEngine {
 
   /**
    * The operator's `@`: resolved against the roster deterministically, appended
-   * to the room as the operator's own message (never a prompt - Kairos sees it
+   * to the room as the operator's own message (never a prompt - Gravit sees it
    * on its next wake), and each named member turns on the standard delta. A
    * member mid-turn takes it after that turn. Resets the caps like every send.
    */
@@ -949,7 +949,7 @@ export const dispatchDescription = (caps: RoomCaps): string =>
 
 /** Every preset this session is on record as: the header's creation value and,
  * when the tree has the `agentPreset` projection, the one it RUNS now - a
- * blank session re-selected to a bot keeps `kairos` in its frozen header
+ * blank session re-selected to a bot keeps `gravit` in its frozen header
  * (NEW packages/preset/agent-preset-registry/src/session.ts:1-15, 36-46). */
 function presetsOf(session: SessionLike, projections: RoomContextLike["sessionProjections"]): string[] {
   const out: string[] = [];
@@ -990,7 +990,7 @@ export function dispatchToolDefinition(engine: RoomEngine, deps: Pick<RoomDeps, 
       /* The 0.1.1 check read the header only. Both records are checked now and
        * EITHER naming a bot refuses - strictly narrower, never wider. The mask
        * already keeps `dispatch` out of a voice's roster; this is the second lock. */
-      if (presetsOf(agent.session, deps.ctx?.sessionProjections).some((preset) => preset !== DEFAULT_PRESET)) throw new Error("dispatch is Kairos's tool; a voice does not dispatch");
+      if (presetsOf(agent.session, deps.ctx?.sessionProjections).some((preset) => !isHostPreset(preset))) throw new Error("dispatch is Gravit's tool; a voice does not dispatch");
       const channel = await deps.channelFor(agent.session.header.cwd);
       if (channel === null) throw new Error("dispatch works in a channel session; this session is in no channel");
       const roster = await engine.rosterFor(channel);

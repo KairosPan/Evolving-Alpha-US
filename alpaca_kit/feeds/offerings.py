@@ -1,7 +1,7 @@
 # alpaca_kit.feeds.offerings.py
 #
 # EDGAR offering-lifecycle typed events + the source-agnostic dilution-overhang REDUCER (P5b; spec
-# docs/superpowers/specs/2026-07-13-p5b-shortinterest-offerings-design.md; design input: kairos-mining §3
+# docs/superpowers/specs/2026-07-13-p5b-shortinterest-offerings-design.md
 # "Dilution lifecycle as typed update events"). This EXTENDS corp_actions' dilution mechanism: today ANY
 # announced ATM/shelf/offering vetoes FOREVER (corp_actions.has_dilution_filing). Here an offering is an
 # `updates_since`-shaped append-only log of typed lifecycle events — announce / effective / withdrawn /

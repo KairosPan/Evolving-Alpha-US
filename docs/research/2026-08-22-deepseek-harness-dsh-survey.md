@@ -1,7 +1,7 @@
 # DeepSeek Harness (dsh) design survey — frozen input, 2026-08-22
 
 Eight-agent parallel deep-read of every public dsh design source, run 2026-08-22 as input to a
-charter (`Evolving-Agent-Design-SoniaKairos.md`) discussion. FROZEN INPUT: notes record what the
+discussion of the previous product's charter. FROZEN INPUT: notes record what the
 sources said on that date (dsh is in developer preview — "THERE WILL BE COMPATIBILITY-BREAKING
 CHANGES"); do not treat as current authority without re-reading the sources.
 

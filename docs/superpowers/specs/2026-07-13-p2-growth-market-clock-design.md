@@ -193,7 +193,7 @@ New:
 - `tests/scripts/test_calibrate_growth_clock.py` — pins the producer against a synthetic FakeSource tape.
 
 Changed (all NON-TCB — verified against `scripts/gen_tcb_lock.py::TCB_FILES`):
-- `alpha/regime/classifier.py` — **docstring drift fix only** (GCycle claims Refiner-editable thresholds that no edit path touches — kairos-mining §4.5); no logic change.
+- `alpha/regime/classifier.py` — **docstring drift fix only** (GCycle claims Refiner-editable thresholds that no edit path touches — design-mining §4.5); no logic change.
 - `alpha/guard/screen.py` — `screen_decision`/`GuardedPolicy` gain `vocabulary` + `track_history`; growth read branch.
 - `alpha/universe/universe.py` — `tape_breadth` helper (full-tape ±10% market breadth, screen-independent).
 - `alpha/state/builder.py` — `build_market_state` gains `market_counts` (decouples the clock/panic breadth from the candidate screen; default None = byte-identical).

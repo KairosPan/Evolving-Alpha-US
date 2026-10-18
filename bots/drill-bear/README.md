@@ -6,7 +6,7 @@ One directory = one bot = one dsh agent preset. Copied by the face's **New bot**
 
 | File | Owner | What |
 |---|---|---|
-| `agent.cordis.yml` | the face (GENERATED) | the composition dsh mounts: the `kairos-bot` plugin (persona + tool mask) and this bot's skill root |
+| `agent.cordis.yml` | the face (GENERATED) | the composition dsh mounts: the `gravit-bot` plugin (persona + tool mask) and this bot's skill root |
 | `preset.yml` | the operator, via the form | `name`, `description` — what the roster shows |
 | `SOUL.md` | the operator, via the form or the bot page | the persona SOURCE. The face copies it into the composition; a hand edit reaches nothing until the face saves it again |
 | `skills/` | the operator | this bot's stance pack, a dsh skill root: `skills/<skill>/SKILL.md` with `name` + `description` frontmatter |
@@ -15,4 +15,4 @@ One directory = one bot = one dsh agent preset. Copied by the face's **New bot**
 Rules: no `{{` anywhere in `SOUL.md` (the system prompt is a strict template with no escape);
 the mask in `agent.cordis.yml` is visibility, not authority — the sandbox and Gate 2 are the
 fences, and neither is containment.
-Kairos never edits anything under `bots/` (AGENTS.md).
+Gravit never edits anything under `bots/` (AGENTS.md).

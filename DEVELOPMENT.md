@@ -1,4 +1,4 @@
-# Kairos Workbench — Development Reference
+# Gravit Workbench — Development Reference
 
 **Status:** living, as-built · **Owner:** the operator · **Last full pass:** 2026-09-09 on
 `feat/rooms` @ `ce07925`. **Last reviewed:** 2026-09-30 on the `worktree-dsh-0.2.0-rc.2` branch
@@ -10,19 +10,19 @@ in a clean checkout; 654 face tests, 642 pass + 12 skipped without `FACE_SMOKE`,
 temporary subagents, the market watchlist and its live quotes) are named here by module and
 route; their operational depth is `face/README.md`'s, and they have had no full pass here.
 
-**Authority.** `Kairos-Design.md` (the charter) outranks this document on intent. This document
+**Authority.** `Gravit-Design.md` (the charter) outranks this document on intent. This document
 describes mechanism *as built*: where it disagrees with the code, the code is the fact and this
 document is the bug. The per-feature specs under `docs/superpowers/specs/` are decision history —
 each is frozen once its post-build amendments land — and this document is where their as-built
 truth is consolidated. `face/README.md` keeps the face's operational depth (run, profile, drills);
-this document points into it rather than repeating it. `AGENTS.md` is written for Kairos and
-`CLAUDE.md` for coding agents — but dsh's instruction loader hands Kairos both (§3.3).
+this document points into it rather than repeating it. `AGENTS.md` is written for Gravit and
+`CLAUDE.md` for coding agents — but dsh's instruction loader hands Gravit both (§3.3).
 
 **Citation rule.** Files and named symbols, not line numbers. The 2026-09-04 drift audit found
 line citations in `face/README.md` stale within days of being written; a symbol name survives an
 edit above it.
 
-**Two D-number series.** A bare `D<n>` is a debt of the charter (`Kairos-Design.md` §5). `PLAN
+**Two D-number series.** A bare `D<n>` is a debt of the charter (`Gravit-Design.md` §5). `PLAN
 D<n>` is an operator decision of the dsh 0.2.0-rc.2 re-host, numbered as the re-host plan and the
 code comments that cite it number them; the plan lived in the build session and is not in the
 repository, so §4.8 is where those decisions are recorded now.
@@ -51,14 +51,14 @@ external services on five hostnames — plus the market watchlist's quote and se
 ```
  browser (operator) ── http://127.0.0.1:3090/?token=… once, then a 30-day cookie ──────┐
                                                                                        │
- ┌─ kairos-face  (Node 22, `tsx src/main.ts`, cwd = repo root) ────────────────────────┴──┐
+ ┌─ gravit-face  (Node 22, `tsx src/main.ts`, cwd = repo root) ────────────────────────┴──┐
  │  hosts DeepSeek Harness (dsh 0.2.0-rc.2) IN-PROCESS from profile `face`                │
  │  ├─ dsh-base bundle: LLM (deepseek), sessions, storage + projection cache, tools       │
  │  │   (§3.6), sandbox, approvals, skills, the `/api` gateway (`typert-gateway`)         │
  │  ├─ face policy layer (§4.3): the 0.1.1 tool roster, egress and telemetry restored     │
- │  ├─ face overlay rows (twelve, §4.3): webserver · connection (sign-in) · api-remotes · │
+ │  ├─ face overlay rows (13, §4.3): webserver · connection (sign-in) · api-remotes ·     │
  │  │   file-upload · workspace · three Remote controllers · directory-picker ·           │
- │  │   ask-user · agent-preset-registry · preset-kairos                                  │
+ │  │   ask-user · agent-preset-registry · preset-gravit · preset-kairos                  │
  │  ├─ bots: each `bots/<id>/` declared as a dsh preset after boot (§3.7)                 │
  │  ├─ face routes: `/` (sign-in) `/market` `/account` `/client/*` `/data/*`              │
  │  ├─ Gate 2: armed inside boot's `prepare` (`armOrderGate`) on `tools/pre-execute` +   │
@@ -81,8 +81,8 @@ Three homes on disk:
 
 | Home | What lives there | Who writes |
 |---|---|---|
-| the repo root | code, `strategies/`, `dsh/` (the profile *template* and skill packs), `docs/`; also the session project directory and the sandbox workspace root | operator, coding agents, Kairos (in `strategies/`) |
-| `$DSH_HOME` (default `~/.dsh`) | `profiles/face/` (the installed profile; its `cordis.patch.yml` holds the operator's rows — and, once the operator adds it, `agent-default-model`: the provider, model id and reasoning effort Kairos runs with, §3.1, PLAN D2), `sessions/` (per session a 0.1.1 `session.jsonl.zstd` and/or, once 0.2.0 has write-opened it, `session.v4.jsonl.zstd` + `session.lock`), `storages/` (workspace registry; the projection cache, one record per session), `face/` (`archived.json`, `channels.json`, `roster.log`, `agents.json`), `.env`, `.credentials.yaml` (dsh's own key store, mode 0600; since 0.2.0 also the browser-session signing secret), `.anonymous-user-id`; `settings.yaml` is 0.1.1's settings file, which the face no longer reads (PLAN D1) | the operator (the patch file, keys) and the face — including the dsh plugins it hosts (`credentials-local`, `connection`, the session persistence and the storage chain) — for everything else |
+| the repo root | code, `strategies/`, `dsh/` (the profile *template* and skill packs), `docs/`; also the session project directory and the sandbox workspace root | operator, coding agents, Gravit (in `strategies/`) |
+| `$DSH_HOME` (default `~/.dsh`) | `profiles/face/` (the installed profile; its `cordis.patch.yml` holds the operator's rows — and, once the operator adds it, `agent-default-model`: the provider, model id and reasoning effort Gravit runs with, §3.1, PLAN D2), `sessions/` (per session a 0.1.1 `session.jsonl.zstd` and/or, once 0.2.0 has write-opened it, `session.v4.jsonl.zstd` + `session.lock`), `storages/` (workspace registry; the projection cache, one record per session), `face/` (`archived.json`, `channels.json`, `roster.log`, `agents.json`), `.env`, `.credentials.yaml` (dsh's own key store, mode 0600; since 0.2.0 also the browser-session signing secret), `.anonymous-user-id`; `settings.yaml` is 0.1.1's settings file, which the face no longer reads (PLAN D1) | the operator (the patch file, keys) and the face — including the dsh plugins it hosts (`credentials-local`, `connection`, the session persistence and the storage chain) — for everything else |
 | `data/` (gitignored) | `pit/2yr`, `pit/broad` (the PIT beds), `.screen_cache`, `.face_cache` | capture scripts; the two caches |
 
 Credentials: `.env.alpaca` and `.env.deepseek` are gitignored files at the repo root that the
@@ -361,8 +361,8 @@ which is prose only). The operator mounts the two rows above into `cordis.patch.
 `toolCallTimeoutMs: 300000` on the MCP row is required for cold screens. Both operator rows are
 unchanged and valid at 0.2.0-rc.2.
 
-The same file carries Kairos's default model. The face provides no `profileContext` (PLAN D1),
-so it reads no `$DSH_HOME/settings.yaml`, and without an `agent-default-model` row Kairos runs
+The same file carries Gravit's default model. The face provides no `profileContext` (PLAN D1),
+so it reads no `$DSH_HOME/settings.yaml`, and without an `agent-default-model` row Gravit runs
 dsh-base's `deepseek-official/deepseek-flash`. Nothing in the running face writes the default
 back either: `agentDefaultModel.saveSelection` needs a config editor, which only `profileContext`
 brings, so `session/selectModel` — a Remote the face client does not call — would change one
@@ -387,7 +387,7 @@ patches, which can override or disable it. It launches the separately installed
 response limit and uses a 120-second tool timeout. Startup failure is logged and
 does not stop the host (`failOnStartupError: false`: the row is ACTIVE either way). These vendor
 reads have no PIT guard. Since 0.2.0 an MCP server's `instructions` enter the system prompt as a
-`mcp:<serverName>` section with no switch — akshare-mcp sets them, so Kairos's prompt and every
+`mcp:<serverName>` section with no switch — akshare-mcp sets them, so Gravit's prompt and every
 bot's carry an `mcp:akshare` section — and instructions over 32 KiB fail the connection; stdio
 negotiation starts a probe process before the serving one, so each MCP server is spawned twice
 per connect. Installation, source limitations and the live-roster check are in `face/README.md`.
@@ -398,9 +398,9 @@ per connect. Installation, source limitations and the live-roster check are in `
 |---|---|---|
 | `dsh/skills/mechanics/backtest-rules` | operator; law, not style | the five rules, the bed-window table, warmup, the results-file contract |
 | `dsh/skills/mechanics/alpaca-kit-guide` | operator | MCP-vs-import split, the registration matrix, RAW, `announce_date := process_date`, bed and warmup dates, fail-soft `ok=false` |
-| `dsh/skills/style-kairos/doctrine` | operator; Kairos proposes in journal or conversation, never edits | 39 entries, 9 tagged `(red-line)` |
-| `dsh/skills/style-kairos/signals` | operator | six named setups |
-| `dsh/skills/style-kairos/lessons` | operator | 21 entries, 20 `(principle)`, one `(loss)` |
+| `dsh/skills/style-gravit/doctrine` | operator; Gravit proposes in journal or conversation, never edits | 39 entries, 9 tagged `(red-line)` |
+| `dsh/skills/style-gravit/signals` | operator | six named setups |
+| `dsh/skills/style-gravit/lessons` | operator | 21 entries, 20 `(principle)`, one `(loss)` |
 
 Every `SKILL.md` needs `name` + `description` frontmatter or dsh drops it silently. The three
 style packs were emitted once by `scripts/convert_seeds.py` from the retired `seeds_v2` JSON
@@ -409,7 +409,7 @@ findings never overrule them. Style yields to findings, but the conflict is repo
 
 ### 3.3 `AGENTS.md`
 
-The workspace map written for Kairos: the three layers, the PIT-guard rule (`replay_days` or
+The workspace map written for Gravit: the three layers, the PIT-guard rule (`replay_days` or
 wrap it yourself), the strategy directory contract and lifecycle, the `status.yaml` headline
 keys, the channel-name rule, the two bed windows with their failure modes and warmup dates, the
 never-edit list (`data/pit/`, installed profile copies, `docs/research/`).
@@ -417,7 +417,7 @@ never-edit list (`data/pit/`, installed profile copies, `docs/research/`).
 Discovery is dsh's, not ours: `dsh-agent-instructions` (the `agent-instructions` row `dsh-base`
 mounts, 64 KiB budget) looks for `AGENTS.md` **and `CLAUDE.md`** (plus `AGENTS.local.md` /
 `CLAUDE.local.md`) in every directory from the `.git` root down to the session's cwd, and for
-`$DSH_HOME/AGENTS.md`. So Kairos reads `CLAUDE.md` as well — an edit there changes Kairos's
+`$DSH_HOME/AGENTS.md`. So Gravit reads `CLAUDE.md` as well — an edit there changes Gravit's
 prompt — and in a channel session it also reads any `strategies/<name>/AGENTS.md` it wrote
 itself. The facts `AGENTS.md` shares with `CLAUDE.md` (beds, RAW, warmup) are repeated in
 `docs/backtest-rules.md`, both mechanics skills (`alpaca-kit-guide` carries the 2yr window and
@@ -446,7 +446,7 @@ malformed YAML, and does **not** validate the vocabulary — status is a badge, 
 Naming: the create box accepts `NAME_RE` — first code point a letter or digit, then letters,
 digits, combining marks, `_`, `-`, at most 41 code points, NFC-normalized; the browser folds
 whitespace runs to one dash before posting. `_template`, dot-leading and `__`-leading
-directories are never channels. Spaces stay refused on purpose: the name becomes a path Kairos
+directories are never channels. Spaces stay refused on purpose: the name becomes a path Gravit
 writes into shell by hand, and by the Trap above — a channel session's cwd is `strategies/<name>` —
 `cd` is the command it has to write, where two words are zsh's two-argument form (word 1 replaced by
 word 2 in `$PWD`), an error most of the time but exit 0 in the WRONG directory whenever the
@@ -470,7 +470,7 @@ trail" holds nothing for them yet (§10).
 | `scripts/smoke_alpaca.py` | manual live probe | `SYM start end`, keys + `[live]` |
 | `scripts/convert_seeds.py` | provenance of the style packs | not re-runnable |
 
-### 3.6 What Kairos can call
+### 3.6 What Gravit can call
 
 Everything below is registered tree-wide; only the MCP rows, `agent_<bin>` and `dispatch` are
 operator- or face-specific. The host roster is dsh-base's plus the face's policy layer (§4.3),
@@ -496,7 +496,7 @@ panel (`/data/plugins.json`).
 | `mcp__alpaca-kit__*` | the operator's MCP row | §2.7 registration matrix |
 | `mcp__akshare__*` | project `mcp-akshare` row | public A-share/other market queries, unguarded; check source errors and truncation |
 | `agent_<bin>` | face `agents.ts` | roster-gated per channel (§6.5) |
-| `dispatch` | face `room.ts` (`installRoom`) | Kairos's own: refused in any session whose header or `agentPreset` projection names a bot (§6.8) |
+| `dispatch` | face `room.ts` (`installRoom`) | Gravit's own: refused in any session whose header or `agentPreset` projection names a bot (§6.8) |
 
 Not tools, but in the same prompt: a connected MCP server's `instructions` (the `mcp:akshare`
 section, §3.1). The MCP resource tools and their prompt section are off by policy (PLAN D7).
@@ -504,7 +504,7 @@ section, §3.1). The MCP resource tools and their prompt section are off by poli
 ### 3.7 The bot directory contract
 
 `bots/<id>/` = `agent.cordis.yml` (GENERATED by `renderComposition`: two rows — the face-owned
-`kairos-bot` plugin, named by the relative path `../../face/plugins/bot.js` and carrying
+`gravit-bot` plugin, named by the relative path `../../face/plugins/bot.js` and carrying
 `persona` + `allow`, and `dsh-skill-filesystem` rooted at `./skills` with
 `includeDefaultRoots: false`), `preset.yml` (`name`, `description`, optional `order` — what the
 roster shows — and the face-only `model`), `SOUL.md` (the persona SOURCE the face copies into
@@ -524,8 +524,13 @@ preset's own. A `./`, `../` or absolute path row becomes an escaped absolute `fi
 `group: true` row rebases recursively, and a relative `customSkillDirs` entry of the
 skill-filesystem row becomes `bots/<id>/…` — a behaviour change: 0.1.1 resolved `./skills`
 against the process cwd, `face/`, so no bot ever scanned its own `skills/` (today those hold only
-a README). `bots/kairos` is the static `preset-kairos` overlay row (§4.3), built by the same
-`definitionFor`, so a missing or non-YAML `bots/kairos/agent.cordis.yml` refuses the compose.
+a README). `bots/gravit` is the static `preset-gravit` overlay row (§4.3), built by the same
+`definitionFor`, so a missing or non-YAML `bots/gravit/agent.cordis.yml` refuses the compose.
+A second static row, `preset-kairos`, declares the same definition under `kairos`, the agent's id
+before the 2026-10-08 rename. Sessions created before it persist that id, and dsh refuses to
+resume a session whose preset no row declares (`agent-preset/not-found`,
+`AgentPresetRegistry.retain`). The alias has no directory, so `/data/bots.json` never lists it,
+and `RESERVED_IDS` keeps both ids from naming a bot.
 Every other bot is declared by `declareBots` once the tree has settled (§4.1): activation is
 eager, and a declaration at row time would mount `plugins/bot.js` before the MCP tools exist. A
 composition the face cannot read (missing, unreadable, not YAML) is not declared — the reason,
@@ -543,13 +548,13 @@ through the face or a restart.
 Naming: the face keeps the retired dsh-agent-presets grammar `[a-z0-9][a-z0-9-]*`, bounded to 64
 code points (`BOT_ID_RE`), as its own gate — dsh 0.2.0 asks only for a non-blank id; the display
 name folds to a proposal through `proposeBotId` (`src/bots.ts`, twinned in `client/botId.js`) and
-the field stays editable. `kairos` is refused by name (`RESERVED_IDS`), `_template` by the
+the field stays editable. `gravit` is refused by name (`RESERVED_IDS`), `_template` by the
 grammar, which admits no leading underscore — both through `isBotId`. A soul carrying `{{` is
 refused twice, at `rejectSoul` and again at the plugin's `validateBotConfig`: the system prompt
 is a strict template with no escape.
 
-State on 2026-09-30: eight directories are tracked. `bots/kairos` is the inert default — an empty
-composition (`[]`) every session that names no preset joins, so Kairos's tools stay exactly the
+State on 2026-09-30: eight directories are tracked. `bots/gravit` is the inert default — an empty
+composition (`[]`) every session that names no preset joins, so Gravit's tools stay exactly the
 host's — and `bots/_template` is the copy source, never declared and refused as an id.
 `bots/drill-bull/` (看多派) and `bots/drill-bear/` (看空派) are the room drill's two voices, kept
 as tracked fixtures with their channel `strategies/room-drill`; `news-scout` and the AQR room's
@@ -635,7 +640,7 @@ row audit; and the policy layer.
    `cordis.patch.yml` → a caller's in-memory `extraPatches` (`main.ts` passes none;
    `scripts/check-home.ts` disables a home copy's MCP rows with it) — apply the guarded
    switches (`session-telemetry-otel` disabled when `DSH_TELEMETRY_DISABLED` is non-empty and
-   the row is composed; `hmr` disabled whenever composed), patch Kairos's persona into
+   the row is composed; `hmr` disabled whenever composed), patch Gravit's persona into
    `system-prompt` (`personaPrefix` only, §4.3), then push **the face overlay last**. This
    inverts the CLI's layering deliberately: loopback-only binding must survive an operator
    patch, so face rows win silently; the policy layer is the other way round and yields to an
@@ -673,7 +678,7 @@ row audit; and the policy layer.
    connection failed … no tools were registered` on stdout; reconnect exhaustion unregisters the
    tools for the life of the process. Check the plugin panel's tool list or that stdout line; the
    fix is the row's `command` and a restart.
-8. The preset roster: the registry present and its default `kairos`; every other bot declared
+8. The preset roster: the registry present and its default `gravit`; every other bot declared
    (`declareBots`, §3.7) — a bot that cannot be declared does not fail the boot, its reason is
    kept for `/data/bots.json`; the default listed and not broken; every declared bot listed. Log
    `agent presets: …` (with `N bot(s) not declared, see above` when a declaration failed).
@@ -687,7 +692,7 @@ row audit; and the policy layer.
     holding its 30-day cookie reconnects the moment the upgrade is admitted and must find every
     route mounted. It re-checks that the root is still active and throws otherwise — into
     `installFailLoud`, never a face that would not stream.
-11. Print `kairos-face: http://<host>:<port>/?token=… (profile: …)` from the bound service —
+11. Print `gravit-face: http://<host>:<port>/?token=… (profile: …)` from the bound service —
     the per-process launch token that mints the browser cookie (§4.4) — then one line
     explaining it, and the room caps.
 
@@ -702,7 +707,7 @@ smoke that boots without `main.ts` relies on.
 |---|---|
 | `main.ts` | entry: chdir, signal handlers and `installFailLoud`, boot with `deferReady`, the sign-in route and every route family (the room engine and the bot runtime included), `commitReady`, the tokenized URL |
 | `boot.ts` | the mirror of the dsh CLI's `runProfile` (§4.1): `composeFace`, the runtime resolution, the strict row audit, the required-service and answerer checks, `ask_user_question` in the live registry, Gate 2 registration, the preset-roster checks, `declareBots`, `commitReady` |
-| `overlay.ts` | the twelve host rows `dsh-base` does not mount (§4.3), `satisfies`-checked against each plugin's own config type; `BOTS_ROOT`, `DEFAULT_PRESET`, `presetRowId` |
+| `overlay.ts` | the thirteen host rows `dsh-base` does not mount (§4.3), `satisfies`-checked against each plugin's own config type; `BOTS_ROOT`, `DEFAULT_PRESET`, `presetRowId` |
 | `policy.ts` | the policy layer (§4.3): `POLICY_ID_PATCHES`, `POLICY_INSERTS`, `facePolicyPatches` — each row a PLAN decision; a missing target is reported on stderr, never skipped silently |
 | `akshare.ts` | project AKShare MCP defaults, composed below operator profile/home patches |
 | `orders.ts` | Gate 2 decision logic, pure: `isOrderTool`, `effectiveApprovalPolicy`, `orderApprovalDecision` (with the `displayReason` twin), `describeOrder`, `hasApprovalGrant`, `isGatedTool`, `orderGuardReason`, `orderGuardReasonForSession` (the guard's one producer; reads `snapshotEvents()`, a distinct denial for an unreadable log), `auditOrderTools`, `OPERATOR_GATED_MARKER` — depends on nothing (structural types only) |
@@ -725,8 +730,8 @@ smoke that boots without `main.ts` relies on.
 | `room-contract.ts` | the room's optional contracts: the structured `dispatch` brief (`BRIEF_SCHEMA`, bounded) and a member's view block, with the discussion summary; plain prose stays valid |
 | `room-projection.ts` | the `room` projection unit: a pure fold of the known events that carry room facts (`dispatch` calls and their `role:'tool'` results, room-sourced messages, turn boundaries) into `{kind, round, members, organizing}`; zod schemas; `stateVersion` (`ROOM_STATE_VERSION` 2) |
 | `room.ts` | the engine on the root context: `installRoom` (the `dispatch` tool, the unit, the bus); `RoomEngine` — members created with `ctx.agents.create` (`parentSession`, `agentPreset`, the model ref, `read-only` pinned inside `setup(agentCtx, agent)`) or resumed, and a member whose log dsh 0.2 cannot open is a `failed` turn naming the legacy format, never a crashed round or a silent fresh member; logs read through `eventsOf` (`snapshotEvents()`), failing closed without it; a cold room resumed through `sessionController.resolveAgent`; `driveTurn` with the extending deadline and the hard-cap cancel (`keepInbox`); rounds parallel/serial, peer continuations, the three caps, `settled`/`capped`/`superseded`; answers appended to a quiet room log, the round-end `followup`; `say` (the operator's `@`), `describe`; two routes |
-| `persona.ts` | Kairos's deployment persona (`personaPrefix`): `readPersona` validates the strict `{{}}` template and refuses the boot on a bad file |
-| `plugins/bot.js` | the `kairos-bot` composition plugin: a scoped `deployment:persona-prefix` section (shadows Kairos's prefix; no suffix) + an allow-list `tools.restrict`, re-expanded after each burst of `tools/change` — coalesced to one timer turn, so a tool that registers after the declaration is admitted when the allow list names it (`expandAllow` resolves `mcp__*__<raw>` against the live tree); dependency-free |
+| `persona.ts` | Gravit's deployment persona (`personaPrefix`): `readPersona` validates the strict `{{}}` template and refuses the boot on a bad file |
+| `plugins/bot.js` | the `gravit-bot` composition plugin: a scoped `deployment:persona-prefix` section (shadows Gravit's prefix; no suffix) + an allow-list `tools.restrict`, re-expanded after each burst of `tools/change` — coalesced to one timer turn, so a tool that registers after the declaration is admitted when the allow list names it (`expandAllow` resolves `mcp__*__<raw>` against the live tree); dependency-free |
 | `panels.ts` | the master rail's feeds: host facts (`/data/host.json`), the local-agent roster (probe, auth, connect, disconnect), memory (skills), plugins (loader rows + tool schemas); builds `PanelDeps` (it requires `skills`, `tools`, `loader`, `workspaceRegistry` and `agents`), whose `channelFor` answers `{workspaceId, name, dir}` — the `dir` is what the room engine gives a member as its `cwd` |
 | `version.ts` | the three pins |
 
@@ -736,8 +741,8 @@ the real `/` (a bare `bootFace` mounts no page), `signIn` trades the launch toke
 
 ### 4.3 The overlay rows and the policy layer
 
-Twelve rows, composed last, winning silently over the operator's patch and the home layer —
-`faceOverlay(port, definitionFor(bots, "kairos"))`, in this order:
+Thirteen rows, composed last, winning silently over the operator's patch and the home layer —
+`faceOverlay(port, definitionFor(bots, "gravit"))`, in this order:
 
 | Row | Package | Why the face mounts it |
 |---|---|---|
@@ -751,8 +756,9 @@ Twelve rows, composed last, winning silently over the operator's patch and the h
 | `settings-controller` | `dsh-api-settings-controller` | `credentials/describe`; its `settings/describe` has no service without `profileContext`, and the client does not call it |
 | `directory-picker` | `dsh-host-directory-picker-auto` | the native folder dialog; since 0.2.0 it fails the row when either of its two runtime entries cannot load, hence the four picker packages in `package.json` |
 | `tool-ask-user` | `dsh-tool-ask-user` | the model-facing half of `userQuestions`, in no upstream bundle; configless = the blocking `legacy` mode |
-| `agent-preset-registry` | `dsh-agent-preset-registry` | `{default: kairos}`. The registry scans no directory and serves only `list`, `read` and `select` Remotes, so 0.1.1's `trust: system` posture — no authoring RPCs over a git-tracked directory — holds with nothing to configure |
-| `preset-kairos` | `dsh-agent-preset` | the default preset, static so it exists before the first `session/create`: `bots/kairos` through `definitionFor` — the host composition itself, `plugins: []` |
+| `agent-preset-registry` | `dsh-agent-preset-registry` | `{default: gravit}`. The registry scans no directory and serves only `list`, `read` and `select` Remotes, so 0.1.1's `trust: system` posture — no authoring RPCs over a git-tracked directory — holds with nothing to configure |
+| `preset-gravit` | `dsh-agent-preset` | the default preset, static so it exists before the first `session/create`: `bots/gravit` through `definitionFor` — the host composition itself, `plugins: []` |
+| `preset-kairos` | `dsh-agent-preset` | the legacy alias: the default's definition under `kairos`, Gravit's id before 2026-10-08, so archived sessions resolve; `bootFace` refuses a boot where it is absent or broken; every host test goes through `isHostPreset` (`src/overlay.ts`, `client/speaker.js`) |
 
 Gone from the overlay since 0.1.1: `storage`, `storage-json`, `storage-domain` and
 `session-projection-cache` — dsh-base mounts all four, so a patch in the profile file now
@@ -760,7 +766,7 @@ REACHES them (a same-id insert here would silently replace base's row and swallo
 `api-gateway` (`dsh-host-apiproxy`, deleted upstream: dsh-base's `typert-gateway` serves `/api`
 and the three controller rows carry its business methods); `cordis-host-runner` (its consumers
 are not mounted); `agent-presets` (deleted: presets are declarations, §3.7). Web-app's
-agent-plane disable set is deliberately not followed: Kairos keeps dsh-base's flat host roster.
+agent-plane disable set is deliberately not followed: Gravit keeps dsh-base's flat host roster.
 A patch of the operator's aimed at an overlay row is accepted, overridden, and never reported
 (`PATCH_HEADER` says so where the operator looks); a patch matching no row is also silent —
 hence the `rows.has(…)` guards around the switches.
@@ -787,7 +793,7 @@ posture dsh-base 0.2.0 changed, and each is an operator decision (§4.8):
 | D9 `str_replace_editor` | `tool-str-replace-editor` | inserted, configless (0.1.1's 16,000-character cap is now the default) | row removed |
 
 `facePolicyPatches` guards every id patch on the row being in the bundle composition and
-reports a missing target on stderr (`kairos-face: warning: policy D…`); `tests/policy.test.ts`
+reports a missing target on stderr (`gravit-face: warning: policy D…`); `tests/policy.test.ts`
 pins every target against the installed dsh-base. Overriding one is a row in
 `profiles/face/cordis.patch.yml`: `- id: session-log-deepseek` / `disabled: false` restores the
 upload; `web_fetch` takes `- id: tool-web` / `config: { fetch: true, searchTimeoutMs: 60000 }`
@@ -960,7 +966,7 @@ through the real `$events` channel too; the human half has not been run.
 
 ### 4.8 The re-host's operator decisions
 
-The dsh 0.2.0-rc.2 re-host (2026-09-30) defaulted every decision that changes what Kairos can
+The dsh 0.2.0-rc.2 re-host (2026-09-30) defaulted every decision that changes what Gravit can
 do, what leaves the machine, or which operator data survives; each stays the operator's. The
 numbers are the re-host plan's, which the code comments cite as `PLAN D<n>`. The go-live runbook
 (`docs/superpowers/runbooks/2026-09-30-dsh-0.2.0-rc.2-go-live.md`, §4) walks each one that
@@ -969,7 +975,7 @@ needs an answer before the operator's home moves.
 | PLAN | Decision | Default in the tree | To choose otherwise |
 |---|---|---|---|
 | D1 | a `profileContext` (settings forms, a live model save, `dsh-hmr`, `plugin-manager`) | none (§4.1) | a code change: every face layer moves into `profileContext.overlays`, and the first boot imports and renames the shared `settings.yaml` |
-| D2 | Kairos's default model | dsh-base's `deepseek-official/deepseek-flash` until the operator adds the `agent-default-model` row (§3.1) | that row in `profiles/face/cordis.patch.yml` |
+| D2 | Gravit's default model | dsh-base's `deepseek-official/deepseek-flash` until the operator adds the `agent-default-model` row (§3.1) | that row in `profiles/face/cordis.patch.yml` |
 | D3–D7, D9 | telemetry, session-log upload, package inventory, `web_fetch`, MCP resource tools, `ralph` and `str_replace_editor` | the 0.1.1 posture (§4.3) | one operator row each |
 | D8 | the browser cookie on `/data`, `/market`, `/account` | fence-only, as at 0.1.1 | a code change behind `isTrustedDataRequest` (Connection's `requestRejection`) |
 | D10 | an HTTP proxy policy | none: the face's own fetches go direct; children still inherit proxy variables | a code change (`installProxyFromEnvironment`), which reroutes every fetch |
@@ -1002,14 +1008,14 @@ literals (`navigation.js`, `market.js`).
 | `chat.js` | the impure half: sessions sidebar, transcript, composer, gates, rail panels, detail pane, strategy picker, channel page glue, the bot settings and inspection pages, the subagent dock; how the session on screen is read (`activeView`, §5.4); and the room: the participants strip (`renderStrip`, refetched by `loadRoomInfo`), a member's gate rendered inline in its room (`gateWho`), members folded under their room row, the members' follows, and the composer's `@` path |
 | `member-traces.js` | a room answer's process, read from the member session through `session/projections` + `session/page` — never activating it |
 | `subagents.js` | temporary subagents: `composeSubagentCatalog` builds 0.1.1's catalog shape from the parent's `subagentCatalog` projection and the list rows (0.2 has no catalog Remote), and `normalizeSubagentCatalog` and the dock's decisions run on it unchanged |
-| `answer-traces.js` | the closed 思考轨迹 disclosure shared by Kairos's and a member's answers |
+| `answer-traces.js` | the closed 思考轨迹 disclosure shared by Gravit's and a member's answers |
 | `render.js` | pretty renderers for alpaca-kit tool results; returns null unless both tool and payload shape are recognised, so the raw `<pre>` is always kept |
-| `markdown.js` | DOM-built markdown for Kairos bubbles (inline emphasis, code, links; headings, nested lists, GFM tables, fences, quotes, rules) |
+| `markdown.js` | DOM-built markdown for Gravit bubbles (inline emphasis, code, links; headings, nested lists, GFM tables, fences, quotes, rules) |
 | `channels.js` | the channel landing page, assembly only — every judgement is made server-side; the **bots in this channel** chips (one per bot dsh reports, `on` when the roster carries it, `broken` with its reason as the title, plus a removable chip for a rostered id no directory answers to) |
 | `grouping.js`, `channelName.js`, `botId.js` | sidebar buckets keyed by `workspaceId` (never title) or by `bot:<id>`; the whitespace → dash fold; the display-name → bot-id fold |
 | `botSettings.js` | the bot settings page's pure translations: the `provider/model` route grammar, the payload, the model choices from `session/modelCatalog` |
 | `room.js` | the pure room rules: `foldMembers` (the membership fold — a bot session parented by a host session, no `origin`), `isMemberSession`, `stripChips` (the strip's chips and their state precedence), `avatarGlyph`, `isMentionText` (the composer anchor), `roundEndLine`, `gateSpeaker` |
-| `speaker.js` | the name the transcript writes over a turn: `speakerFor(summary, bots)` reads the session's `agentPreset` — a rostered bot's display name, its id when the roster has none, `Kairos` for the host and for no session. Per session, never per message; an unknown preset falls to the id, never to the host |
+| `speaker.js` | the name the transcript writes over a turn: `speakerFor(summary, bots)` reads the session's `agentPreset` — a rostered bot's display name, its id when the roster has none, `Gravit` for the host and for no session. Per session, never per message; an unknown preset falls to the id, never to the host |
 | `navigation.js` | the primary navigation rail shared by the chat, market and account pages |
 | `market.js`, `market-model.js`, `market-search.js`, `market-quotes.js`, `market-catalog.js` | the market watchlist: selections kept in this browser's `localStorage`, on-demand search (`/data/symbols/search`), live quotes over server-sent events with a polling fallback (`/data/quotes/stream`, `/data/quotes`), a reference catalog of identities (never prices) |
 | `account.js`, `account-view.js`, `account-model.js` | the read-only paper account dashboard over `/data/account.json` |
@@ -1043,7 +1049,7 @@ The client speaks dsh 0.2.0-rc.2's Typert Remote wire through `api.js`; 0.1.1's 
 (`POST /api/<dotted.method>`, `POST /api/respond`, the downlink-only `/api/events.mux`) was
 deleted upstream, and `call` refuses a dotted name before any fetch. Every `/api` request and the
 mux upgrade carry the browser cookie (§4.4) with no code of the page's; a 401 is reported as
-"not signed in — open the URL kairos-face printed".
+"not signed in — open the URL gravit-face printed".
 
 **Unary** — `call(endpoint, args)`: `POST /api/<ns>/<method>` with
 `{type:"client-request", rpcId, method:"<ns>/<method>", payload:{args}}` — the method repeats the
@@ -1165,7 +1171,7 @@ relay) renders as its report line, and in a child's transcript a parent's relay 
 父会话消息 with a way back, not as a report.
 
 Operator text renders verbatim; injected user-role events from a plugin, tool or model become a
-collapsed `context · <source>` row; Kairos bubbles get an optional collapsed `think` row and
+collapsed `context · <source>` row; Gravit bubbles get an optional collapsed `think` row and
 DOM-built markdown (a bubble with headings, tables or fences widens to `doc`); an interrupted
 answer is cut-marked, never shown complete. `tool/call` opens a collapsed card indexed by
 `callId`, titled by its `bash` command or else the tool name (host presenters no longer reach the
@@ -1195,16 +1201,18 @@ seen/seq/card indexes, the gate map (all sessions) with each generation's delive
 projection store, the channel index, the archived/deleted sets, generation tokens for list /
 open / detail. `localStorage` holds exactly one key for the chat page, `face.collapsed-groups`
 (bucket keys; legacy title-keyed entries dropped by a UUID regex; every access in try/catch), and
-the market page keeps its own, `kairos.market.watchlist.v1`. A reload restores only those — the
-transcript comes back from the host on the next open, and the pending gates on the new `$events`
-generation. Archive/delete metadata lives host-side so it survives any browser.
+the market page keeps its own, `gravit.market.watchlist.v1`; a browser that saved before the
+rename is read from `kairos.market.watchlist.v1` until its first save, which writes only the new
+key. A reload restores only those — the transcript comes back from the host on the next open, and
+the pending gates on the new `$events` generation. Archive/delete metadata lives host-side so it
+survives any browser.
 
 ### 5.5 Styling
 
 Light only: no `prefers-color-scheme`, no `data-theme`; the media queries are
 `prefers-reduced-motion` and a few narrow-width layouts. Two type stacks, `--sans` and
 `--mono` — the prototypes' three-voice rule (mono for machine fact, serif for argued prose, sans
-for the operator) did not carry into the live sheet, so Kairos prose renders in sans. The R4
+for the operator) did not carry into the live sheet, so Gravit prose renders in sans. The R4
 palette is overridden lower in the file by the 2026-09-01 neutral-grey + blue-accent block, which
 also adds the chart tokens. The market and account pages style themselves in `market.css` and
 `account.css` (`body.market-body`, `body.account-body`); the `.inst-*` rules still in `chat.css`,
@@ -1218,7 +1226,7 @@ drill a stale `chat.js` (two false drill failures came from exactly that).
 
 **6.1 A paper order.** Operator arms Gate 1 in the home copy of the MCP row (flag + keys) →
 the MCP child registers `place_order` with `(operator-gated)` in its description → the face's
-boot audit name-matches it and logs `order gate armed` → Kairos calls it → the prepended
+boot audit name-matches it and logs `order gate armed` → Gravit calls it → the prepended
 listener returns `ask` naming the order (`reason`, and the same line as `displayReason`) → dsh's
 `ApprovalService` logs `approval/asked{callId}` and runs the `approval/request` waterfall →
 `api-remotes` forwards it to every connected browser's `$events` stream, keyed by `eventId` (no
@@ -1255,11 +1263,11 @@ header `cwd` is that directory (persisted ∪ live, live wins) → seed a roster
 the client's `summaryOf`.
 
 **6.5 A local agent call.** Operator connects `claude` on the agent page (probe → `agents.json`
-→ `agent_claude` registered tree-wide) and rosters it on a channel → Kairos calls `agent_claude`
+→ `agent_claude` registered tree-wide) and rosters it on a channel → Gravit calls `agent_claude`
 in a session → `execute` resolves the session's channel by `cwd`; on the roster → spawn with a
 fixed argv, prompt on stdin, scrubbed env, the session's cwd, one run per bin at a time (hard
 limits: prompt ≤ 32,000 characters, 600 s per run — SIGTERM, then SIGKILL 5 s later — 16 MiB of
-collected output, and a resume id must be a UUID; a run cut by any of these comes back to Kairos
+collected output, and a resume id must be a UUID; a run cut by any of these comes back to Gravit
 as a flagged partial result, not an error); not on the roster → refused; **no channel → fails
 open**. `channelFor` is a real-path lookup of the session's `cwd` over the registered workspaces
 (`resolveByPath`, never `create`), so a `choose a local folder…` session is roster-checked only
@@ -1295,7 +1303,7 @@ drills. `cordis-plugin-include` is pinned; `loader` and `group` arrive as app-bo
 `timer` through dsh-base, held by the lockfile alone; `cordis-plugin-hmr` is gone.
 
 **6.8 A room round.** Operator checks two bots into a channel (`POST /data/channels/bots` →
-`channels.json` `bots[]`) → asks a question in a channel session → Kairos calls `dispatch` with
+`channels.json` `bots[]`) → asks a question in a channel session → Gravit calls `dispatch` with
 a brief (`tool/call`) → the engine refuses a session whose header or `agentPreset` projection
 names a bot, validates against the roster, starts the round and returns at once (`tool/result`
 naming who was not called) → per bot: find the member session (the room log's record of it,
@@ -1306,9 +1314,9 @@ open is that member's `failed` turn, named in the round-end text and on the cons
 round goes on → `followup` the delta prompt (its `messageIds` are the member's cursor, in its
 own log) → await that turn's `turn/end` under the extending deadline (a pending gate, read off
 the member's log, holds it open) → final text after the last tool result; empty or `(pass)` →
-`passed`; an error → `failed` → an answer is appended to the room log while no Kairos turn is
+`passed`; an error → `failed` → an answer is appended to the room log while no Gravit turn is
 open (else held until its `turn/end`) → peer `@`s queue continuations (≤ 2) → round end: every
-held answer flushed, then ONE `followup` naming who answered and who passed → Kairos's synthesis
+held answer flushed, then ONE `followup` naming who answered and who passed → Gravit's synthesis
 turn. A cold room the operator `@`s is resumed through `sessionController.resolveAgent`, the
 host's own composition. Every step is a known event; the `room` projection folds them; the
 client renders each answer in the bot's voice as it lands and the strip from the projection plus
@@ -1360,18 +1368,18 @@ through `tsx`:
   between bundle and AKShare; the storage chain and projection cache composed once, from
   dsh-base, and reachable by an operator patch; the persona patch setting `personaPrefix` and
   keeping the operator's other `system-prompt` keys; a skipped bundle refused; the static
-  `preset-kairos` row equal to `definitionFor(bots, "kairos")`, and a missing default composition
-  refused), `overlay` (exactly the twelve rows, in order; loopback config; the rows dsh-base owns
-  now and the retired ones never inserted), `policy` (every target a row the installed dsh-base
-  composes; the composed posture; an operator row overriding a default;
-  `DSH_TELEMETRY_DISABLED` winning over an operator re-enable), `setup`, `static` (`/` asks the
-  index gate first and writes nothing on a refusal; the instrument pages and `/client` never
-  consult it), `version` (the three pins, the retired names), `persona` (cross-checked against
-  the installed strict renderer), `check-home` (the go-live dry run's pieces, offline: the
-  live-home refusal by device and inode — through a symlink, in another letter case, inside or
-  above the home — and the marker; the refusal classes; the multi-frame log reader; the inventory
-  diff; the MCP row walk; the `extraPatches` seam composing after the operator's layers and
-  before the face's own).
+  `preset-gravit` row equal to `definitionFor(bots, "gravit")` and the `preset-kairos` alias equal
+  to it under the legacy id, and a missing default composition refused), `overlay` (exactly the
+  thirteen rows, in order; loopback config; the rows dsh-base owns now and the retired ones never
+  inserted), `policy` (every target a row the installed dsh-base composes; the composed posture;
+  an operator row overriding a default; `DSH_TELEMETRY_DISABLED` winning over an operator
+  re-enable), `setup`, `static` (`/` asks the index gate first and writes nothing on a refusal;
+  the instrument pages and `/client` never consult it), `version` (the three pins, the retired
+  names), `persona` (cross-checked against the installed strict renderer), `check-home` (the
+  go-live dry run's pieces, offline: the live-home refusal by device and inode — through a
+  symlink, in another letter case, inside or above the home — and the marker; the refusal classes;
+  the multi-frame log reader; the inventory diff; the MCP row walk; the `extraPatches` seam
+  composing after the operator's layers and before the face's own).
 - **Gate 2** — `orders` (pure gate logic: raw and minted names, renamed server caught, read-only
   listing not gated, deny under `never`, one-shot grants for this `callId` and tool only, marker
   only on `mcp__` tools, the `displayReason` twin, the widened decision type, and
@@ -1398,7 +1406,7 @@ through `tsx`:
   deleted and fenced; a migrated v0 + v4 directory decided by the v4 header; a lock-and-temps
   directory never deletable; the host-archive 409), `roster`, `agents`, `bots`, `bot-presets`
   (the rebasing of every shipped bot onto the real `face/plugins/bot.js` and its own `skills/`;
-  `preset.yml` read as 0.1.1 read it; `declareBots` never declaring `_template` or `kairos`;
+  `preset.yml` read as 0.1.1 read it; `declareBots` never declaring `_template` or `gravit`;
   `redeclare` disposing before registering, following the disk, serialized; the root's disposal
   taking every declaration with it), `bot-plugin` (the persona-prefix slot, a late tool admitted,
   the mask shrinking and re-admitting, a failed re-expansion contained), `bot-journal`,
@@ -1485,13 +1493,13 @@ each speaks the browser's wire through `tests/remote.ts` (`mountClient`, `signIn
 - `bot-sandbox-smoke.test.ts` (S4) — a `read-only` session's write refused inside the tool's
   content, the command having run (§9, R10). Prints one `observed:` line.
 - `room-smoke.test.ts` — a stub model route, three bots in a temp channel, one operator prompt
-  → Kairos dispatches all three in parallel → alpha answers, beta passes, gamma's model fails →
-  the answer is on the room log before the round-end wake, the wake is one turn, Kairos's
+  → Gravit dispatches all three in parallel → alpha answers, beta passes, gamma's model fails →
+  the answer is on the room log before the round-end wake, the wake is one turn, Gravit's
   synthesis is in it; every member is parented, preset-joined, `read-only` as its only
   `permission/preset` before its first turn, carries the channel's `AGENTS.md` chain and lacks
   `dispatch`; the `room` value rides the session row and the per-record cache file; an `@` turns
   alpha, whose write into the channel is refused inside the tool content (D12) and never woke
-  Kairos; a home session writes its journal and is refused on `../SOUL.md`.
+  Gravit; a home session writes its journal and is refused on `../SOUL.md`.
 - `room-discussion-smoke.test.ts` — the structured brief and member views, and each bot's
   journal, through the real request and log path; a member's persona is its own soul.
 - `subagents-smoke.test.ts` — the native subagent lifecycle through the Remotes the page uses:
@@ -1517,7 +1525,7 @@ agent panel (`dsh 0.2.0-rc.2`, model, host, keys `set · env`); `/data/plugins.j
 `mcp__alpaca-kit__*` and fourteen `mcp__akshare__*` tools (both FastMCP servers negotiate with
 the 0.2 MCP client); and a room round in `strategies/room-drill` (two bots checked in through
 `/data/channels/bots`, one prompt → `dispatch` → both members answered → the strip read
-`round 1 · settled`, the discussion card attributed each voice, Kairos's synthesis followed,
+`round 1 · settled`, the discussion card attributed each voice, Gravit's synthesis followed,
 and the member sessions carried `drill-bull` / `drill-bear` in `/data/channels.json`'s
 `presets`). Every other manual row is still owed a re-run on the new pin, along with the checks
 the re-host added (§10, item 14).
@@ -1533,7 +1541,7 @@ the re-host added (§10, item 14).
 | **Bots** — manual (`face/README.md`) | create → home → persona → tools named and not named → `{{` refused; the sidebar buckets the home session under the bot; a restart's boot line lists the id; the transcript names the speaker on all four surfaces (second run) | no automated test pins the four naming surfaces or the reconnect path; per-message attribution in a room is the Room rows below | passed 2026-09-07; re-run 2026-09-08 on `main` with the R12 fix in, passed; owed on 0.2.0 |
 | **Room** — automated (`room-smoke`, `room-discussion-smoke`) | a real round on a stub model: dispatch → three members (answered / passed / failed) → answers on the log before one wake → synthesis in one turn; members parented, preset-joined, `read-only` first, `AGENTS.md` chain, no `dispatch`; the projection on the row and in the cache; the `@` route with a member's write refused in content; a home refused on `../SOUL.md`; the structured brief and views; the journal | that a human can read the strip; a real model's behaviour on the four standing rules | passes 2026-09-30 |
 | **Room** — manual (`face/README.md`, eight parts) | check-in → dispatch line → attributed bubbles and the strip → the fold → `@` → an inline member question with the needs-you mark → a member's write refused → `left` and re-check → a restart keeps states and titles | per-message attribution across a reconnect; convergence of four voices on one model (spec §12, R3); the peer-`@` continuation, which the operator's next `@` superseded before it ran (by design) — that path stands on the engine tests | **Drilled and PASSED 2026-09-09** on the operator's own face (`feat/rooms` @ `31b2e68`, two fresh template bots, DeepSeek as the model); one client finding (F1, the strip missing on a session's first round) fixed the same day and re-verified; owed on 0.2.0, whose 0.1.1 room sessions no longer open (§9, R20) |
-| **Ask-user** — `ask_user_question` offered, called, answered, cancelled | the seam | that it is a gate (the answer is model-visible); the instruction half (README step 6 — on a thin brief that does not name the tool, Kairos asks before it builds, per `AGENTS.md`), left to the operator and not run | passed 2026-09-03 with a real model, 26 tools offered; re-run 2026-09-08 on `main`, passed (34 tools offered; answered, then Stop → `closed · cancelled`); owed on 0.2.0 |
+| **Ask-user** — `ask_user_question` offered, called, answered, cancelled | the seam | that it is a gate (the answer is model-visible); the instruction half (README step 6 — on a thin brief that does not name the tool, Gravit asks before it builds, per `AGENTS.md`), left to the operator and not run | passed 2026-09-03 with a real model, 26 tools offered; re-run 2026-09-08 on `main`, passed (34 tools offered; answered, then Stop → `closed · cancelled`); owed on 0.2.0 |
 
 Owed besides, from the re-host, never yet run in a browser: the Gate-2 drill's new card endings
 — a second tab's `closed`, a lost race's `closed · settled elsewhere`, a stale card's `closed ·
@@ -1565,7 +1573,7 @@ stages all of them, with the transport drill, on a copy of the operator's home.
   been pulled is presumed broken.
 - **Never edit**: `data/pit/` contents (recapture is the only write), the installed profile
   copies under `$DSH_HOME` (operator territory; the face rewrites `cordis.yml`), anything under
-  `bots/` (the operator's voices; Kairos proposes one in conversation and creates none), anything
+  `bots/` (the operator's voices; Gravit proposes one in conversation and creates none), anything
   under `docs/research/` (frozen inputs).
 - **No custom session-event types.** dsh's persistence refuses to reload a log carrying an
   unknown type; a room fact rides a known event with a room `source` — `kind: 'room'`, a native
@@ -1573,7 +1581,7 @@ stages all of them, with the transport drill, on a copy of the operator's home.
   refuses, §9 R20).
 - **A bot's mask is visibility, not authority.** Write sentences that say so; the session's
   sandbox mode and Gate 2 are the fences, and neither is containment.
-- **Channel names do not admit spaces.** They become shell paths Kairos types by hand.
+- **Channel names do not admit spaces.** They become shell paths Gravit types by hand.
 - **Line numbers in prose go stale in days.** Cite files and symbols.
 - **Credentials never enter the repo**; `.env*` is gitignored; error bodies never echo child
   stderr.
@@ -1593,7 +1601,7 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   root, which is the workspace) and import `alpaca_kit.account`. dsh scrubs the keys from the
   shell's *environment*, not from the file. The paper-hostname pin bounds the damage.
 - **R2 — Gate 2 is a gate, not containment.** `tools/execute` runs after the guard, is handed
-  the execution as mutable, and re-resolves the tool by its current name; Kairos has an
+  the execution as mutable, and re-resolves the tool by its current name; Gravit has an
   unrestricted shell. It stops the model's ordinary tool calls.
 - **R3 — The face's loopback surfaces are reachability fences, not authentication.** One
   un-escalated shell turn can `curl` `POST /data/channels/agents` (or `/data/agents/connect`): no
@@ -1617,7 +1625,7 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
 - **R5 — The MCP server's writes bypass the sandbox.** It is a child of the face process, not
   of a session; `data/.screen_cache` was written with no card.
 - **R6 — The charter recorded a seat the tree now fills.** *Resolved 2026-09-09.* The charter's
-  D11 now names the persona mechanism (plan 4). As of 2026-09-07 the model IS told it is Kairos:
+  D11 now names the persona mechanism (plan 4). As of 2026-09-07 the model IS told it is Gravit:
   `composeFace` patches the `system-prompt` row's persona — `personaPrefix` since 0.2.0, the
   same order-0 slot 0.1.1 called `persona` — from `dsh/profile/persona.md` through `readPersona`,
   which refuses the boot on a template the strict renderer would throw on.
@@ -1628,7 +1636,7 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   too); a wrong path still lists them and fails per call with `SnapshotMissingError`. Two
   different half-configured states both print seven.
 - **R9 — The never-edit list is prose, not a fence.** No sandbox deny path and no test protect
-  `data/pit/`, the skill packs or `docs/research/`; from a root session Kairos can rewrite any
+  `data/pit/`, the skill packs or `docs/research/`; from a root session Gravit can rewrite any
   of them with no card (§4.1). Detection is `verify_checksums` for a bed (run by hand, §2.4)
   and `git diff` for the rest.
 - **R10 — A sandboxed write is refused inside the tool's own content, not as an error.** Measured
@@ -1640,7 +1648,7 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   bot's writes is worded off the CONTENT. The escalation the content offers is real: a retry
   with `sandbox_permissions` raises an approval card, so the operator can grant a room member the
   write the preset refuses, and the grant is logged on that member's own session (observed and
-  denied in the room drill's part six). The bot/Kairos asymmetry is
+  denied in the room drill's part six). The bot/Gravit asymmetry is
   enforced-with-a-human-exception, not absolute.
 - **R11 — A question with no client connected blocks; it never fails.** Measured
   (`askuser-noclient-smoke.test.ts`, spike S7): `userQuestions.ask()` from an agent-owned session
@@ -1651,10 +1659,10 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   room the abort has an owner: a member's turn holds its deadline open while a gate is pending
   (`gatePending`) and the hard cap (`turnHardCapMs`, 20 minutes) is what finally cancels the turn,
   so an unanswered member question ends the round `timed-out` rather than hanging it.
-- **R12 — The transcript labels a bot's reply as Kairos.** *Resolved.* Observed in the manual bots
+- **R12 — The transcript labels a bot's reply as Gravit.** *Resolved.* Observed in the manual bots
   drill (2026-09-07): a home session's replies open in the bot's persona, the sidebar buckets the
   session under the bot's name, but the speaker label over each assistant turn is the fixed
-  `Kairos` the message renderer in `chat.js` writes into the `who` element, not the session's
+  `Gravit` the message renderer in `chat.js` writes into the `who` element, not the session's
   `agentPreset`. Cosmetic today (one voice per session); it becomes a truth problem the moment a
   room shows several voices in one log (plan 3). Fixed 2026-09-07: the label is per SESSION
   (`speakerFor` in `client/speaker.js`, from the summary's `agentPreset`), carried by all four
@@ -1677,9 +1685,9 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   block, from which the sidebar reads the title. A record carried over from 0.1.1
   yields the title alone, so the row's `agentPreset` comes from `/data/channels.json`'s header
   hint until the session runs under 0.2.0 (§5.1, `summaries.js`).
-- **R14 — A room's answers are appended to Kairos's log by the face, not spoken by Kairos's
+- **R14 — A room's answers are appended to Gravit's log by the face, not spoken by Gravit's
   driver.** Honest and necessary (plan 2, deviation 2), but it means a room log can gain user-role
-  messages while no client watches and while Kairos is idle; the persistence write path records
+  messages while no client watches and while Gravit is idle; the persistence write path records
   them like any event. The `quiet` rule (no open turn) is what keeps a running request intact.
 - **R15 — Fine states are presence, not truth.** `thinking` / `writing` / `tool` on the strip
   come from the `block-start` frames of each LIVE member's own `session/follow` (a member not
@@ -1698,7 +1706,7 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   holds — nothing is hidden — but the rows carry no voice, while the sidebar's own fold labels
   each member with its bot's name. Polish, not a truth problem; a member's transcript names its
   voice the moment it is opened.
-- **R19 — Dispatch is Kairos's judgment, and nothing checks it.** Kairos chooses whom to call and
+- **R19 — Dispatch is Gravit's judgment, and nothing checks it.** Gravit chooses whom to call and
   in which mode; it can under-call or over-call a voice, and no rule in the engine says otherwise.
   Three things push against it and none removes it: the tool result names who was NOT called, the
   operator's `@` reaches any rostered voice directly, and the round-end text asks for the
@@ -1785,7 +1793,7 @@ In order; each with what "done" is and which charter row it reopens.
 6. **Paper forward-testing** behind the gate (`status: paper`) — after 1 and after an
    independent evaluator exists (D1, D7).
 7. **FINRA and float live endpoints**; then a **second data vendor** for pre-2021 history.
-8. **Distinct commit identity for Kairos** (D2) on the first confusion.
+8. **Distinct commit identity for Gravit** (D2) on the first confusion.
 9. **Rooms** — built 2026-09-08/09 (plans 2–4); the live room drill passed 2026-09-09.
    Remaining from the spec's §11: nothing planned.
 10. **A2A voices** — the charter's §7.1 admits an agent reached over A2A as a voice; no spec,

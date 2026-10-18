@@ -11,11 +11,12 @@ import { AKSHARE_MCP_ROW_ID } from "../src/akshare.ts";
 import { PERSONA_PATH, readPersona } from "../src/persona.ts";
 import { facePolicyPatches } from "../src/policy.ts";
 import { definitionFor } from "../src/bot-presets.ts";
+import { LEGACY_PRESET_DESCRIPTION } from "../src/overlay.ts";
 import { makeBotsRoot } from "./bots-fixture.ts";
 
 /** Every row id {@link faceOverlay} owns, as the composed tree should show them. */
 const OVERLAY_ROW_IDS = [
-  "agent-preset-registry", "api-remotes", "connection", "directory-picker", "file-upload", "preset-kairos",
+  "agent-preset-registry", "api-remotes", "connection", "directory-picker", "file-upload", "preset-gravit",
   "session-controller", "settings-controller", "tool-ask-user", "webserver", "workspace", "workspace-controller",
 ] as const;
 
@@ -285,16 +286,16 @@ test("composeFace resolves the home explicitly and leaves $DSH_HOME alone", () =
  * nothing would be SILENT, so the check is on the COMPOSED row rather than on
  * the patch list - the same reason the hmr and telemetry switches are guarded.
  * The key is the 0.2.0 one: `persona` is gone (commit 40792330c0), and a patch
- * still writing it would compose "fine" and leave Kairos nameless - so the old
+ * still writing it would compose "fine" and leave Gravit nameless - so the old
  * key is asserted ABSENT, not merely the new one present. */
-test("composeFace sets Kairos's persona on dsh-base's system-prompt row", () => {
+test("composeFace sets Gravit's persona on dsh-base's system-prompt row", () => {
   const home = freshHome();
   const { patches } = composeFace({ profileName: "face", port: 3090, dshHome: home });
   const row = composeEntries([patches]).find((r) => r.id === "system-prompt");
   assert.ok(row, "system-prompt row present");
   const config = row!.config as { personaPrefix?: string; persona?: string; personaSuffix?: string };
   const persona = config.personaPrefix ?? "";
-  assert.match(persona, /^You are Kairos/);
+  assert.match(persona, /^You are Gravit/);
   assert.equal(persona, readPersona(PERSONA_PATH));
   assert.equal(config.persona, undefined, "the 0.1.1 key must not be written");
   assert.equal(config.personaSuffix, undefined, "no suffix: 0.1.1 had none, and it defaults to ''");
@@ -356,20 +357,23 @@ test("composeFace returns the loaded profile the runtime resolution needs", () =
   assert.equal(join(profile.dir, "cordis.yml"), rootConfig);
 });
 
-/* The static `preset-kairos` row IS `bots/kairos` (src/bot-presets.ts
+/* The static `preset-gravit` row IS `bots/gravit` (src/bot-presets.ts
  * `definitionFor`, PLAN S6): dsh 0.2 reads no bot directory itself, so the
  * default's display metadata and composition must come from the files, and a
  * regression back to a hard-coded literal - or to a silently empty default -
  * fails here. The fixture's preset.yml deliberately differs from the repo's. */
-test("composeFace takes the static preset-kairos row from bots/kairos", async () => {
+test("composeFace takes the static preset-gravit row from bots/gravit", async () => {
   const home = freshHome();
   const bots = await makeBotsRoot();
-  await writeFile(join(bots, "kairos", "preset.yml"), "name: Kairos Fixture\ndescription: the default, from the fixture\n");
+  await writeFile(join(bots, "gravit", "preset.yml"), "name: Gravit Fixture\ndescription: the default, from the fixture\n");
   const { patches } = composeFace({ profileName: "face", port: 3090, dshHome: home, botsRoot: bots });
-  const row = composeEntries([patches]).find((entry) => entry.id === "preset-kairos");
+  const row = composeEntries([patches]).find((entry) => entry.id === "preset-gravit");
   assert.equal(row?.name, "@deepseek-ai/dsh-agent-preset");
-  assert.deepEqual(row?.config, definitionFor(bots, "kairos"));
-  assert.deepEqual(row?.config, { id: "kairos", name: "Kairos Fixture", description: "the default, from the fixture", plugins: [] });
+  assert.deepEqual(row?.config, definitionFor(bots, "gravit"));
+  assert.deepEqual(row?.config, { id: "gravit", name: "Gravit Fixture", description: "the default, from the fixture", plugins: [] });
+
+  const legacy = composeEntries([patches]).find((entry) => entry.id === "preset-kairos");
+  assert.deepEqual(legacy?.config, { id: "kairos", name: "Gravit Fixture", description: LEGACY_PRESET_DESCRIPTION, plugins: [] });
 });
 
 /* 0.1.1's roster check refused a boot whose default preset could not be read;
@@ -378,9 +382,9 @@ test("composeFace takes the static preset-kairos row from bots/kairos", async ()
 test("composeFace refuses a default preset whose composition is missing", async () => {
   const home = freshHome();
   const bots = await makeBotsRoot();
-  await rm(join(bots, "kairos", "agent.cordis.yml"));
+  await rm(join(bots, "gravit", "agent.cordis.yml"));
   assert.throws(
     () => composeFace({ profileName: "face", port: 3090, dshHome: home, botsRoot: bots }),
-    /kairos\/agent\.cordis\.yml is missing/,
+    /gravit\/agent\.cordis\.yml is missing/,
   );
 });

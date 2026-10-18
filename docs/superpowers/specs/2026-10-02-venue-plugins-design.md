@@ -2,11 +2,11 @@
 
 **Status (2026-10-05):** superseded, not built. The operator chose the buyer-agent demo
 (`linqizhe07/buyer-agent-demo`) as the main line: **posture C** now — the demo is pinned as `demo/` by
-PR #5 and nothing in `face/` or `dsh/` calls it — with **direction A** — Kairos as a tenant of the demo's
+PR #5 and nothing in `face/` or `dsh/` calls it — with **direction A** — Gravit as a tenant of the demo's
 Account through one MCP row, to be settled in the next charter. This spec stays as the record of the
 face-side shape, one dsh row per venue behind Gate 2, and of the five decisions in §11, which were never
 answered one by one. The five conflicts between the two shapes — where the gate lives, who signs, which
-network, one card per write, the ledger — are the next charter's agenda; the demo's README (回灌 Kairos)
+network, one card per write, the ledger — are the next charter's agenda; the demo's README (回灌 Gravit)
 maps its pieces to the seams named here; the conflict record, both positions side by side and the three
 postures, is §12 of the handoff brief (`docs/superpowers/plans/2026-10-05-venue-plugins-unification-handoff.md`).
 As written: a design extending the skeleton design
@@ -51,7 +51,7 @@ confirmed or overturned in §11.
    (`DEVELOPMENT.md` §9 R1); that is acceptable for a paper account with a hostname pin and for
    nothing else.
 3. **Identity records live in dsh's credential seam, outside the workspace.** This is charter P1
-   applied literally — "wide hands, no self-keys … enforced by placement" (`Kairos-Design.md:54`).
+   applied literally — "wide hands, no self-keys … enforced by placement" (`Gravit-Design.md:54`).
    **[spike S1]** on the mechanism (§13).
 4. **The signer is a process or device the agent cannot read.** Where a venue issues a scoped,
    expiring agent key, that key *is* the signer's boundary (Hyperliquid); where it does not, a policy
@@ -78,8 +78,8 @@ confirmed or overturned in §11.
 
 ## 3. Architecture
 
-The current one-page picture (`Kairos-Design.md` §3) gains one row and one column. The row is
-VENUE PLUGINS, between KAIROS and the venues; the column is OUTSIDE THE WORKSPACE, holding the
+The current one-page picture (`Gravit-Design.md` §3) gains one row and one column. The row is
+VENUE PLUGINS, between GRAVIT and the venues; the column is OUTSIDE THE WORKSPACE, holding the
 identity records and the signer. Everything else stays where it is.
 
 ```
@@ -87,7 +87,7 @@ OPERATOR    holds the master accounts and master keys · answers every card ·
             reviews diffs · [new] an out-of-band approval device before real money
 FACE        Gate 2 (one card per write) · /market (three markets today,
             face/src/quote-types.ts:2) · [new] /account as a multi-venue ledger
-KAIROS      dsh runtime · tools come from each MCP row · a bot's allow mask
+GRAVIT      dsh runtime · tools come from each MCP row · a bot's allow mask
             (mcp__*__<raw>, face/plugins/bot.js:56) decides which venue a voice sees
 VENUE       alpaca_kit (US equities + crypto spot, paper, exists) · [new] hyperliquid
 PLUGINS     (perps, agent wallet, testnet) · [new] binance (spot, CCXT MCP, testnet) ·
@@ -201,7 +201,7 @@ the row (`bot.js:56-75`). Nothing in this design changes `bot.js`; it adds venue
 ## 5. The write path
 
 ```
-Kairos proposes an intent   →   Gate 2 card   →   venue-side policy   →   signer   →   venue
+Gravit proposes an intent   →   Gate 2 card   →   venue-side policy   →   signer   →   venue
 (place_order, a write tool)     (face; the        (agent key scope,      (a process the   (fill;
                                 operator answers; validUntil, caps;     agent cannot      receipt
                                 allowed-once      enforced by the       read)             into the
@@ -357,7 +357,7 @@ Each carries the recommendation drawn on the canvas; a reply of the form `D1-A` 
 - **§7.3 "no cryptographic machinery", "no hosted face", "no multi-tenant".** Honored by deferring
   the Solana signer and the product form of the operator's vision to the next charter. A buy-side
   assistant for many users is a hosted, multi-user deployment, and the charter's last trigger says
-  what that means: *"this charter is the wrong document; write the next one"* (`Kairos-Design.md:292`).
+  what that means: *"this charter is the wrong document; write the next one"* (`Gravit-Design.md:292`).
   This design is that charter's input, done on one operator's machine with fake money.
 - **§8 rows this design walks up to.** *Arming `ALPACA_KIT_ENABLE_ORDERS` in the real harness home*
   (step 1b): D3 first, then D8. *Real-money intent*: not fired by anything here; the `network:

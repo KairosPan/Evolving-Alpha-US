@@ -25,7 +25,7 @@ const row = (sessionId: string, values?: Record<string, unknown>, extra: Record<
 });
 
 test("the projected preset wins over the header hint: it is the preset the session runs", () => {
-  const out = summaryOf(row("s1", { agentPreset: "buffett", title: "t" }), { s1: "kairos" });
+  const out = summaryOf(row("s1", { agentPreset: "buffett", title: "t" }), { s1: "gravit" });
   assert.equal(out.agentPreset, "buffett");
 });
 
@@ -73,16 +73,16 @@ test("a non-object row passes through untouched rather than throwing", () => {
 
 test("normalized rows restore the member fold and the speaker label the raw 0.2 rows lose", () => {
   const raw = [
-    row("room", { agentPreset: "kairos" }),
+    row("room", { agentPreset: "gravit" }),
     row("m1", undefined, { parentSessionId: "room" }), // cold, pre-upgrade: only the header knows
     row("m2", { agentPreset: "speculator" }, { parentSessionId: "room" }),
   ];
   // Raw: nobody is a member, because no row names a bot preset.
   assert.deepEqual([...foldMembers(raw).members], []);
-  const hints = { room: "kairos", m1: "buffett" };
+  const hints = { room: "gravit", m1: "buffett" };
   const fold = foldMembers(raw.map((r) => summaryOf(r, hints)));
   assert.deepEqual([...fold.members].sort(), ["m1", "m2"]);
   const bots = [{ id: "buffett", name: "Buffett Type" }];
   assert.equal(speakerFor(summaryOf(raw[1], hints), bots), "Buffett Type");
-  assert.equal(speakerFor(raw[1] as { agentPreset?: unknown }, bots), "Kairos", "the raw row is exactly the silent mislabel this closes");
+  assert.equal(speakerFor(raw[1] as { agentPreset?: unknown }, bots), "Gravit", "the raw row is exactly the silent mislabel this closes");
 });

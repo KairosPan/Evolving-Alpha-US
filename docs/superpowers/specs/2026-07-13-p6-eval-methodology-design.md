@@ -1,6 +1,6 @@
 # P6 — Eval methodology (purged CV · regime-stratified · Hcredit ablation)
 
-Status: spec 2026-07-13. Source: DEVELOPMENT-PLAN.md §1 P6; kairos-mining §2.8; P2 spec (growth
+Status: spec 2026-07-13. Source: DEVELOPMENT-PLAN.md §1 P6; design-mining §2.8; P2 spec (growth
 market-clock thresholds + §5 dead-band 待verdict校准). Gate-non-blocking — these are eval-QUALITY
 tools; they change no live decision and touch no red-line / TCB surface.
 
@@ -132,7 +132,7 @@ is, under `alpha/loop`). No `alpha/data|guard|refine|harness`, no `seeds` touche
 
 ## 5. StatVerdict reporting-shape borrow
 
-Per kairos-mining §2.8: borrow only the per-metric tolerance-with-reasons REPORTING shape. `StatVerdict`
+Per design-mining §2.8: borrow only the per-metric tolerance-with-reasons REPORTING shape. `StatVerdict`
 already carries `verdict` + `ci_low/ci_high/p_value/mde` (the "reasons"); the stratified + ablation
 tools reuse it verbatim (no new stat machinery). Both arms always see identical holdout windows.
 

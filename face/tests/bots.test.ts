@@ -18,11 +18,28 @@ import { HttpError } from "../src/http.ts";
 
 const noPresets = async () => [] as { id: string; broken?: string }[];
 
-test("isBotId is the retired dsh preset-id grammar - now the face's only gate - minus the two names the face reserves", () => {
+test("isBotId is the retired dsh preset-id grammar - now the face's only gate - minus the names the face reserves", () => {
   for (const ok of ["buffett", "a", "spec-2", "x".repeat(64)]) assert.equal(isBotId(ok), true, ok);
-  for (const bad of ["", "Buffett", "_template", "kairos", "-lead", "a_b", "a.b", "a b", "巴菲特", "x".repeat(65), 42, null]) {
+  for (const bad of ["", "Buffett", "_template", "gravit", "kairos", "-lead", "a_b", "a.b", "a b", "巴菲特", "x".repeat(65), 42, null]) {
     assert.equal(isBotId(bad), false, JSON.stringify(bad));
   }
+});
+
+test("createBot refuses both host ids and names them in its error", async () => {
+  const root = await makeBotsRoot();
+  for (const id of ["gravit", "kairos"]) {
+    await assert.rejects(createBot(root, { id, name: "X" }),
+      (err: HttpError) => err.status === 400 && /not gravit, kairos or _template/.test(err.message), id);
+  }
+});
+
+test("listBots never lists a directory named after the pre-rename id", async () => {
+  const root = await makeBotsRoot();
+  await mkdir(join(root, "kairos"));
+  await writeFile(join(root, "kairos", "preset.yml"), "name: Stray\n");
+  const rows = await listBots(root, noPresets);
+  assert.equal(rows.some((row) => row.id === "kairos"), false);
+  assert.equal(rows.find((row) => row.id === "gravit")?.isDefault, true);
 });
 
 test("rejectSoul refuses an empty or templated persona and returns the trimmed text", () => {
@@ -87,7 +104,7 @@ test("createBot without a soul names the bot in its template, and proposes an id
 
 test("createBot refuses bad ids, reserved ids, a templated soul, and a missing template", async () => {
   const root = await makeBotsRoot();
-  for (const id of ["_template", "kairos", "Bad", "a b", "../x", "", 7]) {
+  for (const id of ["_template", "gravit", "Bad", "a b", "../x", "", 7]) {
     await assert.rejects(createBot(root, { id, name: "x" }), (err: HttpError) => err.status === 400, JSON.stringify(id));
   }
   await assert.rejects(createBot(root, { id: "ok", name: "x", soul: "{{cwd}}" }), (err: HttpError) => err.status === 400);
@@ -132,11 +149,11 @@ test("listBots reads every directory in the grammar, marks the default, carries 
   await mkdir(join(root, "cracked"));
   await writeFile(join(root, "cracked", "agent.cordis.yml"), "not: a list\n");
   await mkdir(join(root, "Skipped"));            // outside the grammar: not a preset, not listed
-  const presets = async () => [{ id: "kairos" }, { id: "probe" }, { id: "cracked", broken: "composition is not a list" }];
+  const presets = async () => [{ id: "gravit" }, { id: "probe" }, { id: "cracked", broken: "composition is not a list" }];
   const bots = await listBots(root, presets);
-  assert.deepEqual(bots.map((b) => b.id), ["cracked", "kairos", "probe"]);
+  assert.deepEqual(bots.map((b) => b.id), ["cracked", "gravit", "probe"]);
   const byId = new Map(bots.map((b) => [b.id, b]));
-  assert.equal(byId.get("kairos")!.isDefault, true);
+  assert.equal(byId.get("gravit")!.isDefault, true);
   assert.equal(byId.get("probe")!.name, "Probe");
   assert.equal(byId.get("probe")!.soul, "You are Probe.");
   assert.equal(byId.get("cracked")!.broken, "composition is not a list");
@@ -153,13 +170,13 @@ test("listBots reports a bot the face could not declare as broken with the face'
   await createBot(root, { id: "probe", name: "Probe", soul: "You are Probe." });
   await createBot(root, { id: "mounted", name: "Mounted", soul: "You are Mounted." });
   const errors = new Map([["probe", "bots/probe/agent.cordis.yml is not valid YAML: bad indentation"], ["mounted", "stale face reason"]]);
-  const presets = async () => [{ id: "kairos" }, { id: "mounted", broken: "bot (file:///x/bot.js): import failed" }];
+  const presets = async () => [{ id: "gravit" }, { id: "mounted", broken: "bot (file:///x/bot.js): import failed" }];
   const byId = new Map((await listBots(root, presets, errors)).map((b) => [b.id, b]));
   assert.equal(byId.get("probe")!.broken, "bots/probe/agent.cordis.yml is not valid YAML: bad indentation");
   assert.equal(byId.get("probe")!.listed, false);
   assert.equal(byId.get("mounted")!.broken, "bot (file:///x/bot.js): import failed", "the registry's reason for a declared bot wins");
   assert.equal(byId.get("mounted")!.listed, true);
-  assert.equal(byId.get("kairos")!.broken, undefined);
+  assert.equal(byId.get("gravit")!.broken, undefined);
   assert.equal((await listBots(root, presets)).find((b) => b.id === "probe")!.broken, undefined, "no errors map, no face reason");
 });
 
@@ -224,7 +241,7 @@ test("settings validate every supplied field before changing any saved file", as
     assert.deepEqual(await Promise.all(["preset.yml", "SOUL.md", "agent.cordis.yml"].map((name) => readFile(join(made.dir, name), "utf8"))), original);
   }
   await assert.rejects(updateBotSettings(root, { id: "ghost", name: "Ghost" }), (err: HttpError) => err.status === 404);
-  await assert.rejects(updateBotSettings(root, { id: "kairos", soul: "x" }), (err: HttpError) => err.status === 400);
+  await assert.rejects(updateBotSettings(root, { id: "gravit", soul: "x" }), (err: HttpError) => err.status === 400);
   await writeFile(join(made.dir, "agent.cordis.yml"), dump([{ id: "bot" }, { id: "bot" }]));
   await assert.rejects(updateBotSettings(root, { id: "probe", name: "New name", soul: "v2" }), (err: HttpError) => err.status === 409);
   assert.equal(await readFile(join(made.dir, "preset.yml"), "utf8"), original[0]);
@@ -367,7 +384,7 @@ function postReq(body: string, host = "127.0.0.1:3090", headers: Record<string, 
 }
 function routesFor(root: string, extra: Partial<BotRouteDeps> = {}): Map<string, WebRoute> {
   const routes: WebRoute[] = [];
-  registerBotRoutes({ register: (route) => routes.push(route) }, { botsRoot: root, listPresets: async () => [{ id: "kairos" }], ...extra });
+  registerBotRoutes({ register: (route) => routes.push(route) }, { botsRoot: root, listPresets: async () => [{ id: "gravit" }], ...extra });
   return new Map(routes.map((r) => [r.path, r]));
 }
 
@@ -390,9 +407,9 @@ test("routes: the listing answers ok with every bot row", async () => {
   assert.equal(r.out.status, 200);
   const body = JSON.parse(r.out.body) as { ok: boolean; bots: { id: string; listed: boolean }[] };
   assert.equal(body.ok, true);
-  assert.deepEqual(body.bots.map((b) => b.id), ["kairos", "probe"]);
-  assert.equal(body.bots[0].listed, true);  // the fake roster reports kairos
-  assert.equal(body.bots[1].listed, false); // and only kairos
+  assert.deepEqual(body.bots.map((b) => b.id), ["gravit", "probe"]);
+  assert.equal(body.bots[0].listed, true);  // the fake roster reports gravit
+  assert.equal(body.bots[1].listed, false); // and only gravit
 });
 
 test("routes: create is POST+JSON only, 400 on junk, 200 then 409", async () => {

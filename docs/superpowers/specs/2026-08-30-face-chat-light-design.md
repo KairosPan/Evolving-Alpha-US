@@ -1,7 +1,7 @@
 # face/ — the chat-light face as an in-process dsh host (v1)
 
 **Date:** 2026-08-30 · **Status:** approved design, spec for implementation
-**Authority:** mechanism authority for `face/`. On intent, `Kairos-Design.md` outranks this
+**Authority:** mechanism authority for `face/`. On intent, `Gravit-Design.md` outranks this
 spec; on mechanism, this spec and code win. The design lineage (rounds 1–4, the wiring
 decision) is `docs/design/prototypes/` + `docs/research/2026-08-30-dsh-wiring-recon.md`.
 
@@ -10,7 +10,7 @@ decision) is `docs/design/prototypes/` + `docs/research/2026-08-30-dsh-wiring-re
 A single Node process that **hosts the DeepSeek Harness in-process** (wiring option B′,
 operator-chosen) and serves the operator's own chat face — the round-4 `chat-light`
 messenger — instead of the bundled dsh web UI. The face's composer is live: the operator
-talks to Kairos through our page; approval prompts (Gate 2) render on our page.
+talks to Gravit through our page; approval prompts (Gate 2) render on our page.
 
 Evidence base: the installed `@deepseek-ai/dsh` 0.1.1-rc.2 — every `@deepseek-ai/dsh-*`
 sibling is a real npm package with typed exports; `boot()`, `createApiProxy`,
@@ -110,7 +110,7 @@ Re-implements the CLI chunk's composition (mirror of `profile-boot-*.js` lines ~
   (`{type:"client-request", rpcId, method, payload}`), plus the mux WebSocket with
   reconnect. No framework.
 - `stream.js` — event mapping: `session/event` surface types → DOM via the r4 renderer
-  grammar (operator bubble right / Kairos bubble left / tool result as flat inline card one
+  grammar (operator bubble right / Gravit bubble left / tool result as flat inline card one
   notch quieter); `approval/requested` + question frames → approve/deny · answer cards
   posting `/api/respond`; backfill on open via `session.history`, then live mux frames
   (dedupe by seq).
@@ -161,7 +161,7 @@ coupling — §4. (f) `DSH_TOOLS_MODE`/`DSH_TELEMETRY_DISABLED` read at compose 
 
 v1 acceptance, run by the operator with the face live: trigger a tool call whose approval
 policy is `ask` using a HARMLESS tool (never the order tools; ORDERS stays unarmed) — e.g. a
-session whose prompt asks Kairos to run a shell command under an `ask` pre-execute rule in
+session whose prompt asks Gravit to run a shell command under an `ask` pre-execute rule in
 the operator's installed profile. PASS = the approval card renders on the face, Deny is
 honored (tool does not run), Approve is honored, and both decisions appear in the session
 log as `approval/asked`/`approval/decided`. The README documents the exact drill steps.
@@ -170,7 +170,7 @@ note stays as-is and gains a pointer here once the drill is green.
 
 ## 8. Charter check
 
-`Kairos-Design.md` P1/P2/P5 unaffected (wide hands, operator-only teaching, human steady
+`Gravit-Design.md` P1/P2/P5 unaffected (wide hands, operator-only teaching, human steady
 state). dsh remains the STRATEGY runtime — now vendored into our process rather than beside
 it; the write map gains one row: `face/` is normal workspace code. The face is no longer
 "presentation only" (it hosts the loop) — recorded here as the successor posture, replacing
@@ -197,4 +197,4 @@ As-built truths the sections above predate:
 4. **§4 pinning:** `@deepseek-ai/cordis` rides its own 4.x track (pinned 4.0.2; 0.1.1-rc.2
    does not exist) — two pins, `DSH_PIN` + `CORDIS_PIN`, bumped together; five
    `cordis-plugin-*` packages float on caret ranges held by the lockfile.
-5. **Cosmetic:** the boot label is `kairos-face`, not `dsh` (verified diagnostic-only).
+5. **Cosmetic:** the boot label is `gravit-face`, not `dsh` (verified diagnostic-only).

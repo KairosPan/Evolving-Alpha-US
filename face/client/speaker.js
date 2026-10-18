@@ -7,7 +7,7 @@
  *
  * THE BUG THIS CLOSES (R12). A bot's home session answered in the bot's
  * persona and the sidebar filed it under the bot's name, but the four surfaces
- * in `chat.js` that NAME the speaker each wrote a literal `Kairos`: the `who`
+ * in `chat.js` that NAME the speaker each wrote a literal `Gravit`: the `who`
  * element over an assistant bubble, the ask card's `… asks` head, the composer
  * placeholder, and the status pulse. Four surfaces, one name, as many agents
  * as the operator had bots.
@@ -21,20 +21,31 @@
  * row - preset projection first, persisted header second - before it reaches here.)
  *
  * THE FALLBACK DIRECTION IS THE POINT. An unknown preset (a deleted bot, a
- * roster fetch that failed) degrades to the ID, never to `Kairos`. Labelling a
+ * roster fetch that failed) degrades to the ID, never to `Gravit`. Labelling a
  * bot's words as the host's is the failure worth avoiding; an unlovely
  * `buffett-type` over a bubble is not. Fail-away-from-the-host.
  * @module
  */
 
 /** The host agent's display name — the label for every session no bot owns. */
-export const HOST_NAME = "Kairos";
+export const HOST_NAME = "Gravit";
+
+/** The preset ids that ARE the host: `gravit`, and `kairos` — the same agent's
+ *  id before the 2026-10-08 rename, which archived sessions still carry and the
+ *  face declares as a hidden alias (rename spec 2026-10-18 §5.1). */
+export const HOST_PRESETS = Object.freeze(["gravit", "kairos"]);
+
+/** Whether a preset id is the host's.
+ * @param {unknown} id @returns {boolean} */
+export function isHostPreset(id) {
+  return typeof id === "string" && HOST_PRESETS.includes(id);
+}
 
 /**
  * The voice a session speaks with: a bot's display name when `agentPreset`
- * names one (never the default `kairos`, and never a blank string — a header
+ * names one (never a host id, and never a blank string — a header
  * field present but empty is no preset at all), the bot's id when the roster
- * has no name for it, else Kairos.
+ * has no name for it, else Gravit.
  * @param {{agentPreset?: unknown}|null|undefined} summary - the session
  *   summary from `session/list` (normalized by summaries.js) or `session/create`,
  *   or `null` for no session.
@@ -43,7 +54,7 @@ export const HOST_NAME = "Kairos";
  */
 export function speakerFor(summary, bots) {
   const id = summary?.agentPreset;
-  if (typeof id !== "string" || id.trim() === "" || id === "kairos") return HOST_NAME;
+  if (typeof id !== "string" || id.trim() === "" || isHostPreset(id)) return HOST_NAME;
   const bot = (Array.isArray(bots) ? bots : []).find((b) => b?.id === id);
   const name = typeof bot?.name === "string" ? bot.name.trim() : "";
   return name === "" ? id : name;

@@ -13,7 +13,7 @@ by the function that produced it). Round 2 builds the full face set in that hybr
 | `strategy.html` | NEW — the strategy shelf: lifecycle rail (idea → researching → validated → paper → retired), per-strategy entries with thesis, falsification line, journal freshness, honest backtest summary, equity spark |
 | `account.html` | NEW — the paper account: equity/cash/buying-power, positions (by strategy), closed-trades ledger, exposure, the double order gate rendered read-only |
 
-**Authority: zero**, as in Round 1. `Kairos-Design.md` and the skeleton spec win every conflict.
+**Authority: zero**, as in Round 1. `Gravit-Design.md` and the skeleton spec win every conflict.
 
 ## The graft, translated
 
@@ -30,7 +30,7 @@ world stays. What crosses over is the **bookkeeping skeleton**:
 
 ## Shared shell (built first, faces conform)
 
-One masthead (KAIROS · face-name · as-of · bed facts · ORDERS UNARMED chip), one nav
+One masthead (GRAVIT · face-name · as-of · bed facts · ORDERS UNARMED chip), one nav
 (Market / Strategy / Account as real relative links: `market.html`, `strategy.html`,
 `account.html`; landing linked from the wordmark), one footer, one token sheet
 (`shell.css`): the Round-1 Observatory palette/typography (Fraunces roman for argued voice,
@@ -54,9 +54,9 @@ same as the data script).
 
 ## Data
 
-- `../data/market_mock.js` → `window.KAIROS_DATA` (REAL, Round 1's bed extract) — market face,
+- `../data/market_mock.js` → `window.GRAVIT_DATA` (REAL, Round 1's bed extract) — market face,
   masthead bed facts.
-- `../data/workbench_mock.js` → `window.KAIROS_FACES` (FABRICATED, labeled) — strategy +
+- `../data/workbench_mock.js` → `window.GRAVIT_FACES` (FABRICATED, labeled) — strategy +
   account faces. Shape mirrors the real `strategies/_template` contract and the honest-eval
   vocabulary; see the file's own `note`.
 

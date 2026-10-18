@@ -119,7 +119,7 @@ import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import { DSH_LAUNCH_ENVIRONMENT_KEY } from "@deepseek-ai/dsh-launch-environment";
 import { provideCmdline, type AppReady } from "@deepseek-ai/dsh-cmdline";
 import type { Config as SystemPromptConfig } from "@deepseek-ai/dsh-system-prompt";
-import { BOTS_ROOT, DEFAULT_PRESET, SYSTEM_PROMPT_ROW_ID, faceOverlay } from "./overlay.ts";
+import { BOTS_ROOT, DEFAULT_PRESET, LEGACY_PRESET, SYSTEM_PROMPT_ROW_ID, faceOverlay } from "./overlay.ts";
 import { declareBots, definitionFor, type BotPresets } from "./bot-presets.ts";
 import { PERSONA_PATH, readPersona } from "./persona.ts";
 import { aksharePatches } from "./akshare.ts";
@@ -133,7 +133,7 @@ import {
  * here. Purely a label (nothing branches on it), so it names the face rather
  * than borrowing the CLI's `dsh` — an operator reading a stack must be able to
  * tell a face composition failure from a `dsh` one. */
-const BIN = "kairos-face";
+const BIN = "gravit-face";
 
 /** Absolute path of the face's OWN package.json — the anchor of the runtime
  * module resolution. `loadProfile` resolves each profile bundle from it first
@@ -173,10 +173,10 @@ const HMR_ROW_ID = "hmr";
 const PROFILE_ROOT_FILENAME = "cordis.yml";
 
 /** The empty root entry list the whole face tree patches over. */
-const PROFILE_ROOT_CONFIG = `# kairos-face profile root - an empty entry list. The tree is composed as
+const PROFILE_ROOT_CONFIG = `# gravit-face profile root - an empty entry list. The tree is composed as
 # patches: bundles, the face's policy defaults, project market connections,
 # profile/home user patches, then the face's own host rows. Edit
-# cordis.patch.yml, not this file - kairos-face rewrites it on every boot.
+# cordis.patch.yml, not this file - gravit-face rewrites it on every boot.
 []
 `;
 
@@ -265,7 +265,7 @@ function composedRowIds(layers: readonly FacePatchList[]): Set<string> {
  * layer, the machine-local home layer (`$DSH_HOME/cordis.patch.yml`, which
  * outranks the per-profile one), the caller's in-memory
  * {@link FaceBootOptions.extraPatches} (usually none), the telemetry switch,
- * the hmr switch, Kairos's persona, then the face's host rows last.
+ * the hmr switch, Gravit's persona, then the face's host rows last.
  *
  * Pure with respect to the environment — the home is threaded explicitly into
  * every dsh-app-boot call rather than materialized into `$DSH_HOME` — but NOT
@@ -340,7 +340,7 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
   const telemetry = resolveTelemetryPatch(process.env.DSH_TELEMETRY_DISABLED, rows.has(TELEMETRY_ROW_ID));
   if (telemetry !== undefined) patches.push(telemetry);
   if (rows.has(HMR_ROW_ID)) patches.push({ id: HMR_ROW_ID, disabled: true });
-  /* Kairos's persona: the one config value dsh-base leaves empty on purpose
+  /* Gravit's persona: the one config value dsh-base leaves empty on purpose
    * ("The deployment persona is a deployment choice", base :502-507, row
    * `config: { personaPrefix: '' }`). 0.2.0 renamed the key: `persona`
    * (section `deployment:persona`) became `personaPrefix`, rendered as section
@@ -376,13 +376,13 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
       },
     });
   }
-  /* The static `preset-kairos` row IS `bots/kairos` (src/bot-presets.ts
+  /* The static `preset-gravit` row IS `bots/gravit` (src/bot-presets.ts
    * `definitionFor`): its preset.yml name/description and its `[]`
    * composition - the host composition itself, no mask, no shadowed persona.
    * Static, not declared after boot like the other bots, because the default
    * must exist before the first `session/create` resolves it (NEW
    * packages/api/session-controller/src/agent.ts:380-397). `definitionFor`
-   * throws with the file path when bots/kairos/agent.cordis.yml is missing or
+   * throws with the file path when bots/gravit/agent.cordis.yml is missing or
    * not YAML, which refuses the compose as 0.1.1's roster check refused the
    * boot. `model` stays face-only - a definition carries no route (NEW
    * packages/preset/agent-preset-registry/src/definition.ts:5-11). */
@@ -531,7 +531,7 @@ async function assertEntriesActive(ctx: Context): Promise<void> {
  *   index.ts:208): the room pins every member session `read-only` through it. */
 const REQUIRED_SERVICES: ReadonlyArray<readonly [service: string, consequence: string]> = [
   ["approval", "every order card would fail closed invisibly"],
-  ["userQuestions", "Kairos could not ask the operator anything"],
+  ["userQuestions", "Gravit could not ask the operator anything"],
   ["typertGateway", "no approval answerer - every order would be denied 'no approval channel is available'"],
   ["permissionPresets", "room members could not be pinned read-only"],
 ];
@@ -862,7 +862,7 @@ export async function bootFace(opts: FaceBootOptions): Promise<BootedFace> {
     const tools = ctx.get("tools") as { schemas(): ToolSchemaLike[] } | undefined;
     if (tools?.schemas().some((schema) => schema.name === ASK_USER_TOOL) !== true) {
       throw new Error(
-        `${BIN}: ${ASK_USER_TOOL} is not registered - Kairos would have no way to ask the operator` +
+        `${BIN}: ${ASK_USER_TOOL} is not registered - Gravit would have no way to ask the operator` +
           ` anything, silently (the \`tool-ask-user\` overlay row mounts it)`,
       );
     }
@@ -894,13 +894,13 @@ export async function bootFace(opts: FaceBootOptions): Promise<BootedFace> {
     }
     /* `defaultId = selectedDefault ?? default` (NEW packages/preset/
      * agent-preset-registry/src/index.ts:74): a Settings-supplied default
-     * could otherwise move every preset-less session off Kairos. Without
+     * could otherwise move every preset-less session off Gravit. Without
      * `profileContext` no settings service exists, so this holds today; the
      * check keeps it from drifting silently. */
     if (presets.defaultId !== DEFAULT_PRESET) {
       throw new Error(
         `${BIN}: the preset registry's default is "${presets.defaultId}", not "${DEFAULT_PRESET}" -` +
-          ` every session that names no preset would leave the Kairos composition`,
+          ` every session that names no preset would leave the Gravit composition`,
       );
     }
     /* S6: every non-default bot, declared NOW - after Gate 2 is armed, before
@@ -936,6 +936,16 @@ export async function bootFace(opts: FaceBootOptions): Promise<BootedFace> {
             ? `not in the roster (${roster.map((p) => p.id).join(", ") || "empty"})`
             : `broken: ${fallback.broken}`) +
           ` - every session/create would fail at resolution`,
+      );
+    }
+    /* The pre-rename alias (src/overlay.ts LEGACY_PRESET): a missing or broken
+     * alias refuses the boot here rather than every archived session at resume. */
+    const legacy = roster.find((preset) => preset.id === LEGACY_PRESET);
+    if (legacy === undefined || legacy.broken !== undefined) {
+      throw new Error(
+        `${BIN}: legacy agent preset "${LEGACY_PRESET}" is ` +
+          (legacy === undefined ? "not in the roster" : `broken: ${legacy.broken}`) +
+          " - sessions created before 2026-10-08 would not open",
       );
     }
     /* Every bot this boot declared must be LISTED - the registry is what

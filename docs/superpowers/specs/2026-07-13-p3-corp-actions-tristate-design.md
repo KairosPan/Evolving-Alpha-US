@@ -1,6 +1,6 @@
 # P3 — Corp-actions tri-state guard-blind fix (design)
 
-Status: drafted 2026-07-13. Source: DEVELOPMENT-PLAN.md §1 P3; kairos-mining §2.2 (CONFIRMED) + §4.2.
+Status: drafted 2026-07-13. Source: DEVELOPMENT-PLAN.md §1 P3; design-mining §2.2 (CONFIRMED) + §4.2.
 Charter posture: warn-the-human co-pilot — surface the data gap, never add a veto.
 
 ## The verified hole
@@ -40,7 +40,7 @@ source (only the corp-data-dependent ones are in scope for this fix):
 | `panic_state` | `detect_panic_state(history, state)` | history-derived | no |
 | `going_concern`, `regulatory` | hardcoded `False` (no feed yet) | no data source | no |
 
-Notes on the not-in-scope tape flags (kairos-mining §2.2 named "ssr_active/halt_then_dump mapping
+Notes on the not-in-scope tape flags (design-mining §2.2 named "ssr_active/halt_then_dump mapping
 missing rows → False" as the sibling silent seam, but they are **not** corp-artifact-dependent):
 - `halt_then_dump`: `screen_decision` calls `guarded.daily_snapshot(as_of)` unconditionally, and
   `SnapshotSource.daily_snapshot` **raises `SnapshotMissingError`** on an absent day — so a missing

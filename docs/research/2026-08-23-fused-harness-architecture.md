@@ -1,6 +1,6 @@
 # A Fused Harness Architecture — dsh × Prime Agent
 
-> Companion to `2026-08-22-harness-design-report.md`. This document sets the SoniaKairos
+> Companion to `2026-08-22-harness-design-report.md`. This document sets the previous product's
 > charter aside (per the operator's instruction of 2026-08-23) and asks a narrower engineering
 > question: *taking only the native primitives of DeepSeek Harness (dsh / Cordis) and Prime
 > Agent (RLM / Continual Harness), what is the strongest single architecture you can build?*
@@ -276,10 +276,10 @@ scorers deferred — is Prime Agent's ordering, and Factorio is its measured out
 
 ## 6. Relation to this repo (non-binding observation)
 
-The composed architecture is, structurally, what SoniaKairos already reaches for by other names:
+The composed architecture is, structurally, what the previous product's charter already reaches for by other names:
 one write-waist (`try_apply_op`) = the Landing Waist; the immutable-kernel enumeration = R2's
 protected scope; provenance stamps = the Identity Mint; `learned_asof` / append-only edit log =
-the Ledger; the two-hands governance (Sonia proposes, user approves, worker never proposes) = the
+the Ledger; the two-hands governance (the retired meta-agent proposes, user approves, worker never proposes) = the
 actor-never-writes-its-own-durable-self invariant. What the fusion adds that the repo does not yet
 have: the **Jail** as a first-class OS boundary (the repo's `LocalEnv` is explicitly "not a
 security boundary"), **emission classification** as a capability property, and the **graded-lane**

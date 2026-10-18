@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KAIROS · STRATEGY — R3 IMMERSIVE</title>
+<title>GRAVIT · STRATEGY — R3 IMMERSIVE</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2305070b'/%3E%3Cpath d='M8 2 L11 8 L8 14 L5 8 Z' fill='%23c8a552'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="../r2/shell.css">
 <link rel="stylesheet" href="timeline.css">
@@ -165,7 +165,7 @@ main.wrap.imm-main{
 
 <header class="masthead">
   <div class="wrap mast-top">
-    <a class="wordmark" href="../r2/landing.html"><span class="dia" aria-hidden="true"></span>KAIROS</a>
+    <a class="wordmark" href="../r2/landing.html"><span class="dia" aria-hidden="true"></span>GRAVIT</a>
     <span class="facename">STRATEGY</span>
     <nav class="imm-nav" aria-label="Faces">
       <a class="nav-link" href="../r2/market.html"><span class="nav-idx">01</span>Market</a>
@@ -194,7 +194,7 @@ main.wrap.imm-main{
     <div class="dock-cap">
       <span class="eyebrow">dossier · tt-breakout · pinned</span>
       <span class="spacer"></span>
-      <span class="stamp-sample" title="dossier numbers come from KAIROS_FACES, a labeled fabricated block">sample</span>
+      <span class="stamp-sample" title="dossier numbers come from GRAVIT_FACES, a labeled fabricated block">sample</span>
     </div>
 
     <!-- card 1 · the kill line -->
@@ -287,9 +287,9 @@ main.wrap.imm-main{
 
 <footer class="foot-band">
   <div class="wrap foot">
-    <span>KAIROS · <b>STRATEGY</b> — round-3 immersive prototype · zero authority · read-only</span>
+    <span>GRAVIT · <b>STRATEGY</b> — round-3 immersive prototype · zero authority · read-only</span>
     <span class="spacer"></span>
-    <span>intent · <b>Kairos-Design.md</b></span>
+    <span>intent · <b>Gravit-Design.md</b></span>
     <span>mechanism · <b>the skeleton spec &amp; code</b></span>
   </div>
 </footer>
@@ -302,7 +302,7 @@ main.wrap.imm-main{
 /* ── shell fill — shared across all R2 faces ── */
 (function(){
   "use strict";
-  var D = window.KAIROS_DATA || null;
+  var D = window.GRAVIT_DATA || null;
   if(!D) return; // dashes stand: no reading, never fake
   function t(id, s){ var el = document.getElementById(id); if(el) el.textContent = s; }
   t("k-asof", D.as_of);
@@ -322,10 +322,10 @@ main.wrap.imm-main{
   });
 })();
 
-/* ── dossier fill — pinned cards read KAIROS_FACES.strategies.rows[0] ── */
+/* ── dossier fill — pinned cards read GRAVIT_FACES.strategies.rows[0] ── */
 (function(){
   "use strict";
-  var F = window.KAIROS_FACES || null;
+  var F = window.GRAVIT_FACES || null;
   var rows = F && F.strategies && F.strategies.rows;
   var r = rows && rows.length ? rows[0] : null;
   if(!r) return; // the null spans stand: no reading, never fake

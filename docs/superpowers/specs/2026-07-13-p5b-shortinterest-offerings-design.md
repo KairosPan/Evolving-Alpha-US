@@ -11,7 +11,7 @@
   §"Not built here").
 - **Builds on:** `2026-07-13-p4-composite-source-design.md` (the CompositeSource per-capability seam) and
   `2026-07-13-p5a-earnings-feed-design.md` (the template these two feeds copy method-for-method).
-- **Design input:** kairos-mining §3 "Dilution lifecycle as typed update events" — `updates_since`-shaped
+- **Design input:** design-mining §3 "Dilution lifecycle as typed update events" — `updates_since`-shaped
   typed events, each keyed on its own announce/process date (PIT); keep today's veto-forever as the
   explicit fail-closed no-connector default.
 
@@ -63,7 +63,7 @@ Each lifecycle transition (announce / effective / withdrawn / expired) is a sepa
 the day THAT transition became knowable — its EDGAR filing/index date (or, for a Rule-415 shelf expiry,
 the scheduled expiry date itself). A `withdrawn` event keyed on the RW-filing date lifts the veto exactly
 then and no earlier; an `announce` keyed on the S-3 filing date starts it. This is the `updates_since`
-append-only-log shape from kairos-mining §3: the feed is a log of typed updates; the *current* overhang
+append-only-log shape from design-mining §3: the feed is a log of typed updates; the *current* overhang
 state is a fold over the events known by `as_of`.
 
 ## Data models

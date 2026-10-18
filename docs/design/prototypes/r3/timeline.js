@@ -1,8 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════
-   KAIROS · R3 — SESSION TIMELINE KIT (shared renderer)
+   GRAVIT · R3 — SESSION TIMELINE KIT (shared renderer)
 
    window.renderSessionTimeline(containerEl) builds the ENTIRE
-   session timeline DOM from window.KAIROS_SESSION: session header
+   session timeline DOM from window.GRAVIT_SESSION: session header
    (strategy, id, date, attendance stamp, runtime, SAMPLE plate,
    raw linkback) → numbered turns T·1… in three voice registers →
    the one inert composer.
@@ -284,13 +284,13 @@ var KIND_WORD = {
 };
 var KIND_NOTE = {
   backtest: "scored under the five honest-eval rules · docs/backtest-rules.md",
-  arena_write: "record, not gate — the arena is Kairos's to write",
+  arena_write: "record, not gate — the arena is Gravit's to write",
   proposal: "not committed — the operator is the only teacher"
 };
 
 /* ── one turn ── */
 function turnLi(turn){
-  var role = turn.role === "operator" || turn.role === "kairos" || turn.role === "tool"
+  var role = turn.role === "operator" || turn.role === "gravit" || turn.role === "tool"
     ? turn.role : "tool";
   var li = el("li", "tl-turn tl-turn-" + role);
 
@@ -314,7 +314,7 @@ function turnLi(turn){
 
   if(role === "operator"){
     body.appendChild(el("p", "tl-text-op", turn.text || DASH));
-  } else if(role === "kairos"){
+  } else if(role === "gravit"){
     body.appendChild(el("p", "tl-text-k", turn.text || DASH));
   } else {
     var c = card(KIND_WORD[turn.kind] || (turn.kind || "instrument"), summaryFor(turn), {
@@ -404,10 +404,10 @@ window.renderSessionTimeline = function(containerEl){
   containerEl.textContent = "";           /* idempotent */
   var root = el("section", "tl");
   root.setAttribute("aria-label", "Session timeline");
-  var S = window.KAIROS_SESSION || null;
+  var S = window.GRAVIT_SESSION || null;
   if(!S || !S.session){
     root.appendChild(el("p", "tl-empty",
-      "— no session data (window.KAIROS_SESSION missing) — dashes stand, never fake"));
+      "— no session data (window.GRAVIT_SESSION missing) — dashes stand, never fake"));
     containerEl.appendChild(root);
     return;
   }

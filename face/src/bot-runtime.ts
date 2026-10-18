@@ -49,7 +49,7 @@ export function sessionPresetReader(ctx: { get(name: string): unknown }): (sessi
   return (session) => {
     const projections = ctx.get("sessionProjections") as ProjectionsLike | undefined;
     if (projections === undefined) {
-      throw new Error("kairos-face: sessionProjections service is absent - cannot tell which agent preset a session runs");
+      throw new Error("gravit-face: sessionProjections service is absent - cannot tell which agent preset a session runs");
     }
     return projections.stateOf(session, "agentPreset") ?? undefined;
   };
@@ -211,7 +211,7 @@ export function registerBotRuntimeRoutes(web: RouteRegistrar, runtime: ReturnTyp
       return send(200, { ok: true, runtime: await runtime.inspect(query.get("id") ?? "", query.get("sessionId") ?? "") });
     } catch (error) {
       if (error instanceof HttpError) return send(error.status, { ok: false, error: error.message });
-      console.error("kairos-face: bot runtime inspection failed:", error);
+      console.error("gravit-face: bot runtime inspection failed:", error);
       return send(500, { ok: false, error: "runtime inspection failed" });
     }
   } });

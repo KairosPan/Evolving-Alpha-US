@@ -10,7 +10,7 @@ it is the "add later" reservoir; this round defines v1.
 
 | File | What |
 |---|---|
-| `chat.css` + `chat.js` | the minimal kit: token-driven styles + `renderChat(el)` rendering `window.KAIROS_SESSION` |
+| `chat.css` + `chat.js` | the minimal kit: token-driven styles + `renderChat(el)` rendering `window.GRAVIT_SESSION` |
 | `chat-light.html` | the messenger-clean light variant (closest to the operator's reference) |
 | `chat-dark.html` | the identical layout in the Observatory palette — tests whether "simple" and the chosen voice coexist |
 
@@ -21,11 +21,11 @@ it is the "add later" reservoir; this round defines v1.
 The messenger metaphor maps onto our objects:
 
 - **Conversations = strategies.** The sidebar lists the five strategies from
-  `window.KAIROS_FACES.strategies.rows` as conversation rows: name, a tiny status chip, and the
+  `window.GRAVIT_FACES.strategies.rows` as conversation rows: name, a tiny status chip, and the
   `journal_tail` truncated as the "last message" preview. tt-breakout is the active
   conversation (this session); the rest are inert.
 - **Bubbles carry the voices, lightly.** Operator = right-aligned dark bubble (their own words,
-  as in any messenger). Kairos = left-aligned light bubble with a small name label. The serif /
+  as in any messenger). Gravit = left-aligned light bubble with a small name label. The serif /
   mono / sans register system relaxes to: prose in the UI face, machine numbers in mono. No
   engraved plates, no entry numbers, no monograms.
 - **Tool results are compact inline cards** inside the flow, not instruments: the breadth
@@ -39,7 +39,7 @@ The messenger metaphor maps onto our objects:
   - every card keeps a small `raw` link (plain text link, not a signature plate);
   - the session header row keeps `SAMPLE` and the `interactive` stamp as small quiet tags;
   - null = em-dash; the thin-sample caveat line stays on the backtest card.
-- **The composer is present and inert** ("Message Kairos…", disabled, small honest note).
+- **The composer is present and inert** ("Message Gravit…", disabled, small honest note).
 - Date/time separators like a messenger ("2026-07-08 09:41").
 
 ## Hard constraints

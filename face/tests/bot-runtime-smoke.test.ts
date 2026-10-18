@@ -248,7 +248,7 @@ test("bot runtime smoke: actual home routing, saved-versus-mounted identity, rea
       // `agentPresets/select` (NEW packages/preset/agent-preset-registry/src/index.ts:318-334).
       const switchedId = await createHome();
       assert.equal((await runtime.inspect("probe", switchedId)).model, "stub/bot-v2");
-      assert.equal(await remote<string>(base, cookie, "agentPresets/select", { agentId: switchedId, agentPreset: "kairos" }), "kairos");
+      assert.equal(await remote<string>(base, cookie, "agentPresets/select", { agentId: switchedId, agentPreset: "gravit" }), "gravit");
       await prompt(switchedId, "The principal agent uses the host default.");
       assertRoute(switchedId, "host-default");
 

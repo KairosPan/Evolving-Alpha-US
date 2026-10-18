@@ -1,6 +1,6 @@
 /* R4 — Minimal Chat kit.
    window.renderChat(sidebarEl, mainEl) builds the whole page from
-   window.KAIROS_SESSION + window.KAIROS_FACES via DOM APIs only
+   window.GRAVIT_SESSION + window.GRAVIT_FACES via DOM APIs only
    (createElement/textContent — no unescaped innerHTML of data).
    Null anywhere renders an em-dash. Zero authority; read-only. */
 (function () {
@@ -34,7 +34,7 @@
   /* ---------- sidebar: conversations = strategies ---------- */
 
   function buildSidebar(root, faces, session) {
-    root.appendChild(el("div", "side-brand", "Kairos"));
+    root.appendChild(el("div", "side-brand", "Gravit"));
     root.appendChild(el("div", "side-search", "Search"));
 
     var list = el("div", "conv-list");
@@ -197,9 +197,9 @@
         var op = el("div", "msg op");
         op.appendChild(el("div", "bubble", dash(turn.text)));
         inner.appendChild(op);
-      } else if (turn.role === "kairos") {
+      } else if (turn.role === "gravit") {
         var k = el("div", "msg k");
-        k.appendChild(el("div", "who", "Kairos"));
+        k.appendChild(el("div", "who", "Gravit"));
         k.appendChild(el("div", "bubble", dash(turn.text)));
         inner.appendChild(k);
       } else if (turn.role === "tool") {
@@ -215,7 +215,7 @@
     var row = el("div", "composer-row");
     var input = el("input", "composer-input");
     input.type = "text";
-    input.placeholder = "Message Kairos…";
+    input.placeholder = "Message Gravit…";
     input.disabled = true;
     row.appendChild(input);
     comp.appendChild(row);
@@ -225,10 +225,10 @@
   }
 
   window.renderChat = function (sidebarEl, mainEl) {
-    var sessionData = window.KAIROS_SESSION || {};
+    var sessionData = window.GRAVIT_SESSION || {};
     var session = sessionData.session || {};
     session.turns = sessionData.turns;
-    var faces = window.KAIROS_FACES || {};
+    var faces = window.GRAVIT_FACES || {};
 
     sidebarEl.textContent = "";
     mainEl.textContent = "";

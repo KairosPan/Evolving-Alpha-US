@@ -21,10 +21,10 @@ test("isMentionText is the composer anchor: start or whitespace, then @ and a to
 });
 
 const rows = [
-  { sessionId: "room", agentPreset: "kairos", cwd: "/c" },
+  { sessionId: "room", agentPreset: "gravit", cwd: "/c" },
   { sessionId: "m1", parentSessionId: "room", agentPreset: "buffett", cwd: "/c" },
   { sessionId: "m2", parentSessionId: "room", agentPreset: "speculator", cwd: "/c" },
-  { sessionId: "fork", parentSessionId: "room", agentPreset: "kairos", cwd: "/c" },
+  { sessionId: "fork", parentSessionId: "room", agentPreset: "gravit", cwd: "/c" },
   { sessionId: "child", parentSessionId: "room", agentPreset: "buffett", origin: "subagent", cwd: "/c" },
   { sessionId: "orphan", parentSessionId: "gone", agentPreset: "buffett", cwd: "/c" },
   { sessionId: "home", agentPreset: "buffett", cwd: "/bots/buffett/journal" },
@@ -60,19 +60,19 @@ test("bucketFor: a member never files under its bot's home bucket, whatever prec
 
 const roster = [{ id: "buffett", name: "巴菲特型" }, { id: "speculator", name: "投机型" }, { id: "cracked", name: "cracked", broken: "not a list" }];
 
-test("stripChips: Kairos first; roster members read the projection's coarse state, the pulses' fine state while called, a pending gate over both; a rostered-but-unmounted bot is shown broken; a member no longer rostered is left", () => {
+test("stripChips: Gravit first; roster members read the projection's coarse state, the pulses' fine state while called, a pending gate over both; a rostered-but-unmounted bot is shown broken; a member no longer rostered is left", () => {
   const projection = { kind: "room", organizing: true, members: { buffett: { sessionId: "m1", state: "called" }, speculator: { sessionId: "m2", state: "passed" }, ghost: { sessionId: "m3", state: "answered", name: "Ghost" } } };
-  const chips = stripChips({ roster, projection, members: { ghost: { sessionId: "m3", name: "Ghost" } }, gates: new Set(["m2"]), fine: new Map([["m1", "writing"]]), running: false, kairosName: "Kairos" });
-  assert.deepEqual(chips.map((c) => `${c.id}:${c.state}`), ["kairos:organizing", "buffett:writing", "speculator:waiting for you", "cracked:idle", "ghost:left"]);
-  assert.equal(chips[0].kairos, true);
+  const chips = stripChips({ roster, projection, members: { ghost: { sessionId: "m3", name: "Ghost" } }, gates: new Set(["m2"]), fine: new Map([["m1", "writing"]]), running: false, gravitName: "Gravit" });
+  assert.deepEqual(chips.map((c) => `${c.id}:${c.state}`), ["gravit:organizing", "buffett:writing", "speculator:waiting for you", "cracked:idle", "ghost:left"]);
+  assert.equal(chips[0].gravit, true);
   assert.equal(chips[3].broken, "not a list");
   assert.equal(chips[1].sessionId, "m1");
 });
 
-test("stripChips: before any dispatch the strip is the roster at idle, and Kairos follows the running flag", () => {
-  const chips = stripChips({ roster, projection: { kind: "none" }, members: {}, gates: new Set(), fine: new Map(), running: true, kairosName: "Kairos" });
+test("stripChips: before any dispatch the strip is the roster at idle, and Gravit follows the running flag", () => {
+  const chips = stripChips({ roster, projection: { kind: "none" }, members: {}, gates: new Set(), fine: new Map(), running: true, gravitName: "Gravit" });
   assert.deepEqual(chips.map((c) => c.state), ["organizing", "idle", "idle", "idle"]);
-  assert.deepEqual(stripChips({ roster: [], projection: undefined, members: {}, gates: new Set(), fine: new Map(), running: false, kairosName: "Kairos" }).map((c) => c.id), ["kairos"]);
+  assert.deepEqual(stripChips({ roster: [], projection: undefined, members: {}, gates: new Set(), fine: new Map(), running: false, gravitName: "Gravit" }).map((c) => c.id), ["gravit"]);
 });
 
 test("roundEndLine reads the outcome and each state group; capped and superseded say so", () => {
@@ -85,9 +85,9 @@ test("roundEndLine reads the outcome and each state group; capped and superseded
 test("gateSpeaker names the member's bot for a member's gate, else the fallback", () => {
   const memberRows = [{ sessionId: "m1", agentPreset: "buffett" }];
   const bots = [{ id: "buffett", name: "巴菲特型" }];
-  assert.equal(gateSpeaker("m1", memberRows, bots, "Kairos"), "巴菲特型");
-  assert.equal(gateSpeaker("m9", memberRows, bots, "Kairos"), "Kairos");
-  assert.equal(gateSpeaker("m1", memberRows, [], "Kairos"), "buffett", "no roster name: the id, never the host");
+  assert.equal(gateSpeaker("m1", memberRows, bots, "Gravit"), "巴菲特型");
+  assert.equal(gateSpeaker("m9", memberRows, bots, "Gravit"), "Gravit");
+  assert.equal(gateSpeaker("m1", memberRows, [], "Gravit"), "buffett", "no roster name: the id, never the host");
 });
 
 const account = {
@@ -165,4 +165,14 @@ test("structured account strings remain literal data, never parsed as markup or 
   assert.deepEqual(normalized, literal);
   normalized!.evidence.push("local display change");
   assert.equal(literal.evidence.length, 1, "normalization does not mutate the original event");
+});
+
+test("foldMembers: a room recorded under the pre-rename id still folds its members, and its forks stay out", () => {
+  const { rooms, members } = foldMembers([
+    { sessionId: "legacy-room", agentPreset: "kairos" },
+    { sessionId: "m-legacy", parentSessionId: "legacy-room", agentPreset: "buffett" },
+    { sessionId: "legacy-fork", parentSessionId: "legacy-room", agentPreset: "kairos" },
+  ]);
+  assert.deepEqual(rooms.get("legacy-room")?.map((r) => r.sessionId), ["m-legacy"]);
+  assert.deepEqual([...members], ["m-legacy"]);
 });

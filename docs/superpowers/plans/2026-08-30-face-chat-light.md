@@ -35,7 +35,7 @@
 
 ```json
 {
-  "name": "kairos-face",
+  "name": "gravit-face",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -132,7 +132,7 @@ Expected: PASS, clean typecheck
 
 ```bash
 git add face/package.json face/package-lock.json face/tsconfig.json face/.gitignore face/src/version.ts face/tests/version.test.ts
-git commit -m "feat(face): scaffold kairos-face with the dsh family pinned to 0.1.1-rc.2"
+git commit -m "feat(face): scaffold gravit-face with the dsh family pinned to 0.1.1-rc.2"
 ```
 
 ---
@@ -278,7 +278,7 @@ const PROFILE_PKG = {
 };
 
 const PATCH_HEADER = `# face profile patch layer. The face's own host rows (webserver :3090,
-# api gateway, connection) are inserted programmatically by kairos-face at
+# api gateway, connection) are inserted programmatically by gravit-face at
 # boot - do NOT add them here. This file is the operator's: mount the
 # alpaca_kit MCP server and skill roots here per dsh/README.md steps 3-6.
 `;
@@ -554,7 +554,7 @@ const clientDir = join(dirname(fileURLToPath(import.meta.url)), "..", "client");
 
 const { ctx, dispose } = await bootFace({ profileName, port });
 registerStatic(ctx.webServer, clientDir);
-console.log(`kairos-face: http://127.0.0.1:${ctx.webServer.port}/ (profile: ${profileName})`);
+console.log(`gravit-face: http://127.0.0.1:${ctx.webServer.port}/ (profile: ${profileName})`);
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, () => { void dispose().then(() => process.exit(sig === "SIGINT" ? 130 : 0)); });
@@ -565,8 +565,8 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
 ```html
 <!doctype html>
 <meta charset="utf-8">
-<title>KAIROS</title>
-<p>kairos-face booted. Client lands in the next task.</p>
+<title>GRAVIT</title>
+<p>gravit-face booted. Client lands in the next task.</p>
 ```
 
 - [ ] **Step 5: Typecheck, then a manual boot probe (best-effort, not a gate)**
@@ -625,7 +625,7 @@ test("surface events map to bubbles and cards; log-only types are ignored", () =
   const views = lines.map(mapFrame);
   assert.equal(views[0].kind, "bubble"); assert.equal(views[0].role, "operator");
   assert.match(views[0].text, /pivot/);
-  assert.equal(views[1].kind, "bubble"); assert.equal(views[1].role, "kairos");
+  assert.equal(views[1].kind, "bubble"); assert.equal(views[1].role, "gravit");
   assert.equal(views[2].kind, "card");   assert.equal(views[2].card.tool, "breadth");
   assert.equal(views[2].card.callId, "c1");
   assert.equal(views[3].kind, "ignore"); // assistant/chunk is log-only for v1
@@ -660,7 +660,7 @@ export function mapFrame(frame) {
     case "user/message":
       return { kind: "bubble", role: "operator", text: ev.data?.text ?? "—", seq: ev.seq };
     case "assistant/message":
-      return { kind: "bubble", role: "kairos", text: ev.data?.text ?? "—", seq: ev.seq };
+      return { kind: "bubble", role: "gravit", text: ev.data?.text ?? "—", seq: ev.seq };
     case "tool/result":
       return { kind: "card", seq: ev.seq,
                card: { tool: ev.data?.tool ?? "tool", callId: ev.data?.callId ?? null, result: ev.data?.result ?? null } };
@@ -743,7 +743,7 @@ function renderView(view) {
   if (view.kind === "ignore") return null;
   if (view.kind === "bubble") {
     const wrap = el("div", `bubble bubble--${view.role === "operator" ? "op" : "kai"}`);
-    if (view.role === "kairos") wrap.append(el("div", "bubble-label", "Kairos"));
+    if (view.role === "gravit") wrap.append(el("div", "bubble-label", "Gravit"));
     wrap.append(el("div", "bubble-text", view.text));
     return wrap;
   }
@@ -757,7 +757,7 @@ function renderView(view) {
   }
   if (view.kind === "approval" || view.kind === "question") {
     const card = el("div", "card card--ask");
-    card.append(el("div", "card-kind", view.kind === "approval" ? "approval requested" : "Kairos asks"));
+    card.append(el("div", "card-kind", view.kind === "approval" ? "approval requested" : "Gravit asks"));
     if (view.question?.text) card.append(el("div", "card-body", view.question.text));
     const row = el("div", "card-actions");
     const answers = view.kind === "approval"
@@ -847,19 +847,19 @@ void refreshSessions();
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KAIROS</title>
+<title>GRAVIT</title>
 <link rel="stylesheet" href="/client/chat.css">
 </head>
 <body>
 <aside class="sidebar">
-  <div class="sidebar-head">KAIROS <button id="new-session" class="conv-new" title="new session">+</button></div>
+  <div class="sidebar-head">GRAVIT <button id="new-session" class="conv-new" title="new session">+</button></div>
   <div id="sessions"></div>
   <div class="sidebar-foot">live · loopback only</div>
 </aside>
 <main class="main">
   <div id="flow" class="flow"></div>
   <form id="composer-form" class="composer">
-    <input id="composer-input" type="text" placeholder="Message Kairos…" autocomplete="off">
+    <input id="composer-input" type="text" placeholder="Message Gravit…" autocomplete="off">
   </form>
 </main>
 <script type="module" src="/client/chat.js"></script>
@@ -915,7 +915,7 @@ test("boot smoke: face serves /, /api answers, fence holds", { skip: gated && "s
 
     const index = await fetch(`${base}/`);
     assert.equal(index.status, 200);
-    assert.match(await index.text(), /KAIROS/);
+    assert.match(await index.text(), /GRAVIT/);
 
     const list = await fetch(`${base}/api/session.list`, {
       method: "POST", headers: { "content-type": "application/json" },
@@ -962,7 +962,7 @@ git commit -m "test(face): gated boot smoke - static, api, 426 upgrade, host fen
 - [ ] **Step 1: Write `face/README.md`**
 
 ```markdown
-# kairos-face — the chat-light face as an in-process dsh host
+# gravit-face — the chat-light face as an in-process dsh host
 
 One Node 22 process: boots the DeepSeek Harness from the `face` profile
 (bundles: dsh-base only) and serves the operator's chat UI at
@@ -998,7 +998,7 @@ below. Only then trust it.
 ## The Gate-2 drill (run after any face or dsh change)
 
 A guard never pulled is presumed broken. With the face live and a session
-open, prompt Kairos to run a shell command that the profile's approval
+open, prompt Gravit to run a shell command that the profile's approval
 policy marks `ask` (dsh-base ships shell under `approval: ask`). PASS =
 the approval card renders in the face; Deny is honored (the tool does not
 run); a second attempt with Approve is honored; the session log records

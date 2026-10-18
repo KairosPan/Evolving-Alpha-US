@@ -119,11 +119,11 @@ export class FakeAgent {
     this.pendingFinish = undefined;
     if (finish !== undefined) this.tree.clock.setTimeout(() => finish({ kind: "aborted", reason: cause }), 1);
   }
-  /** A Kairos fake: settle when the test says the driver went idle. */
+  /** A Gravit fake: settle when the test says the driver went idle. */
   whenIdle(): Promise<void> {
     return this.status === "idle" ? Promise.resolve() : new Promise((resolve) => { this.idleWaiters.push(resolve); });
   }
-  /** A Kairos fake: the driver wakes and claims every pending message into one turn. */
+  /** A Gravit fake: the driver wakes and claims every pending message into one turn. */
   wake(): MessageLike[] {
     const claimed = [...this.inbox.nextStep.splice(0), ...this.inbox.nextTurn.splice(0, 1)];
     const turn = ++this.turn;
@@ -131,7 +131,7 @@ export class FakeAgent {
     for (const m of claimed) this.emit("user/message", m);
     return claimed;
   }
-  /** A Kairos fake: end the open turn. */
+  /** A Gravit fake: end the open turn. */
   sleep(): void {
     this.emit("turn/end", { turn: this.turn, reason: { kind: "completed" } });
     this.status = "idle";
@@ -210,9 +210,9 @@ export class FakeTree {
     for (const l of [...this.listeners]) l(session, event);
   }
   script(bot: string, fn: (message: MessageLike, turn: number) => Script): void { this.scripts.set(bot, fn); }
-  /** A room: Kairos's live session in a channel. */
-  newRoom(id: string, cwd: string): FakeAgent {
-    const session = new FakeSession(id, { id, cwd, agentPreset: "kairos", createdAt: this.createdAt++ });
+  /** A room: Gravit's live session in a channel. */
+  newRoom(id: string, cwd: string, agentPreset = "gravit"): FakeAgent {
+    const session = new FakeSession(id, { id, cwd, agentPreset, createdAt: this.createdAt++ });
     session.tree = this;
     const agent = new FakeAgent(this, session);
     this.sessions.set(id, session);

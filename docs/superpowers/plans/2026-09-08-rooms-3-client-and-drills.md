@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** After this plan the operator sees a room: each bot's answer as its own attributed bubble, the dispatch and round-end lines, a participants strip that says who is preparing an answer, a member's question or escalation card inline in the room and answered there, the members folded under their room in the sidebar, a needs-you mark on the channel row and the landing page, bots checked in on the channel page, and `@` in the composer reaching a bot without waking Kairos — and `face/README.md` documents the mechanism and a live drill that passed.
+**Goal:** After this plan the operator sees a room: each bot's answer as its own attributed bubble, the dispatch and round-end lines, a participants strip that says who is preparing an answer, a member's question or escalation card inline in the room and answered there, the members folded under their room in the sidebar, a needs-you mark on the channel row and the landing page, bots checked in on the channel page, and `@` in the composer reaching a bot without waking Gravit — and `face/README.md` documents the mechanism and a live drill that passed.
 
 **Architecture:** Everything the client shows about a room derives from what plan 2 already puts on the wire: `user/message` events whose `source.kind === 'room'` (answers, round ends, a member's delta), the operator's `mention` field, the `dispatch` tool's own call/result card, the `room` projection unit (coarse states, on `session/projection` frames and on `session.list` rows), the member sessions' own `assistant/chunk` block starts and `turn/*` boundaries (fine states — the mux forwards every live session), the gate frames (which carry the member's `sessionId`), the `session.list` header fields (`parentSessionId`, `agentPreset`, `origin` — the fold rule), and two loopback routes (`/data/rooms/state`, `/data/rooms/say`). The pure decisions live in one new browser module, `face/client/room.js`, tested under `node:test`; `chat.js` wires them; `mapper.js` grows four view kinds; `channels.js` grows the bots chips. No `innerHTML` anywhere, no new client-side retention of other sessions' frames beyond the fine-state map and the gate map that already exist.
 
@@ -23,12 +23,12 @@
 - No `innerHTML` anywhere in the client; every string lands via `textContent` (`el()`), markdown through `renderMarkdown`.
 - Pure decisions go in `face/client/room.js` and are tested under `node:test`; `chat.js` holds DOM and state only. Follow the split `grouping.js` / `speaker.js` / `channelName.js` already make.
 - The mapper's view vocabulary is closed and documented in its `FrameView` typedef; every new kind or field is added there, and `tests/fixtures/events.jsonl` is repinned with REAL wire shapes (the plan-2 sources, verbatim).
-- The fold rule and the strip's state vocabulary are exactly the spec's §6 table reduced to what the wire carries: `idle`, `organizing` (Kairos), `called`, `thinking`, `writing`, `tool`, `waiting for you`, `answered`, `passed`, `failed`, `timed-out`, `left`.
+- The fold rule and the strip's state vocabulary are exactly the spec's §6 table reduced to what the wire carries: `idle`, `organizing` (Gravit), `called`, `thinking`, `writing`, `tool`, `waiting for you`, `answered`, `passed`, `failed`, `timed-out`, `left`.
 - Rule 5: a member is folded and **counted** under its room, never hidden; a roster id the mount does not report is shown; `left` is shown; `capped` and `superseded` read differently from `settled`.
 - Gate answers carry the gate's own `sessionId` (`view.sessionId`), never the viewer's active session.
 - Every operator send — `@` or not — goes through one place, `send()`; an `@` that resolves to nobody falls through to an ordinary prompt.
 - Commit after every task (`git commit -F <file>` when the message carries backticks or parentheses). Never commit the operator's untracked files (`strategies/*`, `bots/buffet/`, `docs/research/*`, `tests/strategies/`, `face/probe4.ts`, `.claude/launch.json`, `docs/storage-industry-chain-2026.md`, `.bots-smoke-*`).
-- Nothing in this plan edits `Kairos-Design.md`, `CLAUDE.md`, `AGENTS.md` or `DEVELOPMENT.md` (plan 4). `face/README.md` is this plan's (Task 9).
+- Nothing in this plan edits `Gravit-Design.md`, `CLAUDE.md`, `AGENTS.md` or `DEVELOPMENT.md` (plan 4). `face/README.md` is this plan's (Task 9).
 
 ## File Structure
 
@@ -136,7 +136,7 @@ Replace `bubble()`:
 ```js
 function bubble(role, message, base, interrupted) {
   const text = isObject(message) ? blocksText(message.content) : "";
-  const thinking = role === "kairos" && isObject(message) ? blocksReasoning(message.content) : "";
+  const thinking = role === "gravit" && isObject(message) ? blocksReasoning(message.content) : "";
   if (text === "" && thinking === "") return ignore();
   const src = isObject(message) && isObject(message.source) ? message.source : {};
   const kind = typeof src.kind === "string" ? src.kind : undefined;
@@ -209,7 +209,7 @@ feat(face): the mapper learns the room - a member's answer is a bot bubble with 
 
 **Interfaces:**
 - Consumes: `session.list` rows (`sessionId`, `parentSessionId`, `agentPreset`, `origin`); the `room` projection value (`{ kind, members: { [bot]: { sessionId?, name?, state, turn? } }, organizing?, round? }`); `/data/bots.json` rows.
-- Produces: `avatarGlyph(id): string`; `isMentionText(text): boolean`; `foldMembers(items): { rooms: Map<string, Row[]>, members: Set<string> }`; `stripChips({ roster, projection, members, gates, fine, running, kairosName }): Chip[]` with `Chip = { id, name, state, kairos?: boolean, broken?: string, sessionId?: string }`; `roundEndLine(view): string`; `gateSpeaker(sessionId, memberRows, bots, fallback): string`; `bucketFor(channel, archived, bot, member = false)`.
+- Produces: `avatarGlyph(id): string`; `isMentionText(text): boolean`; `foldMembers(items): { rooms: Map<string, Row[]>, members: Set<string> }`; `stripChips({ roster, projection, members, gates, fine, running, gravitName }): Chip[]` with `Chip = { id, name, state, gravit?: boolean, broken?: string, sessionId?: string }`; `roundEndLine(view): string`; `gateSpeaker(sessionId, memberRows, bots, fallback): string`; `bucketFor(channel, archived, bot, member = false)`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -237,10 +237,10 @@ test("isMentionText is the composer anchor: start or whitespace, then @ and a to
 });
 
 const rows = [
-  { sessionId: "room", agentPreset: "kairos", cwd: "/c" },
+  { sessionId: "room", agentPreset: "gravit", cwd: "/c" },
   { sessionId: "m1", parentSessionId: "room", agentPreset: "buffett", cwd: "/c" },
   { sessionId: "m2", parentSessionId: "room", agentPreset: "speculator", cwd: "/c" },
-  { sessionId: "fork", parentSessionId: "room", agentPreset: "kairos", cwd: "/c" },
+  { sessionId: "fork", parentSessionId: "room", agentPreset: "gravit", cwd: "/c" },
   { sessionId: "child", parentSessionId: "room", agentPreset: "buffett", origin: "subagent", cwd: "/c" },
   { sessionId: "orphan", parentSessionId: "gone", agentPreset: "buffett", cwd: "/c" },
   { sessionId: "home", agentPreset: "buffett", cwd: "/bots/buffett/journal" },
@@ -264,19 +264,19 @@ test("bucketFor: a member never files under its bot's home bucket, whatever prec
 
 const roster = [{ id: "buffett", name: "巴菲特型" }, { id: "speculator", name: "投机型" }, { id: "cracked", name: "cracked", broken: "not a list" }];
 
-test("stripChips: Kairos first; roster members read the projection's coarse state, the pulses' fine state while called, a pending gate over both; a rostered-but-unmounted bot is shown broken; a member no longer rostered is left", () => {
+test("stripChips: Gravit first; roster members read the projection's coarse state, the pulses' fine state while called, a pending gate over both; a rostered-but-unmounted bot is shown broken; a member no longer rostered is left", () => {
   const projection = { kind: "room", organizing: true, members: { buffett: { sessionId: "m1", state: "called" }, speculator: { sessionId: "m2", state: "passed" }, ghost: { sessionId: "m3", state: "answered", name: "Ghost" } } };
-  const chips = stripChips({ roster, projection, members: { ghost: { sessionId: "m3", name: "Ghost" } }, gates: new Set(["m2"]), fine: new Map([["m1", "writing"]]), running: false, kairosName: "Kairos" });
-  assert.deepEqual(chips.map((c) => `${c.id}:${c.state}`), ["kairos:organizing", "buffett:writing", "speculator:waiting for you", "cracked:idle", "ghost:left"]);
-  assert.equal(chips[0].kairos, true);
+  const chips = stripChips({ roster, projection, members: { ghost: { sessionId: "m3", name: "Ghost" } }, gates: new Set(["m2"]), fine: new Map([["m1", "writing"]]), running: false, gravitName: "Gravit" });
+  assert.deepEqual(chips.map((c) => `${c.id}:${c.state}`), ["gravit:organizing", "buffett:writing", "speculator:waiting for you", "cracked:idle", "ghost:left"]);
+  assert.equal(chips[0].gravit, true);
   assert.equal(chips[3].broken, "not a list");
   assert.equal(chips[1].sessionId, "m1");
 });
 
-test("stripChips: before any dispatch the strip is the roster at idle, and Kairos follows the running flag", () => {
-  const chips = stripChips({ roster, projection: { kind: "none" }, members: {}, gates: new Set(), fine: new Map(), running: true, kairosName: "Kairos" });
+test("stripChips: before any dispatch the strip is the roster at idle, and Gravit follows the running flag", () => {
+  const chips = stripChips({ roster, projection: { kind: "none" }, members: {}, gates: new Set(), fine: new Map(), running: true, gravitName: "Gravit" });
   assert.deepEqual(chips.map((c) => c.state), ["organizing", "idle", "idle", "idle"]);
-  assert.deepEqual(stripChips({ roster: [], projection: undefined, members: {}, gates: new Set(), fine: new Map(), running: false, kairosName: "Kairos" }).map((c) => c.id), ["kairos"]);
+  assert.deepEqual(stripChips({ roster: [], projection: undefined, members: {}, gates: new Set(), fine: new Map(), running: false, gravitName: "Gravit" }).map((c) => c.id), ["gravit"]);
 });
 
 test("roundEndLine reads the outcome and each state group; capped and superseded say so", () => {
@@ -289,9 +289,9 @@ test("roundEndLine reads the outcome and each state group; capped and superseded
 test("gateSpeaker names the member's bot for a member's gate, else the fallback", () => {
   const memberRows = [{ sessionId: "m1", agentPreset: "buffett" }];
   const bots = [{ id: "buffett", name: "巴菲特型" }];
-  assert.equal(gateSpeaker("m1", memberRows, bots, "Kairos"), "巴菲特型");
-  assert.equal(gateSpeaker("m9", memberRows, bots, "Kairos"), "Kairos");
-  assert.equal(gateSpeaker("m1", memberRows, [], "Kairos"), "buffett", "no roster name: the id, never the host");
+  assert.equal(gateSpeaker("m1", memberRows, bots, "Gravit"), "巴菲特型");
+  assert.equal(gateSpeaker("m9", memberRows, bots, "Gravit"), "Gravit");
+  assert.equal(gateSpeaker("m1", memberRows, [], "Gravit"), "buffett", "no roster name: the id, never the host");
 });
 ```
 
@@ -334,13 +334,13 @@ export const MENTION_RE = /(^|\s)@[^\s@]/u;
 export const isMentionText = (text) => MENTION_RE.test(text);
 
 /** Whether a row runs the host: no preset, or the inert default. @param {{agentPreset?: unknown}} row */
-const isHost = (row) => typeof row.agentPreset !== "string" || row.agentPreset === "" || row.agentPreset === "kairos";
+const isHost = (row) => typeof row.agentPreset !== "string" || row.agentPreset === "" || row.agentPreset === "gravit";
 
 /**
  * The fold rule (spec §2.4 as plan 2 rebuilt it): a session is a member of
  * `P` when its header names `P` as parent, it has no `origin`, its preset is
  * a bot, and `P` itself is in the list running the host. Forks carry the
- * source's preset (`kairos` for a room) and subagent children carry
+ * source's preset (`gravit` for a room) and subagent children carry
  * `origin`, so both stay out; a member of a member is not a member.
  * @param {ReadonlyArray<{sessionId: unknown, parentSessionId?: unknown, agentPreset?: unknown, origin?: unknown}>} items
  * @returns {{rooms: Map<string, any[]>, members: Set<string>}} rooms → their member rows, in list order; every member id.
@@ -362,16 +362,16 @@ export function foldMembers(items) {
   return { rooms, members };
 }
 
-/** @typedef {{id: string, name: string, state: string, kairos?: boolean, broken?: string, sessionId?: string}} Chip */
+/** @typedef {{id: string, name: string, state: string, gravit?: boolean, broken?: string, sessionId?: string}} Chip */
 
 /**
- * The participants strip (spec §6): Kairos first, then every rostered bot,
+ * The participants strip (spec §6): Gravit first, then every rostered bot,
  * then any member the roster no longer carries (`left`). States, in
  * precedence: a pending gate on the member's session → `waiting for you`;
  * while `called`, the live fine state if any; else the projection's coarse
- * state; else `idle`. Kairos is `organizing` while the projection says so,
+ * state; else `idle`. Gravit is `organizing` while the projection says so,
  * or - before the session is a room - while the list says it is running.
- * @param {{roster: ReadonlyArray<{id: string, name: string, broken?: string}>, projection: any, members: Record<string, {sessionId?: string, name?: string}>, gates: Set<string>, fine: Map<string, string>, running: boolean, kairosName?: string}} input
+ * @param {{roster: ReadonlyArray<{id: string, name: string, broken?: string}>, projection: any, members: Record<string, {sessionId?: string, name?: string}>, gates: Set<string>, fine: Map<string, string>, running: boolean, gravitName?: string}} input
  * @returns {Chip[]}
  */
 export function stripChips(input) {
@@ -379,7 +379,7 @@ export function stripChips(input) {
   const projMembers = room !== null && room.members !== null && typeof room.members === "object" ? room.members : {};
   const organizing = room !== null ? room.organizing === true : input.running === true;
   /** @type {Chip[]} */
-  const chips = [{ id: "kairos", name: input.kairosName ?? "Kairos", state: organizing ? "organizing" : "idle", kairos: true }];
+  const chips = [{ id: "gravit", name: input.gravitName ?? "Gravit", state: organizing ? "organizing" : "idle", gravit: true }];
   const stateOf = (bot) => {
     const sessionId = input.members[bot]?.sessionId ?? projMembers[bot]?.sessionId;
     if (sessionId !== undefined && input.gates.has(sessionId)) return { state: "waiting for you", sessionId };
@@ -464,7 +464,7 @@ In `chat.js` import `avatarGlyph, roundEndLine` from `./room.js`. In `bubbleNode
 
 ```js
   /* A member's answer: the bot's own lane and name, an avatar glyph the eye
-   * learns, markdown like Kairos's. Attribution is per MESSAGE here - the
+   * learns, markdown like Gravit's. Attribution is per MESSAGE here - the
    * room log carries several voices - which is what `speaker` (per session)
    * could never say (R12's last mile). */
   if (view.role === "bot") {
@@ -729,7 +729,7 @@ async function loadRoomInfo() {
 - [ ] **Step 3: The renderer**
 
 ```js
-const KAIROS_STATES = { organizing: "organizing", idle: "" };
+const GRAVIT_STATES = { organizing: "organizing", idle: "" };
 /** Draw the strip for the session on screen, or hide it. */
 function renderStrip() {
   const strip = $("#strip");
@@ -738,21 +738,21 @@ function renderStrip() {
   if (roomInfo === null || (roomInfo.roster.length === 0 && !isRoom)) { strip.hidden = true; strip.replaceChildren(); return; }
   const running = lastSessions.find((s) => String(s.sessionId) === activeSession)?.running === true;
   const chips = stripChips({
-    roster: roomInfo.roster.filter((b) => b.id !== "kairos"),
+    roster: roomInfo.roster.filter((b) => b.id !== "gravit"),
     projection,
     members: roomInfo.members,
     gates: new Set([...gates.values()].map((g) => g.sessionId)),
     fine: fineStates,
     running,
-    kairosName: HOST_NAME,
+    gravitName: HOST_NAME,
   });
   strip.replaceChildren();
   for (const chip of chips) {
-    const node = el("span", chip.kairos ? "strip-chip kairos" : "strip-chip");
+    const node = el("span", chip.gravit ? "strip-chip gravit" : "strip-chip");
     node.dataset.state = chip.state;
-    if (!chip.kairos) node.append(el("span", "avatar", avatarGlyph(chip.id)));
+    if (!chip.gravit) node.append(el("span", "avatar", avatarGlyph(chip.id)));
     node.append(el("span", "strip-name", chip.name));
-    node.append(el("span", "strip-state", chip.kairos ? (KAIROS_STATES[chip.state] ?? chip.state) : chip.state));
+    node.append(el("span", "strip-state", chip.gravit ? (GRAVIT_STATES[chip.state] ?? chip.state) : chip.state));
     if (chip.broken) { node.classList.add("broken"); node.title = `dsh cannot mount this bot: ${chip.broken}`; }
     if (chip.sessionId) {
       node.title = `session ${chip.sessionId}`;
@@ -831,7 +831,7 @@ git commit -F /tmp/msg.txt
 with `/tmp/msg.txt`:
 
 ```
-feat(face): the participants strip - Kairos and every rostered voice, coarse states from the room projection, fine states from the members' own pulses, a pending gate over both, left when unrostered
+feat(face): the participants strip - Gravit and every rostered voice, coarse states from the room projection, fine states from the members' own pulses, a pending gate over both, left when unrostered
 ```
 
 ---
@@ -895,7 +895,7 @@ feat(face): a member's question or escalation card renders inline in its room, h
 
 **Interfaces:**
 - Consumes: `isMentionText` (Task 2), `POST /data/rooms/say { sessionId, text }` → `{ ok, addressed: string[] }` (plan 2), `channelOf`, `botIndex`.
-- Produces: an `@` message reaches the named bots without waking Kairos; a message that names nobody is an ordinary prompt.
+- Produces: an `@` message reaches the named bots without waking Gravit; a message that names nobody is an ordinary prompt.
 
 - [ ] **Step 1: Implement**
 
@@ -904,7 +904,7 @@ In `send()`, after the session-creation branch and before the `session.prompt` c
 ```js
     /* The operator's `@` (spec §4.4 rule 1): resolved on the server against
      * the channel's roster, appended to the room as the operator's own message
-     * without waking Kairos, and each named member turns. A text that resolves
+     * without waking Gravit, and each named member turns. A text that resolves
      * to nobody is an ordinary prompt. Only inside a channel: elsewhere `@` is
      * just a character. */
     if (isMentionText(text) && channelOf(activeSession) !== null) {
@@ -926,7 +926,7 @@ Run: `cd face && node --check client/chat.js && npm test`
 
 ```bash
 git add face/client/chat.js
-git commit -m "feat(face): an @ in the composer reaches the named voices through the room route and never wakes Kairos; a text naming nobody is an ordinary prompt"
+git commit -m "feat(face): an @ in the composer reaches the named voices through the room route and never wakes Gravit; a text naming nobody is an ordinary prompt"
 ```
 
 ---
@@ -953,7 +953,7 @@ In `renderChannelPage`, after the agents chips block:
   const bchips = el("div", "ch-chips");
   bchips.append(el("span", "ch-chips-label", "bots in this channel"));
   const rosterBots = Array.isArray(payload.bots) ? payload.bots : [];
-  const allBots = (Array.isArray(payload.allBots) ? payload.allBots : []).filter((b) => b.id !== "kairos");
+  const allBots = (Array.isArray(payload.allBots) ? payload.allBots : []).filter((b) => b.id !== "gravit");
   const known = new Set(allBots.map((b) => b.id));
   for (const bot of allBots) {
     const on = rosterBots.includes(bot.id);
@@ -1022,7 +1022,7 @@ git commit -m "feat(face): bots are checked into a channel on its page - one chi
 Replace the paragraph beginning `**Not built here (the rooms arc, plans 2–4 of the spec):**` with:
 
 ```markdown
-**A bot in a room** — dispatched by Kairos, addressed by the operator's `@`, its answers in the
+**A bot in a room** — dispatched by Gravit, addressed by the operator's `@`, its answers in the
 room's transcript in its own voice — is the next section. What is still not built (spec §11, on
 purpose): bot-to-bot messaging outside a room, cross-channel memory for a bot, a delete button, a
 channel-scoped 1:1 with a bot.
@@ -1035,18 +1035,18 @@ Insert after the Bots section:
 ```markdown
 ## Rooms (src/room.ts + src/room-rules.ts + src/room-projection.ts + client/room.js)
 
-A room is an ordinary channel session whose agent is Kairos and which has **members**: one
+A room is an ordinary channel session whose agent is Gravit and which has **members**: one
 session per bot the channel rosters, created lazily the first time that bot is named. Nothing
 is created to make a session a room. The operator checks bots into a channel on its page
 ("bots in this channel", `POST /data/channels/bots`, at most six — `ROOM_CAPS.maxMembers`); the
 roster stays a menu, not a fence (the channels section's honest limits apply verbatim).
 
-**Kairos organizes the room through one tool, `dispatch`** (`to`, `mode` parallel or serial,
+**Gravit organizes the room through one tool, `dispatch`** (`to`, `mode` parallel or serial,
 `brief`, `reason`). It is registered globally on the root context (`installRoom` in `main.ts`),
-so it is in Kairos's roster; every bot's allow-list mask excludes it without naming it. The
+so it is in Gravit's roster; every bot's allow-list mask excludes it without naming it. The
 call validates `to` against the channel's bot roster (the refusal names the roster), starts
 the round, and returns at once — the result text names who was called, how, **who was not
-called**, and tells the model to end its turn. Kairos is woken once per round, by a
+called**, and tells the model to end its turn. Gravit is woken once per round, by a
 `followup` that names who answered and who passed.
 
 **A member session** is created in-process by the engine (`ctx.agents.create`) with the
@@ -1055,11 +1055,11 @@ channel directory as `cwd`, `parentSession` = the room, `agentPreset` = the bot,
 result), and — inside the same creation `setup`, before the session is published — the
 **`read-only`** permission preset: a bot in a room does not write files, by sandbox mode, not
 by mask (D12). A member that already exists is resumed, never recreated. Members are runtime
-roots (created from the root context, not from Kairos's), which is what lets a member ask the
+roots (created from the root context, not from Gravit's), which is what lets a member ask the
 operator a question.
 
-**What a member sees** each turn: the room delta — every operator prompt, Kairos reply and
-member answer since it last spoke, one attributed line each (`操作员:`, `Kairos:`, `<bot> (you):`,
+**What a member sees** each turn: the room delta — every operator prompt, Gravit reply and
+member answer since it last spoke, one attributed line each (`操作员:`, `Gravit:`, `<bot> (you):`,
 `<bot>:`) — the brief, and four standing rules carried in the prompt (reply with your view or
 exactly `(pass)`; your text goes to the room verbatim; you remember this room only; address the
 operator directly when the judgment is theirs, write `@<bot>` to pull a peer in). Its cursor is
@@ -1073,7 +1073,7 @@ rides a known event: membership is the member's header; the dispatch is the tool
 call/result; an answer is a `user/message` on the room session with `source: { kind: 'room',
 form: 'answer', bot, name, sessionId, turn, round }`; the round end is the waking
 `user/message` with `form: 'round-end'` and every turn's state. Answers are **appended straight
-onto the room log** while no Kairos turn is open (a bubble at once, a seq now, in the next
+onto the room log** while no Gravit turn is open (a bubble at once, a seq now, in the next
 request's history) and held in a per-room outbox otherwise, flushed at the next `turn/end` and
 before the round-end wake. The `room` projection unit folds these events into the coarse state
 the strip shows (`called`, `answered`, `passed`, `failed`, `timed-out`, the round, `organizing`);
@@ -1088,10 +1088,10 @@ A member whose model fails is `failed` and counts as a pass; the round continues
 turns finish and land, nothing further starts) — three words for three facts. Every operator
 send resets the caps.
 
-**The operator's `@`** is deterministic and never passes through Kairos: the composer sends a
+**The operator's `@`** is deterministic and never passes through Gravit: the composer sends a
 text containing `(^|\s)@` to `POST /data/rooms/say`, which resolves mentions against the roster
 by id (by display name only when it is one token), appends the message to the room as the
-operator's own (`kind: 'user'`, `mention: [...]`) without waking Kairos, and turns each named
+operator's own (`kind: 'user'`, `mention: [...]`) without waking Gravit, and turns each named
 member — one mid-turn is queued behind that turn, never refused. A text that names nobody comes
 back `addressed: []` and the client sends it as an ordinary prompt. `POST /data/rooms/state`
 answers the roster, the members the engine drove this boot, and the caps left.
@@ -1099,7 +1099,7 @@ answers the roster, the members the engine drove this boot, and the caps left.
 **The client.** A member's answer renders as a bubble in the bot's own voice — its display name
 and an avatar glyph — never as a context row (`client/room.js`, `mapper.js`); the round end is a
 room line; the dispatch card reads as the who-was-called line. The **participants strip** above
-the transcript shows Kairos (`organizing` while its turn is open) and every rostered voice:
+the transcript shows Gravit (`organizing` while its turn is open) and every rostered voice:
 coarse states from the projection, fine states (`thinking` / `writing` / `tool`) from the member
 sessions' own pulses, `waiting for you` when a gate is pending on the member, `left` for a member
 the roster no longer carries. A member's question or escalation card renders **inline in the
@@ -1113,7 +1113,7 @@ landing page (needs-you at the index level).
 mask is visibility; a member's write fence is its sandbox mode, its order fence is Gate 2,
 tree-wide (both proven from a bot session in `room-smoke.test.ts` and `bots-smoke.test.ts`).
 Four voices on one model will tend to converge (R3); parallel first answers are the mitigation,
-not a cure. Dispatch is Kairos's judgment (R2): it may under- or over-call; the "not called"
+not a cure. Dispatch is Gravit's judgment (R2): it may under- or over-call; the "not called"
 clause and the operator's `@` are the answer. A member's pending gate with no client connected
 blocks until the hard cap (R6). A bot does not remember across channels (R5).
 
@@ -1134,12 +1134,12 @@ Insert after `## The bots drill`:
 A room whose strip never moved is presumed decorative.
 
 **Step 0, no model, no key.** `FACE_SMOKE=1 npm test` boots `room-smoke.test.ts`: a stub model
-route, three bots in a temp channel, one operator prompt → Kairos dispatches all three in
+route, three bots in a temp channel, one operator prompt → Gravit dispatches all three in
 parallel → alpha answers, beta passes, gamma's model fails → the answer is on the room log before
-the round-end wake, the wake is one turn, Kairos's synthesis is in it; every member is parented,
+the round-end wake, the wake is one turn, Gravit's synthesis is in it; every member is parented,
 preset-joined, `read-only` as its first event, carries the channel's `AGENTS.md` chain and lacks
 `dispatch`; the `room` value rides the session row and the cache file; an `@` turns alpha, whose
-write into the channel is refused inside the tool content (D12) and never woke Kairos; a home
+write into the channel is refused inside the tool content (D12) and never woke Gravit; a home
 session writes its journal and is refused on `../SOUL.md`.
 
 **Step 0b, if you changed anything under `client/`.** Hard-reload.
@@ -1150,15 +1150,15 @@ drill, steps 1–2), on a fresh channel:
 1. Channel page → **bots in this channel** → check both in. PASS, part one: two chips read
    on; `$DSH_HOME/face/roster.log` gained a dated `bots` line; `channels.json` carries `bots`.
 2. `new round`, ask a question that invites two views ("X 值得买吗？各说各的"). PASS, part
-   two: the strip appears with Kairos and both voices; Kairos's dispatch card reads
+   two: the strip appears with Gravit and both voices; Gravit's dispatch card reads
    `Dispatched <A>, <B> (parallel) … Not called: none.`; both chips go `called` → `thinking` /
    `writing` → `answered` or `passed`; each answer is a bubble in the bot's own voice with its
-   glyph; the round line reads `round 1 · settled · …`; Kairos wakes once and names the
+   glyph; the round line reads `round 1 · settled · …`; Gravit wakes once and names the
    disagreement.
 3. Sidebar. PASS, part three: the room row shows `2 members`, folded; expanding it lists both
    by name; opening one shows its delta as a `context · room` row and its reply.
 4. `@<bot> …` in the composer. PASS, part four: the status line reads `@ → <bot>`; the bot's
-   chip moves and its bubble lands; Kairos does not speak (no new Kairos turn until you prompt
+   chip moves and its bubble lands; Gravit does not speak (no new Gravit turn until you prompt
    it); the `@` shows as your own bubble.
 5. Make a bot ask: `@<bot> 先问我一个问题再回答`. PASS, part five: the card appears inline in
    the room headed `<bot> asks`; the chip reads `waiting for you`; the channel header and the
@@ -1169,7 +1169,7 @@ drill, steps 1–2), on a fresh channel:
    `[sandbox: file access denied under read-only mode]`; the bot reports the refusal in the
    room.
 7. Un-check one bot on the channel page and come back. PASS, part seven: its chip reads
-   `left`; `@` to it resolves nobody (the text goes to Kairos as a prompt); re-check it and
+   `left`; `@` to it resolves nobody (the text goes to Gravit as a prompt); re-check it and
    `@` it again: the same session answers (one member row, not two).
 8. Restart the face, open the room. PASS, part eight: the strip's coarse states and the fold
    survive (the projection cache); the members' titles survive (R13 closed).
@@ -1179,7 +1179,7 @@ drill, steps 1–2), on a fresh channel:
 
 - [ ] **Step 4: The channels section's roster table**
 
-In the Channels section's three-layer table change the Roster row to: `| **Roster** (runtime) | \`$DSH_HOME/face/channels.json\` — \`agents[]\` (local CLIs Kairos may call) and \`bots[]\` (the voices a room may dispatch) | the operator, on the channel page |`.
+In the Channels section's three-layer table change the Roster row to: `| **Roster** (runtime) | \`$DSH_HOME/face/channels.json\` — \`agents[]\` (local CLIs Gravit may call) and \`bots[]\` (the voices a room may dispatch) | the operator, on the channel page |`.
 
 - [ ] **Step 5: Commit the documentation**
 
@@ -1206,7 +1206,7 @@ This step is not for a subagent. The controller starts the face (`preview_start`
 
 **Placeholder scan.** Every task carries its code; Task 9 Step 6 names the controller as the runner and says what gets written.
 
-**Type consistency.** `stripChips` input `{ roster, projection, members, gates, fine, running, kairosName }` is what `renderStrip` builds; `foldMembers` returns `{ rooms, members }` and `memberFold` holds it; `gateSpeaker(sessionId, memberRows, bots, fallback)` matches `gateWho`; `bucketFor`'s fourth argument is a boolean; the mapper's `turn` views carry `phase`, `turn`, `sessionId`; the `room-line` view carries `line`, `round`, `outcome`, `turns`, `text` and `roundEndLine` reads exactly those.
+**Type consistency.** `stripChips` input `{ roster, projection, members, gates, fine, running, gravitName }` is what `renderStrip` builds; `foldMembers` returns `{ rooms, members }` and `memberFold` holds it; `gateSpeaker(sessionId, memberRows, bots, fallback)` matches `gateWho`; `bucketFor`'s fourth argument is a boolean; the mapper's `turn` views carry `phase`, `turn`, `sessionId`; the `room-line` view carries `line`, `round`, `outcome`, `turns`, `text` and `roundEndLine` reads exactly those.
 
 ## Execution handoff
 

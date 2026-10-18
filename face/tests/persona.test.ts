@@ -19,7 +19,7 @@ const renderPersona = (text: string): string => renderPrompt({
 });
 
 test("validatePersonaTemplate accepts model and cwd, refuses everything else the strict renderer would throw on", () => {
-  assert.equal(validatePersonaTemplate("You are Kairos. Your working directory is {{cwd}} on {{model}}."), undefined);
+  assert.equal(validatePersonaTemplate("You are Gravit. Your working directory is {{cwd}} on {{model}}."), undefined);
   assert.match(validatePersonaTemplate("") ?? "", /empty/);
   assert.match(validatePersonaTemplate("   \n") ?? "", /empty/);
   assert.match(validatePersonaTemplate("Hello {{date}}") ?? "", /unknown persona variable \{\{date\}\}/);
@@ -38,9 +38,9 @@ test("readPersona returns the trimmed file and throws with the path on a bad tem
   assert.throws(() => readPersona(bad), (err: Error) => err.message.includes(bad) && /nobody/.test(err.message));
 });
 
-test("the shipped persona.md is valid and names Kairos", () => {
+test("the shipped persona.md is valid and names Gravit", () => {
   const text = readPersona(PERSONA_PATH);
-  assert.match(text, /You are Kairos/);
+  assert.match(text, /You are Gravit/);
   assert.equal(validatePersonaTemplate(text), undefined);
 });
 
@@ -53,7 +53,7 @@ test("whatever validatePersonaTemplate accepts, dsh's strict renderer renders - 
   for (const variable of PERSONA_VARIABLES) {
     assert.doesNotThrow(() => renderPersona(`You run {{${variable}}}.`), variable);
   }
-  assert.equal(renderPersona("You are Kairos in {{cwd}} on {{model}}."), "You are Kairos in /work/tree on deepseek-flash.");
+  assert.equal(renderPersona("You are Gravit in {{cwd}} on {{model}}."), "You are Gravit in /work/tree on deepseek-flash.");
   for (const text of ["Hello {{date}}", "Hello {{ model }}", "Hello {{Model}}"]) {
     assert.notEqual(validatePersonaTemplate(text), undefined, `the face refuses ${text}`);
     assert.throws(() => renderPersona(text), `and dsh would have thrown on ${text}`);

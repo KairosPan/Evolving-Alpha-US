@@ -50,7 +50,7 @@ export interface RoomState {
   round?: RoomRoundState;
   /** room: the members of the current round, by bot id */
   members?: Record<string, RoomMemberState>;
-  /** room: Kairos's turn is open */
+  /** room: Gravit's turn is open */
   organizing?: boolean;
   /** member: the room session this member belongs to */
   room?: string;
@@ -137,7 +137,7 @@ function applyOperator(state: RoomState, source: Source): RoomState {
   if (state.kind === "member") return state;
   if (state.kind === "none" && mention.length === 0) return state;
   const room = asRoom(state) as RoomState;
-  /* An `@` is posted by the engine and waits in the room's outbox while Kairos
+  /* An `@` is posted by the engine and waits in the room's outbox while Gravit
    * is mid-turn, so it can be folded AFTER a dispatch that in wall time came
    * later (room.ts carries the same twin on the bus). While a round is open it
    * therefore ADDS the voices it names and leaves the running round standing,

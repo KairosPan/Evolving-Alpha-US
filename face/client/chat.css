@@ -936,7 +936,7 @@ body {
 @keyframes think-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .think-live-dot { animation: none; } }
 
-/* markdown bubbles: Kairos's answers, rendered. Tokens only; the table reuses
+/* markdown bubbles: Gravit's answers, rendered. Tokens only; the table reuses
    .viz-table so chat tables and tool tables read as one instrument. */
 .msg.k.doc { max-width: 100%; }
 .md-bubble { font-size: 14px; }

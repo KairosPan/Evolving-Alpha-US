@@ -15,7 +15,7 @@
  *      it replaced.
  *   2. `interrupted`. A cancelled turn logs the PREFIX that had arrived, not an
  *      answer. Such a bubble renders cut (an em-dash and a marker tag) so a
- *      half-sentence can never be read as Kairos's finished reply.
+ *      half-sentence can never be read as Gravit's finished reply.
  *   3. `source`. A `user/message` is not automatically the operator's: plugins
  *      inject file-change notices, skill content and cron wake-ups through the
  *      same event. Anything whose source is not `user` renders as a quiet
@@ -60,7 +60,7 @@ import { ARCHIVED_KEY, bucketFor, isBotKey, UNGROUPED_KEY } from "./grouping.js"
 import { proposeBotId } from "./botId.js";
 import { botModelChoices, botSettingsPayload, botToolLabel, draftBotSoul, normalizeBotModel } from "./botSettings.js";
 import { foldChannelName } from "./channelName.js";
-import { HOST_NAME, speakerFor } from "./speaker.js";
+import { HOST_NAME, isHostPreset, speakerFor } from "./speaker.js";
 import { composeSubagentCatalog, isSubagentRow, normalizeSubagentCatalog, subagentAddress, subagentControls, subagentResult } from "./subagents.js";
 import { avatarGlyph, foldMembers, gateSpeaker, isMemberSession, isMentionText, normalizeRoomDiscussion, roomAnswerDisplay, roundEndLine, stripChips } from "./room.js";
 
@@ -358,12 +358,12 @@ function renderSubagents() {
   const toolbar = el("div", "subagent-toolbar");
   toolbar.append(subagentButton("刷新状态", () => loadSubagentInfo()));
   const summary = lastSessions.find((s) => String(s.sessionId) === activeSession);
-  if (!isSubagentSession(activeSession) && !memberFold.members.has(activeSession) && (!summary?.agentPreset || summary.agentPreset === "kairos")) {
+  if (!isSubagentSession(activeSession) && !memberFold.members.has(activeSession) && (!summary?.agentPreset || isHostPreset(summary.agentPreset))) {
     toolbar.append(subagentButton("委派子任务", () => {
       const input = /** @type {HTMLInputElement} */ ($("#composer-input"));
       if (input.value.trim() === "") input.value = "请委派一个临时子任务，任务是：";
       input.focus();
-      status("补充任务目标和完成条件后发送，Kairos 会创建临时子任务。");
+      status("补充任务目标和完成条件后发送，Gravit 会创建临时子任务。");
     }));
   }
   box.append(toolbar);
@@ -515,9 +515,9 @@ async function loadRoomInfo() {
   renderStrip();
 }
 
-/** Kairos's own chip says `organizing` or nothing at all: the host is not a
+/** Gravit's own chip says `organizing` or nothing at all: the host is not a
  * called voice, so the bots' vocabulary would misread on it. */
-const KAIROS_STATES = { organizing: "organizing", idle: "" };
+const GRAVIT_STATES = { organizing: "organizing", idle: "" };
 /** Draw the strip for the session on screen, or hide it. */
 function renderStrip() {
   const strip = $("#strip");
@@ -526,26 +526,26 @@ function renderStrip() {
   const isRoom = projection !== null && typeof projection === "object" && /** @type {any} */ (projection).kind === "room";
   /* A member's OWN transcript takes no strip: `/data/rooms/state` answers for
    * it (same cwd, same channel, same roster) and would draw every voice idle
-   * with Kairos `organizing` off the member's own `running` flag. */
+   * with Gravit `organizing` off the member's own `running` flag. */
   if (isMemberSession(projection, memberFold.members, activeSession)) { strip.hidden = true; strip.replaceChildren(); return; }
   if (roomInfo === null || (roomInfo.roster.length === 0 && !isRoom)) { strip.hidden = true; strip.replaceChildren(); return; }
   const running = lastSessions.find((s) => String(s.sessionId) === activeSession)?.running === true;
   const chips = stripChips({
-    roster: roomInfo.roster.filter((b) => b.id !== "kairos"),
+    roster: roomInfo.roster.filter((b) => !isHostPreset(b.id)),
     projection,
     members: roomInfo.members,
     gates: new Set([...gates.values()].map((g) => g.sessionId)),
     fine: fineStates,
     running,
-    kairosName: HOST_NAME,
+    gravitName: HOST_NAME,
   });
   strip.replaceChildren();
   for (const chip of chips) {
-    const node = el("span", chip.kairos ? "strip-chip kairos" : "strip-chip");
+    const node = el("span", chip.gravit ? "strip-chip gravit" : "strip-chip");
     node.dataset.state = chip.state;
-    if (!chip.kairos) node.append(el("span", "avatar", avatarGlyph(chip.id)));
+    if (!chip.gravit) node.append(el("span", "avatar", avatarGlyph(chip.id)));
     node.append(el("span", "strip-name", chip.name));
-    node.append(el("span", "strip-state", chip.kairos ? (KAIROS_STATES[chip.state] ?? chip.state) : chip.state));
+    node.append(el("span", "strip-state", chip.gravit ? (GRAVIT_STATES[chip.state] ?? chip.state) : chip.state));
     /* Both facts, never one over the other: a bot the engine drove earlier this
      * boot and that the roster now reports broken is the case where the reason
      * matters most, and it is exactly the case that carries a session id too. */
@@ -655,7 +655,7 @@ function place(view, node, trace = false) {
   if (trace) answerTraces.add(node);
   else {
     flow().append(node);
-    if (view.kind === "bubble" && view.role === "kairos") answerTraces.attach(node);
+    if (view.kind === "bubble" && view.role === "gravit") answerTraces.attach(node);
   }
   index(view, node);
   if (stick) toTail();
@@ -673,7 +673,7 @@ function index(view, node) {
 /**
  * One message bubble.
  *
- * Three shapes, not two. `op` and `k` are the operator and Kairos; `note` is a
+ * Three shapes, not two. `op` and `k` are the operator and Gravit; `note` is a
  * user-ROLE message the operator did not write (source `plugin`/`tool`/`model`)
  * — a file-change notice, injected skill content, a cron wake-up. It is quiet
  * and centred precisely so it cannot be mistaken for something the operator said.
@@ -681,7 +681,7 @@ function index(view, node) {
  */
 function bubbleNode(view) {
   /* A member's answer: the bot's own lane and name, an avatar glyph the eye
-   * learns, markdown like Kairos's. Attribution is per MESSAGE here - the
+   * learns, markdown like Gravit's. Attribution is per MESSAGE here - the
    * room log carries several voices - which is what `speaker` (per session)
    * could never say (R12's last mile). */
   if (view.role === "bot") {
@@ -722,7 +722,7 @@ function bubbleNode(view) {
   const hasText = typeof view.text === "string" && view.text !== "";
   if (hasText) {
     if (lane === "k") wrap.append(el("div", "who", speaker));
-    /* Kairos writes markdown; the operator's own words render exactly as
+    /* Gravit writes markdown; the operator's own words render exactly as
      * typed. A markdown answer with document structure (headings, tables)
      * widens its lane — a chat-sized reply keeps the bubble. */
     let bubble;
@@ -788,7 +788,7 @@ function contextRow(view) {
 }
 
 /**
- * A message's reasoning as one collapsed line — the operator sees THAT Kairos
+ * A message's reasoning as one collapsed line — the operator sees THAT Gravit
  * thought and the first line of what about; the full text is one click away.
  * @param {string} text @returns {HTMLElement}
  */
@@ -829,7 +829,7 @@ function memberTraceNode(view) {
             else if (typeof card.callId === "string") calls.set(card.callId, node);
             body.append(node);
           }
-        } else if (entry.role === "kairos" && entry.thinking) {
+        } else if (entry.role === "gravit" && entry.thinking) {
           const node = thinkRow(entry.thinking);
           if (entry.interrupted) node.querySelector(".card-head").append(el("span", "tag tag-cut", "interrupted"));
           body.append(node);
@@ -1570,7 +1570,7 @@ function accept(view) {
   if (view.kind === "bubble") {
     const injected = view.role === "operator" && typeof view.source === "string" && view.source !== "user";
     if (injected) place(view, contextRow(view), true);
-    else if (view.role === "kairos") {
+    else if (view.role === "gravit") {
       const hasText = typeof view.text === "string" && view.text !== "";
       if (typeof view.thinking === "string" && view.thinking !== "") {
         const row = thinkRow(view.thinking);
@@ -2040,7 +2040,7 @@ async function openSession(id) {
    * The exception is REOPENING the session already on screen: its label was set
    * from a summary the list may not carry yet - `openBotHome` arms a preset
    * before any session exists. Resetting it to the host there would relabel a
-   * live bot transcript as Kairos, so a same-session reopen with no row keeps
+   * live bot transcript as Gravit, so a same-session reopen with no row keeps
    * what is on screen; `refreshSessions` heals it when the list does land. */
   const row = lastSessions.find((s) => String(s.sessionId) === id);
   if (row !== undefined || id !== previousActive) setSpeaker(row ?? null);
@@ -2328,7 +2328,7 @@ let pendingCwd;
 let pendingWorkspaceId;
 
 /** The agent preset the NEXT `session/create` names: a bot's id for its home
- * session, `undefined` for Kairos (the gateway then mounts the default).
+ * session, `undefined` for Gravit (the gateway then mounts the default).
  * Set with `pendingCwd = <bot>.homeCwd` by openBotHome; reset wherever the
  * other two pendings are. @type {string|undefined} */
 let pendingAgentPreset;
@@ -2412,16 +2412,16 @@ async function loadBotIndex() {
 /** The bot a session belongs to: its row's `agentPreset` - restored by
  * {@link summaryOf} from the preset projection or the persisted header, since
  * the 0.2 summary carries neither itself - names one and it is not the default.
- * `null` for Kairos and for a preset-less session. */
+ * `null` for Gravit and for a preset-less session. */
 function botOf(summary) {
   const id = summary?.agentPreset;
-  if (typeof id !== "string" || id === "kairos") return null;
+  if (typeof id !== "string" || isHostPreset(id)) return null;
   const bot = botIndex.find((b) => b.id === id);
   return { id, label: bot?.name ?? id };
 }
 
 /** The name the transcript writes over the ACTIVE session's turns: a bot's
- * display name for its own session, `Kairos` for the host's. Per session, not
+ * display name for its own session, `Gravit` for the host's. Per session, not
  * per message — `speakerFor` reads the same normalized `agentPreset` `botOf`
  * buckets the sidebar by, so the label and the bucket can never disagree.
  * @type {string} */
@@ -2581,7 +2581,7 @@ function pickerRow(label, cwd, badge, picker, workspaceId) {
     pendingWorkspaceId = workspaceId;
     pendingCwd = workspaceId === undefined ? cwd : undefined;
     pendingAgentPreset = undefined;
-    setSpeaker(null); // a folder or channel is Kairos's, whatever was armed before
+    setSpeaker(null); // a folder or channel is Gravit's, whatever was armed before
     for (const other of picker.querySelectorAll(".pick-row")) other.classList.toggle("sel", other === row);
     status(`new session · ${label} · type below`);
   };
@@ -2793,7 +2793,7 @@ async function send() {
       followActive(id, openSeq, { kind: "session", sessionId: id }, false);
       /* The new session's voice, from the summary the host just answered with
        * — `created.agentPreset`, which `bots-smoke.test.ts` pins on a real tree
-       * for both branches: a bot's id, and the literal `kairos` for the host.
+       * for both branches: a bot's id, and the literal `gravit` for the host.
        * The host's answer, not the pending we sent:
        * if the two ever disagreed the host's is the session that exists. This
        * one call covers both the bot case and the reset the other three sites
@@ -2813,7 +2813,7 @@ async function send() {
     const target = activeSession;
     /* The operator's `@` (spec §4.4 rule 1): resolved on the server against
      * the channel's roster, appended to the room as the operator's own message
-     * without waking Kairos, and each named member turns. A text that resolves
+     * without waking Gravit, and each named member turns. A text that resolves
      * to nobody is an ordinary prompt. Only inside a channel: elsewhere `@` is
      * just a character. */
     if (isMentionText(text) && channelOf(target) !== null) {
@@ -2891,7 +2891,7 @@ async function stopTurn() {
    sidebar is always an INDEX — rows, never content — and clicking a row opens
    that item's content in the RIGHT pane, in place of the chat. `strategy`
    indexes sessions and its content is the chat itself; `agent` indexes the
-   main agent (Kairos), the local coding CLIs, and the A2A placeholder;
+   main agent (Gravit), the local coding CLIs, and the A2A placeholder;
    `memory` indexes the skill packs; `plugin` indexes MCP servers and the
    composed row tree. Picking a session (or "+ new") always brings the chat
    back. Data: `agent` over the Remotes the client already reaches
@@ -3040,7 +3040,7 @@ async function openChannel(channel) {
         pendingWorkspaceId = channel.workspaceId;
         pendingCwd = undefined;
         pendingAgentPreset = undefined;
-        setSpeaker(null); // a channel round is Kairos's, even opened from a bot's page
+        setSpeaker(null); // a channel round is Gravit's, even opened from a bot's page
         closeDetail();
         resetFlow();
         markActive();
@@ -3242,7 +3242,7 @@ function spGroup(label, count) {
   return head;
 }
 
-/** The agent index: main agent (Kairos) · local agents · a2a. Rows only —
+/** The agent index: main agent (Gravit) · local agents · a2a. Rows only —
  * clicking one opens its page in the right pane. */
 async function refreshAgentPanel() {
   const panel = $("#panel-agent");
@@ -3258,15 +3258,15 @@ async function refreshAgentPanel() {
   if (activePanel !== "agent") return; // the operator moved on mid-fetch
   panel.replaceChildren();
 
-  /* -- main agent: Kairos, owner of this whole runtime -- */
+  /* -- main agent: Gravit, owner of this whole runtime -- */
   panel.append(spGroup("main agent"));
   const mainInfo = roster?.main;
-  const kairos = el("div", "sp-plug");
-  kairos.append(phaseDot("active"), el("span", "sp-plug-name", String(mainInfo?.name ?? "Kairos")));
+  const gravit = el("div", "sp-plug");
+  gravit.append(phaseDot("active"), el("span", "sp-plug-name", String(mainInfo?.name ?? "Gravit")));
   /* Names only in this index (operator direction) — the runtime pin, versions
    * and install state live on the pages the rows open; hover keeps a hint. */
-  kairos.title = dash(mainInfo?.runtime);
-  panel.append(indexRow(kairos, () => void openAgentMain(mainInfo)));
+  gravit.title = dash(mainInfo?.runtime);
+  panel.append(indexRow(gravit, () => void openAgentMain(mainInfo)));
 
   /* -- local agents: the operator's CONNECTED roster, not a fixed list -- */
   panel.append(spGroup("local agents"));
@@ -3751,7 +3751,7 @@ const KEY_REFS = ["DEEPSEEK_API_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"];
  *           0.1.1 `.credentials` wrapper (settings-controller src/credentials.ts:82-97).
  * @param {Record<string, any>|undefined} mainInfo - the roster's main block. */
 async function openAgentMain(mainInfo) {
-  const name = String(mainInfo?.name ?? "Kairos");
+  const name = String(mainInfo?.name ?? "Gravit");
   const title = `${name} · main agent`;
   const token = openDetail(title, (inner) => {
     inner.append(el("div", "detail-title", name));
@@ -3846,14 +3846,14 @@ function openLocalAgent(agent) {
         : "Signed out — sign in from this agent's own CLI."));
     }
 
-    /* What the connection is FOR: the tool Kairos gets in every strategy session. */
-    const use = panelCard("kairos");
+    /* What the connection is FOR: the tool Gravit gets in every strategy session. */
+    const use = panelCard("gravit");
     if (typeof agent.tool === "string") {
       kvRow(use, "tool", agent.tool);
       use.append(el("div", "sp-note",
-        `Kairos can call ${agent.tool} from any strategy session. It answers about that session's workspace and cannot run commands or edit files.`));
+        `Gravit can call ${agent.tool} from any strategy session. It answers about that session's workspace and cannot run commands or edit files.`));
     } else {
-      use.append(el("div", "sp-note", "connected, but the face has no recipe for this agent yet — not callable by Kairos."));
+      use.append(el("div", "sp-note", "connected, but the face has no recipe for this agent yet — not callable by Gravit."));
     }
     inner.append(use);
 
@@ -4093,7 +4093,7 @@ function renderAgentSession() {
 
 /* -- memory -- */
 
-/** The skill catalog, grouped by pack: Kairos's standing knowledge. */
+/** The skill catalog, grouped by pack: Gravit's standing knowledge. */
 async function refreshMemoryPanel() {
   const panel = $("#panel-memory");
   panel.replaceChildren(el("div", "sp-note", "loading…"));

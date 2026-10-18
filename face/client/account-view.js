@@ -246,7 +246,7 @@ function accountDetails(data, available, state) {
   const content = el("div", "account-details-content");
   if (!available) {
     const guide = el("section", "account-connect-guide");
-    guide.append(el("h2", "", "连接 Alpaca 模拟账户"), el("p", "", "在运行 Kairos 的环境中配置 Alpaca Paper 的 API Key 和 Secret，然后重启服务并刷新此页。"));
+    guide.append(el("h2", "", "连接 Alpaca 模拟账户"), el("p", "", "在运行 Gravit 的环境中配置 Alpaca Paper 的 API Key 和 Secret，然后重启服务并刷新此页。"));
     guide.append(el("p", "account-technical", "APCA_API_KEY_ID · APCA_API_SECRET_KEY"));
     if (typeof data.reason === "string") guide.append(el("p", "account-detail-note", data.reason));
     content.append(guide);

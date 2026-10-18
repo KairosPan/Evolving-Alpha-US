@@ -1,14 +1,14 @@
 # Market-Strategy-Account Skeleton — Design (Approach A)
 
 **Date:** 2026-08-29 · **Status:** approved in brainstorming, pending user review of this spec ·
-**Supersedes:** the Sonia-Kairos self-evolving-H product concept (charter, H=(p,K,M,C,W,A),
+**Supersedes:** the previous product's self-evolving-H concept (charter, H=(p,K,M,C,W,A),
 write-waist governance, two entities) — retired by operator decision 2026-08-29.
 
 ---
 
 ## 1. Context and decision history
 
-The operator is resetting this project from the Sonia-Kairos concept to a three-layer product:
+The operator is resetting this project from the previous product's concept to a three-layer product:
 
 - **MARKET** — market data: bars, snapshots, screening, corporate actions, breadth.
 - **STRATEGY** — where the LLM agent mainly operates; strategies are first-class objects.
@@ -170,7 +170,7 @@ dsh/
 │   │   ├── backtest-rules/     #   the honest-eval rules (references docs/backtest-rules.md)
 │   │   └── alpaca-kit-guide/   #   lib/MCP usage + the gotcha corpus (announce:=process_date,
 │   │                           #     IEX feed, RAW prices, PIT keys per feed, ...)
-│   └── style-kairos/           # the operator's PERSONAL investment style — loaded by default,
+│   └── style-gravit/           # the operator's PERSONAL investment style — loaded by default,
 │       ├── doctrine/           #   but every skill opens with: "this is the operator's style
 │       ├── signals/            #   and preference, not objective market law; when research
 │       └── lessons/            #   findings conflict with a style entry, REPORT the conflict,
@@ -216,7 +216,7 @@ implementation time.
 3. Migrate alpha/data + related → alpaca_kit/, rename imports, migrate tests, go green.
 4. Write new code: account.py → mcp/__main__.py → replay.py.
 5. Remount data/pit/ from backup; place strategies/_template/, dsh/, AGENTS.md.
-6. Pin profile/skill formats against current dsh docs; write skills (mechanics + style-kairos).
+6. Pin profile/skill formats against current dsh docs; write skills (mechanics + style-gravit).
 7. End-to-end smoke: dsh web up → agent calls screen/daily_bars → create the first strategy
    directory and run a backtest through replay.py.
 

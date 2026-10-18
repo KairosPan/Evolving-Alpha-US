@@ -21,7 +21,7 @@
 export const name = "midboot-slow-row";
 
 /** The drill's key; tests/order-gate-midboot-smoke.test.ts uses the same one. */
-const DRILL = Symbol.for("kairos-face.order-gate-midboot-drill");
+const DRILL = Symbol.for("gravit-face.order-gate-midboot-drill");
 
 /**
  * Hold this row's activation until the test releases it (or the cap passes).

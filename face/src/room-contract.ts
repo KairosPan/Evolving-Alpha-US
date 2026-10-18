@@ -177,7 +177,7 @@ export function formatDiscussionSummary(summary: DiscussionSummary): string {
     foot.push(`Answers without a valid structured view: ${excerpt(summary.unstructuredBots.map((id) => `@${id}`).join(", "), 1_000)}. Read their original answers in this conversation; they remain part of the discussion.`);
   }
   foot.push("This summary uses excerpts and may omit evidence or details. Read the original answers in this conversation for the full positions; [abridged] marks a shortened excerpt.");
-  foot.push("Kairos: compare the members' actual claims before drawing your own conclusion. Name disagreements in facts, interpretation, and risk preferences; distinguish missing evidence from opposing evidence. No declared disagreement is not consensus, and the number of voices is not a vote. Then give your conclusion and the next evidence to check, including what could change that conclusion.");
+  foot.push("Gravit: compare the members' actual claims before drawing your own conclusion. Name disagreements in facts, interpretation, and risk preferences; distinguish missing evidence from opposing evidence. No declared disagreement is not consensus, and the number of voices is not a vote. Then give your conclusion and the next evidence to check, including what could change that conclusion.");
   const fixedLength = charCount([...head, ...foot].join("\n\n"));
   const rowBudget = Math.max(0, Math.floor((12_000 - fixedLength - summary.views.length * 2) / Math.max(1, summary.views.length)));
   const fieldBudget = Math.min(180, Math.max(12, Math.floor((rowBudget - 650) / 7)));

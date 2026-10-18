@@ -96,7 +96,7 @@ test("room smoke: dispatch → two members → answers in the room log → one w
         const last = [...o.messages].reverse()[0];
         const lastKind = String((last?.source as { kind?: unknown } | undefined)?.kind);
         const lastForm = String((last?.source as { form?: unknown } | undefined)?.form);
-        if (who === "kairos") {
+        if (who === "gravit") {
           if (lastKind === "tool") return { kind: "text", text: "Waiting for the room." };
           if (lastKind === "room" && lastForm === "round-end") {
             const users = o.messages.filter((m) => m.role === "user");
@@ -144,12 +144,12 @@ test("room smoke: dispatch → two members → answers in the room log → one w
         return await res.json() as Record<string, unknown>;
       };
 
-      /* Kairos's room session, on the stub route. */
+      /* Gravit's room session, on the stub route. */
       const created = await rpc<{ sessionId: string; agentPreset?: string }>("session/create", { request: { workspaceId: ws.id } });
       const roomId = String(created.sessionId);
-      assert.equal(created.agentPreset, "kairos");
+      assert.equal(created.agentPreset, "gravit");
       await rpc("session/selectModel", { request: { sessionId: roomId, provider: "stub", model: "echo" } });
-      assert.ok(tools.schemas(agents.get(roomId) as object).some((s) => s.name === "dispatch"), "dispatch is in Kairos's roster");
+      assert.ok(tools.schemas(agents.get(roomId) as object).some((s) => s.name === "dispatch"), "dispatch is in Gravit's roster");
 
       await rpc("session/prompt", { request: { requestId: randomUUID(), sessionId: roomId, mode: "queue", content: [{ type: "text", text: "各位对 X 的看法？" }] } });
       const room = () => sessions.get(roomId)!.snapshotEvents();
@@ -173,7 +173,7 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       const roundEndAt = types.indexOf("user/message:room/round-end");
       const secondStart = types.indexOf("turn/start", firstEnd);
       assert.ok(types.indexOf("tool/call:dispatch") < firstEnd, "dispatch was called in the first turn");
-      assert.ok(answerAt > firstEnd && answerAt < roundEndAt, "alpha's answer landed after Kairos's turn ended and before the wake");
+      assert.ok(answerAt > firstEnd && answerAt < roundEndAt, "alpha's answer landed after Gravit's turn ended and before the wake");
       assert.ok(roundEndAt > secondStart && types.slice(secondStart, roundEndAt).filter((t) => t === "turn/start").length === 1, "the wake is one turn");
       const dispatchResult = events.find((e) => e.type === "tool/result" && JSON.stringify(e.data).includes("Dispatched"));
       assert.match(JSON.stringify(dispatchResult?.data), /Not called: none\./);
@@ -230,7 +230,7 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       assert.equal((row.projections?.values.room as { kind?: string } | undefined)?.kind, "room", "the room value rides session.list");
       assert.equal((members[0].projections?.values.room as { kind?: string } | undefined)?.kind, "member");
 
-      /* The cache row (R13): Kairos's turn/end is a mandatory write. dsh 0.2
+      /* The cache row (R13): Gravit's turn/end is a mandatory write. dsh 0.2
        * stores the domain `per-record`: one document per session under
        * `<storages>/session_projcache/sessions/<id>.json`
        * (NEW packages/session/session-projection-cache/src/spec.ts:1-9, 101-106;
@@ -251,7 +251,7 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       assert.ok(probe !== undefined, "the member ran its write");
       assert.match(JSON.stringify(probe!.data), /sandbox: file access denied/);
       assert.equal(existsSync(join(channelDir, "s4-member-should-not-exist.txt")), false);
-      assert.equal(room().filter((e) => e.type === "turn/start").length, 2, "an @ never woke Kairos");
+      assert.equal(room().filter((e) => e.type === "turn/start").length, 2, "an @ never woke Gravit");
 
       /* Plan 1's deferral 4: a HOME session writes its journal and is refused on ../SOUL.md. */
       const homeSession = await rpc<{ sessionId: string }>("session/create", { request: { cwd: join(bots, "alpha", "journal"), agentPreset: "alpha" } });
@@ -264,6 +264,11 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       const text = (outside.content ?? []).map((c) => c.text ?? "").join("\n");
       assert.match(text, /sandbox: file access denied/, "a home cannot rewrite its own SOUL.md");
       assert.equal(await readFile(join(bots, "alpha", "SOUL.md"), "utf8"), soulBefore);
+
+      /* The pre-rename id: a room created under `kairos` is the host and keeps dispatch. */
+      const legacyRoom = await rpc<{ sessionId: string; agentPreset?: string }>("session/create", { request: { workspaceId: ws.id, agentPreset: "kairos" } });
+      assert.equal(legacyRoom.agentPreset, "kairos");
+      assert.ok(tools.schemas(agents.get(String(legacyRoom.sessionId)) as object).some((s) => s.name === "dispatch"), "a pre-rename room keeps dispatch");
     } finally {
       await dispose();
     }

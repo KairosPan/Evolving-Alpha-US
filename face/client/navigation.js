@@ -6,7 +6,7 @@ const ITEMS = [
   { id: "market", href: "/market", icon: marketIcon, title: "Market" },
   { id: "strategy", href: "/#strategy", glyph: "❖", title: "Strategy — workspaces and sessions" },
   { id: "agent", href: "/#agent", glyph: "◎", title: "Agent — model, host, keys, session usage" },
-  { id: "memory", href: "/#memory", glyph: "▤", title: "Memory — the skill packs Kairos carries" },
+  { id: "memory", href: "/#memory", glyph: "▤", title: "Memory — the skill packs Gravit carries" },
   { id: "plugin", href: "/#plugin", glyph: "⚙", title: "Plugin — composed rows and MCP tools" },
   { id: "account", href: "/account", icon: accountIcon, title: "Account" },
 ];

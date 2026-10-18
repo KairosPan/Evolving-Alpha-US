@@ -70,7 +70,7 @@
  *   Gates: the waterfall's `agentId`, which IS the session id (NEW packages/core/agent/src/index.ts:258-270).
  * @property {SurfaceOpView} [surfaceOp] - on every rendered session event: `append`, or a
  *   replace instruction the renderer MUST honour by dropping the shadowed range.
- * @property {"operator"|"kairos"|"bot"} [role] - bubble side; `bot` is a room member speaking in its own voice.
+ * @property {"operator"|"gravit"|"bot"} [role] - bubble side; `bot` is a room member speaking in its own voice.
  * @property {string} [text] - bubble text.
  * @property {boolean} [interrupted] - bubbles: the turn was cancelled mid-stream and this is
  *   only the prefix that had arrived. Never render a partial answer as a complete one.
@@ -78,7 +78,7 @@
  *   a first-party producer kind (`compact-checkpoint`, `runtime-context`,
  *   `agent-instructions`, …), a migrated `plugin:<name>`, `agent-message` or
  *   `subagent-report` (child-authored), or `subagent-settled` (runtime-authored).
- * @property {string} [thinking] - kairos bubbles: the message's reasoning blocks, joined.
+ * @property {string} [thinking] - gravit bubbles: the message's reasoning blocks, joined.
  *   Thinking is never chat text; a renderer shows it apart from the bubble or not at all.
  * @property {string} [mode] - pulses: which block kind just opened live — `reasoning`, `text`, `tool-call`.
  * @property {ToolCardView} [card] - the card body.
@@ -200,7 +200,7 @@ function surfaceOpOf(event) {
  * message (the face has no attachment path yet), and — only in theory, since
  * every producer of one frames a summary — a textless REPLACE node, whose
  * shadow instruction would be dropped with it.
- * @param {"operator"|"kairos"} role - which side of the flow.
+ * @param {"operator"|"gravit"} role - which side of the flow.
  * @param {unknown} message - the LLM Message wrapper.
  * @param {FrameView} base - seq/sessionId/surfaceOp already read off the event.
  * @param {boolean} interrupted - whether this is a cancelled turn's prefix.
@@ -208,7 +208,7 @@ function surfaceOpOf(event) {
  */
 function bubble(role, message, base, interrupted) {
   const text = isObject(message) ? blocksText(message.content) : "";
-  const thinking = role === "kairos" && isObject(message) ? blocksReasoning(message.content) : "";
+  const thinking = role === "gravit" && isObject(message) ? blocksReasoning(message.content) : "";
   const src = isObject(message) && isObject(message.source) ? message.source : {};
   const kind = typeof src.kind === "string" ? src.kind : undefined;
   const form = typeof src.form === "string" ? src.form : undefined;
@@ -327,7 +327,7 @@ function mapSessionEvent(frame) {
       // interrupted marks a turn cancelled mid-stream: what follows is the
       // delivered PREFIX, not the answer (session types.ts:333-353). The
       // embedded `stream` record list is the model's raw timing; not rendered.
-      return bubble("kairos", data.message, base, data.interrupted === true);
+      return bubble("gravit", data.message, base, data.interrupted === true);
     case "tool/call": {
       const name = typeof data.name === "string" ? data.name : undefined;
       return { ...base, kind: "card", card: {

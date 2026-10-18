@@ -26,7 +26,7 @@ At the end of `<body>`, before your own page script:
 
 `market_mock.js` + `workbench_mock.js` first (masthead bed facts + dossier numbers, same as
 R2 — the shell-fill snippet and any dossier panes read them), `session_mock.js` next so
-`window.KAIROS_SESSION` exists, `timeline.js` last. `timeline.js` only defines the renderer;
+`window.GRAVIT_SESSION` exists, `timeline.js` last. `timeline.js` only defines the renderer;
 it renders nothing on load.
 
 ## The one call
@@ -42,7 +42,7 @@ it renders nothing on load.
 One call, one container (any block element), after the four scripts. The renderer clears the
 container (idempotent — calling again re-renders) and builds: session header (strategy name,
 id, date, engraved attendance stamp, runtime line, SAMPLE plate, raw linkback) → all turns →
-the inert composer. If `KAIROS_SESSION` is missing it renders an honest em-dash empty state,
+the inert composer. If `GRAVIT_SESSION` is missing it renders an honest em-dash empty state,
 never a fake.
 
 ## Container sizing — you own the box, the kit fills it
@@ -58,7 +58,7 @@ never a fake.
 
 Page layout, panes/rails/grids, the masthead + footer (copy the R2 skeleton and shell-fill
 snippet per `../r2/SHELL-NOTES.md` — the kit does NOT fill the masthead), the dossier
-(numbers from `window.KAIROS_FACES.strategies`, tt-breakout), breadcrumbs, docked/pinned
+(numbers from `window.GRAVIT_FACES.strategies`, tt-breakout), breadcrumbs, docked/pinned
 cards, entrance motion on your own panes, and the timeline **container itself** — its width,
 margin, position, background, overflow. The outer box only.
 
@@ -68,7 +68,7 @@ margin, position, background, overflow. The outer box only.
   classes as they appear inside the container (`#timeline .sig`, `#timeline details.fold`,
   `#timeline .ledger`, …). Nothing. If a spacing/width need arises, solve it on the container.
 - No reimplementing or duplicating turns/cards, no hiding or reordering turns, no reading
-  `KAIROS_SESSION` into markup of your own (dossier reads `KAIROS_FACES`, not the session).
+  `GRAVIT_SESSION` into markup of your own (dossier reads `GRAVIT_FACES`, not the session).
 - No second composer and no other write affordance anywhere on the page.
 - No copies or forks of `timeline.css` / `timeline.js` — link the shared files.
 
