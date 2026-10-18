@@ -1,7 +1,7 @@
 # P1 — Adversarial trap-day battery + panic-state L4 veto (design)
 
 > Spec for DEVELOPMENT-PLAN §1 P1 (incl. the 2026-07-12 panic-state pivot addition).
-> Sources: kairos-mining §2.5 (CONFIRMED, value 3), §6 order-4; manuscript
+> Sources: design-mining §2.5 (CONFIRMED, value 3), §6 order-4; manuscript
 > `docs/doctrine/2026-07-12-us-growth-doctrine-draft.md` §1.1 `panic_state`, §4.3
 > `panic_state_ban.rule`, Appendix B (`panic_state_ban.rule → L4 guard veto, alpha/guard, 待前置工程`).
 
@@ -11,7 +11,7 @@ A `tests/` battery of **synthetic trap days** — days built so that ANY new lon
 the FULL production decision stack `SizingPolicy(GuardedPolicy(LLMAgentPolicy(H, mock)))` with a
 scripted `MockLLMClient` that aggressively proposes buys. The battery asserts **zero new longs
 survive** on every trap day. Trap days live ONLY in tests (`FakeSource` / directly-built
-`MarketState`); they never touch live eval/verdict scoring (kairos-mining §2.5: "regression/promotion
+`MarketState`); they never touch live eval/verdict scoring (design-mining §2.5: "regression/promotion
 preconditions, never training signal"). This is the guardrail that lets P2's GCycle recalibration
 proceed without silently re-opening chase-risk entries.
 

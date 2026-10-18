@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KAIROS — Terminal</title>
+<title>GRAVIT — Terminal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -125,10 +125,10 @@ table.wm{border-collapse:collapse;font-size:12px;margin-top:6px;width:100%}
 <div class="wrap">
 
 <header class="manhead">
-  <span>KAIROS(1)</span><span>Kairos Workbench Manual</span><span>KAIROS(1)</span>
+  <span>GRAVIT(1)</span><span>Gravit Workbench Manual</span><span>GRAVIT(1)</span>
 </header>
 
-<div class="banner" role="img" aria-label="KAIROS">
+<div class="banner" role="img" aria-label="GRAVIT">
 <pre>
 ██╗  ██╗ █████╗ ██╗██████╗  ██████╗ ███████╗
 ██║ ██╔╝██╔══██╗██║██╔══██╗██╔═══██╗██╔════╝
@@ -148,13 +148,13 @@ table.wm{border-collapse:collapse;font-size:12px;margin-top:6px;width:100%}
   <div id="tapeaxis"></div>
   <div class="motd-line" style="margin-top:10px" id="tapeline"></div>
   <div class="motd-line" id="gateline"></div>
-  <div id="nodata">data script not loaded — expected ../data/market_mock.js (window.KAIROS_DATA)</div>
+  <div id="nodata">data script not loaded — expected ../data/market_mock.js (window.GRAVIT_DATA)</div>
 </div>
 
 <section>
   <h2>NAME</h2>
   <div class="body">
-    <p>kairos — a single trading-research agent, run by a single operator, on DeepSeek
+    <p>gravit — a single trading-research agent, run by a single operator, on DeepSeek
     Harness. It works a three-layer workbench; its authority over its own runtime is zero.</p>
   </div>
 </section>
@@ -163,9 +163,9 @@ table.wm{border-collapse:collapse;font-size:12px;margin-top:6px;width:100%}
   <h2>SYNOPSIS</h2>
   <div class="body">
     <div class="syn">
-      <span><span class="dim">kairos</span> <b>market</b></span><span>point-in-time US equities · Alpaca + EDGAR · lookahead-guarded</span>
-      <span><span class="dim">kairos</span> <b>strategy</b></span><span>the arena · git-versioned theses, screens, backtests, journals</span>
-      <span><span class="dim">kairos</span> <b>account</b></span><span>Alpaca paper · read-only · orders double-gated, both closed</span>
+      <span><span class="dim">gravit</span> <b>market</b></span><span>point-in-time US equities · Alpaca + EDGAR · lookahead-guarded</span>
+      <span><span class="dim">gravit</span> <b>strategy</b></span><span>the arena · git-versioned theses, screens, backtests, journals</span>
+      <span><span class="dim">gravit</span> <b>account</b></span><span>Alpaca paper · read-only · orders double-gated, both closed</span>
     </div>
   </div>
 </section>
@@ -193,7 +193,7 @@ table.wm{border-collapse:collapse;font-size:12px;margin-top:6px;width:100%}
       over its own runtime: <b>zero</b>. The profile, keys, and gate flags live in the
       harness home, outside the workspace.</dd>
       <dt><span class="pn">P2</span>THE OPERATOR IS THE ONLY TEACHER</dt>
-      <dd>Style is operator-owned. When research conflicts with a style entry, Kairos
+      <dd>Style is operator-owned. When research conflicts with a style entry, Gravit
       <b>reports the conflict</b> — never silently defers, never silently overrides.</dd>
       <dt><span class="pn">P3</span>POINT-IN-TIME HONESTY, IN CODE</dt>
       <dd>Every dated market read passes a lookahead guard; guard surfaces are pinned by
@@ -249,7 +249,7 @@ table.wm{border-collapse:collapse;font-size:12px;margin-top:6px;width:100%}
     <table class="wm">
       <thead><tr><th>SURFACE</th><th>WRITER</th><th>AUDIT / GATE</th></tr></thead>
       <tbody>
-        <tr><td>strategies/</td><td>kairos, freely</td><td>git history is the ledger; the operator reviews diffs</td></tr>
+        <tr><td>strategies/</td><td>gravit, freely</td><td>git history is the ledger; the operator reviews diffs</td></tr>
         <tr><td>dsh/skills/*</td><td>operator only</td><td>law and style; the agent proposes, never edits</td></tr>
         <tr><td>harness home · gate flags</td><td>operator only</td><td>outside the workspace — structurally unreachable</td></tr>
         <tr><td>data/pit/ beds</td><td>nobody</td><td>checksums; recapture is the only legitimate write</td></tr>
@@ -262,18 +262,18 @@ table.wm{border-collapse:collapse;font-size:12px;margin-top:6px;width:100%}
 <section>
   <h2>SEE ALSO</h2>
   <div class="body see" style="font-size:12px;color:var(--dim)">
-    <p><a href="#" title="Kairos-Design.md">kairos-design(7)</a> — the charter: intent and principles &nbsp;·&nbsp;
+    <p><a href="#" title="Gravit-Design.md">gravit-design(7)</a> — the charter: intent and principles &nbsp;·&nbsp;
     <a href="#" title="docs/superpowers/specs/2026-08-29-market-strategy-account-skeleton-design.md">skeleton-spec(7)</a> — mechanism &nbsp;·&nbsp;
     <a href="#" title="docs/backtest-rules.md">backtest-rules(5)</a> — the five rules</p>
   </div>
 </section>
 
 <div class="prompt" aria-hidden="true">
-  <span class="dim">operator@kairos</span>:<span class="dim">~</span>$ <span class="cursor">&nbsp;</span>
+  <span class="dim">operator@gravit</span>:<span class="dim">~</span>$ <span class="cursor">&nbsp;</span>
 </div>
 
 <footer class="manfoot">
-  <span>Kairos Workbench</span><span>2026-08-30</span><span>KAIROS(1)</span>
+  <span>Gravit Workbench</span><span>2026-08-30</span><span>GRAVIT(1)</span>
 </footer>
 
 </div>
@@ -282,7 +282,7 @@ table.wm{border-collapse:collapse;font-size:12px;margin-top:6px;width:100%}
 <script>
 (function () {
   "use strict";
-  var D = window.KAIROS_DATA;
+  var D = window.GRAVIT_DATA;
   var $ = function (id) { return document.getElementById(id); };
   if (!D) { $("nodata").style.display = "block"; return; }
 

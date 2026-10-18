@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KAIROS · STRATEGY — R3 3PANE</title>
+<title>GRAVIT · STRATEGY — R3 3PANE</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2305070b'/%3E%3Cpath d='M8 2 L11 8 L8 14 L5 8 Z' fill='%23c8a552'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="../r2/shell.css">
 <link rel="stylesheet" href="timeline.css">
@@ -62,7 +62,7 @@
 
 <header class="masthead">
   <div class="wrap mast-top">
-    <a class="wordmark" href="../r2/landing.html"><span class="dia" aria-hidden="true"></span>KAIROS</a>
+    <a class="wordmark" href="../r2/landing.html"><span class="dia" aria-hidden="true"></span>GRAVIT</a>
     <span class="facename">STRATEGY</span>
     <span class="spacer"></span>
     <span class="seg">as of <b id="k-asof" class="mono">—</b></span>
@@ -213,9 +213,9 @@
 
 <footer class="foot-band">
   <div class="wrap foot">
-    <span>KAIROS · <b>STRATEGY</b> — round-3 face prototype · zero authority · read-only</span>
+    <span>GRAVIT · <b>STRATEGY</b> — round-3 face prototype · zero authority · read-only</span>
     <span class="spacer"></span>
-    <span>intent · <b>Kairos-Design.md</b></span>
+    <span>intent · <b>Gravit-Design.md</b></span>
     <span>mechanism · <b>the skeleton spec &amp; code</b></span>
   </div>
 </footer>
@@ -228,7 +228,7 @@
 /* ── shell fill — shared across all R2 faces ── */
 (function(){
   "use strict";
-  var D = window.KAIROS_DATA || null;
+  var D = window.GRAVIT_DATA || null;
   if(!D) return; // dashes stand: no reading, never fake
   function t(id, s){ var el = document.getElementById(id); if(el) el.textContent = s; }
   t("k-asof", D.as_of);
@@ -251,10 +251,10 @@
 /* ── the one kit call — the whole conversation ledger ── */
 renderSessionTimeline(document.getElementById("timeline"));
 
-/* ── page fill: switcher + dossier (reads KAIROS_FACES only, never the session) ── */
+/* ── page fill: switcher + dossier (reads GRAVIT_FACES only, never the session) ── */
 (function(){
   "use strict";
-  var F = window.KAIROS_FACES || null;
+  var F = window.GRAVIT_FACES || null;
   var S = F && F.strategies;
   if(!S || !S.rows) return; // dashes stand
   var MINUS = "−";

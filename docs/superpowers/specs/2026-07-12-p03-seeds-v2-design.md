@@ -97,7 +97,7 @@ Defense-heavy (detectors > patterns), like momo. `laggard_launch` ships `incubat
 **Memory (`seeds_v2/memory.json`):** the Appendix A concept ledger as `Lesson`s carrying the analog in
 `named_analog` (English label; §0.3 forbids inlining old *action* semantics, so the 反转★ lessons name
 the reflex only to invert it, and the 墓碑 rows — 连板/打板/卡位/竞价/妖股 — are **excluded** to keep
-A-share action recipes out of Kairos's context). Plus the §L-001 Peloton failure card and the §2.3
+A-share action recipes out of Gravit's context). Plus the §L-001 Peloton failure card and the §2.3
 thesis-card template as a recallable scaffold.
 
 **Explicitly out of v1:**

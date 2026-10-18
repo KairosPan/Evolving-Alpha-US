@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KAIROS · STRATEGY — R3 PAGE</title>
+<title>GRAVIT · STRATEGY — R3 PAGE</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2305070b'/%3E%3Cpath d='M8 2 L11 8 L8 14 L5 8 Z' fill='%23c8a552'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="../r2/shell.css">
 <link rel="stylesheet" href="timeline.css">
@@ -97,7 +97,7 @@ a.crumb:hover{ color:var(--brass-hi); border-bottom-color:var(--brass-dim); }
 
 <header class="masthead">
   <div class="wrap mast-top">
-    <a class="wordmark" href="../r2/landing.html"><span class="dia" aria-hidden="true"></span>KAIROS</a>
+    <a class="wordmark" href="../r2/landing.html"><span class="dia" aria-hidden="true"></span>GRAVIT</a>
     <span class="facename">STRATEGY</span>
     <span class="spacer"></span>
     <span class="seg">as of <b id="k-asof" class="mono">—</b></span>
@@ -134,7 +134,7 @@ a.crumb:hover{ color:var(--brass-hi); border-bottom-color:var(--brass-dim); }
       <span class="entry-no" data-entry>E —.—</span>
       <span class="eyebrow">dossier · <b id="d-name">—</b></span>
       <span class="chip chip-dim" id="d-chip">—</span>
-      <span class="stamp-plate" title="dossier readouts come from KAIROS_FACES.strategies, a labeled fabricated block">sample — fabricated shape</span>
+      <span class="stamp-plate" title="dossier readouts come from GRAVIT_FACES.strategies, a labeled fabricated block">sample — fabricated shape</span>
       <span class="dstrip-line" id="d-line"></span>
       <span class="spacer"></span>
       <span class="eyebrow" id="d-updated">updated <span class="null" title="no reading in this bed">—</span></span>
@@ -203,9 +203,9 @@ a.crumb:hover{ color:var(--brass-hi); border-bottom-color:var(--brass-dim); }
 
 <footer class="foot-band">
   <div class="wrap foot">
-    <span>KAIROS · <b>STRATEGY</b> — round-3 face prototype · zero authority · read-only</span>
+    <span>GRAVIT · <b>STRATEGY</b> — round-3 face prototype · zero authority · read-only</span>
     <span class="spacer"></span>
-    <span>intent · <b>Kairos-Design.md</b></span>
+    <span>intent · <b>Gravit-Design.md</b></span>
     <span>mechanism · <b>the skeleton spec &amp; code</b></span>
   </div>
 </footer>
@@ -218,7 +218,7 @@ a.crumb:hover{ color:var(--brass-hi); border-bottom-color:var(--brass-dim); }
 /* ── shell fill — shared across all R2 faces ── */
 (function(){
   "use strict";
-  var D = window.KAIROS_DATA || null;
+  var D = window.GRAVIT_DATA || null;
   if(!D) return; // dashes stand: no reading, never fake
   function t(id, s){ var el = document.getElementById(id); if(el) el.textContent = s; }
   t("k-asof", D.as_of);
@@ -238,11 +238,11 @@ a.crumb:hover{ color:var(--brass-hi); border-bottom-color:var(--brass-dim); }
   });
 })();
 
-/* ── dossier strip fill — reads KAIROS_FACES.strategies (tt-breakout only);
+/* ── dossier strip fill — reads GRAVIT_FACES.strategies (tt-breakout only);
       missing data leaves the em-dashes standing, never a fake reading ── */
 (function(){
   "use strict";
-  var F = window.KAIROS_FACES || null;
+  var F = window.GRAVIT_FACES || null;
   var S = F && F.strategies;
   var rows = (S && S.rows) || [];
   var row = null;

@@ -114,7 +114,7 @@ table.scr{border-collapse:collapse;width:100%;font-size:12px}
 <div class="wrap">
 
 <header class="sbar" id="topbar">
-  <span class="id">KAIROS::MARKET</span>
+  <span class="id">GRAVIT::MARKET</span>
   <span id="sb-asof"><span class="dim">as-of</span> —</span>
   <span class="dim" id="sb-bed">bed —</span>
   <span id="sb-syms">—</span>
@@ -124,7 +124,7 @@ table.scr{border-collapse:collapse;width:100%;font-size:12px}
   <a class="raw" href="#" id="bedraw">bed.raw &#9656;</a>
 </header>
 
-<div id="nodata">data script not loaded — expected ../data/market_mock.js (window.KAIROS_DATA)</div>
+<div id="nodata">data script not loaded — expected ../data/market_mock.js (window.GRAVIT_DATA)</div>
 
 <div class="grid">
 
@@ -196,7 +196,7 @@ table.scr{border-collapse:collapse;width:100%;font-size:12px}
 <script>
 (function () {
   "use strict";
-  var D = window.KAIROS_DATA;
+  var D = window.GRAVIT_DATA;
   var $ = function (id) { return document.getElementById(id); };
   if (!D) { $("nodata").style.display = "block"; return; }
 

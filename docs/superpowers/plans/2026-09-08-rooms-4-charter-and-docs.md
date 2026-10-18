@@ -16,7 +16,7 @@
 - Charter scale discipline: no section grows past a page; mechanism goes to `DEVELOPMENT.md`.
 - `CLAUDE.md` stays ~55 lines, present-tense facts, no prescriptions, one file (the operator's policy).
 - `DEVELOPMENT.md` citation rule: files and named symbols, never line numbers. Its header's "Last full pass" line carries the real counts from the last `FACE_SMOKE=1 npm test` and `python -m pytest` runs — run them in Task 3 and write what they print.
-- `AGENTS.md` is what Kairos itself reads (dsh's instruction loader hands it `CLAUDE.md` too): write for the model, in the register the file already uses.
+- `AGENTS.md` is what Gravit itself reads (dsh's instruction loader hands it `CLAUDE.md` too): write for the model, in the register the file already uses.
 - The residual ledger (`DEVELOPMENT.md` §9) records what holds and what does not (charter Rule 3): every plan-2/3 residual named in the spec's §12 and §16 blocks gets a row or an update; nothing is marked resolved without naming the mechanism that resolved it.
 - Every date is absolute (2026-09-08 / 2026-09-09).
 - Commit per task (`git commit -F <file>` when the message carries backticks or parentheses). Never commit the operator's untracked files (`strategies/*`, `bots/buffet/`, `docs/research/*`, `tests/strategies/`, `face/probe4.ts`, `.claude/launch.json`, `docs/storage-industry-chain-2026.md`, `.bots-smoke-*`).
@@ -26,19 +26,19 @@
 
 | File | Edits |
 |---|---|
-| `Kairos-Design.md` | header status line; §1 (`one principal agent`, the bots sentence); §5 D11 → resolved, D12 and D13 added; §7.1 replaced by the agreed wording; §8 new trigger row |
+| `Gravit-Design.md` | header status line; §1 (`one principal agent`, the bots sentence); §5 D11 → resolved, D12 and D13 added; §7.1 replaced by the agreed wording; §8 new trigger row |
 | `CLAUDE.md` | "What this is" mirror line; Map row for `bots/` and the room engine; Gotchas: one line on no custom session-event types |
-| `AGENTS.md` | a rooms paragraph: what Kairos is told about `dispatch`, the bots on a channel's roster, the operator's `@`, and that a voice is evidence, never a verdict |
+| `AGENTS.md` | a rooms paragraph: what Gravit is told about `dispatch`, the bots on a channel's roster, the operator's `@`, and that a voice is evidence, never a verdict |
 | `DEVELOPMENT.md` | header counts; §3.7 rooms state; §4.2 module rows; §4.3 the cache row; §4.4 the three routes; §4.5 state; §5.1 `room.js` + the room views; §5.2 the room frames and the `@` route; §5.3 pipeline; §6.8 a room round end to end; §7.3 suite; §7.4 drill rows; §8 conventions; §9 R6 resolved, R13 resolved, R14–R17 new; §10 item 9 done, item 3 done |
 | `ROADMAP.md` | built log line |
 | `docs/superpowers/specs/2026-09-07-bots-and-rooms-design.md` | §16 blocks for plans 3 and 4 |
 
 ---
 
-### Task 1: The charter — `Kairos-Design.md`
+### Task 1: The charter — `Gravit-Design.md`
 
 **Files:**
-- Modify: `Kairos-Design.md`
+- Modify: `Gravit-Design.md`
 
 - [ ] **Step 1: The header**
 
@@ -46,25 +46,25 @@ Change `**Status:** living charter, written 2026-08-30, revised 2026-09-04, §9 
 
 - [ ] **Step 2: §1**
 
-Replace `for **one operator, one machine, one agent**. The agent, also called Kairos, runs on DeepSeek Harness (dsh) inside the operator's chat face and works three layers:` with:
+Replace `for **one operator, one machine, one agent**. The agent, also called Gravit, runs on DeepSeek Harness (dsh) inside the operator's chat face and works three layers:` with:
 
 ```markdown
-for **one operator, one machine, one principal agent**. The agent, also called Kairos, runs on
+for **one operator, one machine, one principal agent**. The agent, also called Gravit, runs on
 DeepSeek Harness (dsh) inside the operator's chat face and works three layers. The operator may
-author further agents — bots — as discussants (§7.1); they are voices on Kairos's substrate, not
+author further agents — bots — as discussants (§7.1); they are voices on Gravit's substrate, not
 hands.
 ```
 
-(keep the three-layer list that follows). In the STRATEGY bullet, after `its roster of helper agents.` add: `A channel with bots on its roster is a **room**: Kairos dispatches the voices, the operator argues with them, and the conclusion stays Kairos's.`
+(keep the three-layer list that follows). In the STRATEGY bullet, after `its roster of helper agents.` add: `A channel with bots on its roster is a **room**: Gravit dispatches the voices, the operator argues with them, and the conclusion stays Gravit's.`
 
 - [ ] **Step 3: §5 — D11 resolved, D12 and D13 added**
 
 Replace the D11 row with:
 
 ```markdown
-| D11 | *Resolved 2026-09-07.* The model is told it is Kairos: `dsh/profile/persona.md` is the `system-prompt` row's `persona`, set by the face at compose time; a bot's preset shadows it for that bot's sessions | — | — |
+| D11 | *Resolved 2026-09-07.* The model is told it is Gravit: `dsh/profile/persona.md` is the `system-prompt` row's `persona`, set by the face at compose time; a bot's preset shadows it for that bot's sessions | — | — |
 | D12 | Bot tool masks are visibility, not authority. dsh scopes and `tools.restrict` are "live visibility composition, not an authority boundary"; a bot with a shell writes whatever its session's sandbox mode allows and reaches whatever the network allows | held by: the `read-only` permission preset logged into every bot room session inside its creation (file effects, subject to an operator-granted escalation card), the `journal/`-scoped `cwd` of every bot home session, Gate 2 tree-wide (the account), and the room transcript naming every dispatch and every member not called. Not held by the mask, and not held for the network | if a bot's composition is ever given the account tools, or a room session is created other than read-only (§8) |
-| D13 | Kairos's sessions may have a picked `cwd` at the repository root, which includes `bots/`; "Kairos never edits a bot" is a Rule-7 commitment carried by `AGENTS.md`'s never-edit list and review, not by the sandbox | single operator; every edit reviewed; git is the ledger | the first bot edit that is not the operator's |
+| D13 | Gravit's sessions may have a picked `cwd` at the repository root, which includes `bots/`; "Gravit never edits a bot" is a Rule-7 commitment carried by `AGENTS.md`'s never-edit list and review, not by the sandbox | single operator; every edit reviewed; git is the ledger | the first bot edit that is not the operator's |
 ```
 
 - [ ] **Step 4: §7 — the amendment, verbatim from the spec's §10**
@@ -73,15 +73,15 @@ Replace the `**No second agent.**` bullet with:
 
 ```markdown
 - **No privileged second agent.** Teaching, review, and adjudication belong to the operator. One
-  hand, many voices: Kairos is the one agent whose composition carries the account tools and the
+  hand, many voices: Gravit is the one agent whose composition carries the account tools and the
   write to a strategy directory; the operator may roster other agents on a channel — local CLIs as
   callable tools, operator-authored dsh bots as **discussants** that speak in the room — but a bot
-  is a voice, not a reviewer: what it says is evidence the operator and Kairos weigh, never a
-  verdict, and the conclusion is written by Kairos. Bots run on Kairos's substrate with their tool
+  is a voice, not a reviewer: what it says is evidence the operator and Gravit weigh, never a
+  verdict, and the conclusion is written by Gravit. Bots run on Gravit's substrate with their tool
   sets masked by configuration; the mask is a menu (a bot with a shell writes whatever its sandbox
   mode allows — D12), and the fence around the account is Gate 2, tree-wide, the same for every
-  agent. Kairos's `dispatch` orders the room but grants nothing, and the operator's `@` bypasses
-  it. Bots are authored by the operator, never by Kairos (Rule 7). A voice need not run on this
+  agent. Gravit's `dispatch` orders the room but grants nothing, and the operator's `@` bypasses
+  it. Bots are authored by the operator, never by Gravit (Rule 7). A voice need not run on this
   machine: an agent reached over A2A is a voice too — untrusted text in the room log, never a hand
   in this tree; the moment anything outside this machine can call *in*, §8's last row applies. A
   reviewer entity with authority would add a plane of machinery to buy safety that already comes
@@ -99,14 +99,14 @@ Add a row before the interface-migration row:
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Kairos-Design.md
+git add Gravit-Design.md
 git commit -F /tmp/msg.txt
 ```
 
 with `/tmp/msg.txt`:
 
 ```
-docs(charter): section 7.1 reads no privileged second agent (the agreed 2026-09-07 wording); D11 resolved, D12 masks are visibility and D13 Kairos never edits a bot added; the bot-capability trigger
+docs(charter): section 7.1 reads no privileged second agent (the agreed 2026-09-07 wording); D11 resolved, D12 masks are visibility and D13 Gravit never edits a bot added; the bot-capability trigger
 ```
 
 ---
@@ -119,10 +119,10 @@ docs(charter): section 7.1 reads no privileged second agent (the agreed 2026-09-
 
 - [ ] **Step 1: `CLAUDE.md`**
 
-In "What this is", change `for one operator and one agent (Kairos)` to `for one operator, one principal agent (Kairos), and operator-authored bots`. Change `Last reviewed 2026-09-04` to `Last reviewed 2026-09-09`. In the Map table add a row after the `face/` row:
+In "What this is", change `for one operator and one agent (Gravit)` to `for one operator, one principal agent (Gravit), and operator-authored bots`. Change `Last reviewed 2026-09-04` to `Last reviewed 2026-09-09`. In the Map table add a row after the `face/` row:
 
 ```markdown
-| `bots/` | one directory per bot (`_template` is the copy source, `kairos` the inert default): a dsh agent preset — persona + allow-list mask via `face/plugins/bot.js`; a bot's home session writes only `bots/<id>/journal/`; in a room (a channel session with bots rostered) `face/src/room.ts` creates one `read-only` member session per bot and Kairos calls `dispatch` |
+| `bots/` | one directory per bot (`_template` is the copy source, `gravit` the inert default): a dsh agent preset — persona + allow-list mask via `face/plugins/bot.js`; a bot's home session writes only `bots/<id>/journal/`; in a room (a channel session with bots rostered) `face/src/room.ts` creates one `read-only` member session per bot and Gravit calls `dispatch` |
 ```
 
 In Gotchas add one bullet after the `face/client/*` one:
@@ -162,7 +162,7 @@ git commit -F /tmp/msg.txt
 with `/tmp/msg.txt`:
 
 ```
-docs: CLAUDE.md names the principal agent and the bots directory; AGENTS.md tells Kairos how a room works - dispatch, the caps, the operator's @, and that a voice is evidence
+docs: CLAUDE.md names the principal agent and the bots directory; AGENTS.md tells Gravit how a room works - dispatch, the caps, the operator's @, and that a voice is evidence
 ```
 
 ---
@@ -184,7 +184,7 @@ Write the counts into the header: `**Last full pass:** 2026-09-09 on \`feat/room
 
 - [ ] **Step 2: §3.7 — the state line**
 
-Replace `State on 2026-09-07: no bot exists. …` with a paragraph stating what is true: which bots exist in the tree (`kairos`, `_template`; `bots/buffet/` untracked, the operator's), that a bot's `preset.yml` may carry a face-only `model:` route, and that a bot in a room gets a member session per room (`parentSession` = the room, `cwd` = the channel, `read-only`), created and resumed by `face/src/room.ts`, never by hand.
+Replace `State on 2026-09-07: no bot exists. …` with a paragraph stating what is true: which bots exist in the tree (`gravit`, `_template`; `bots/buffet/` untracked, the operator's), that a bot's `preset.yml` may carry a face-only `model:` route, and that a bot in a room gets a member session per room (`parentSession` = the room, `cwd` = the channel, `read-only`), created and resumed by `face/src/room.ts`, never by hand.
 
 - [ ] **Step 3: §4.2 — module rows**
 
@@ -226,16 +226,16 @@ Append:
 
 ```markdown
 **6.8 A room round.** Operator checks two bots into a channel (`POST /data/channels/bots` →
-`channels.json` `bots[]`) → asks a question in a channel session → Kairos calls `dispatch`
+`channels.json` `bots[]`) → asks a question in a channel session → Gravit calls `dispatch`
 (`tool/call`) → the engine validates against the roster, starts the round and returns at once
 (`tool/result` naming who was not called) → per bot: find or create the member session
 (`ctx.agents.create`, `parentSession` = the room, `agentPreset` = the bot, `read-only` pinned
 inside `setup`, attached to the channel workspace) → `followup` the delta prompt (its
 `messageIds` are the member's cursor, in its own log) → await that turn's `turn/end` under the
 extending deadline → final text after the last tool result; empty or `(pass)` → `passed`; an
-error → `failed` → an answer is appended to the room log while no Kairos turn is open (else held
+error → `failed` → an answer is appended to the room log while no Gravit turn is open (else held
 until its `turn/end`) → peer `@`s queue continuations (≤ 2) → round end: every held answer
-flushed, then ONE `followup` naming who answered and who passed → Kairos's synthesis turn. Every
+flushed, then ONE `followup` naming who answered and who passed → Gravit's synthesis turn. Every
 step is a known event; the `room` projection folds them; the client renders each answer in the
 bot's voice as it lands and the strip from the projection plus the members' own pulses.
 ```
@@ -258,9 +258,9 @@ bot's voice as it lands and the strip from the projection plus the members' own 
 §9: R6 → `*Resolved 2026-09-09.* The charter's D11 now names the persona mechanism (plan 4).` R13 → `*Resolved 2026-09-08.* The face mounts \`dsh-session-projection-cache\` (overlay row); a cold session lists with its cached projections once it has completed a turn under the row — sessions cold before it stay \`untitled\` until resumed.` Add:
 
 ```markdown
-- **R14 — A room's answers are appended to Kairos's log by the face, not spoken by Kairos's
+- **R14 — A room's answers are appended to Gravit's log by the face, not spoken by Gravit's
   driver.** Honest and necessary (plan 2, deviation 2), but it means a room log can gain user-role
-  messages while no client watches and while Kairos is idle; the persistence write path records
+  messages while no client watches and while Gravit is idle; the persistence write path records
   them like any event. The `quiet` rule (no open turn) is what keeps a running request intact.
 - **R15 — Fine states are presence, not truth.** `thinking` / `writing` / `tool` on the strip come
   from the members' own `assistant/chunk` block starts, held in the client's memory and cleared at
@@ -319,7 +319,7 @@ and the PASS line are in the README.
 
 ### Plan 4 — the charter and the documents
 
-Written 2026-09-09 after plans 2–3 shipped: §10's amendment landed in `Kairos-Design.md` §7.1
+Written 2026-09-09 after plans 2–3 shipped: §10's amendment landed in `Gravit-Design.md` §7.1
 verbatim; D11 marked resolved, D12 and D13 added, the §8 trigger added; `CLAUDE.md`, `AGENTS.md`,
 `DEVELOPMENT.md` (§3.7, §4.2–4.5, §5.1–5.3, §6.8, §7.3–7.4, §8, §9 R6/R13/R14–R17, §10) and
 `ROADMAP.md` describe the tree as built. This document is frozen: its Status line stays as written

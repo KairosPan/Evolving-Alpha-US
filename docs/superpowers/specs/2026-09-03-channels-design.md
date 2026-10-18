@@ -27,7 +27,7 @@ Decisions fixed during brainstorming (each confirmed by the operator):
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | What is an agent inside a channel? | **A tool of Kairos.** The channel's member list is that channel's `agent_<bin>` whitelist. Only Kairos speaks; delegated CLI output stays a folded tool result. No multi-party posting. |
+| 1 | What is an agent inside a channel? | **A tool of Gravit.** The channel's member list is that channel's `agent_<bin>` whitelist. Only Gravit speaks; delegated CLI output stays a folded tool result. No multi-party posting. |
 | 2 | Are channels typed? | **No kinds, but the card is structured.** One channel shape; an all-optional structured header supplies what cannot be derived. |
 | 3 | Where does the artifact sit? | **A channel landing page (three-tier).** Sidebar lists channels → the channel page shows the artifact plus that channel's sessions → a session (or "new round") opens the conversation. |
 | 4 | Where does the artifact's content come from? | **Derived-first, plus one optional headline block.** No new producer, no new file; `status.yaml` gains optional keys. |
@@ -43,21 +43,21 @@ three layers are split by *who may write them*, which the charter already decide
 
 | Layer | Lives in | Writer | Contents |
 |---|---|---|---|
-| **Body** (content) | `strategies/<dir>/` in the repo | **Kairos, freely** (write map row 1, `Kairos-Design.md:87`) | `THESIS.md` · `status.yaml` · `journal.md` · `screen.py` · `backtest.py` · `backtests/` · optional `AGENTS.md` |
+| **Body** (content) | `strategies/<dir>/` in the repo | **Gravit, freely** (write map row 1, `Gravit-Design.md:87`) | `THESIS.md` · `status.yaml` · `journal.md` · `screen.py` · `backtest.py` · `backtests/` · optional `AGENTS.md` |
 | **Identity** (container) | dsh workspace registry → `~/.dsh/storages/workspace.json` | **host-owned; mutated only through `/api/workspace.*`** | `workspaceId` (UUID) · `title` · `sessionIds[]` · durable order · timestamps |
 | **Roster** (runtime) | `$DSH_HOME/face/channels.json` (new) | **operator only**, through the face UI | the channel's `agent_<bin>` whitelist |
 
-Kairos may rewrite a channel's *content* freely and cannot **write** its *identity* or its
+Gravit may rewrite a channel's *content* freely and cannot **write** its *identity* or its
 *roster*: both sit outside the workspace, behind the sandbox's file-write fence. This is a
 placement of concerns in the spirit of P1, but **it is not structural unreachability** — see
 §5 limit 3, which names the loopback path that reaches them anyway. It is also why the roster
-cannot live in the channel's own `AGENTS.md`: that file is Kairos's.
+cannot live in the channel's own `AGENTS.md`: that file is Gravit's.
 
 `@deepseek-ai/dsh-workspace` "registers no tools, injects no prompts, and writes no session
 events" (its README, "Model Experience"), so nothing about the registry enters a request prefix.
 The separation is a **write** separation, not confidentiality: `dsh-fs-sandbox` fences
 `writeText`/`editText` only — "Reads always pass through — every mode permits reading" (its
-README:5) — and `dsh-shell-env` hands every shell call `DSH_HOME`, so Kairos can read both files
+README:5) — and `dsh-shell-env` hands every shell call `DSH_HOME`, so Gravit can read both files
 if it looks. Nothing in this design depends on it not looking.
 
 ### Existence rule
@@ -69,7 +69,7 @@ if it looks. Nothing in this design depends on it not looking.
 must never become a channel — **plus the repo root itself** → for each such directory
 `workspaceRegistry.create(path)` → merge the registry's `title` / `sessionIds` / order. `create` is idempotent: it canonicalizes
 via `fs.realpath`, keeps at most one record per canonical path, and "repeated calls for that
-path return the existing workspace without changing its title." A channel Kairos creates with a
+path return the existing workspace without changing its title." A channel Gravit creates with a
 plain `mkdir` therefore becomes a channel on the next listing, and "git history is the ledger"
 still holds.
 
@@ -116,7 +116,7 @@ All new `/data/*` routes go through the single existing fence `isTrustedDataRequ
 (`face/src/data.ts:120-131`); every POST additionally requires `content-type: application/json`.
 Read §5 limit 3 before treating that fence as authentication — it is not.
 
-**Deleting a channel** needs no new route and no new decision: remove the directory (Kairos's own
+**Deleting a channel** needs no new route and no new decision: remove the directory (Gravit's own
 write map row 1, or the operator's shell), then `/api/workspace.delete`. Order matters —
 `workspaceRegistry.create` rejects a nonexistent path, so once the directory is gone the reconcile
 cannot resurrect the record. `delete` never touches the directory or the session logs; its
@@ -251,7 +251,7 @@ miss **throws** — naming the current roster and where to change it. The tool p
 that message, so what the model sees is a result, never a crash — but the mechanism at the
 enforcement point itself is a thrown `Error`, not a returned value. That refusal message *is* the
 roster contract; it is deliberately not written into the channel's `AGENTS.md`, because that file
-is Kairos-writable and would drift from the operator-owned `channels.json`. One call teaches it,
+is Gravit-writable and would drift from the operator-owned `channels.json`. One call teaches it,
 and it cannot fall out of sync.
 
 ### The honest limits — to be stated in the spec, the README, and the code
@@ -261,7 +261,7 @@ and it cannot fall out of sync.
    `face/src/agents.ts:527`) publishes one flat name per bin (`agent_<bin>`, minted by `toolNameFor`,
    `face/src/agents.ts:84`) that every session sees. A non-member agent's *schema* is still
    visible in every channel; only the call is refused.
-2. **Kairos has a shell.** One shell turn can invoke `claude` directly. Per Rule 2 — "enforce
+2. **Gravit has a shell.** One shell turn can invoke `claude` directly. Per Rule 2 — "enforce
    below the layer that runs arbitrary code — or admit the gate is prose" — **this roster is a
    menu, not a fence.** It reduces noise and states intent; it does not contain.
 3. **The storage bypass, not just the effect bypass — and it predates this design.** The sandbox
@@ -281,7 +281,7 @@ and it cannot fall out of sync.
    (route at `face/src/panels.ts:672`, writing through `writeAgentsMeta`,
    `face/src/panels.ts:228-231`) already writes `$DSH_HOME/face/agents.json` and registers the
    tool live by the same path. It does mean the charter's "structurally unreachable, not merely
-   forbidden" (`Kairos-Design.md:90`) is **narrower than it reads whenever the face runs**, and
+   forbidden" (`Gravit-Design.md:90`) is **narrower than it reads whenever the face runs**, and
    §11 must not claim otherwise.
 
    **Proportionate mitigation, not authentication** (Rule 5 — what is never surfaced is never
@@ -353,7 +353,7 @@ adoption its page honestly reads "no thesis yet". That is the correct outcome, n
 Before this change those foreign sessions were worse than ungrouped: `session.list` is globally
 scoped, so `strategyLabel` (pre-registry `face/client/chat.js:1169`, removed in `a45d104`) bucketed
 them as if they were strategies and the picker offered their directories as workspaces for a new
-Kairos session. The registry-driven index fixes both — bucketing now runs through `bucketFor`
+Gravit session. The registry-driven index fixes both — bucketing now runs through `bucketFor`
 (`face/client/grouping.js:40`).
 
 ### One correctness fix in the code being touched (shipped in `42fea60`)
@@ -433,7 +433,7 @@ its drill in the same change") therefore require: the roster refusal and the thr
 
 ## 9. Not building
 
-- **Multi-party posting** — agents remain Kairos's tools (decision 1).
+- **Multi-party posting** — agents remain Gravit's tools (decision 1).
 - **Channel kinds / per-kind templates** (decision 2).
 - **Per-channel skills.** `dsh-skill-filesystem` resolves project scope to "the nearest `.git`
   ancestor" (its README, §Project scope), so every channel directory resolves to the same repo
@@ -461,9 +461,9 @@ neighbourhood and Rule 3 requires stating what actually holds.
    `data/.screen_cache/` written at the repo root during 2026-09-02 strategy work with no
    approval card. The stakes are small today (gitignored cache), but "the write map becomes
    code" does not currently cover this path.
-2. **The model is never told it is Kairos.** `system-prompt.persona` is `''` in `dsh-base` and
-   is set by neither `face/src/overlay.ts` nor the operator's `cordis.patch.yml`; `Kairos`
-   appears only as a UI literal and a directory name. The charter's "single agent Kairos" is
+2. **The model is never told it is Gravit.** `system-prompt.persona` is `''` in `dsh-base` and
+   is set by neither `face/src/overlay.ts` nor the operator's `cordis.patch.yml`; `Gravit`
+   appears only as a UI literal and a directory name. The charter's "single agent Gravit" is
    currently a label on a page, not a composed property. `persona` is the already-present,
    config-authored seat for it.
 
@@ -472,7 +472,7 @@ neighbourhood and Rule 3 requires stating what actually holds.
 ## 11. Charter conformance
 
 - **P1 (wide hands, no self-keys)** — identity and roster live outside the workspace and outside
-  the git-reviewed arena, and the file-effect sandbox blocks any direct write to them; Kairos
+  the git-reviewed arena, and the file-effect sandbox blocks any direct write to them; Gravit
   writes only channel *content*. **But enforcement is the loopback-trust posture of `/data` and
   `/api`, not structural unreachability** — one un-escalated shell turn can `curl` either surface.
   See §5 limit 3. This design does not widen that hole (`POST /data/agents/connect` is the same
@@ -494,12 +494,12 @@ neighbourhood and Rule 3 requires stating what actually holds.
 - **§7.5 "No memory substrate beyond what exists"** — git, the strategy directories, and dsh's
   own sessions remain the memory.
 
-**Write-map impact: none for row 1** — it still reads `strategies/`, writer "Kairos, freely", and
+**Write-map impact: none for row 1** — it still reads `strategies/`, writer "Gravit, freely", and
 the directory name does not change.
 
 **One charter phrase is measurably narrower than it reads, and that is a finding, not a change
 request.** Row 4 grades the harness home "outside the workspace — structurally unreachable, not
-merely forbidden" (`Kairos-Design.md:90`). Verified against the running face: it is reachable over
+merely forbidden" (`Gravit-Design.md:90`). Verified against the running face: it is reachable over
 loopback from inside the workspace, today, before this change. That is the operator's call to make
 — either the phrase is softened, or the loopback surfaces get authentication (new security
 machinery, against §7.4). This spec neither assumes nor forces either; it records the residual per

@@ -55,10 +55,10 @@ site.
 
 | Dimension | DeepSeek Harness (dsh) | Prime Agent | previous product's charter |
 |---|---|---|---|
-| One-line identity | "Everything is a plugin. Every run is traceable." | "A self-improving RLM agent" — the Continual Harness paper, productionized | "Kairos acts, the meta-agent evolves" — governance-first evolving agent |
+| One-line identity | "Everything is a plugin. Every run is traceable." | "A self-improving RLM agent" — the Continual Harness paper, productionized | "Gravit acts, the meta-agent evolves" — governance-first evolving agent |
 | Substrate | Cordis kernel (vendored, formally specified) | pi (TypeScript harness) + persistent IPython kernel | own kernel (`alpha/*`), Continual Harness paper as doctrine source |
 | Core abstraction | microkernel: kernel owns only mount/unmount, DI, typed events, reversible effects; *everything* else (loop included) is a plugin | everything is programmatic: one tool (persistent IPython REPL); tools, sub-agents, context ops are function calls; context is a variable | seven decoupled components; Harness = Kernel ∪ Body; evolution rewrites Body only |
-| Who modifies the harness | the operator, via layered declarative config (profiles/bundles/patches); Creator preset ≈ shell access, and says so | **the agent itself, live, ungated** — `/refine` applies CRUD to H=(ρ,G,K,M) from its own trajectory; auto-refine behind a cheap LLM gate | the retired meta-agent proposes → user approves → Applier lands; or user-direct edit through the same Applier; Kairos: never |
+| Who modifies the harness | the operator, via layered declarative config (profiles/bundles/patches); Creator preset ≈ shell access, and says so | **the agent itself, live, ungated** — `/refine` applies CRUD to H=(ρ,G,K,M) from its own trajectory; auto-refine behind a cheap LLM gate | the retired meta-agent proposes → user approves → Applier lands; or user-direct edit through the same Applier; Gravit: never |
 | Immutable stratum | Cordis kernel + host-plane composition rules | base system prompt (built in code; single choke point `validateEdit` rejects edits to it) | Immutable Kernel enumeration (mechanisms + governed data rows), kernel prompt stub |
 | Self-mod evidence trail | n/a (operator acts) | RefinementEvent {trigger, changes, evidence, outcome} + before/after snapshots + rollback by ID | deliberation packet (behavior diff + replay fidelity + cost + rollback point + kernel-generated delta declarations) + hash-chained EditLog |
 | Traceability | **"Model-visible means logged"** — runtime-asserted; one append-only event stream powers resume/fork/search/replay; token-level chunk fidelity | append-only JSONL session *tree* (branching via leaf pointers in one file); kernel state snapshots; child usage folded back into parent turns | append-only session log, hash-chained, principal-origin-stamped; context window = per-call projection |
@@ -476,7 +476,7 @@ S1 from the fused reading (§6). Ordered by recommendation strength within each 
   point 2) noting the convergence; it strengthens the claim that this shape is a fixed point of
   the design space, not our idiosyncrasy.
 - **P3 — adopt. A2A hardening defaults, recorded now for the deferred outward phase.** When
-  Kairos's A2A endpoint goes live: (i) topology restriction as default posture (Prime Agent's
+  Gravit's A2A endpoint goes live: (i) topology restriction as default posture (Prime Agent's
   nuclear-family rule — reach limited to parent/siblings/children; no broadcast primitive at
   all); (ii) counterparty identity assigned by the platform intake, never self-asserted
   (already implied by our stamp contract — make it explicit for `a2a-party`); (iii) hard
@@ -497,7 +497,7 @@ S1 from the fused reading (§6). Ordered by recommendation strength within each 
   split.** RLM moves context assembly *into the model's action space* — in tension with fixed
   point 5 (assembly is kernel code) if adopted wholesale, but its safe core is separable: a
   **read-only programmatic view over `getEvents()`** (slice/grep/transform, results as
-  variables) is a world-capability tool, not self-authority, and would give Kairos RLM-class
+  variables) is a world-capability tool, not self-authority, and would give Gravit RLM-class
   long-horizon leverage with zero governance change. Record as a located-donor note under
   *Session Is Not the Context Window* ("the loop can transform events however it wants" —
   donor for eventually letting the *agent* request transformations); no build commitment.

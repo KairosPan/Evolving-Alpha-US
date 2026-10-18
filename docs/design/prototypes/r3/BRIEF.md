@@ -14,7 +14,7 @@ differs:
 | `strategy-page.html` | **Full-width conversation page**: breadcrumb back to the shelf (`strategy.html`), the dossier as a collapsible strip above the timeline, conversation gets the full measure |
 | `strategy-immersive.html` | **Immersive**: conversation fills the viewport dsh-style, the dossier floats as pinned/dockable cards over the timeline |
 
-**Authority: zero**, as always. `Kairos-Design.md` and the skeleton spec win every conflict.
+**Authority: zero**, as always. `Gravit-Design.md` and the skeleton spec win every conflict.
 
 ## The design translation — conversation as instrument, not chat app
 
@@ -25,14 +25,14 @@ The dialogue face inherits the whole voice system; it must NOT read as a message
 - **Three voices land literally** (the shell's registers):
   - operator turns — sans, the operator's own authority; Chinese in the mock (a live register
     choice: the operator speaks their language);
-  - Kairos turns — serif, argued prose, *read critically*;
+  - Gravit turns — serif, argued prose, *read critically*;
   - tool/machine turns — **mono instrument cards**: a breadth reading, a backtest probe, a file
     diff — each a signed entry (producer monogram + raw linkback), the R2 entry-plate system
     living inside the conversation.
 - **Danger forces disclosure inside the timeline.** The mock's breadth card carries
   `danger: true` + its rule — it renders auto-opened/alerted; routine cards may fold.
 - **Arena writes are records, not approvals.** `arena_write` cards show the diff and the git
-  commit — Kairos writes its own arena freely; git is the record, not a gate. The `proposal`
+  commit — Gravit writes its own arena freely; git is the record, not a gate. The `proposal`
   card is different: a draft diff *awaiting operator judgment* (which the operator then
   declines in the mock — render that arc honestly; the operator is the only teacher).
 - **The attendance stamp is visible** (`session.attendance: "interactive"`) and never blurred.
@@ -46,19 +46,19 @@ All Round 1 + Round 2 constraints bind (shell conformance, read-only beyond the 
 composer, SAMPLE marking on fabricated content, null = em-dash, desktop-first 1280–1440,
 `@dsCard` first line, self-contained except shared scripts/`shell.css`/fonts). Plus:
 
-- The three variants render the SAME `window.KAIROS_SESSION` transcript with the same card
+- The three variants render the SAME `window.GRAVIT_SESSION` transcript with the same card
   components — a reviewer comparing variants must see the layout move, not the content change.
 - The transcript's real readings (the 2026-07-08 breadth card embeds real bed numbers) keep
   their raw linkbacks; the fabricated dialogue sits under the session's SAMPLE marking.
-- Where a variant shows the dossier, its numbers come from `window.KAIROS_FACES.strategies`
+- Where a variant shows the dossier, its numbers come from `window.GRAVIT_FACES.strategies`
   (tt-breakout) — same source as R2's shelf.
 
 ## Data
 
-- `../data/session_mock.js` → `window.KAIROS_SESSION` (fabricated transcript, labeled; real
+- `../data/session_mock.js` → `window.GRAVIT_SESSION` (fabricated transcript, labeled; real
   embedded readings — see the file's `note`)
-- `../data/workbench_mock.js` → `window.KAIROS_FACES` (dossier numbers)
-- `../data/market_mock.js` → `window.KAIROS_DATA` (masthead bed facts)
+- `../data/workbench_mock.js` → `window.GRAVIT_FACES` (dossier numbers)
+- `../data/market_mock.js` → `window.GRAVIT_DATA` (masthead bed facts)
 - `../shell.css` → wait — no: `r3` pages link the shell as `../r2/shell.css` (the shell is
   Round 2's artifact; Round 3 conforms to it, it does not fork it)
 
@@ -71,7 +71,7 @@ docs/design/prototypes/r3/
   strategy-3pane.html  strategy-page.html  strategy-immersive.html
 ```
 
-**The kit rule:** `timeline.js` renders `window.KAIROS_SESSION` into a container
+**The kit rule:** `timeline.js` renders `window.GRAVIT_SESSION` into a container
 (`renderSessionTimeline(el)`), `timeline.css` styles the turns/cards in shell vocabulary.
 Variants call the renderer and lay out panes around it — they may NOT reimplement or restyle
 the turn/card components. This is what makes the comparison honest: the content is literally

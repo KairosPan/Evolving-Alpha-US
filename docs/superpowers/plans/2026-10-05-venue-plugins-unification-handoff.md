@@ -2,8 +2,8 @@
 
 **日期：** 2026-10-05 · **写给：** 接手这项工作的下一个 agent · **来自：** 2026-10-01 至 10-04 的设计 session（Claude Code，session_01TrWt4ehRrR7e4TJ9XyFX2K）。
 **一句话任务：** 把 Linqi 的几个分支和场所插件设计稿统一成一版，以做出 demo 为目标；决策和交互形式在 Claude Design 画布上。
-**原则：** 这份简报只记事实、结论和待定项。机制以代码为准；意图以 `Kairos-Design.md` 为准；引用都带路径和行号，行号读自 `main @ a09f217`。
-**状态（2026-10-05，operator 拍板）：** 这份简报的方案已被取代。operator 定了 demo 为主线：**现在站 C**（demo 以 `demo/` 子模块钉进树，PR #5；`face/` 与 `dsh/` 不调用它，两个产品互不接），**方向朝 A**（Kairos 经一行 MCP row 做 demo Account 的租客，在下一份 charter 里定）。§7 的 S0 被 PR #5 的落法取代：main + `feat/demo` + 子模块 bump 到 demo 的 main 头 `2d49602`；S1–S7 在下一份 charter 选定 A 或 B 之前不做。§3 的分支事实读自 10-03，10-05 的清理是：PR #1、#2、#3 关闭（paper-book 线暂存，分支保留为归档）、`feat/prediction-markets` 与 `feat/account-layer` 删除。§6 的 D1–D5、U1–U8 没有逐条答复；两种形状的五个冲突点（门在哪、谁签字、网络、每写一卡、账本）是下一份 charter 的议程。demo 当前的样子见 PR #5 与 demo 的 README。五个冲突点的完整记录、不冲突的部分和三种站法在 §12。
+**原则：** 这份简报只记事实、结论和待定项。机制以代码为准；意图以 `Gravit-Design.md` 为准；引用都带路径和行号，行号读自 `main @ a09f217`。
+**状态（2026-10-05，operator 拍板）：** 这份简报的方案已被取代。operator 定了 demo 为主线：**现在站 C**（demo 以 `demo/` 子模块钉进树，PR #5；`face/` 与 `dsh/` 不调用它，两个产品互不接），**方向朝 A**（Gravit 经一行 MCP row 做 demo Account 的租客，在下一份 charter 里定）。§7 的 S0 被 PR #5 的落法取代：main + `feat/demo` + 子模块 bump 到 demo 的 main 头 `2d49602`；S1–S7 在下一份 charter 选定 A 或 B 之前不做。§3 的分支事实读自 10-03，10-05 的清理是：PR #1、#2、#3 关闭（paper-book 线暂存，分支保留为归档）、`feat/prediction-markets` 与 `feat/account-layer` 删除。§6 的 D1–D5、U1–U8 没有逐条答复；两种形状的五个冲突点（门在哪、谁签字、网络、每写一卡、账本）是下一份 charter 的议程。demo 当前的样子见 PR #5 与 demo 的 README。五个冲突点的完整记录、不冲突的部分和三种站法在 §12。
 
 ---
 
@@ -28,11 +28,11 @@
 
 ## 2. 这棵树的硬约束（接手前必读）
 
-- 读 `Kairos-Design.md` §1–§2、§4 写地图、§5 债务、§6 规则、§7.3 不建的东西、§8 触发表；`AGENTS.md`；`CLAUDE.md` 的 Gotchas。
-- **P1 wide hands, no self-keys**：agent 对自己运行时的权限为零，靠放置执行（`Kairos-Design.md:54`）。
+- 读 `Gravit-Design.md` §1–§2、§4 写地图、§5 债务、§6 规则、§7.3 不建的东西、§8 触发表；`AGENTS.md`；`CLAUDE.md` 的 Gotchas。
+- **P1 wide hands, no self-keys**：agent 对自己运行时的权限为零，靠放置执行（`Gravit-Design.md:54`）。
 - **Rule 2**：在能跑任意代码的那一层之下执行，否则承认门只是 prose。**Rule 4**：没演练过的 guard 视为坏的。**Rule 8**：内容没来之前别选 substrate。
 - **§7.3**：no bespoke harness（dsh 是 runtime，face 只是宿主）、no hosted face、no multi-tenant / cryptographic / kernel-level machinery。
-- **§8 触发**：在真实 harness home 里打开 `ALPACA_KIT_ENABLE_ORDERS` → 先做 D3（人工半场 order drill，`DEVELOPMENT.md` §10 第 1 项）；真钱意图 → §4 两道门、D1、D3、D8、换钥匙；第二个人或任何 hosted 部署 → "this charter is the wrong document; write the next one"（`Kairos-Design.md:292`）。
+- **§8 触发**：在真实 harness home 里打开 `ALPACA_KIT_ENABLE_ORDERS` → 先做 D3（人工半场 order drill，`DEVELOPMENT.md` §10 第 1 项）；真钱意图 → §4 两道门、D1、D3、D8、换钥匙；第二个人或任何 hosted 部署 → "this charter is the wrong document; write the next one"（`Gravit-Design.md:292`）。
 - **残差**（`DEVELOPMENT.md` §9）：R1 两道门只守工具面，`.env.alpaca` 在仓库根可被 shell 读；R2 Gate 2 是门不是容器；R3a 审批答复可从 workspace 经 loopback 伪造。
 - **永不**：改 `data/pit/`、`bots/` 下任何东西、`docs/research/`；在真实 home 里打开 order flag；把 key 放进仓库根的 `.env.*` 当作新场所的身份。
 
@@ -67,7 +67,7 @@
 - `src/agent/gate.ts` 照 Gate 2 的 decision / grant / guard 三件套，allow-list 从 manifest 长出。`src/agent/mandates.ts` 在卡之前检查用途、总额、单笔上限、品种、收款人、频率、有效期。`src/agent/agent.ts` 的 `execute()` 是整条写路径，每个拒绝是结构化的 `{ok:false, code, layer}`。`src/contract/env-scrub.ts`：子进程只带 `BUYER_CRED_REF`，按名字 scrub KEY/SECRET/TOKEN/PASSWORD。`src/agent/ledger.ts`：JSONL 哈希链，拒绝也是一行。
 - 十一个场景：挂载；rogue 插件（藏 `sweepToColdWallet`）拒绝；跨场所读无卡；注资；Alpaca tif 改写再问；Hyperliquid agent key 过期；Binance 第三方 server 只配清单；Solana 签名器拒签；注入被授权书拦；提回与对账；总结。
 - 它自己承认的边界：模拟器不是场所；门不是围栏（R1、R3a 它自己演了）；脚本 agent 不代表 LLM；钱包服务信任同一进程的卡结论。
-- 它的 `回灌 Kairos` 表（README）把每块指回 face 接缝：manifests+mount → `akshare.ts` 模式；audit → `orders.ts` 的 `auditOrderTools` + `boot.ts` 拒绝启动；gate → `orders.ts` 三件套；mandates → `budgets.ts` Gate 3 与 agentpay 的 `mandateRejection`；env-scrub → dsh 的 `.credentials.yaml`；ledger → agentpay 的 JSONL 账本；场景 ✓/✗ → `face/README.md` 的 drill。
+- 它的 `回灌 Gravit` 表（README）把每块指回 face 接缝：manifests+mount → `akshare.ts` 模式；audit → `orders.ts` 的 `auditOrderTools` + `boot.ts` 拒绝启动；gate → `orders.ts` 三件套；mandates → `budgets.ts` Gate 3 与 agentpay 的 `mandateRejection`；env-scrub → dsh 的 `.credentials.yaml`；ledger → agentpay 的 JSONL 账本；场景 ✓/✗ → `face/README.md` 的 drill。
 - 本机验证：`npm install && npm test` → 10 files, 98 tests passed, e2e 11 场景按序完成, exit 0。
 - **没接进 dsh / face**：自带 MCP client、门、home；模拟器在 runner 进程内起（`src/runner/setup.ts`），没有单独的 serve 脚本。
 
@@ -84,7 +84,7 @@
 | U3 | 授权书层 | A：移植 demo 的 `mandates.ts` 为 face 的 pre-execute 监听，文件放 `$DSH_HOME/face/mandates/`，不动 agentpay | 注入那一场靠它；B（泛化 Gate 3）留下一版 |
 | U4 | 账本 | A：这版用 demo 的形状放 `$DSH_HOME/face/venues/ledger.jsonl`，`/account` 读它 | 三本账都是 JSONL 哈希链，行格式统一留下一版 |
 | U5 | demo 界面 | A：face 的聊天卡、`/account`、插件面板 | control room 退役；线框在第 15–17 板 |
-| U6 | demo 的 agent | A：Kairos 真 LLM；十一个脚本场景改成 operator 提示词清单；脚本版留作无头 drill | |
+| U6 | demo 的 agent | A：Gravit 真 LLM；十一个脚本场景改成 operator 提示词清单；脚本版留作无头 drill | |
 | U7 | 场所 | A：四个本地模拟器原样跑；不碰 testnet | testnet 要先过 spike S3 |
 | U8 | 钱包与组合钱包 | A：不接 :4810 与 :4820；agentpay 的 `/wallet` 保留 | 会把下一份 charter 的题目提前拉进这版 |
 
@@ -92,7 +92,7 @@
 
 ## 7. 施工计划 S0–S7（画布 v2 第 18 板）
 
-完成的定义：第 14 板的十个场景在 face 里由 Kairos 跑通；自动半场在 `FACE_SMOKE=1` 下全绿；手动半场有 operator 记的 PASS 行；`/account` 对账 4/4。S1、S3、S4 互相独立可并行；S2 等 S1 的 row 形状；S6 最后。分工只是建议。
+完成的定义：第 14 板的十个场景在 face 里由 Gravit 跑通；自动半场在 `FACE_SMOKE=1` 下全绿；手动半场有 operator 记的 PASS 行；`/account` 对账 4/4。S1、S3、S4 互相独立可并行；S2 等 S1 的 row 形状；S6 最后。分工只是建议。
 
 | 步 | 做什么 | 复用 / 新写 | 建议分工 |
 |---|---|---|---|
@@ -128,14 +128,14 @@ S1 凭据引用进 MCP row 的 env；S2 row 工具表何时可审计、拒绝后
 - 不要并排跑 demo 的 gate 和 face 的 Gate 2（U2-B）。
 - 不要把 `feat/prediction-markets` 合进任何分支。
 - 不要在真实 harness home 里打开 `ALPACA_KIT_ENABLE_ORDERS`；不要把任何 key 写进仓库根的 `.env.*` 当新场所身份。
-- 不要动 `bots/`、`data/pit/`、`docs/research/`、`dsh/skills/style-kairos/`。
+- 不要动 `bots/`、`data/pit/`、`docs/research/`、`dsh/skills/style-gravit/`。
 - 不要为了统一先抽一个通用 venue Protocol 或新建 ledger 服务（Rule 8；U4、D2）。
 - 不要把 demo 的钱包骨架与组合钱包接进这版（U8-A）。
 - 画布改动：用 Artifact 工具先 `read` 再 publish，编辑器会重新序列化文件，直接重发旧副本会被拒。
 
 ## 11. 给下一个 agent 的开场提示词
 
-> 先读本简报顶部的「状态」行，再读 `Kairos-Design.md` §1–§2、§7.3、§8，`AGENTS.md`，`CLAUDE.md`。operator 的决定（2026-10-05）是：**现在站 C，方向朝 A**。不要按 §7 施工：S0 已由 PR #5 落地，S1–S7 等下一份 charter。先读 PR #5 和 `demo/` 的 README（回灌 Kairos 表），再读设计稿 v1（PR #4）的 §4、§5、§11。画布 <https://claude.ai/artifact/2aXJoRzTzp5kDhMqCD8fLk> 是当时的图，不是现在的计划。下一个文档任务是下一份 charter：议程是两种形状的五个冲突点（门在哪、谁签字、网络、每写一卡、账本，记录在本简报 §12），A 和 B 是它要选的两种形状。任何真钱、testnet 或 mainnet 的事，以及任何把 demo 接进 face 的事，都先停下来问。
+> 先读本简报顶部的「状态」行，再读 `Gravit-Design.md` §1–§2、§7.3、§8，`AGENTS.md`，`CLAUDE.md`。operator 的决定（2026-10-05）是：**现在站 C，方向朝 A**。不要按 §7 施工：S0 已由 PR #5 落地，S1–S7 等下一份 charter。先读 PR #5 和 `demo/` 的 README（回灌 Gravit 表），再读设计稿 v1（PR #4）的 §4、§5、§11。画布 <https://claude.ai/artifact/2aXJoRzTzp5kDhMqCD8fLk> 是当时的图，不是现在的计划。下一个文档任务是下一份 charter：议程是两种形状的五个冲突点（门在哪、谁签字、网络、每写一卡、账本，记录在本简报 §12），A 和 B 是它要选的两种形状。任何真钱、testnet 或 mainnet 的事，以及任何把 demo 接进 face 的事，都先停下来问。
 
 ## 12. 冲突记录：v1 的形状 vs demo 的形状（2026-10-05）
 
@@ -145,7 +145,7 @@ operator 的决定：**现在站 C**，两个产品互不接；**方向朝 A**�
 
 | # | 点 | v1 设计稿（face 侧） | demo @ 2d49602 | 为什么不能都要 |
 |---|---|---|---|---|
-| C1 | 门在哪 | face 的 Gate 2 是全树唯一的卡生产者（`face/src/orders.ts`），manifest 只喂写工具名（设计稿 §4.3） | 自己的门（`src/agent/gate.ts`）+ 授权书（`src/agent/mandates.ts`）+ Account 层的支出 / 交易额度（`src/portfolio/account/state.ts`），Conservative / Aggressive 两档 | 两道门两个进程，就是 `Kairos-Design.md` §7.3「no bespoke harness」和本简报 U2-B 否掉的东西；接了就只能留一道 |
+| C1 | 门在哪 | face 的 Gate 2 是全树唯一的卡生产者（`face/src/orders.ts`），manifest 只喂写工具名（设计稿 §4.3） | 自己的门（`src/agent/gate.ts`）+ 授权书（`src/agent/mandates.ts`）+ Account 层的支出 / 交易额度（`src/portfolio/account/state.ts`），Conservative / Aggressive 两档 | 两道门两个进程，就是 `Gravit-Design.md` §7.3「no bespoke harness」和本简报 U2-B 否掉的东西；接了就只能留一道 |
 | C2 | 谁签字 | 人在 face 上点卡，答复进会话日志（`allowed-once`）；真正的边界在场所侧（agent key 不能提币、`validUntil`）；签名器「不建」（设计稿 §6.4、§12） | owner 是浏览器里的 P-256 设备钥匙，每条指令是带 nonce 的 EIP-712 签名信封；批卡 = owner 对卡哈希的签名，放行时重查（`src/portfolio/account/sign.ts`、`exchange.ts`） | 这正是设计稿 D5-A 和残差 R3a 要的答案，也正是 charter §7.3 写明不建的 cryptographic machinery；要么接受签名协议并改 charter，要么留在点卡加场所侧约束 |
 | C3 | 网络 | paper / testnet；manifest 里 `network: mainnet` 一律拒绝（设计稿 §4.1） | 主网真账户（ccxt 覆盖的交易所、Alpaca、Kalshi、Robinhood、Polymarket、六条 EVM 链上的浏览器钱包、MetaMask）；真实下单**默认开**，`--read-only` 才关，`--live-cap` 单笔默认 $100 | 「拒绝 mainnet」和「默认开」不能同时成立；接了就要选 fence 是哪一种 |
 | C4 | 每写一卡 | charter P5：每次写停一张卡 | Aggressive 模式：额度内 agent 直接下单、直接动钱，不出卡 | 这是 P5 本身；Aggressive 进 face 就要改 charter |
@@ -157,19 +157,19 @@ operator 的决定：**现在站 C**，两个产品互不接；**方向朝 A**�
 
 - demo 的插件合同就是设计稿 §4：manifest allow-list、挂载审计四条规则、`intent → 授权书 → 卡 → grant → 场所 → 账本`。demo 在四个模拟器上把这一层验证了（十一个场景，`test/e2e.test.ts`）。这一层没有取舍。
 - demo 的资金面（每个场所的出入金门、在途资金、地址簿冷静期、agent 子账户 float、经 LI.FI 的跨链、x402 / MPP / AP2 付款）设计稿没有，是加法。
-- 设计稿的 face / dsh 接法 demo 没有：MCP row 组合（`face/src/akshare.ts` 模式）、credential seam、bot mask、`AGENTS.md` 一段。demo README 的「回灌 Kairos」表把这些列为目标，一条没做。纯互补。
+- 设计稿的 face / dsh 接法 demo 没有：MCP row 组合（`face/src/akshare.ts` 模式）、credential seam、bot mask、`AGENTS.md` 一段。demo README 的「回灌 Gravit」表把这些列为目标，一条没做。纯互补。
 
 ### 12.3 三种站法
 
 | 站法 | 做什么 | 代价 | 设计稿 v1 的去向 |
 |---|---|---|---|
-| A · Kairos 做 Account 的租客 | face 一行 MCP row 接 demo 的 `portfolio:mcp`，agent key 由 owner 授权；owner 在 Account 页批卡；Gate 2 不再看场所写入 | 两个审批面（Alpaca paper 仍在 face 出卡）；两个 home；charter 必须重写，C2、C3、C4 全触发 | §4.3 的 Gate 2 喂名作废；§7 的 PIT 立场和 §4.5 的 bot mask 仍适用 |
-| B · demo 的件搬进 face | 本简报 S1–S4：manifest 审计、授权书、账本移植进 `face/src`；Gate 2 仍是唯一的门，demo 的门退役；签名协议不要或重做 | 重写已有的东西；Kairos 长期停在 paper / testnet；Linqi 的 Account 线和 face 分叉 | 原样成立 |
-| C · 两个产品，先不接 | 现状：demo 以 `demo/` 钉在树里（PR #5），谁也不调用谁；设计稿留作 face 侧接法的记录 | 没有共享的门、账本、凭据；Kairos 仍只有 Alpaca paper 一个席位 | 记录 |
+| A · Gravit 做 Account 的租客 | face 一行 MCP row 接 demo 的 `portfolio:mcp`，agent key 由 owner 授权；owner 在 Account 页批卡；Gate 2 不再看场所写入 | 两个审批面（Alpaca paper 仍在 face 出卡）；两个 home；charter 必须重写，C2、C3、C4 全触发 | §4.3 的 Gate 2 喂名作废；§7 的 PIT 立场和 §4.5 的 bot mask 仍适用 |
+| B · demo 的件搬进 face | 本简报 S1–S4：manifest 审计、授权书、账本移植进 `face/src`；Gate 2 仍是唯一的门，demo 的门退役；签名协议不要或重做 | 重写已有的东西；Gravit 长期停在 paper / testnet；Linqi 的 Account 线和 face 分叉 | 原样成立 |
+| C · 两个产品，先不接 | 现状：demo 以 `demo/` 钉在树里（PR #5），谁也不调用谁；设计稿留作 face 侧接法的记录 | 没有共享的门、账本、凭据；Gravit 仍只有 Alpaca paper 一个席位 | 记录 |
 
 ### 12.4 什么时候回来这一节
 
-- Kairos 真的需要第二个场所的时候：先在 12.1 上选 A 或 B，再动代码。
-- 任何真钱之前：先写下一份 charter（`Kairos-Design.md` §8 最后一行），C1–C5 就是它的议程。
+- Gravit 真的需要第二个场所的时候：先在 12.1 上选 A 或 B，再动代码。
+- 任何真钱之前：先写下一份 charter（`Gravit-Design.md` §8 最后一行），C1–C5 就是它的议程。
 - 再 bump `demo/` 之前：读 demo 那次 PR 的说明，知道又有多少能动真钱的代码进树；2d49602 起 demo 默认开着真实下单。
-- demo 自己承认没有一把真钥匙用过（README「诚实边界」）：Kairos 接过去并不比它的 Alpaca paper 席位更真，所以 Rule 8 的「内容来之前别选 substrate」在这里仍然成立。
+- demo 自己承认没有一把真钥匙用过（README「诚实边界」）：Gravit 接过去并不比它的 Alpaca paper 席位更真，所以 Rule 8 的「内容来之前别选 substrate」在这里仍然成立。

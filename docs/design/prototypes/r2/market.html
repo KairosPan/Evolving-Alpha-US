@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KAIROS · MARKET — R2</title>
+<title>GRAVIT · MARKET — R2</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2305070b'/%3E%3Cpath d='M8 2 L11 8 L8 14 L5 8 Z' fill='%23c8a552'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="shell.css">
 <style>
@@ -67,7 +67,7 @@ table.wtab td.neg{ color:var(--down); }
 
 <header class="masthead">
   <div class="wrap mast-top">
-    <a class="wordmark" href="landing.html"><span class="dia" aria-hidden="true"></span>KAIROS</a>
+    <a class="wordmark" href="landing.html"><span class="dia" aria-hidden="true"></span>GRAVIT</a>
     <span class="facename">MARKET</span>
     <span class="spacer"></span>
     <span class="seg">as of <b id="k-asof" class="mono">—</b></span>
@@ -224,9 +224,9 @@ table.wtab td.neg{ color:var(--down); }
 
 <footer class="foot-band">
   <div class="wrap foot">
-    <span>KAIROS · <b>MARKET</b> — round-2 face prototype · zero authority · read-only</span>
+    <span>GRAVIT · <b>MARKET</b> — round-2 face prototype · zero authority · read-only</span>
     <span class="spacer"></span>
-    <span>intent · <b>Kairos-Design.md</b></span>
+    <span>intent · <b>Gravit-Design.md</b></span>
     <span>mechanism · <b>the skeleton spec &amp; code</b></span>
   </div>
 </footer>
@@ -236,7 +236,7 @@ table.wtab td.neg{ color:var(--down); }
 /* ── shell fill — shared across all R2 faces ── */
 (function(){
   "use strict";
-  var D = window.KAIROS_DATA || null;
+  var D = window.GRAVIT_DATA || null;
   if(!D) return; // dashes stand: no reading, never fake
   function t(id, s){ var el = document.getElementById(id); if(el) el.textContent = s; }
   t("k-asof", D.as_of);
@@ -259,7 +259,7 @@ table.wtab td.neg{ color:var(--down); }
 /* ── page: the three entries ── */
 (function(){
   "use strict";
-  var D = window.KAIROS_DATA || null;
+  var D = window.GRAVIT_DATA || null;
   if(!D) return; // every readout stays an em-dash: no reading, never fake
   var $ = function(id){ return document.getElementById(id); };
   function txt(id, s){ var el=$(id); if(el) el.textContent=s; }

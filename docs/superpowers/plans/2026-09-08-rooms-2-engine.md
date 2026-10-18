@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** After this plan Kairos can call `dispatch` from a channel session, the face creates or resumes one `read-only` member session per named bot, runs their turns in parallel or serially with an attributed room delta, feeds every answer back into Kairos's session as an attributed user-role message, wakes Kairos once per round with who spoke and who passed, and a `room` projection unit tells any client the coarse state of the room — all provable in-process with a stub model and no key.
+**Goal:** After this plan Gravit can call `dispatch` from a channel session, the face creates or resumes one `read-only` member session per named bot, runs their turns in parallel or serially with an attributed room delta, feeds every answer back into Gravit's session as an attributed user-role message, wakes Gravit once per round with who spoke and who passed, and a `room` projection unit tells any client the coarse state of the room — all provable in-process with a stub model and no key.
 
 **Architecture:** One face module, `face/src/room.ts`, installed on the booted root context by `main.ts` (the same way Gate 2 and the `agent_<bin>` tools are installed — on `ctx`, not as a cordis row). It registers the global `dispatch` tool, a root-level `session/event` listener, the `room` projection unit, and two loopback routes. Member sessions are created in-process through `ctx.agents.create` with `meta: { cwd: <channel dir>, parentSession: <room id>, agentPreset: <bot> }` and a face-owned `setup` that mirrors the gateway's (`installModelSelection` + `agentPresets.mount`), and pinned `read-only` with `permissionPresets.set` inside that same `setup`, before publication — `pinInitialPermission` fills only missing knobs, so the pin is the session's first permission fact and there is no window to close. Pure rules (mentions, validation, deltas, final text, caps, the dispatch line) live in `face/src/room-rules.ts`; the projection fold lives in `face/src/room-projection.ts`. **No custom session-event types**: every room fact rides a known dsh event (see Deviation 1).
 
@@ -12,13 +12,13 @@
 
 **Deviations from the spec, decided by substrate facts measured while planning (2026-09-08). Each is recorded in the spec's §16 by Task 11.**
 
-1. **No `room/*` session events.** The spec's `room/member`, `room/dispatch`, `room/turn` and `room/round-end` cannot be appended: `Session.append` accepts any type, but every persistence *read* (`readFrom`, `inspect`, `prepare`/resume) runs the log through the generated closed set `KNOWN_SESSION_EVENT_TYPES` and throws `SessionFormatUnsupportedError` for an unknown type unless the event carries `ignorable: true` — and `append` has no way to set it (`dsh-session-persistence/lib/index.js:1119-1120`; `dsh-session/lib/index.js:1444-1463`). One custom event would make the room session unresumable and unlistable after the next boot. So every room fact rides a **known** event: membership = the member's own header (`parentSession` + `agentPreset`) plus the room-sourced messages that name it; the dispatch = the `dispatch` tool's own `tool/call` + `tool/result` (the result text names who was *not* called); a member's answer = a `user/message` in Kairos's session with `source: { kind: 'room', form: 'answer', bot, name, sessionId, turn, round }`; the round end = the waking `user/message` with `source: { kind: 'room', form: 'round-end', … }`; the member's cursor = the delta message in the member's own log, `source: { kind: 'room', form: 'delta', room, bot, messageIds }`. The `room` projection unit folds exactly these.
-2. **Answers are appended to the room log directly, and only while no Kairos turn is open — never `inject`ed.** `inject` splices the inbox only: the `user/message` the client renders lands when Kairos's next step *claims* it, so §4.3's "the operator sees bubbles appear while Kairos sleeps" is false on the substrate, the answer's seq is unknown until the claim, and an inject on a *running* driver forces an extra model step or opens a stray turn whose only input is the injected text (`dsh-agent-loop/lib/index.js:554, 564-571, 600-604`). `Session.append('user/message', msg, { surfaceOp: 'append' })` on the room session is the honest carrier: a known event, visible on the mux at once, seq assigned now, persisted, and in `deriveMessages()` for Kairos's next request. It is safe only while the room log is **quiet** (its last `turn/start` is closed by a `turn/end`) — a user message dropped between an assistant tool-call message and its `tool/result` would break the running request — so the engine keeps a per-room outbox and flushes it on every `turn/end` and before the round-end `followup`, in one synchronous block. Kairos is woken only by `followup` (the round-end); every answer is already in the log above it.
+1. **No `room/*` session events.** The spec's `room/member`, `room/dispatch`, `room/turn` and `room/round-end` cannot be appended: `Session.append` accepts any type, but every persistence *read* (`readFrom`, `inspect`, `prepare`/resume) runs the log through the generated closed set `KNOWN_SESSION_EVENT_TYPES` and throws `SessionFormatUnsupportedError` for an unknown type unless the event carries `ignorable: true` — and `append` has no way to set it (`dsh-session-persistence/lib/index.js:1119-1120`; `dsh-session/lib/index.js:1444-1463`). One custom event would make the room session unresumable and unlistable after the next boot. So every room fact rides a **known** event: membership = the member's own header (`parentSession` + `agentPreset`) plus the room-sourced messages that name it; the dispatch = the `dispatch` tool's own `tool/call` + `tool/result` (the result text names who was *not* called); a member's answer = a `user/message` in Gravit's session with `source: { kind: 'room', form: 'answer', bot, name, sessionId, turn, round }`; the round end = the waking `user/message` with `source: { kind: 'room', form: 'round-end', … }`; the member's cursor = the delta message in the member's own log, `source: { kind: 'room', form: 'delta', room, bot, messageIds }`. The `room` projection unit folds exactly these.
+2. **Answers are appended to the room log directly, and only while no Gravit turn is open — never `inject`ed.** `inject` splices the inbox only: the `user/message` the client renders lands when Gravit's next step *claims* it, so §4.3's "the operator sees bubbles appear while Gravit sleeps" is false on the substrate, the answer's seq is unknown until the claim, and an inject on a *running* driver forces an extra model step or opens a stray turn whose only input is the injected text (`dsh-agent-loop/lib/index.js:554, 564-571, 600-604`). `Session.append('user/message', msg, { surfaceOp: 'append' })` on the room session is the honest carrier: a known event, visible on the mux at once, seq assigned now, persisted, and in `deriveMessages()` for Gravit's next request. It is safe only while the room log is **quiet** (its last `turn/start` is closed by a `turn/end`) — a user message dropped between an assistant tool-call message and its `tool/result` would break the running request — so the engine keeps a per-room outbox and flushes it on every `turn/end` and before the round-end `followup`, in one synchronous block. Gravit is woken only by `followup` (the round-end); every answer is already in the log above it.
 3. **Fine states are the client's.** The projection registry has no out-of-fold write (`dsh-session-projection/lib/index.js`: `drive`/cells private, the change feed fires only inside `drive`), so the spec's "thinking / writing / tool" states cannot be folded into the unit by the plugin. The mux already forwards every live session's `assistant/chunk` block starts to every client, so plan 3 derives fine states from the member sessions' own pulses. The unit carries coarse state only.
 4. **`session.selectModel` is not used for `preset.yml`'s `model:`.** It saves the selection as the host-wide default (`dsh-host-apiproxy/lib/index.js` `selectModel` → `saveDefaultModelSelection`). The engine installs a per-member `ModelSelectionRef` through `installModelSelection` (exported by `@deepseek-ai/dsh-agent`) inside the creation `setup`, exactly as the gateway does for its own sessions, and validates the route with `ctx.llm.resolveCallConfig` first — falling back to `ctx.agentDefaultModel.currentSelection()` with a visible line in the dispatch result.
 5. **The hard-cap cancel keeps the inbox.** `agent.cancel(cause)` clears the inbox by default (logging canceled splices); the engine passes `{ keepInbox: true }` so a member's queued work survives the cancellation of one runaway turn.
 6. **A superseded round has its own outcome.** `settled` and `capped` are the spec's; a round cut short by a new operator message ends with outcome `superseded` (Rule 5: a third fact deserves a third word).
-7. **The membership fold is a header rule.** The spec folds a child under a room only when the parent's log names it; with no `room/member` event the rule becomes: a session is a member of `P` when its header has `parentSession = P`, no `origin`, and an `agentPreset` naming a bot, and `P` itself runs the host preset. Forks carry the source's preset (`kairos` for a room) and subagent children carry `origin: 'subagent'`, so both stay out.
+7. **The membership fold is a header rule.** The spec folds a child under a room only when the parent's log names it; with no `room/member` event the rule becomes: a session is a member of `P` when its header has `parentSession = P`, no `origin`, and an `agentPreset` naming a bot, and `P` itself runs the host preset. Forks carry the source's preset (`gravit` for a room) and subagent children carry `origin: 'subagent'`, so both stay out.
 8. **The gate that pends is read from the log.** `ask_user_question` leaves no session event (questions live only in the gateway's memory and on the mux), so "a pending gate" for the deadline extension is an open `tool/call` named `ask_user_question` with no `tool/result` yet, or an `approval/asked` with no `approval/decided`.
 
 ## Global Constraints
@@ -27,14 +27,14 @@
 - **One `bootFace` per test process**: every FACE_SMOKE test is its own `face/tests/<name>.test.ts`, gated `skip: gated && "set FACE_SMOKE=1"`, booting into a `mkdtempSync` home via `setupFaceProfile(home)`; never `~/.dsh`.
 - **No custom session-event types, ever** (Deviation 1). If you find yourself calling `session.append`, stop: the engine speaks to agents only through `followup` / `inject` / `cancel`.
 - **Never call `inject`/`followup` synchronously inside a `session/event` listener for the same session**: `Session.append` rejects reentrancy. The engine's listener only resolves promises and records state; every action runs in a promise continuation.
-- Member sessions are created from the **root** context (`booted.ctx`), never through Kairos's `agent.ctx`: a runtime-owned child cannot ask the operator anything (`userQuestions.ask` refuses `DELEGATED_CALLER`) and the gateway would refuse its gates as subagent-owned.
+- Member sessions are created from the **root** context (`booted.ctx`), never through Gravit's `agent.ctx`: a runtime-owned child cannot ask the operator anything (`userQuestions.ask` refuses `DELEGATED_CALLER`) and the gateway would refuse its gates as subagent-owned.
 - `meta.cwd` must be an absolute path; session ids are `session-<uuid>` (the face's `SESSION_ID_RE`).
 - Constants live in one block, `ROOM_CAPS` in `room-rules.ts`: `maxRounds 3`, `maxContinuations 2`, `maxBotMessages 10`, `maxMembers 6`, `turnTimeoutMs 180_000`, `turnHardCapMs 1_200_000` (spec §4.6 verbatim).
 - Rule 5: the dispatch result names who was **not** called; `capped`, `superseded`, `passed`, `failed`, `timed-out` are all distinct words on the wire; a member whose preset is gone is reported `failed` with its reason, never skipped.
 - Rule 2 / D12: a member's write fence is the `read-only` permission preset logged into its session before its first prompt, verified with `permissionPresets.current(events)`; the mask is visibility.
-- Every log line is `${BIN}: …` with `const BIN = "kairos-face"` declared per module. Docs cite files and symbols, never line numbers.
+- Every log line is `${BIN}: …` with `const BIN = "gravit-face"` declared per module. Docs cite files and symbols, never line numbers.
 - Commit after every task (`git commit -F <file>` when the message carries backticks or parentheses). Never commit the operator's untracked files (`strategies/*`, `bots/buffet/`, `docs/research/*`, `tests/strategies/`, `face/probe4.ts`, `.claude/launch.json`).
-- Nothing in this plan edits `Kairos-Design.md`, `CLAUDE.md`, `AGENTS.md`, `DEVELOPMENT.md` or `face/README.md` (plans 3–4). Two exceptions: `dsh/profile/persona.md` (Task 9, the room default Kairos carries) and the spec's §16 (Task 11).
+- Nothing in this plan edits `Gravit-Design.md`, `CLAUDE.md`, `AGENTS.md`, `DEVELOPMENT.md` or `face/README.md` (plans 3–4). Two exceptions: `dsh/profile/persona.md` (Task 9, the room default Gravit carries) and the spec's §16 (Task 11).
 
 ## File Structure
 
@@ -586,7 +586,7 @@ const user = (id: string, text: string, seq: number, source: Record<string, unkn
 const answer = (id: string, bot: string, name: string, text: string, seq: number): EventLike =>
   user(id, text, seq, { kind: "room", form: "answer", bot, name, sessionId: "s-b", turn: 1, round: 1 });
 
-test("roomLinesOf: operator prompts, Kairos replies and member answers, in order; room events, plugin context and tool results are not lines", () => {
+test("roomLinesOf: operator prompts, Gravit replies and member answers, in order; room events, plugin context and tool results are not lines", () => {
   const events: EventLike[] = [
     user("u1", "开个会", 1),
     user("ctx", "Instructions from AGENTS.md", 2, { kind: "plugin", plugin: "agent-instructions", form: "instructions" }),
@@ -603,14 +603,14 @@ test("roomLinesOf: operator prompts, Kairos replies and member answers, in order
   const lines = roomLinesOf(events, pending, roster);
   assert.deepEqual(lines.map((l) => l.id), ["u1", "m3", "a1", "u2", "a2"], "pending lines follow the log; an id already in the log is not repeated");
   assert.deepEqual(lines[0].speaker, { kind: "operator" });
-  assert.deepEqual(lines[1].speaker, { kind: "kairos" });
+  assert.deepEqual(lines[1].speaker, { kind: "gravit" });
   assert.deepEqual(lines[2].speaker, { kind: "bot", bot: "buffett", name: "巴菲特型" });
   assert.deepEqual(lines[4].speaker, { kind: "bot", bot: "speculator", name: "投机型" });
 });
 
 test("formatDelta attributes every line and marks the reader's own", () => {
   const lines = roomLinesOf([user("u1", "开个会", 1), msg(1, "先各说各的", 3), answer("a1", "buffett", "巴菲特型", "买\n理由：便宜", 5), answer("a2", "speculator", "投机型", "卖", 6)], [], roster);
-  assert.equal(formatDelta(lines, "buffett"), "操作员: 开个会\nKairos: 先各说各的\n巴菲特型 (you): 买\n  理由：便宜\n投机型: 卖");
+  assert.equal(formatDelta(lines, "buffett"), "操作员: 开个会\nGravit: 先各说各的\n巴菲特型 (you): 买\n  理由：便宜\n投机型: 卖");
   assert.equal(formatDelta([], "buffett"), "(nothing new)");
 });
 
@@ -626,7 +626,7 @@ test("memberPrompt carries the delta, the brief when given, the trigger, and the
   assert.match(text, /投机型/, "the other voices are named so a peer mention can be spelled");
   const mention = memberPrompt({ roomName: "x", roster, self: "buffett", delta: "(nothing new)", trigger: "mention" });
   assert.match(mention, /operator addressed you directly/i);
-  assert.doesNotMatch(mention, /Kairos asks this batch/);
+  assert.doesNotMatch(mention, /Gravit asks this batch/);
   const cont = memberPrompt({ roomName: "x", roster, self: "buffett", delta: "(nothing new)", trigger: "continuation" });
   assert.match(cont, /continuation/i);
 });
@@ -668,7 +668,7 @@ Expected: FAIL — cannot find `../src/room-rules.ts`.
 
 ```ts
 // face/src/room-rules.ts
-/** The room's rules that are not Kairos's (spec §4.2, §4.3, §4.4, §4.6) —
+/** The room's rules that are not Gravit's (spec §4.2, §4.3, §4.4, §4.6) —
  * pure functions and the constants block, so every rule is drillable without
  * a harness and the engine (room.ts) is orchestration only.
  *
@@ -676,7 +676,7 @@ Expected: FAIL — cannot find `../src/room-rules.ts`.
  * persistence read path refuses a log carrying any event type outside its
  * generated catalog, so the vocabulary here is a `source` vocabulary on
  * ordinary `user/message` events, never a new event type. The four sources:
- *   `answer`    a member's final text, injected into Kairos's session;
+ *   `answer`    a member's final text, injected into Gravit's session;
  *   `round-end` the one waking message per round;
  *   `delta`     the prompt a member turn received, in the MEMBER's own log -
  *               its `messageIds` are the member's durable cursor;
@@ -867,7 +867,7 @@ export function dispatchResultText(args: DispatchArgs, roster: readonly RosterBo
 
 export interface RoomLine {
   id: string;
-  speaker: { kind: "operator" } | { kind: "kairos" } | { kind: "bot"; bot: string; name: string };
+  speaker: { kind: "operator" } | { kind: "gravit" } | { kind: "bot"; bot: string; name: string };
   text: string;
 }
 
@@ -884,8 +884,8 @@ function lineOfUserMessage(message: MessageLike | undefined, roster: readonly Ro
 }
 
 /**
- * The room as a member reads it: operator prompts, Kairos replies and member
- * answers, in log order, then the messages still pending in Kairos's inbox
+ * The room as a member reads it: operator prompts, Gravit replies and member
+ * answers, in log order, then the messages still pending in Gravit's inbox
  * (answers and `@`s that have not been claimed yet), deduplicated by id.
  */
 export function roomLinesOf(events: readonly EventLike[], pending: readonly MessageLike[], roster: readonly RosterBot[]): RoomLine[] {
@@ -901,7 +901,7 @@ export function roomLinesOf(events: readonly EventLike[], pending: readonly Mess
     else if (event.type === "assistant/message") {
       const message = (event.data as { message?: { id?: unknown; content?: unknown } } | undefined)?.message;
       const text = textBlocks(message?.content);
-      if (typeof message?.id === "string" && text !== "") push({ id: message.id, speaker: { kind: "kairos" }, text });
+      if (typeof message?.id === "string" && text !== "") push({ id: message.id, speaker: { kind: "gravit" }, text });
     }
   }
   for (const message of pending) push(lineOfUserMessage(message, roster));
@@ -913,7 +913,7 @@ export function formatDelta(lines: readonly RoomLine[], self: string): string {
   if (lines.length === 0) return "(nothing new)";
   return lines.map((line) => {
     const label = line.speaker.kind === "operator" ? "操作员"
-      : line.speaker.kind === "kairos" ? "Kairos"
+      : line.speaker.kind === "gravit" ? "Gravit"
       : line.speaker.bot === self ? `${line.speaker.name} (you)` : line.speaker.name;
     return `${label}: ${line.text.replace(/\n/g, "\n  ")}`;
   }).join("\n");
@@ -930,13 +930,13 @@ export const MEMBER_RULES: readonly string[] = [
 export function memberPrompt(opts: { roomName: string; roster: readonly RosterBot[]; self: string; delta: string; trigger: TurnTrigger; brief?: string }): string {
   const others = opts.roster.filter((b) => b.id !== opts.self).map((b) => `${b.name} (@${b.id})`);
   const parts = [
-    `You are in the room "${opts.roomName}" with the operator, Kairos (the organizer)${others.length === 0 ? "" : ` and the other voices on this channel's roster: ${others.join(", ")}`}.`,
+    `You are in the room "${opts.roomName}" with the operator, Gravit (the organizer)${others.length === 0 ? "" : ` and the other voices on this channel's roster: ${others.join(", ")}`}.`,
     "",
     "New in the room since you last spoke:",
     opts.delta,
     "",
   ];
-  if (opts.brief !== undefined) parts.push(`Kairos asks this batch: ${opts.brief}`, "");
+  if (opts.brief !== undefined) parts.push(`Gravit asks this batch: ${opts.brief}`, "");
   if (opts.trigger === "mention") parts.push("The operator addressed you directly.", "");
   if (opts.trigger === "continuation") parts.push("A peer addressed you; this is your one continuation turn this round.", "");
   parts.push("Rules for this turn:", ...MEMBER_RULES.map((rule, i) => `${i + 1}. ${rule}`));
@@ -1084,7 +1084,7 @@ test("a second dispatch bumps the round and forgets who was in the last one", ()
   assert.deepEqual(s.members, { speculator: { state: "called" } });
 });
 
-test("Kairos's own turn boundaries drive `organizing` only once the session is a room", () => {
+test("Gravit's own turn boundaries drive `organizing` only once the session is a room", () => {
   const room = fold([dispatchCall(["buffett"], "parallel"), ev("turn/end", { turn: 1, reason: { kind: "completed" } })]);
   assert.equal(room.organizing, false);
   const again = applyRoomEvent(room, ev("turn/start", { turn: 2 }));
@@ -1164,7 +1164,7 @@ export interface RoomState {
   round?: { n: number; mode: "parallel" | "serial" | "mention"; open: boolean; outcome?: RoundOutcome };
   /** room: the members of the current round, by bot id */
   members?: Record<string, RoomMemberState>;
-  /** room: Kairos's turn is open */
+  /** room: Gravit's turn is open */
   organizing?: boolean;
   /** member: the room session this member belongs to */
   room?: string;
@@ -1355,7 +1355,7 @@ feat(face): the room projection unit - a pure fold of the known events that carr
 
 **Interfaces:**
 - Consumes: Task 3's `EventLike`, `MessageLike`.
-- Produces: `makeFakeTree(): FakeTree` with `tree.ctx` (satisfies the engine's `RoomContextLike` of Task 6), `tree.clock` (`now`, `setTimeout`, `clearTimeout`, `advance(ms)`, `flush()`), `tree.newRoom(id, cwd)` (a Kairos agent whose inbox is inspectable and whose `wake()` simulates a turn claiming its inbox), `tree.script(bot, fn)` (what a member does when prompted), `tree.agentsCreated`, `tree.mounts`, `tree.selections`, `tree.registeredTools`, `tree.attached`, `tree.persisted`. Script kinds: `{ kind: "answer", text, afterMs?, toolFirst? }`, `{ kind: "error", message }`, `{ kind: "hang" }` (never ends until cancelled), `{ kind: "gate" }` (opens an `ask_user_question` call and hangs), `{ kind: "throw" }` (followup itself throws).
+- Produces: `makeFakeTree(): FakeTree` with `tree.ctx` (satisfies the engine's `RoomContextLike` of Task 6), `tree.clock` (`now`, `setTimeout`, `clearTimeout`, `advance(ms)`, `flush()`), `tree.newRoom(id, cwd)` (a Gravit agent whose inbox is inspectable and whose `wake()` simulates a turn claiming its inbox), `tree.script(bot, fn)` (what a member does when prompted), `tree.agentsCreated`, `tree.mounts`, `tree.selections`, `tree.registeredTools`, `tree.attached`, `tree.persisted`. Script kinds: `{ kind: "answer", text, afterMs?, toolFirst? }`, `{ kind: "error", message }`, `{ kind: "hang" }` (never ends until cancelled), `{ kind: "gate" }` (opens an `ask_user_question` call and hangs), `{ kind: "throw" }` (followup itself throws).
 
 - [ ] **Step 1: Write the fake**
 
@@ -1450,11 +1450,11 @@ export class FakeAgent {
     this.pendingFinish = undefined;
     if (finish !== undefined) this.tree.clock.setTimeout(() => finish({ kind: "aborted", reason: cause }), 1);
   }
-  /** A Kairos fake: settle when the test says the driver went idle. */
+  /** A Gravit fake: settle when the test says the driver went idle. */
   whenIdle(): Promise<void> {
     return this.status === "idle" ? Promise.resolve() : new Promise((resolve) => { this.idleWaiters.push(resolve); });
   }
-  /** A Kairos fake: the driver wakes and claims every pending message into one turn. */
+  /** A Gravit fake: the driver wakes and claims every pending message into one turn. */
   wake(): MessageLike[] {
     const claimed = [...this.inbox.nextStep.splice(0), ...this.inbox.nextTurn.splice(0, 1)];
     const turn = ++this.turn;
@@ -1462,7 +1462,7 @@ export class FakeAgent {
     for (const m of claimed) this.emit("user/message", m);
     return claimed;
   }
-  /** A Kairos fake: end the open turn. */
+  /** A Gravit fake: end the open turn. */
   sleep(): void {
     this.emit("turn/end", { turn: this.turn, reason: { kind: "completed" } });
     this.status = "idle";
@@ -1523,9 +1523,9 @@ export class FakeTree {
     for (const l of [...this.listeners]) l(session, event);
   }
   script(bot: string, fn: (message: MessageLike, turn: number) => Script): void { this.scripts.set(bot, fn); }
-  /** A room: Kairos's live session in a channel. */
+  /** A room: Gravit's live session in a channel. */
   newRoom(id: string, cwd: string): FakeAgent {
-    const session = new FakeSession(id, { cwd, agentPreset: "kairos", createdAt: this.createdAt++ });
+    const session = new FakeSession(id, { cwd, agentPreset: "gravit", createdAt: this.createdAt++ });
     session.tree = this;
     const agent = new FakeAgent(this, session);
     this.sessions.set(id, session);
@@ -1686,9 +1686,9 @@ test("an unserved preset.yml route falls back to the default with a note; no rou
 
 test("a member that already exists on disk is RESUMED, never recreated - by the answer in the room log, else by its header", async () => {
   const tree = makeFakeTree();
-  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  const gravit = tree.newRoom("session-room", CHANNEL.dir);
   tree.persistMember("session-old", "session-room", "buffett", CHANNEL.dir);
-  tree.persistMember("session-fork", "session-room", "kairos", CHANNEL.dir); // a fork of the room: kairos preset, never a member
+  tree.persistMember("session-fork", "session-room", "gravit", CHANNEL.dir); // a fork of the room: gravit preset, never a member
   const engine = engineOn(tree);
   const room = engine.roomOf("session-room", CHANNEL);
   const m = await engine.ensureMember(room, roster[0]);
@@ -1698,7 +1698,7 @@ test("a member that already exists on disk is RESUMED, never recreated - by the 
   assert.deepEqual(tree.mounts, [{ agent: "session-old", preset: "buffett" }], "a resume joins the preset again in its own setup");
   // a second room-runtime (say, after the engine was rebuilt) finds the same session through the log
   const engine2 = engineOn(tree);
-  kairos.session.append("user/message", { id: "a1", role: "user", content: [{ type: "text", text: "view" }], source: { kind: "room", form: "answer", bot: "buffett", name: "巴菲特型", sessionId: "session-old", turn: 1, round: 1 } }, { surfaceOp: "append" });
+  gravit.session.append("user/message", { id: "a1", role: "user", content: [{ type: "text", text: "view" }], source: { kind: "room", form: "answer", bot: "buffett", name: "巴菲特型", sessionId: "session-old", turn: 1, round: 1 } }, { surfaceOp: "append" });
   const again = await engine2.ensureMember(engine2.roomOf("session-room", CHANNEL), roster[0]);
   assert.equal(again.agent.id, "session-old", "already live: neither created nor resumed");
   assert.equal(tree.resumed.length, 1);
@@ -1714,8 +1714,8 @@ test("a member whose preset is gone fails visibly at ensure, with dsh's reason",
 
 test("one driven turn: the member gets the attributed delta with the rules, its final text comes back, and its own log carries the cursor", async () => {
   const tree = makeFakeTree();
-  const kairos = tree.newRoom("session-room", CHANNEL.dir);
-  kairos.session.append("user/message", { id: "u1", role: "user", content: [{ type: "text", text: "SanDisk 值得买吗" }], source: { kind: "user" } }, { surfaceOp: "append" });
+  const gravit = tree.newRoom("session-room", CHANNEL.dir);
+  gravit.session.append("user/message", { id: "u1", role: "user", content: [{ type: "text", text: "SanDisk 值得买吗" }], source: { kind: "user" } }, { surfaceOp: "append" });
   tree.script("buffett", (message) => ({ kind: "answer", text: `I read: ${message.content[0].text?.includes("SanDisk 值得买吗") ? "yes" : "no"}. 买` }));
   const engine = engineOn(tree);
   const room = engine.roomOf("session-room", CHANNEL);
@@ -1728,7 +1728,7 @@ test("one driven turn: the member gets the attributed delta with the rules, its 
   assert.equal(result.record.turn, 1);
   const prompt = member.agent.session.events.find((e) => e.type === "user/message")!.data as { content: { text: string }[]; source: Record<string, unknown> };
   assert.match(prompt.content[0].text, /操作员: SanDisk 值得买吗/);
-  assert.match(prompt.content[0].text, /Kairos asks this batch: state a view/);
+  assert.match(prompt.content[0].text, /Gravit asks this batch: state a view/);
   assert.match(prompt.content[0].text, /exactly \(pass\)/);
   assert.deepEqual(prompt.source, { kind: "room", form: "delta", room: "session-room", bot: "buffett", messageIds: ["u1"], trigger: "dispatch", brief: "state a view" });
   // the cursor: a second turn with nothing new says so
@@ -1785,21 +1785,21 @@ test("deadlines: the base timeout extends while the member runs or has a gate pe
   }
 });
 
-test("post: an answer is appended to the room log at once while no Kairos turn is open, and held until turn/end otherwise", async () => {
+test("post: an answer is appended to the room log at once while no Gravit turn is open, and held until turn/end otherwise", async () => {
   const tree = makeFakeTree();
-  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  const gravit = tree.newRoom("session-room", CHANNEL.dir);
   const engine = engineOn(tree);
   const room = engine.roomOf("session-room", CHANNEL);
   const msg = (id: string) => ({ id, role: "user" as const, content: [{ type: "text", text: "v" }], source: { kind: "room", form: "answer", bot: "buffett", name: "巴菲特型", sessionId: "s", turn: 1, round: 1 } });
   engine.post(room, msg("a1"));
-  assert.deepEqual(sources(kairos.session.events).map((s) => s.form), ["answer"], "quiet room: appended now");
-  kairos.wake(); // Kairos opens a turn
+  assert.deepEqual(sources(gravit.session.events).map((s) => s.form), ["answer"], "quiet room: appended now");
+  gravit.wake(); // Gravit opens a turn
   engine.post(room, msg("a2"));
-  assert.equal(sources(kairos.session.events).length, 1, "a turn is open: held");
-  kairos.sleep();
+  assert.equal(sources(gravit.session.events).length, 1, "a turn is open: held");
+  gravit.sleep();
   await tree.clock.flush();
-  assert.equal(sources(kairos.session.events).length, 2, "flushed on turn/end");
-  assert.equal(kairos.session.events.at(-1)!.type, "user/message");
+  assert.equal(sources(gravit.session.events).length, 2, "flushed on turn/end");
+  assert.equal(gravit.session.events.at(-1)!.type, "user/message");
 });
 ```
 
@@ -1826,15 +1826,15 @@ Expected: FAIL — cannot find `../src/room.ts`.
  * outside its generated catalog, so there are no `room/*` events. Membership
  * is the member's own header (`parentSession` + `agentPreset`); the dispatch is
  * the tool's own `tool/call`/`tool/result`; an answer is a `user/message` in
- * Kairos's session with `source.kind === 'room'`; the member's cursor is the
+ * Gravit's session with `source.kind === 'room'`; the member's cursor is the
  * delta message in ITS log.
  *
- * HOW AN ANSWER REACHES KAIROS (deviation 2): appended straight onto the room
+ * HOW AN ANSWER REACHES GRAVIT (deviation 2): appended straight onto the room
  * session's log with `surfaceOp: 'append'` - visible at once, seq now, in the
  * next request's history - but ONLY while the room log is quiet (no open turn),
  * because a user message dropped between an assistant tool-call message and
  * its tool result breaks the running request. Otherwise it waits in the room's
- * outbox for the next `turn/end`. Kairos is woken only by the round-end
+ * outbox for the next `turn/end`. Gravit is woken only by the round-end
  * `followup`, issued in the same synchronous block as the last flush.
  *
  * WHAT THIS IS NOT. Dispatch grants nothing: a member's tools are its mask,
@@ -1861,7 +1861,7 @@ import {
 import { SESSION_ID_RE } from "./sessions.ts";
 import type { RouteRegistrar } from "./static.ts";
 
-const BIN = "kairos-face";
+const BIN = "gravit-face";
 
 /* ---------- what the engine reads of the tree, stated structurally ---------- */
 
@@ -1894,7 +1894,7 @@ export interface CreateMemberOptions {
 }
 export interface ResumeMemberOptions { resumeSessionId: string; agentOptions: { provider: string; model: string }; setup(agentCtx: AgentCtxLike): Promise<void> }
 export interface PersistedHeaderLike { id: string; cwd?: string; parentSession?: string; agentPreset?: string; origin?: string; createdAt: number }
-/** dsh-tools' `ToolRunContext`, narrowed: the calling agent and Kairos's TURN signal (which the round must not run on). */
+/** dsh-tools' `ToolRunContext`, narrowed: the calling agent and Gravit's TURN signal (which the round must not run on). */
 export interface RoomToolExec { agent?: AgentLike; signal: AbortSignal }
 /** dsh-tools' `ToolDefinition`, stated the way agents.ts states it. */
 export interface RoomToolDefinition {
@@ -2371,10 +2371,10 @@ Append to `face/tests/room-engine.test.ts`:
 const answers = (events: readonly EventLike[]) => sources(events).filter((s) => s.kind === "room" && s.form === "answer").map((s) => s.bot);
 const roundEnds = (events: readonly EventLike[]) => sources(events).filter((s) => s.kind === "room" && s.form === "round-end");
 
-test("a parallel round: every member gets the same delta and sees no peer this round; answers land in the room log; Kairos is woken once with who spoke and who passed", async () => {
+test("a parallel round: every member gets the same delta and sees no peer this round; answers land in the room log; Gravit is woken once with who spoke and who passed", async () => {
   const tree = makeFakeTree();
-  const kairos = tree.newRoom("session-room", CHANNEL.dir);
-  kairos.session.append("user/message", { id: "u1", role: "user", content: [{ type: "text", text: "开会" }], source: { kind: "user" } }, { surfaceOp: "append" });
+  const gravit = tree.newRoom("session-room", CHANNEL.dir);
+  gravit.session.append("user/message", { id: "u1", role: "user", content: [{ type: "text", text: "开会" }], source: { kind: "user" } }, { surfaceOp: "append" });
   const prompts: Record<string, string> = {};
   tree.script("buffett", (m) => { prompts.buffett = m.content[0].text ?? ""; return { kind: "answer", text: "买", afterMs: 20 }; });
   tree.script("speculator", (m) => { prompts.speculator = m.content[0].text ?? ""; return { kind: "answer", text: "(pass)", afterMs: 5 }; });
@@ -2384,14 +2384,14 @@ test("a parallel round: every member gets the same delta and sees no peer this r
   await tree.clock.advance(100);
   assert.doesNotMatch(prompts.buffett, /投机型/, "parallel: no peer answer this round");
   assert.doesNotMatch(prompts.speculator, /巴菲特型:/);
-  assert.deepEqual(answers(kairos.session.events), ["buffett"], "a pass is not an answer");
-  assert.equal(kairos.inbox.nextTurn.length, 1, "woken exactly once");
-  const end = kairos.inbox.nextTurn[0];
+  assert.deepEqual(answers(gravit.session.events), ["buffett"], "a pass is not an answer");
+  assert.equal(gravit.inbox.nextTurn.length, 1, "woken exactly once");
+  const end = gravit.inbox.nextTurn[0];
   assert.deepEqual(end.source.form, "round-end");
   assert.equal((end.source as { outcome: string }).outcome, "settled");
   assert.deepEqual((end.source as { turns: { bot: string; state: string }[] }).turns.map((t) => `${t.bot}:${t.state}`), ["speculator:passed", "buffett:answered"]);
   assert.match(end.content[0].text ?? "", /Answered: 巴菲特型\. Passed: 投机型\./);
-  assert.ok(kairos.session.events.findIndex((e) => (e.data as { source?: { form?: string } })?.source?.form === "answer") >= 0, "the answer is in the log BEFORE the wake is queued");
+  assert.ok(gravit.session.events.findIndex((e) => (e.data as { source?: { form?: string } })?.source?.form === "answer") >= 0, "the answer is in the log BEFORE the wake is queued");
 });
 
 test("a serial round: the later member's delta carries the earlier answer", async () => {
@@ -2406,9 +2406,9 @@ test("a serial round: the later member's delta carries the earlier answer", asyn
   assert.match(prompts.speculator, /巴菲特型: 买/);
 });
 
-test("a peer @ queues one continuation after the dispatched turns, bounded, and Kairos is woken after it", async () => {
+test("a peer @ queues one continuation after the dispatched turns, bounded, and Gravit is woken after it", async () => {
   const tree = makeFakeTree();
-  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  const gravit = tree.newRoom("session-room", CHANNEL.dir);
   let macroTurns = 0;
   tree.script("buffett", () => ({ kind: "answer", text: "@macro 你怎么看 @macro 再说一次" }));
   tree.script("speculator", () => ({ kind: "answer", text: "@macro @buffett @speculator" }));
@@ -2417,15 +2417,15 @@ test("a peer @ queues one continuation after the dispatched turns, bounded, and 
   await engine.dispatch("session-room", CHANNEL, { to: ["buffett", "speculator"], mode: "parallel", brief: "q", reason: "r" }, roster);
   await tree.clock.advance(200);
   assert.equal(macroTurns, 1, "one continuation for macro however many peers named it");
-  assert.deepEqual(answers(kairos.session.events).sort(), ["buffett", "macro", "speculator"]);
-  const end = kairos.inbox.nextTurn[0];
+  assert.deepEqual(answers(gravit.session.events).sort(), ["buffett", "macro", "speculator"]);
+  const end = gravit.inbox.nextTurn[0];
   assert.equal((end.source as { turns: unknown[] }).turns.length, 3);
-  assert.ok(kairos.session.events.filter((e) => (e.data as { source?: { form?: string } })?.source?.form === "answer").length === 3, "all three answers precede the wake");
+  assert.ok(gravit.session.events.filter((e) => (e.data as { source?: { form?: string } })?.source?.form === "answer").length === 3, "all three answers precede the wake");
 });
 
 test("caps: the round cap refuses a fourth dispatch; the bot-message cap ends a round capped; a new operator send resets both", async () => {
   const tree = makeFakeTree();
-  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  const gravit = tree.newRoom("session-room", CHANNEL.dir);
   for (const b of roster) tree.script(b.id, () => ({ kind: "answer", text: "v" }));
   const engine = engineOn(tree, { caps: { maxBotMessages: 4, maxRounds: 2 } });
   const args = { to: ["buffett", "speculator", "macro"], mode: "parallel" as const, brief: "q", reason: "r" };
@@ -2433,11 +2433,11 @@ test("caps: the round cap refuses a fourth dispatch; the bot-message cap ends a 
   await tree.clock.advance(100);
   await engine.dispatch("session-room", CHANNEL, args, roster);
   await tree.clock.advance(100);
-  const ends = roundEnds(kairos.session.events.concat(kairos.inbox.nextTurn.map((m, i) => ({ type: "user/message", seq: 1000 + i, data: m }))));
+  const ends = roundEnds(gravit.session.events.concat(gravit.inbox.nextTurn.map((m, i) => ({ type: "user/message", seq: 1000 + i, data: m }))));
   assert.deepEqual(ends.map((e) => e.outcome), ["settled", "capped"], "round 2 ran one turn of three before the message cap");
   await assert.rejects(engine.dispatch("session-room", CHANNEL, args, roster), /round cap/);
   // the operator speaks: the gateway logs a user message on the room
-  kairos.session.append("user/message", { id: "u2", role: "user", content: [{ type: "text", text: "再来" }], source: { kind: "user" } }, { surfaceOp: "append" });
+  gravit.session.append("user/message", { id: "u2", role: "user", content: [{ type: "text", text: "再来" }], source: { kind: "user" } }, { surfaceOp: "append" });
   await tree.clock.flush();
   const out = await engine.dispatch("session-room", CHANNEL, args, roster);
   assert.equal(out.round, 1);
@@ -2445,7 +2445,7 @@ test("caps: the round cap refuses a fourth dispatch; the bot-message cap ends a 
 
 test("a dispatch while a round is running is refused; an operator message mid-round supersedes it - running turns finish, nothing further starts", async () => {
   const tree = makeFakeTree();
-  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  const gravit = tree.newRoom("session-room", CHANNEL.dir);
   tree.script("buffett", () => ({ kind: "answer", text: "slow", afterMs: 50 }));
   tree.script("speculator", () => ({ kind: "answer", text: "@macro", afterMs: 10 }));
   tree.script("macro", () => ({ kind: "answer", text: "never" }));
@@ -2453,16 +2453,16 @@ test("a dispatch while a round is running is refused; an operator message mid-ro
   await engine.dispatch("session-room", CHANNEL, { to: ["buffett", "speculator"], mode: "parallel", brief: "q", reason: "r" }, roster);
   await assert.rejects(engine.dispatch("session-room", CHANNEL, { to: ["macro"], mode: "parallel", brief: "q", reason: "r" }, roster), /still running|not settled/);
   await tree.clock.advance(20);
-  kairos.session.append("user/message", { id: "u2", role: "user", content: [{ type: "text", text: "换个话题" }], source: { kind: "user" } }, { surfaceOp: "append" });
+  gravit.session.append("user/message", { id: "u2", role: "user", content: [{ type: "text", text: "换个话题" }], source: { kind: "user" } }, { surfaceOp: "append" });
   await tree.clock.advance(200);
-  assert.deepEqual(answers(kairos.session.events).sort(), ["buffett", "speculator"], "the running turn finished and landed; the continuation never started");
-  const end = kairos.inbox.nextTurn[0];
+  assert.deepEqual(answers(gravit.session.events).sort(), ["buffett", "speculator"], "the running turn finished and landed; the continuation never started");
+  const end = gravit.inbox.nextTurn[0];
   assert.equal((end.source as { outcome: string }).outcome, "superseded");
 });
 
 test("say: an @ is the operator's message, appended to the room, not a prompt; the named members turn; an @ to a running member is queued", async () => {
   const tree = makeFakeTree();
-  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  const gravit = tree.newRoom("session-room", CHANNEL.dir);
   const turns: string[] = [];
   tree.script("buffett", (m, turn) => { turns.push(`buffett:${turn}`); return { kind: "answer", text: "b", afterMs: 30 }; });
   tree.script("speculator", (m, turn) => { turns.push(`speculator:${turn}`); return { kind: "answer", text: "s" }; });
@@ -2470,14 +2470,14 @@ test("say: an @ is the operator's message, appended to the room, not a prompt; t
   engine.rosterFor = async () => roster; // the roster read is the file's; stub it here
   const first = await engine.say("session-room", "@buffett @speculator 你们怎么看");
   assert.deepEqual(first.addressed, ["buffett", "speculator"]);
-  assert.deepEqual(sources(kairos.session.events).at(-1), { kind: "user", mention: ["buffett", "speculator"] }, "in the room log as the operator's, with whom it addressed");
-  assert.equal(kairos.inbox.nextTurn.length, 0, "Kairos is not prompted");
+  assert.deepEqual(sources(gravit.session.events).at(-1), { kind: "user", mention: ["buffett", "speculator"] }, "in the room log as the operator's, with whom it addressed");
+  assert.equal(gravit.inbox.nextTurn.length, 0, "Gravit is not prompted");
   const second = await engine.say("session-room", "@buffett 补一句");
   assert.deepEqual(second.addressed, ["buffett"]);
   await tree.clock.advance(100);
   assert.deepEqual(turns, ["buffett:1", "speculator:1", "buffett:2"], "the second @ ran after the first turn, never refused");
-  assert.deepEqual(answers(kairos.session.events), ["speculator", "buffett", "buffett"]);
-  assert.equal(kairos.inbox.nextTurn.length, 0, "no round-end for @ turns");
+  assert.deepEqual(answers(gravit.session.events), ["speculator", "buffett", "buffett"]);
+  assert.equal(gravit.inbox.nextTurn.length, 0, "no round-end for @ turns");
   const none = await engine.say("session-room", "no mention at all");
   assert.deepEqual(none, { addressed: [] });
   assert.equal(tree.modelsCalls.length, 0, "a live room needs no resume");
@@ -2487,7 +2487,7 @@ test("say on a cold room resumes it through the gateway's own composition before
   const tree = makeFakeTree();
   const engine = engineOn(tree);
   engine.rosterFor = async () => roster;
-  tree.persisted.push({ id: "session-cold", cwd: CHANNEL.dir, agentPreset: "kairos", createdAt: 1 });
+  tree.persisted.push({ id: "session-cold", cwd: CHANNEL.dir, agentPreset: "gravit", createdAt: 1 });
   tree.ctx.apiProxy.sessions.models = async (request: { payload: { sessionId: string } }) => { tree.modelsCalls.push(request.payload.sessionId); tree.newRoom(request.payload.sessionId, CHANNEL.dir); return { ok: true }; };
   tree.script("buffett", () => ({ kind: "answer", text: "b" }));
   const out = await engine.say("session-cold", "@buffett hi");
@@ -2538,7 +2538,7 @@ Add inside `RoomEngine` (after `runMemberTurn`):
   }
 
   /**
-   * Start a round for Kairos and return at once (the tool result tells the model
+   * Start a round for Gravit and return at once (the tool result tells the model
    * to end its turn). Refuses on the round cap and while a round is unsettled.
    */
   async dispatch(agentId: string, channel: RoomChannel, args: DispatchArgs, roster: readonly RosterBot[]): Promise<{ round: number; remainingRounds: number; notCalled: string[]; notes: string[] }> {
@@ -2635,7 +2635,7 @@ Add inside `RoomEngine` (after `runMemberTurn`):
 
   /** A cold room session becomes live through the gateway's OWN composition path
    * (`session.models` resumes via its agent resolver and changes nothing else),
-   * so the face never composes Kairos's session itself. */
+   * so the face never composes Gravit's session itself. */
   private async ensureLive(sessionId: string): Promise<AgentLike> {
     const live = this.deps.ctx.agents.get(sessionId);
     if (live !== undefined) return live;
@@ -2648,7 +2648,7 @@ Add inside `RoomEngine` (after `runMemberTurn`):
 
   /**
    * The operator's `@`: resolved against the roster deterministically, appended
-   * to the room as the operator's own message (never a prompt - Kairos sees it
+   * to the room as the operator's own message (never a prompt - Gravit sees it
    * on its next wake), and each named member turns on the standard delta. A
    * member mid-turn takes it after that turn. Resets the caps like every send.
    */
@@ -2727,11 +2727,11 @@ feat(face): the room engine, part 2 - parallel and serial rounds, peer-@ continu
 Append to `face/tests/room-engine.test.ts` (imports: `dispatchToolDefinition, installRoom, registerRoomRoutes` from `../src/room.ts`; `mkdtemp`, `tmpdir`, `join`; `setBots` from `../src/roster.ts`; the route recorder helper used by `bots.test.ts` — import or copy it):
 
 ```ts
-test("the dispatch tool: global, Kairos-only, channel-only, roster-checked; validates, starts the round and names who was not called", async () => {
+test("the dispatch tool: global, Gravit-only, channel-only, roster-checked; validates, starts the round and names who was not called", async () => {
   const tree = makeFakeTree();
   const home = await mkdtemp(join(tmpdir(), "face-room-"));
   await setBots(home, CHANNEL.workspaceId, ["buffett", "speculator"]);
-  const kairos = tree.newRoom("session-room", CHANNEL.dir);
+  const gravit = tree.newRoom("session-room", CHANNEL.dir);
   tree.script("buffett", () => ({ kind: "answer", text: "b" }));
   const engine = installRoom({
     ctx: tree.ctx as unknown as RoomDeps["ctx"], home,
@@ -2746,12 +2746,12 @@ test("the dispatch tool: global, Kairos-only, channel-only, roster-checked; vali
 
   await assert.rejects(tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, exec(undefined)), /needs a session/);
   const bot = { id: "session-bot", status: "idle", session: { id: "session-bot", header: { cwd: CHANNEL.dir, agentPreset: "buffett" }, events: [], seq: 0 } };
-  await assert.rejects(tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, exec(bot)), /Kairos's tool/);
-  const nowhere = { ...kairos, session: { ...kairos.session, header: { cwd: "/elsewhere", agentPreset: "kairos" } } };
+  await assert.rejects(tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, exec(bot)), /Gravit's tool/);
+  const nowhere = { ...gravit, session: { ...gravit.session, header: { cwd: "/elsewhere", agentPreset: "gravit" } } };
   await assert.rejects(tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "r" }, exec(nowhere)), /in no channel/);
-  await assert.rejects(tool.execute({ to: ["macro"], mode: "parallel", brief: "q", reason: "r" }, exec(kairos)), /macro is not on this channel's roster.*buffett, speculator/);
+  await assert.rejects(tool.execute({ to: ["macro"], mode: "parallel", brief: "q", reason: "r" }, exec(gravit)), /macro is not on this channel's roster.*buffett, speculator/);
 
-  const value = await tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "first" }, exec(kairos)) as { text: string; round: number; notCalled: string[] };
+  const value = await tool.execute({ to: ["buffett"], mode: "parallel", brief: "q", reason: "first" }, exec(gravit)) as { text: string; round: number; notCalled: string[] };
   assert.equal(value.round, 1);
   assert.deepEqual(value.notCalled, ["speculator"]);
   const rendered = tool.output.render({}, value)[0].text;
@@ -2759,7 +2759,7 @@ test("the dispatch tool: global, Kairos-only, channel-only, roster-checked; vali
   assert.match(rendered, /Not called: 投机型\./);
   assert.deepEqual(tool.presentCall({ to: ["buffett"], mode: "parallel", brief: "q", reason: "first" }), { card: "generic", title: "dispatch buffett (parallel)", kind: "read", rawInput: "first" });
   await tree.clock.advance(100);
-  assert.equal(kairos.inbox.nextTurn.length, 1);
+  assert.equal(gravit.inbox.nextTurn.length, 1);
   engine.dispose();
   assert.equal(tree.registeredTools.length, 0, "dispose unregisters the tool");
   assert.equal(tree.listeners.length, 0, "and the bus listener");
@@ -2848,7 +2848,7 @@ export function dispatchToolDefinition(engine: RoomEngine, deps: Pick<RoomDeps, 
       const agent = exec.agent;
       if (agent === undefined) throw new Error("dispatch needs a session to run in");
       const preset = agent.session.header.agentPreset;
-      if (preset !== undefined && preset !== DEFAULT_PRESET) throw new Error("dispatch is Kairos's tool; a voice does not dispatch");
+      if (preset !== undefined && preset !== DEFAULT_PRESET) throw new Error("dispatch is Gravit's tool; a voice does not dispatch");
       const channel = await deps.channelFor(agent.session.header.cwd);
       if (channel === null) throw new Error("dispatch works in a channel session; this session is in no channel");
       const roster = await engine.rosterFor(channel);
@@ -2943,12 +2943,12 @@ git commit -F /tmp/msg.txt
 (omit `route-recorder.ts` if no helper was extracted) with `/tmp/msg.txt`:
 
 ```
-feat(face): the dispatch tool - global, Kairos-only, channel-only, roster-checked, returning at once and naming who was not called; installRoom on the root context; POST /data/rooms/say and /state
+feat(face): the dispatch tool - global, Gravit-only, channel-only, roster-checked, returning at once and naming who was not called; installRoom on the root context; POST /data/rooms/say and /state
 ```
 
 ---
 
-### Task 9: Wiring — `main.ts`, Kairos's persona, the template
+### Task 9: Wiring — `main.ts`, Gravit's persona, the template
 
 **Files:**
 - Modify: `face/src/main.ts`
@@ -2958,7 +2958,7 @@ feat(face): the dispatch tool - global, Kairos-only, channel-only, roster-checke
 
 **Interfaces:**
 - Consumes: Task 8's `installRoom`, `registerRoomRoutes`; Task 2's `channelFor` with `dir`.
-- Produces: a booted face with `dispatch` in Kairos's roster, the `room` unit registered, and the two routes mounted; the persona paragraph the spec's §4.4 default rests on.
+- Produces: a booted face with `dispatch` in Gravit's roster, the `room` unit registered, and the two routes mounted; the persona paragraph the spec's §4.4 default rests on.
 
 - [ ] **Step 1: Wire the engine in `face/src/main.ts`**
 
@@ -3166,7 +3166,7 @@ test("room smoke: dispatch → two members → answers in the room log → one w
         const last = [...o.messages].reverse()[0];
         const lastKind = String((last?.source as { kind?: unknown } | undefined)?.kind);
         const lastForm = String((last?.source as { form?: unknown } | undefined)?.form);
-        if (who === "kairos") {
+        if (who === "gravit") {
           if (lastKind === "tool") return { kind: "text", text: "Waiting for the room." };
           if (lastKind === "room" && lastForm === "round-end") return { kind: "text", text: `Synthesis: ${lastUserText(o).split("\n")[1]}` };
           return { kind: "tool", name: "dispatch", args: { to: ["alpha", "beta", "gamma"], mode: "parallel", brief: "state your view on X", reason: "independent views first" } };
@@ -3205,12 +3205,12 @@ test("room smoke: dispatch → two members → answers in the room log → one w
         return await res.json() as Record<string, unknown>;
       };
 
-      /* Kairos's room session, on the stub route. */
+      /* Gravit's room session, on the stub route. */
       const created = await rpc("session.create", { workspaceId: ws.id });
       const roomId = String(created.sessionId);
-      assert.equal(created.agentPreset, "kairos");
+      assert.equal(created.agentPreset, "gravit");
       await rpc("session.selectModel", { sessionId: roomId, provider: "stub", model: "echo" });
-      assert.ok(tools.schemas(agents.get(roomId) as object).some((s) => s.name === "dispatch"), "dispatch is in Kairos's roster");
+      assert.ok(tools.schemas(agents.get(roomId) as object).some((s) => s.name === "dispatch"), "dispatch is in Gravit's roster");
 
       await rpc("session.prompt", { sessionId: roomId, mode: "queue", content: [{ type: "text", text: "各位对 X 的看法？" }] });
       const room = () => sessions.get(roomId)!.events;
@@ -3229,7 +3229,7 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       const roundEndAt = types.indexOf("user/message:room/round-end");
       const secondStart = types.indexOf("turn/start", firstEnd);
       assert.ok(types.indexOf("tool/call:dispatch") < firstEnd, "dispatch was called in the first turn");
-      assert.ok(answerAt > firstEnd && answerAt < roundEndAt, "alpha's answer landed after Kairos's turn ended and before the wake");
+      assert.ok(answerAt > firstEnd && answerAt < roundEndAt, "alpha's answer landed after Gravit's turn ended and before the wake");
       assert.ok(roundEndAt > secondStart && types.slice(secondStart, roundEndAt).filter((t) => t === "turn/start").length === 1, "the wake is one turn");
       const dispatchResult = events.find((e) => e.type === "tool/result" && JSON.stringify(e.data).includes("Dispatched"));
       assert.match(JSON.stringify(dispatchResult?.data), /Not called: none\./);
@@ -3268,7 +3268,7 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       assert.equal((row.projections?.values.room as { kind?: string } | undefined)?.kind, "room", "the room value rides session.list");
       assert.equal((members[0].projections?.values.room as { kind?: string } | undefined)?.kind, "member");
 
-      /* The cache row (R13): Kairos's turn/end is a mandatory write. */
+      /* The cache row (R13): Gravit's turn/end is a mandatory write. */
       const cacheFile = join(home, "storages", "session_projcache.json");
       await waitFor("the projection cache file", () => existsSync(cacheFile) && readFileSync(cacheFile, "utf8").includes(roomId), 10_000);
 
@@ -3284,7 +3284,7 @@ test("room smoke: dispatch → two members → answers in the room log → one w
       assert.ok(probe !== undefined, "the member ran its write");
       assert.match(JSON.stringify(probe!.data), /sandbox: file access denied/);
       assert.equal(existsSync(join(channelDir, "s4-member-should-not-exist.txt")), false);
-      assert.equal(room().filter((e) => e.type === "turn/start").length, 2, "an @ never woke Kairos");
+      assert.equal(room().filter((e) => e.type === "turn/start").length, 2, "an @ never woke Gravit");
 
       /* Plan 1's deferral 4: a HOME session writes its journal and is refused on ../SOUL.md. */
       const homeSession = await rpc("session.create", { cwd: join(bots, "alpha", "journal"), agentPreset: "alpha" });
@@ -3313,7 +3313,7 @@ test("room smoke: dispatch → two members → answers in the room log → one w
 Run: `cd face && FACE_SMOKE=1 npx tsx --test tests/room-smoke.test.ts`
 Expected: PASS within a minute. Things that legitimately need adjusting on a first run, and what to do:
 - **`selectModel` refuses `stub`** → the adapter's `resolveModel` shape is off; compare with `dsh-llm-deepseek`'s `modelInfoFor` and add what `normalizeModelInfo` demands.
-- **Kairos's first request does not reach the stub** → `session.prompt` refused with `model-unavailable`: `routeServed` checks `listProviders()`; make sure `registerAdapter` ran before the prompt.
+- **Gravit's first request does not reach the stub** → `session.prompt` refused with `model-unavailable`: `routeServed` checks `listProviders()`; make sure `registerAdapter` ran before the prompt.
 - **`assistant/message` for the tool call finishes the turn without executing** → the `finish` reason must be `{ kind: "tool-calls" }` and the block a `tool-call` block with a string `arguments`.
 - **The AGENTS.md chain assertion fails** → find where `dsh-agent-instructions` injects (a `user/message` with `source.kind === 'plugin'`) and match on that; if it injects only into the FIRST request's history rather than the log, read `agent.session.deriveMessages()` instead. Do not weaken the assertion to "some plugin message exists".
 - **The home-scope write to `../SOUL.md` is NOT refused** → this is a measurement (plan 1 deferred it). Print the observed content, keep the assertion failing, and record the fact in the spec's §16 (Task 11) as an open D12 gap rather than passing the test by loosening it.
@@ -3356,7 +3356,7 @@ Built 2026-09-08 on `main` (`face/src/room.ts`, `room-rules.ts`, `room-projectio
 **Deviations from the design, each forced by a substrate fact measured while planning.**
 
 1. **No `room/*` session events.** `Session.append` accepts any type, but every persistence read runs the log through the generated closed set `KNOWN_SESSION_EVENT_TYPES` and refuses a type outside it unless the event carries `ignorable: true` — which `append` cannot set (`dsh-session-persistence/lib/index.js`, `assertEventsSupported`; `dsh-session/lib/index.js`, `append`). One `room/member` would make the room session unresumable and its cold listing throw. So §2.4's "room membership is a room fact" became a header fact plus the log: a member is a session whose header carries `parentSession = <room>`, no `origin`, and a bot `agentPreset` (forks carry the source's preset, subagent children carry `origin`); the dispatch is the tool's own `tool/call` + `tool/result` (the result text names who was NOT called); a member's answer is a `user/message` on the room session with `source: { kind: 'room', form: 'answer', bot, name, sessionId, turn, round }`; the round end is the waking `user/message` with `form: 'round-end'` carrying every turn's state; the member's cursor is the delta message in ITS log (`form: 'delta'`, `messageIds`). §4.6's event list is retired; the `room` projection unit folds these known events instead (`face/src/room-projection.ts`).
-2. **Answers are appended, never injected.** §4.3's "every member answer enters the room log via `inject` as it lands, so the operator sees bubbles appear while Kairos sleeps" does not hold: `inject` splices the inbox, and the `user/message` the client renders lands only when Kairos's next step claims it; an inject on a running driver forces an extra step or opens a stray turn. The engine appends the answer straight onto the room session's log (`surfaceOp: 'append'`) while the log is quiet — no open turn — and otherwise holds it in a per-room outbox flushed at the next `turn/end`. Kairos is woken only by the round-end `followup`, sent in the same synchronous block as the last flush, so the claim is one turn with every answer already above it. S5 was restated for this: proven in `room-smoke.test.ts` (answer before round-end, one `turn/start` for the wake, synthesis inside it).
+2. **Answers are appended, never injected.** §4.3's "every member answer enters the room log via `inject` as it lands, so the operator sees bubbles appear while Gravit sleeps" does not hold: `inject` splices the inbox, and the `user/message` the client renders lands only when Gravit's next step claims it; an inject on a running driver forces an extra step or opens a stray turn. The engine appends the answer straight onto the room session's log (`surfaceOp: 'append'`) while the log is quiet — no open turn — and otherwise holds it in a per-room outbox flushed at the next `turn/end`. Gravit is woken only by the round-end `followup`, sent in the same synchronous block as the last flush, so the claim is one turn with every answer already above it. S5 was restated for this: proven in `room-smoke.test.ts` (answer before round-end, one `turn/start` for the wake, synthesis inside it).
 3. **The `read-only` pin runs inside creation `setup`.** §2.4's create-then-`set` window and its "do not deliver the first prompt until `set` has logged" rule are unnecessary: `permissionPresets.set` on `agentCtx.agent.session` inside `setup` logs `permission/preset` + `sandbox/mode` + `approval/policy` before publication, and `pinInitialPermission` fills only missing facts. The pin is every member session's first event (asserted; a fresh session carries no `session/end-seed` marker — dsh appends it only over a seed).
 4. **Fine states are the client's.** The projection registry has no out-of-fold write, so §6's "thinking / writing / tool … folded by the plugin into the unit" cannot be done. The unit carries coarse state (`called`, `answered`, `passed`, `failed`, `timed-out`, the round, `organizing`); plan 3 derives the fine states from the member sessions' own `assistant/chunk` block starts, which the mux already forwards for every live session.
 5. **`preset.yml` `model:` is honored through `installModelSelection`, not `session.selectModel`** — the RPC saves the selection as the host-wide default. The route is validated with `llm.resolveCallConfig`; an unserved route falls back to `agentDefaultModel.currentSelection()` with a line in the dispatch result.
@@ -3364,15 +3364,15 @@ Built 2026-09-08 on `main` (`face/src/room.ts`, `room-rules.ts`, `room-projectio
 7. **The hard-cap cancel keeps the inbox** (`cancel(cause, { keepInbox: true })`); dsh clears it by default.
 8. **A pending gate is read from the member's log** — an `ask_user_question` call with no result, or an `approval/asked` with no `approval/decided` — because questions leave no session event.
 9. **The engine is installed on the root context by `main.ts`, not as a cordis row** (the spec's "room plugin row"): a root-created member is a runtime root, which is what lets it ask the operator a question (`userQuestions.ask` refuses a runtime-owned child with `DELEGATED_CALLER`) and keeps the gateway from fencing its gates as subagent-owned. `dispatch` is registered globally through `ctx.tools.register`; the bots' allow masks exclude it without naming it (plan 1, deviation 2).
-10. **The operator's `@` is a face route**, `POST /data/rooms/say`: the client sends a message containing `@` there first; the route resolves mentions deterministically against the roster (by id; by display name only when one token), appends the message to the room as the operator's own (`kind: 'user'`, `mention: [...]`) without waking Kairos, and turns the named members; a message that names nobody comes back `addressed: []` and the client then sends it as an ordinary prompt. A cold room is made live through the gateway's own composition (`apiProxy.sessions.models`), never composed by the face.
+10. **The operator's `@` is a face route**, `POST /data/rooms/say`: the client sends a message containing `@` there first; the route resolves mentions deterministically against the roster (by id; by display name only when one token), appends the message to the room as the operator's own (`kind: 'user'`, `mention: [...]`) without waking Gravit, and turns the named members; a message that names nobody comes back `addressed: []` and the client then sends it as an ordinary prompt. A cold room is made live through the gateway's own composition (`apiProxy.sessions.models`), never composed by the face.
 
 **Spike outcomes** (`FACE_SMOKE=1 npm test`, 2026-09-08, `room-smoke.test.ts`).
 
-- **S5** — restated per deviation 2 and proven: two answers appended to a quiet room log, one `followup`, one turn, the synthesis inside it; a `followup` issued while Kairos ran (the dispatch turn) landed after its `turn/end`.
+- **S5** — restated per deviation 2 and proven: two answers appended to a quiet room log, one `followup`, one turn, the synthesis inside it; a `followup` issued while Gravit ran (the dispatch turn) landed after its `turn/end`.
 - **S6** — a member created in-process with `meta: { cwd, parentSession, agentPreset }` and a `setup` of `installModelSelection` + `agentPresets.mount` + `permissionPresets.set` carries `agentPreset` and `parentSessionId` on its `session.list` row, shows the bot's persona in its first assembled prompt, lacks `dispatch` in its schemas, and logs `read-only` as its first event; no "published without joining" warning.
 - **S4 for a member** — a bash write from a member into its channel directory came back `isError: false` with `[sandbox: file access denied under read-only mode]` in the content and no file (R10 holds in a room).
 - **Plan 1's deferral 4 (home scope)** — <observed: a home session wrote `journal/probe.md` and was refused on `../SOUL.md` with the same marker | or what was seen>.
-- **R13** — with the `session-projection-cache` overlay row, `$DSH_HOME/storages/session_projcache.json` carries the room session after Kairos's first `turn/end`; the `room` value rides the `session.list` row for the room and the members.
+- **R13** — with the `session-projection-cache` overlay row, `$DSH_HOME/storages/session_projcache.json` carries the room session after Gravit's first `turn/end`; the `room` value rides the `session.list` row for the room and the members.
 - **S8 (new)** — the persistence catalog is closed (deviation 1). Recorded here because the spec's §13 table did not know to ask.
 
 **Where the as-built truth now lives.** `face/src/room.ts` (module header), `room-rules.ts`, `room-projection.ts`; the smoke; plan 3 adds the client and `face/README.md`; plan 4 the reference documents and the charter.

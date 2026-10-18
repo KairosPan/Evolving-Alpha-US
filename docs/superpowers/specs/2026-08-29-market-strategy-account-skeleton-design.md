@@ -170,7 +170,7 @@ dsh/
 │   │   ├── backtest-rules/     #   the honest-eval rules (references docs/backtest-rules.md)
 │   │   └── alpaca-kit-guide/   #   lib/MCP usage + the gotcha corpus (announce:=process_date,
 │   │                           #     IEX feed, RAW prices, PIT keys per feed, ...)
-│   └── style-kairos/           # the operator's PERSONAL investment style — loaded by default,
+│   └── style-gravit/           # the operator's PERSONAL investment style — loaded by default,
 │       ├── doctrine/           #   but every skill opens with: "this is the operator's style
 │       ├── signals/            #   and preference, not objective market law; when research
 │       └── lessons/            #   findings conflict with a style entry, REPORT the conflict,
@@ -216,7 +216,7 @@ implementation time.
 3. Migrate alpha/data + related → alpaca_kit/, rename imports, migrate tests, go green.
 4. Write new code: account.py → mcp/__main__.py → replay.py.
 5. Remount data/pit/ from backup; place strategies/_template/, dsh/, AGENTS.md.
-6. Pin profile/skill formats against current dsh docs; write skills (mechanics + style-kairos).
+6. Pin profile/skill formats against current dsh docs; write skills (mechanics + style-gravit).
 7. End-to-end smoke: dsh web up → agent calls screen/daily_bars → create the first strategy
    directory and run a backtest through replay.py.
 

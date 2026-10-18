@@ -8,7 +8,7 @@ Synced to a claude.ai/design project for the operator to browse; committed here 
 record.
 
 **Authority: zero.** Prototypes are ideation artifacts. Nothing here decides architecture;
-`Kairos-Design.md` (intent) and the skeleton spec (mechanism) win every conflict.
+`Gravit-Design.md` (intent) and the skeleton spec (mechanism) win every conflict.
 
 ## Lineage (inherited principles, not inherited pixels)
 
@@ -57,7 +57,7 @@ All prototypes load the same real dataset (extracted read-only from the 2yr PIT 
 `scripts`-grade code; see `data/market_mock.json`):
 
 ```html
-<script src="../data/market_mock.js"></script>  <!-- defines window.KAIROS_DATA -->
+<script src="../data/market_mock.js"></script>  <!-- defines window.GRAVIT_DATA -->
 ```
 
 Shape (lengths are real, not illustrative):

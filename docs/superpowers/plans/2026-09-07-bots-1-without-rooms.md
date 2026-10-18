@@ -2,16 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** After this plan the operator can create a bot from a form, talk to it at its home, and see it listed beside Kairos — Kairos is told who it is for the first time, every session joins a dsh agent preset, and a bot's tools are a mask over Kairos's roster.
+**Goal:** After this plan the operator can create a bot from a form, talk to it at its home, and see it listed beside Gravit — Gravit is told who it is for the first time, every session joins a dsh agent preset, and a bot's tools are a mask over Gravit's roster.
 
-**Architecture:** The face mounts `@deepseek-ai/dsh-agent-presets` with the repository's `bots/` directory as its only root and an inert `kairos` preset as the default. A bot is a directory `bots/<id>/` whose `agent.cordis.yml` names one face-owned, dependency-free plugin (`face/plugins/bot.js`) that registers the bot's persona section and an allow-list tool mask into the preset's scope, plus a `dsh-skill-filesystem` row for its stance pack. Bot home sessions are created by the existing client through the gateway's own `session.create({ cwd, agentPreset })`, which mounts the preset itself — no in-process agent creation in this plan. Kairos's identity is the `system-prompt` row's `persona` config, set from `dsh/profile/persona.md` by a face-owned patch.
+**Architecture:** The face mounts `@deepseek-ai/dsh-agent-presets` with the repository's `bots/` directory as its only root and an inert `gravit` preset as the default. A bot is a directory `bots/<id>/` whose `agent.cordis.yml` names one face-owned, dependency-free plugin (`face/plugins/bot.js`) that registers the bot's persona section and an allow-list tool mask into the preset's scope, plus a `dsh-skill-filesystem` row for its stance pack. Bot home sessions are created by the existing client through the gateway's own `session.create({ cwd, agentPreset })`, which mounts the preset itself — no in-process agent creation in this plan. Gravit's identity is the `system-prompt` row's `persona` config, set from `dsh/profile/persona.md` by a face-owned patch.
 
 **Tech Stack:** Node 22 · TypeScript (`tsc --noEmit`, no build step — `tsx` runs sources directly) · `node:test` via `tsx --test tests/*.test.ts` (one process per file) · dsh `0.1.1-rc.2` exact (`face/src/version.ts` `DSH_PIN`) · cordis `4.0.2` · js-yaml `4.3.2` · plain-ESM browser client with no bundler and no cache headers.
 
 **Spec:** `docs/superpowers/specs/2026-09-07-bots-and-rooms-design.md` — read §1, §2, §3, §7, §8, §13, §14 before Task 1. This plan is its §14 item 1. Rooms (`dispatch`, member sessions, the participants strip, the roster's `bots[]`) are plans 2–3; the charter amendment is plan 4.
 
 **Deviations from the spec, to be recorded in its post-build amendments block:**
-1. **One face-owned plugin instead of `@deepseek-ai/dsh-persona` + `kairos-face/bot-mask`.** `dsh-persona` is not in the face's bundle and its registry availability is unverified; the mask needs a face plugin anyway; and dsh's own `dsh-subagent` composes a child exactly this way — a scoped `deployment:persona` section plus `tools.restrict` (`dsh-subagent/lib/index.js:570-582`). So `face/plugins/bot.js` does both. Spec S1 (`!!js` reading `SOUL.md`) is moot: the face writes the persona text into the composition, as the spec's fallback already said.
+1. **One face-owned plugin instead of `@deepseek-ai/dsh-persona` + `gravit-face/bot-mask`.** `dsh-persona` is not in the face's bundle and its registry availability is unverified; the mask needs a face plugin anyway; and dsh's own `dsh-subagent` composes a child exactly this way — a scoped `deployment:persona` section plus `tools.restrict` (`dsh-subagent/lib/index.js:570-582`). So `face/plugins/bot.js` does both. Spec S1 (`!!js` reading `SOUL.md`) is moot: the face writes the persona text into the composition, as the spec's fallback already said.
 2. **The mask is an `allow` list, not a `deny` list.** `dsh-tools/README.md:22`: "Deny masks admit later unnamed globals, while allow masks exclude later names." The tools a bot must never have are exactly the ones registered *after* the mount — `agent_<bin>` on connect, `mcp__…__place_order` when the MCP server comes up, `dispatch` in plan 2. An allow list excludes them without naming them.
 3. **Spec S6 (in-process composed session) is not needed here.** The gateway's `session.create` accepts `agentPreset` and performs the mount in its own `setup` (`dsh-host-apiproxy/lib/index.js:454-460, 1754-1768, 2104-2118`). Home sessions ride that path from the client. S6 moves to plan 2 (member sessions need `parentSession` and the `read-only` pin).
 
@@ -19,24 +19,24 @@
 
 - Every `@deepseek-ai/dsh-*` dependency is pinned **exactly** `0.1.1-rc.2`; `face/tests/version.test.ts` sweeps `dependencies` and `devDependencies` programmatically and fails on any other range or installed version. Run `npm install` in `face/` after editing `package.json`.
 - **One `bootFace` per test process** (`face/tests/smoke.test.ts:12-22`): every FACE_SMOKE test is its own `face/tests/<name>.test.ts`, gated `skip: gated && "set FACE_SMOKE=1"`, booting into a `mkdtempSync` home via `setupFaceProfile(home)`; never `~/.dsh`.
-- Bot id grammar is dsh's preset-id grammar `[a-z0-9][a-z0-9-]*` (`dsh-agent-presets/README.md:11`); `_template` and `kairos` are refused as ids by the face.
+- Bot id grammar is dsh's preset-id grammar `[a-z0-9][a-z0-9-]*` (`dsh-agent-presets/README.md:11`); `_template` and `gravit` are refused as ids by the face.
 - The dsh system prompt is a **strict `{{…}}` template with no escape** (`dsh-system-prompt/README.md:13, 88`). `dsh/profile/persona.md` may reference only `{{model}}` and `{{cwd}}`; a bot's persona text may contain no `{{` at all. Both are validated where they are read and refused where they are written.
 - Authoring is the face's own filesystem write, never `ctx.agentPresets.copy()` (it re-tightens the tree to owner-only permissions, `dsh-agent-presets/README.md:61`).
 - Rule 5: a broken preset is listed with its reason, never skipped; a bot directory the preset roster does not report is shown as such.
 - Rule 2: the mask is *visibility*, not authority — every doc sentence says so; write asymmetry is the sandbox (plan 2).
 - Docs cite files and symbols, never line numbers (`DEVELOPMENT.md` "Citation rule").
 - `face/client/*` is served with no cache headers: **hard-reload** the browser after any client edit before believing what you see.
-- Every log line is `${BIN}: …` with `const BIN = "kairos-face"` declared per module.
+- Every log line is `${BIN}: …` with `const BIN = "gravit-face"` declared per module.
 - Commit after every task (`git commit -F <file>` when the message carries backticks or parentheses).
-- Nothing in this plan edits `Kairos-Design.md` or `CLAUDE.md` (plan 4).
+- Nothing in this plan edits `Gravit-Design.md` or `CLAUDE.md` (plan 4).
 
 ## File Structure
 
 | File | Responsibility |
 |---|---|
-| `face/plugins/bot.js` (new) | the bot composition plugin `kairos-bot`: validates config, registers the `deployment:persona` section and the allow-list `tools.restrict` into the calling (preset) scope; dependency-free ESM |
-| `face/src/persona.ts` (new) | `validatePersonaTemplate`, `readPersona` — Kairos's deployment persona, read at compose time, refused if malformed |
-| `face/src/overlay.ts` | + the `agent-presets` row (`bots/` root, default `kairos`, no user root); `faceOverlay` gains a `botsRoot` parameter |
+| `face/plugins/bot.js` (new) | the bot composition plugin `gravit-bot`: validates config, registers the `deployment:persona` section and the allow-list `tools.restrict` into the calling (preset) scope; dependency-free ESM |
+| `face/src/persona.ts` (new) | `validatePersonaTemplate`, `readPersona` — Gravit's deployment persona, read at compose time, refused if malformed |
+| `face/src/overlay.ts` | + the `agent-presets` row (`bots/` root, default `gravit`, no user root); `faceOverlay` gains a `botsRoot` parameter |
 | `face/src/boot.ts` | + the `system-prompt` persona patch beside the `hmr` patch; + boot assertion that the roster and its default mount; `FaceBootOptions.botsRoot?` |
 | `face/src/setup.ts` | the patch header names the two new face-owned row ids |
 | `face/src/bots.ts` (new) | `isBotId`, `renderComposition`, `renderPresetMeta`, `createBot`, `updateSoul`, `listBots`, `registerBotRoutes` (`GET /data/bots.json`, `POST /data/bots`, `POST /data/bots/soul`) |
@@ -45,8 +45,8 @@
 | `face/client/grouping.js` | `bucketFor(channel, archived, bot)` + `BOT_KEY_PREFIX`, `isBotKey` |
 | `face/client/chat.js` | Bots section on the agent face; bot page (home, soul editor); New bot form; `pendingAgentPreset`; bot buckets in the sidebar; collapsed-key filter; `knownFolders` exclusion |
 | `bots/_template/` (new) | `agent.cordis.yml`, `preset.yml`, `SOUL.md`, `README.md`, `skills/README.md`, `journal/notes.md` |
-| `bots/kairos/` (new) | `agent.cordis.yml` (`[]`), `preset.yml` |
-| `dsh/profile/persona.md` (new) | Kairos's deployment persona |
+| `bots/gravit/` (new) | `agent.cordis.yml` (`[]`), `preset.yml` |
+| `dsh/profile/persona.md` (new) | Gravit's deployment persona |
 | `face/tests/bot-plugin.test.ts`, `persona.test.ts`, `bots.test.ts`, `botId.test.ts` (new); `grouping.test.ts`, `overlay.test.ts`, `boot.test.ts` (modified) | offline |
 | `face/tests/bots-smoke.test.ts`, `bot-sandbox-smoke.test.ts`, `askuser-noclient-smoke.test.ts` (new) | FACE_SMOKE, one boot each |
 | `face/README.md`, `DEVELOPMENT.md`, `AGENTS.md` | the Bots section and drill; mechanism rows; `bots/` on the never-edit line |
@@ -64,13 +64,13 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 /** Absolute path of the real plugin file: a temp bots root cannot reach it by `../../face/…`. */
 export const PLUGIN_ABS = join(REPO, "face", "plugins", "bot.js");
 
-/** A throwaway `bots/` root: the repo's real `_template`, an inert `kairos`, and nothing else. */
+/** A throwaway `bots/` root: the repo's real `_template`, an inert `gravit`, and nothing else. */
 export async function makeBotsRoot(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "face-bots-"));
   await cp(join(REPO, "bots", "_template"), join(root, "_template"), { recursive: true });
-  await mkdir(join(root, "kairos"));
-  await writeFile(join(root, "kairos", "agent.cordis.yml"), "[]\n");
-  await writeFile(join(root, "kairos", "preset.yml"), "name: Kairos\ndescription: the principal agent\n");
+  await mkdir(join(root, "gravit"));
+  await writeFile(join(root, "gravit", "agent.cordis.yml"), "[]\n");
+  await writeFile(join(root, "gravit", "preset.yml"), "name: Gravit\ndescription: the principal agent\n");
   return root;
 }
 ```
@@ -85,7 +85,7 @@ export async function makeBotsRoot(): Promise<string> {
 
 **Interfaces:**
 - Consumes: nothing (dependency-free; the loader resolves it by a relative path from a preset directory, `dsh-agent-presets/README.md:65-69`).
-- Produces: `name = "kairos-bot"`, `inject = ["systemPrompt", "tools"]`, `validateBotConfig(config): string | undefined`, `expandAllow(allow: string[], known: Set<string>): { allow: string[]; missing: string[] }`, `apply(ctx, config)`. Config shape `{ persona: string; allow: string[] }`. Task 4 renders this row into every composition; Task 7 proves it on a real tree.
+- Produces: `name = "gravit-bot"`, `inject = ["systemPrompt", "tools"]`, `validateBotConfig(config): string | undefined`, `expandAllow(allow: string[], known: Set<string>): { allow: string[]; missing: string[] }`, `apply(ctx, config)`. Config shape `{ persona: string; allow: string[] }`. Task 4 renders this row into every composition; Task 7 proves it on a real tree.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -96,8 +96,8 @@ import assert from "node:assert/strict";
 // Plain ESM JS (the dsh loader imports it by path); tsconfig `allowJs` lets tsx import it here.
 import { apply, expandAllow, inject, name, validateBotConfig } from "../plugins/bot.js";
 
-test("kairos-bot: name and inject are what the composition relies on", () => {
-  assert.equal(name, "kairos-bot");
+test("gravit-bot: name and inject are what the composition relies on", () => {
+  assert.equal(name, "gravit-bot");
   assert.deepEqual(inject, ["systemPrompt", "tools"]);
 });
 
@@ -157,7 +157,7 @@ Expected: FAIL — `Cannot find module '../plugins/bot.js'`.
 ```js
 // face/plugins/bot.js
 /**
- * `kairos-bot` — the one plugin every bot composition mounts.
+ * `gravit-bot` — the one plugin every bot composition mounts.
  *
  * A bot is a dsh agent preset (`bots/<id>/agent.cordis.yml`, spec §2). Its
  * composition names this file by a RELATIVE path (`../../face/plugins/bot.js`),
@@ -178,7 +178,7 @@ Expected: FAIL — `Cannot find module '../plugins/bot.js'`.
  * see — `agent_<bin>` on connect, `mcp__…__place_order` when the MCP server
  * comes up, `dispatch` in plan 2 — are all registered AFTER the mount.
  */
-export const name = "kairos-bot";
+export const name = "gravit-bot";
 export const inject = ["systemPrompt", "tools"];
 
 /** The dsh system prompt is a strict `{{…}}` template with no escape; a bot's
@@ -218,11 +218,11 @@ export function expandAllow(allow, known) {
 
 export function apply(ctx, config) {
   const problem = validateBotConfig(config);
-  if (problem !== undefined) throw new Error(`kairos-bot: ${problem}`);
+  if (problem !== undefined) throw new Error(`gravit-bot: ${problem}`);
   const known = new Set(ctx.tools.schemas().map((schema) => schema.name));
   const { allow, missing } = expandAllow(config.allow, known);
-  if (missing.length > 0) ctx.logger?.warn?.(`kairos-bot: allow names not in this tree, ignored: ${missing.join(", ")}`);
-  if (allow.length === 0) throw new Error("kairos-bot: none of the allowed tools exist in this tree; the bot would have no hands at all");
+  if (missing.length > 0) ctx.logger?.warn?.(`gravit-bot: allow names not in this tree, ignored: ${missing.join(", ")}`);
+  if (allow.length === 0) throw new Error("gravit-bot: none of the allowed tools exist in this tree; the bot would have no hands at all");
   ctx.effect(() => ctx.systemPrompt.section({ name: "deployment:persona", order: 0, text: config.persona }));
   ctx.effect(() => ctx.tools.restrict({ allow }));
 }
@@ -242,7 +242,7 @@ git commit -m "feat(face): the bot composition plugin - a scoped persona and an 
 
 ---
 
-### Task 2: Kairos's deployment persona (`dsh/profile/persona.md`, `face/src/persona.ts`)
+### Task 2: Gravit's deployment persona (`dsh/profile/persona.md`, `face/src/persona.ts`)
 
 **Files:**
 - Create: `dsh/profile/persona.md`, `face/src/persona.ts`
@@ -250,7 +250,7 @@ git commit -m "feat(face): the bot composition plugin - a scoped persona and an 
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `PERSONA_VARIABLES = ["model", "cwd"]`, `validatePersonaTemplate(text: string): string | undefined`, `readPersona(path: string): string` (trimmed text; throws `kairos-face: <path>: <problem>`), `PERSONA_PATH` (absolute path of `dsh/profile/persona.md`, module-relative). Task 3 pushes the patch.
+- Produces: `PERSONA_VARIABLES = ["model", "cwd"]`, `validatePersonaTemplate(text: string): string | undefined`, `readPersona(path: string): string` (trimmed text; throws `gravit-face: <path>: <problem>`), `PERSONA_PATH` (absolute path of `dsh/profile/persona.md`, module-relative). Task 3 pushes the patch.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -264,7 +264,7 @@ import { join } from "node:path";
 import { PERSONA_PATH, readPersona, validatePersonaTemplate } from "../src/persona.ts";
 
 test("validatePersonaTemplate accepts model and cwd, refuses everything else the strict renderer would throw on", () => {
-  assert.equal(validatePersonaTemplate("You are Kairos. Your working directory is {{cwd}} on {{model}}."), undefined);
+  assert.equal(validatePersonaTemplate("You are Gravit. Your working directory is {{cwd}} on {{model}}."), undefined);
   assert.match(validatePersonaTemplate("") ?? "", /empty/);
   assert.match(validatePersonaTemplate("   \n") ?? "", /empty/);
   assert.match(validatePersonaTemplate("Hello {{date}}") ?? "", /unknown persona variable \{\{date\}\}/);
@@ -282,9 +282,9 @@ test("readPersona returns the trimmed file and throws with the path on a bad tem
   assert.throws(() => readPersona(bad), (err: Error) => err.message.includes(bad) && /nobody/.test(err.message));
 });
 
-test("the shipped persona.md is valid and names Kairos", () => {
+test("the shipped persona.md is valid and names Gravit", () => {
   const text = readPersona(PERSONA_PATH);
-  assert.match(text, /You are Kairos/);
+  assert.match(text, /You are Gravit/);
   assert.equal(validatePersonaTemplate(text), undefined);
 });
 ```
@@ -298,10 +298,10 @@ Expected: FAIL — `Cannot find module '../src/persona.ts'`.
 
 ```ts
 // face/src/persona.ts
-/** Kairos's deployment persona — the order-0 `deployment:persona` section of
+/** Gravit's deployment persona — the order-0 `deployment:persona` section of
  * every prompt the face assembles, set on dsh-base's `system-prompt` row by
  * the patch `composeFace` pushes (boot.ts). Before this file existed the row's
- * `persona` was `''` and the model was never told it was Kairos (charter D11).
+ * `persona` was `''` and the model was never told it was Gravit (charter D11).
  *
  * The renderer is STRICT (dsh-system-prompt README: "complete `{{…}}` groups
  * are interpreted strictly against the registered variables … with no escape
@@ -343,14 +343,14 @@ export function validatePersonaTemplate(text: string): string | undefined {
 export function readPersona(path: string): string {
   const text = readFileSync(path, "utf8");
   const problem = validatePersonaTemplate(text);
-  if (problem !== undefined) throw new Error(`kairos-face: ${path}: ${problem}`);
+  if (problem !== undefined) throw new Error(`gravit-face: ${path}: ${problem}`);
   return text.trim();
 }
 ```
 
 ```markdown
 <!-- dsh/profile/persona.md -->
-You are Kairos, the one principal agent of a market–strategy–account research workbench run by one operator on one machine. Your working directory is {{cwd}}.
+You are Gravit, the one principal agent of a market–strategy–account research workbench run by one operator on one machine. Your working directory is {{cwd}}.
 
 The strategy directories under strategies/ are your arena: theses with falsification terms, executable screens, backtests, a journal, a lifecycle state. You write them freely and git is the ledger. You read the market only through point-in-time channels, you state what was actually measured, and a backtest that cannot be honest fails loudly rather than succeeding approximately.
 
@@ -359,7 +359,7 @@ The operator is your only teacher. Their style pack is the default you follow; w
 You do not trade. Order tools sit behind a gate the operator answers, and the roster of other agents on a channel is a menu of voices you may consult, never hands that act for you.
 ```
 
-The `<!-- -->` line is a comment for this plan only — the file starts at "You are Kairos".
+The `<!-- -->` line is a comment for this plan only — the file starts at "You are Gravit".
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -370,21 +370,21 @@ Expected: PASS (3 tests); typecheck clean.
 
 ```bash
 git add dsh/profile/persona.md face/src/persona.ts face/tests/persona.test.ts
-git commit -m "feat(face): Kairos's deployment persona, validated against the strict prompt template"
+git commit -m "feat(face): Gravit's deployment persona, validated against the strict prompt template"
 ```
 
 ---
 
-### Task 3: Mount the preset roster and set the persona (overlay, boot, setup, `bots/kairos`)
+### Task 3: Mount the preset roster and set the persona (overlay, boot, setup, `bots/gravit`)
 
 **Files:**
 - Modify: `face/package.json` (two dependencies), `face/src/overlay.ts`, `face/src/boot.ts`, `face/src/setup.ts`
-- Create: `bots/kairos/agent.cordis.yml`, `bots/kairos/preset.yml`
+- Create: `bots/gravit/agent.cordis.yml`, `bots/gravit/preset.yml`
 - Test: `face/tests/overlay.test.ts`, `face/tests/boot.test.ts` (modify)
 
 **Interfaces:**
 - Consumes: `readPersona`, `PERSONA_PATH` (Task 2).
-- Produces: `faceOverlay(port: number, dshHome: string, botsRoot: string): FacePatchEntry[]`; `BOTS_ROOT` (absolute `<repo>/bots`), `DEFAULT_PRESET = "kairos"`, `AGENT_PRESETS_ROW_ID = "agent-presets"`, `SYSTEM_PROMPT_ROW_ID = "system-prompt"` exported from `overlay.ts`; `FaceBootOptions.botsRoot?: string` (defaults to `BOTS_ROOT`); `composeFace` pushes `{ id: "system-prompt", name: "@deepseek-ai/dsh-system-prompt", config: { persona } }`; `bootFace` refuses to start when `ctx.get("agentPresets")` is absent or the default preset is missing/broken.
+- Produces: `faceOverlay(port: number, dshHome: string, botsRoot: string): FacePatchEntry[]`; `BOTS_ROOT` (absolute `<repo>/bots`), `DEFAULT_PRESET = "gravit"`, `AGENT_PRESETS_ROW_ID = "agent-presets"`, `SYSTEM_PROMPT_ROW_ID = "system-prompt"` exported from `overlay.ts`; `FaceBootOptions.botsRoot?: string` (defaults to `BOTS_ROOT`); `composeFace` pushes `{ id: "system-prompt", name: "@deepseek-ai/dsh-system-prompt", config: { persona } }`; `bootFace` refuses to start when `ctx.get("agentPresets")` is absent or the default preset is missing/broken.
 
 - [ ] **Step 1: Add the dependencies and install**
 
@@ -415,7 +415,7 @@ test("overlay inserts exactly the eleven rows with loopback config", () => {
       "storage-domain", "storage-json", "tool-ask-user", "webserver", "workspace"],
   );
   assert.deepEqual(byId.get("agent-presets")!.config, {
-    default: "kairos",
+    default: "gravit",
     roots: [{ path: BOTS, trust: "user" }],
     includeUserRoot: false,
   });
@@ -427,12 +427,12 @@ Update every other `faceOverlay(3090, HOME)` call in that file to `faceOverlay(3
 In `face/tests/boot.test.ts`: add `"agent-presets"` to `OVERLAY_ROW_IDS`; change the layer-count assertion from `3` to `4` with the comment `dsh-base insert + hmr disable + system-prompt persona + face overlay`; add:
 
 ```ts
-test("composeFace sets Kairos's persona on dsh-base's system-prompt row", () => {
+test("composeFace sets Gravit's persona on dsh-base's system-prompt row", () => {
   const { patches } = composeFace({ profileName: "face", port: 3090, dshHome: home });
   const row = composeEntries([patches]).find((r) => r.id === "system-prompt");
   assert.ok(row, "system-prompt row present");
   const persona = (row!.config as { persona?: string }).persona ?? "";
-  assert.match(persona, /^You are Kairos/);
+  assert.match(persona, /^You are Gravit/);
   assert.equal(persona, readPersona(PERSONA_PATH));
 });
 ```
@@ -454,7 +454,7 @@ import { fileURLToPath } from "node:url";
 /** The repository's bot directory — the ONLY preset root the face scans. Module-relative. */
 export const BOTS_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "bots");
 /** The inert preset every session that names none joins (spec S3). */
-export const DEFAULT_PRESET = "kairos";
+export const DEFAULT_PRESET = "gravit";
 export const AGENT_PRESETS_ROW_ID = "agent-presets";
 /** dsh-base's system-prompt row, whose `persona` composeFace sets (boot.ts). */
 export const SYSTEM_PROMPT_ROW_ID = "system-prompt";
@@ -470,7 +470,7 @@ and the row:
        * own `bots/` — `includeUserRoot: false` keeps `$DSH_HOME/.agent-presets`
        * out, so a bot the repository does not carry cannot exist. `default` is
        * REQUIRED by the plugin and is what the gateway mounts for a session that
-       * names no preset: `kairos`, an empty composition, so Kairos's own sessions
+       * names no preset: `gravit`, an empty composition, so Gravit's own sessions
        * keep the flat host roster unchanged (spec S3). The plugin warns on every
        * agent created outside a preset once a roster is mounted; the default
        * makes that warning unreachable. */
@@ -499,7 +499,7 @@ Add to `FaceBootOptions`:
 In `composeFace`, after the `hmr` push and before the overlay push:
 
 ```ts
-  /* Kairos's persona: the one config value dsh-base leaves empty on purpose
+  /* Gravit's persona: the one config value dsh-base leaves empty on purpose
    * ("the deployment persona is a deployment choice"). A non-insert patch
    * REPLACES the row's whole config (cordis-plugin-include applyEntryPatches),
    * and dsh-base sets nothing else on this row, so nothing is lost. Guarded
@@ -523,7 +523,7 @@ In `bootFace`, after the existing order-gate wiring and before `return { ctx, di
   /* The preset roster: every session.create the gateway serves resolves a
    * preset - the named one or `default` - and fails at resolution if the
    * roster cannot supply it. Assert it here, against the LIVE service, so a
-   * missing `bots/kairos` refuses the boot instead of failing every session. */
+   * missing `bots/gravit` refuses the boot instead of failing every session. */
   const presets = ctx.get("agentPresets") as
     | { defaultId: string; list(): Promise<{ id: string; broken?: string }[]> }
     | undefined;
@@ -549,19 +549,19 @@ In `bootFace`, after the existing order-gate wiring and before `return { ctx, di
 - [ ] **Step 5: Create the inert default preset**
 
 ```yaml
-# bots/kairos/agent.cordis.yml
-# The default agent preset: EMPTY on purpose. Kairos is the host plane - dsh-base's
+# bots/gravit/agent.cordis.yml
+# The default agent preset: EMPTY on purpose. Gravit is the host plane - dsh-base's
 # flat tool roster, the operator's MCP row, the face's gate and ask-user rows - and
 # a session that names no preset joins this one so that the roster plugin's
-# "published without joining" warning never fires and Kairos's tools stay exactly
+# "published without joining" warning never fires and Gravit's tools stay exactly
 # the host's (spec S3, verified by bots-smoke.test.ts). Add nothing here: a row
-# here would reach every Kairos session.
+# here would reach every Gravit session.
 []
 ```
 
 ```yaml
-# bots/kairos/preset.yml
-name: Kairos
+# bots/gravit/preset.yml
+name: Gravit
 description: the principal agent - the host composition itself, no mask, no shadowed persona
 ```
 
@@ -577,15 +577,15 @@ Expected: PASS everything (overlay eleven rows; boot four layers; persona presen
 - [ ] **Step 8: Boot the real thing once**
 
 Run: `cd face && FACE_SMOKE=1 npx tsx --test tests/smoke.test.ts`
-Expected: PASS, and the boot log carries `kairos-face: agent presets: kairos (default kairos)`. (The fixture home has no `bots/` of its own — the roster root is the repository's, so `kairos` is found.)
+Expected: PASS, and the boot log carries `gravit-face: agent presets: gravit (default gravit)`. (The fixture home has no `bots/` of its own — the roster root is the repository's, so `gravit` is found.)
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add face/package.json face/package-lock.json face/src/overlay.ts face/src/boot.ts face/src/setup.ts bots/kairos face/tests/overlay.test.ts face/tests/boot.test.ts
+git add face/package.json face/package-lock.json face/src/overlay.ts face/src/boot.ts face/src/setup.ts bots/gravit face/tests/overlay.test.ts face/tests/boot.test.ts
 git commit -F /tmp/msg.txt
 ```
-with `/tmp/msg.txt`: `feat(face): mount the agent-preset roster on bots/ with an inert kairos default, and name Kairos in the deployment persona`.
+with `/tmp/msg.txt`: `feat(face): mount the agent-preset roster on bots/ with an inert gravit default, and name Gravit in the deployment persona`.
 
 ---
 
@@ -598,7 +598,7 @@ with `/tmp/msg.txt`: `feat(face): mount the agent-preset roster on bots/ with an
 **Interfaces:**
 - Consumes: `HttpError` (`face/src/http.ts`), js-yaml `load`/`dump`.
 - Produces (all exported from `face/src/bots.ts`):
-  - `BOT_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/`, `RESERVED_IDS: ReadonlySet<string>` (`kairos`), `TEMPLATE = "_template"`, `isBotId(v: unknown): v is string`
+  - `BOT_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/`, `RESERVED_IDS: ReadonlySet<string>` (`gravit`), `TEMPLATE = "_template"`, `isBotId(v: unknown): v is string`
   - `DEFAULT_ALLOW: readonly string[]`, `TEMPLATE_SOUL: string`, `BOT_PLUGIN_RELATIVE = "../../face/plugins/bot.js"`
   - `renderComposition(opts: { soul: string; allow: readonly string[]; plugin?: string }): string`
   - `renderPresetMeta(name: string, description: string): string`
@@ -630,7 +630,7 @@ const noPresets = async () => [] as { id: string; broken?: string }[];
 
 test("isBotId is dsh's preset grammar minus the two names the face reserves", () => {
   for (const ok of ["buffett", "a", "spec-2", "x".repeat(64)]) assert.equal(isBotId(ok), true, ok);
-  for (const bad of ["", "Buffett", "_template", "kairos", "-lead", "a_b", "a.b", "a b", "巴菲特", "x".repeat(65), 42, null]) {
+  for (const bad of ["", "Buffett", "_template", "gravit", "-lead", "a_b", "a.b", "a b", "巴菲特", "x".repeat(65), 42, null]) {
     assert.equal(isBotId(bad), false, JSON.stringify(bad));
   }
 });
@@ -693,7 +693,7 @@ test("createBot without a soul uses the template's, and proposes an id from the 
 
 test("createBot refuses bad ids, reserved ids, a templated soul, and a missing template", async () => {
   const root = await makeBotsRoot();
-  for (const id of ["_template", "kairos", "Bad", "a b", "../x", "", 7]) {
+  for (const id of ["_template", "gravit", "Bad", "a b", "../x", "", 7]) {
     await assert.rejects(createBot(root, { id, name: "x" }), (err: HttpError) => err.status === 400, JSON.stringify(id));
   }
   await assert.rejects(createBot(root, { id: "ok", name: "x", soul: "{{cwd}}" }), (err: HttpError) => err.status === 400);
@@ -720,11 +720,11 @@ test("listBots reads every directory in the grammar, marks the default, carries 
   await mkdir(join(root, "cracked"));
   await writeFile(join(root, "cracked", "agent.cordis.yml"), "not: a list\n");
   await mkdir(join(root, "Skipped"));            // outside the grammar: not a preset, not listed
-  const presets = async () => [{ id: "kairos" }, { id: "probe" }, { id: "cracked", broken: "composition is not a list" }];
+  const presets = async () => [{ id: "gravit" }, { id: "probe" }, { id: "cracked", broken: "composition is not a list" }];
   const bots = await listBots(root, presets);
-  assert.deepEqual(bots.map((b) => b.id), ["cracked", "kairos", "probe"]);
+  assert.deepEqual(bots.map((b) => b.id), ["cracked", "gravit", "probe"]);
   const byId = new Map(bots.map((b) => [b.id, b]));
-  assert.equal(byId.get("kairos")!.isDefault, true);
+  assert.equal(byId.get("gravit")!.isDefault, true);
   assert.equal(byId.get("probe")!.name, "Probe");
   assert.equal(byId.get("probe")!.soul, "You are Probe.");
   assert.equal(byId.get("cracked")!.broken, "composition is not a list");
@@ -757,8 +757,8 @@ Expected: FAIL — `Cannot find module '../src/bots.ts'`.
  * until `updateSoul` runs again (spec R4).
  *
  * `_template` is invisible to dsh (a leading underscore is outside the preset
- * grammar) and refused as an id here; `kairos` is the inert default preset
- * (`bots/kairos`), never a bot. Ids are dsh's grammar `[a-z0-9][a-z0-9-]*`.
+ * grammar) and refused as an id here; `gravit` is the inert default preset
+ * (`bots/gravit`), never a bot. Ids are dsh's grammar `[a-z0-9][a-z0-9-]*`.
  * @module
  */
 import { cp, readdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -769,13 +769,13 @@ import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 import { FORBIDDEN, HttpError, readBody } from "./http.ts";
 import type { RouteRegistrar } from "./static.ts";
 
-const BIN = "kairos-face";
+const BIN = "gravit-face";
 
 export const TEMPLATE = "_template";
 /** dsh-agent-presets' preset-id grammar, bounded to 64 code points. */
 export const BOT_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 /** Ids the grammar admits but the face refuses: the default preset is not a bot. */
-export const RESERVED_IDS: ReadonlySet<string> = new Set(["kairos"]);
+export const RESERVED_IDS: ReadonlySet<string> = new Set(["gravit"]);
 export const isBotId = (value: unknown): value is string =>
   typeof value === "string" && BOT_ID_RE.test(value) && !RESERVED_IDS.has(value);
 
@@ -783,7 +783,7 @@ export const isBotId = (value: unknown): value is string =>
  *  path from the preset's own directory (dsh-agent-presets README). */
 export const BOT_PLUGIN_RELATIVE = "../../face/plugins/bot.js";
 
-/** What a voice keeps of Kairos's roster (spec §2.2.1): the shell, file read
+/** What a voice keeps of Gravit's roster (spec §2.2.1): the shell, file read
  *  and edit, search, web, skills, the question tool, and the market-data reads
  *  of the alpaca-kit MCP server under whatever the operator named it. Absent
  *  by design: delegation (`subagent*`, `workflow`, `ralph`), goals and todos,
@@ -835,7 +835,7 @@ export interface BotRow {
   /** The bot's home session cwd - its journal, the one directory it may write. */
   homeCwd: string;
   soul: string;
-  /** `kairos`: the host composition, not a bot. */
+  /** `gravit`: the host composition, not a bot. */
   isDefault: boolean;
   /** dsh's own reason when the composition cannot mount (Rule 5: shown, never skipped). */
   broken?: string;
@@ -877,7 +877,7 @@ async function rowFor(root: string, id: string, presets: Map<string, { broken?: 
   const preset = presets.get(id);
   return {
     id, name: meta.name ?? id, description: meta.description ?? "", dir, homeCwd: join(dir, "journal"), soul,
-    isDefault: id === "kairos",
+    isDefault: id === "gravit",
     ...(preset?.broken === undefined ? {} : { broken: preset.broken }),
     listed: preset !== undefined,
   };
@@ -906,7 +906,7 @@ export async function createBot(root: string, body: Record<string, unknown>): Pr
   const name = typeof body.name === "string" && body.name.trim() !== "" ? body.name.trim() : undefined;
   const id = body.id !== undefined ? body.id : (name === undefined ? undefined : proposeBotId(name));
   if (!isBotId(id)) {
-    throw new HttpError(400, "invalid bot id (lowercase letters, digits and -; starts with a letter or digit; up to 64; not kairos or _template)");
+    throw new HttpError(400, "invalid bot id (lowercase letters, digits and -; starts with a letter or digit; up to 64; not gravit or _template)");
   }
   const description = typeof body.description === "string" ? body.description.trim() : "";
   const soul = body.soul === undefined ? TEMPLATE_SOUL : rejectSoul(body.soul);
@@ -974,7 +974,7 @@ One directory = one bot = one dsh agent preset. Copied by the face's **New bot**
 
 | File | Owner | What |
 |---|---|---|
-| `agent.cordis.yml` | the face (GENERATED) | the composition dsh mounts: the `kairos-bot` plugin (persona + tool mask) and this bot's skill root |
+| `agent.cordis.yml` | the face (GENERATED) | the composition dsh mounts: the `gravit-bot` plugin (persona + tool mask) and this bot's skill root |
 | `preset.yml` | the operator, via the form | `name`, `description` — what the roster shows |
 | `SOUL.md` | the operator, via the form or the bot page | the persona SOURCE. The face copies it into the composition; a hand edit reaches nothing until the face saves it again |
 | `skills/` | the operator | this bot's stance pack, a dsh skill root: `skills/<skill>/SKILL.md` with `name` + `description` frontmatter |
@@ -982,7 +982,7 @@ One directory = one bot = one dsh agent preset. Copied by the face's **New bot**
 
 Rules: no `{{` anywhere in `SOUL.md` (the system prompt is a strict template with no escape);
 the mask in `agent.cordis.yml` is visibility, not authority — the sandbox and Gate 2 are the fences.
-Kairos never edits anything under `bots/` (AGENTS.md).
+Gravit never edits anything under `bots/` (AGENTS.md).
 ```
 
 ```markdown
@@ -996,7 +996,7 @@ Skills this bot carries. One directory per skill, `skills/<skill>/SKILL.md`, ope
     ---
 
 Both keys are required — dsh drops a SKILL.md lacking either, silently. The stance pack is the
-operator's (charter P2): Kairos proposes, the operator writes.
+operator's (charter P2): Gravit proposes, the operator writes.
 ```
 
 ```markdown
@@ -1059,7 +1059,7 @@ function postReq(body: string, host = "127.0.0.1:3090", headers: Record<string, 
 }
 function routesFor(root: string): Map<string, WebRoute> {
   const routes: WebRoute[] = [];
-  registerBotRoutes({ register: (route) => routes.push(route) }, { root, listPresets: async () => [{ id: "kairos" }] });
+  registerBotRoutes({ register: (route) => routes.push(route) }, { root, listPresets: async () => [{ id: "gravit" }] });
   return new Map(routes.map((r) => [r.path, r]));
 }
 
@@ -1082,8 +1082,8 @@ test("routes: the listing answers ok with every bot row", async () => {
   assert.equal(r.out.status, 200);
   const body = JSON.parse(r.out.body) as { ok: boolean; bots: { id: string; listed: boolean }[] };
   assert.equal(body.ok, true);
-  assert.deepEqual(body.bots.map((b) => b.id), ["kairos", "probe"]);
-  assert.equal(body.bots[1].listed, false); // the fake roster reports only kairos
+  assert.deepEqual(body.bots.map((b) => b.id), ["gravit", "probe"]);
+  assert.equal(body.bots[1].listed, false); // the fake roster reports only gravit
 });
 
 test("routes: create is POST+JSON only, 400 on junk, 200 then 409", async () => {
@@ -1267,7 +1267,7 @@ Expected: FAIL — `botId.js` missing; `BOT_KEY_PREFIX`/`isBotKey` not exported.
  * a non-empty proposal is always an id the server accepts).
  *
  * WHAT IT IS NOT. It is not a fence. `createBot` (src/bots.ts) keeps the only
- * gate: dsh's preset grammar `[a-z0-9][a-z0-9-]*`, minus `kairos` and
+ * gate: dsh's preset grammar `[a-z0-9][a-z0-9-]*`, minus `gravit` and
  * `_template`. This runs before the POST so the operator sees the id a name
  * becomes and can type another; a name with no ASCII letters proposes
  * nothing, and the form then requires the id field. Fail-closed.
@@ -1297,7 +1297,7 @@ export function isBotKey(key) {
  * @param {{workspaceId: string, title: string}|null} channel
  * @param {boolean} archived
  * @param {{id: string, label: string}|null} bot - the session's bot when its
- *   `agentPreset` names one (never the default `kairos`), else `null`.
+ *   `agentPreset` names one (never the default `gravit`), else `null`.
  */
 export function bucketFor(channel, archived, bot) {
   if (archived) return { key: ARCHIVED_KEY, label: "archived", channel: null };
@@ -1320,7 +1320,7 @@ All edits in `face/client/chat.js`; the anchors are the current lines named.
 
 ```js
 /** The agent preset the NEXT `session.create` names: a bot's id for its home
- * session, `undefined` for Kairos (the gateway then mounts the default).
+ * session, `undefined` for Gravit (the gateway then mounts the default).
  * Set with `pendingCwd = <bot>.homeCwd` by openBotHome; reset wherever the
  * other two pendings are. @type {string|undefined} */
 let pendingAgentPreset;
@@ -1350,10 +1350,10 @@ async function loadBotIndex() {
   return botIndex;
 }
 /** The bot a session belongs to, from its own header: `agentPreset` names one
- * and it is not the default. `null` for Kairos and for a preset-less session. */
+ * and it is not the default. `null` for Gravit and for a preset-less session. */
 function botOf(summary) {
   const id = summary?.agentPreset;
-  if (typeof id !== "string" || id === "kairos") return null;
+  if (typeof id !== "string" || id === "gravit") return null;
   const bot = botIndex.find((b) => b.id === id);
   return { id, label: bot?.name ?? id };
 }
@@ -1560,8 +1560,8 @@ with `/tmp/msg.txt`: `feat(face): bots on the agent face - create form, a bot's 
  * S1: a composition whose plugin row is a PATH (not a package) mounts, and the
  *     persona text the face wrote into it reaches the assembled prompt.
  * S2: `tools.restrict({allow})` from a preset row masks every agent joined to
- *     the preset - a bot session sees exactly allow ∩ tree, Kairos sees all.
- * S3: `kairos` is an empty composition and Kairos's sessions join it: their
+ *     the preset - a bot session sees exactly allow ∩ tree, Gravit sees all.
+ * S3: `gravit` is an empty composition and Gravit's sessions join it: their
  *     tool set is byte-identical to the host's global view.
  * Also: the roster lists a broken fixture with its reason and never `_template`;
  * a session created through the gateway with `agentPreset` carries it on its
@@ -1604,8 +1604,8 @@ test("bots smoke: roster, mask, persona, and an inert default on a real tree", {
   try {
     const presets = ctx.get("agentPresets") as { defaultId: string; list(): Promise<{ id: string; broken?: string }[]> };
     const roster = await presets.list();
-    assert.deepEqual(roster.map((p) => p.id).sort(), ["cracked", "kairos", "probe"], "listed - and never _template");
-    assert.equal(presets.defaultId, "kairos");
+    assert.deepEqual(roster.map((p) => p.id).sort(), ["cracked", "gravit", "probe"], "listed - and never _template");
+    assert.equal(presets.defaultId, "gravit");
     assert.match(roster.find((p) => p.id === "cracked")!.broken ?? "", /list/, "a broken preset carries dsh's reason (Rule 5)");
 
     const base = `http://127.0.0.1:${ctx.webServer.port}`;
@@ -1624,14 +1624,14 @@ test("bots smoke: roster, mask, persona, and an inert default on a real tree", {
     const systemPrompt = ctx.get("systemPrompt") as { assemble(context?: { scope?: object }): Promise<Parameters<typeof renderPrompt>[0]> };
     const names = (schemas: { name: string }[]) => schemas.map((s) => s.name).sort();
 
-    /* S3 - Kairos: a session naming no preset joins `kairos` and keeps the host's tools. */
+    /* S3 - Gravit: a session naming no preset joins `gravit` and keeps the host's tools. */
     const k = await call("session.create", { cwd: home });
-    assert.equal(k.agentPreset, "kairos");
-    const kairos = agents.get(String(k.sessionId))!;
-    assert.equal(kairos.session.header.agentPreset, "kairos");
-    assert.deepEqual(names(tools.schemas(kairos as object)), names(tools.schemas()), "the inert default adds and removes nothing");
-    const kairosPrompt = renderPrompt(await systemPrompt.assemble({ scope: kairos as object }));
-    assert.ok(kairosPrompt.includes(readPersona(PERSONA_PATH).split("\n")[0]), "D11 closed: Kairos is told who it is");
+    assert.equal(k.agentPreset, "gravit");
+    const gravit = agents.get(String(k.sessionId))!;
+    assert.equal(gravit.session.header.agentPreset, "gravit");
+    assert.deepEqual(names(tools.schemas(gravit as object)), names(tools.schemas()), "the inert default adds and removes nothing");
+    const gravitPrompt = renderPrompt(await systemPrompt.assemble({ scope: gravit as object }));
+    assert.ok(gravitPrompt.includes(readPersona(PERSONA_PATH).split("\n")[0]), "D11 closed: Gravit is told who it is");
 
     /* S1 + S2 - a bot: the gateway mounts the preset; the mask and the persona hold. */
     const p = await call("session.create", { cwd: join(bots, "probe", "journal"), agentPreset: "probe" });
@@ -1640,8 +1640,8 @@ test("bots smoke: roster, mask, persona, and an inert default on a real tree", {
     assert.equal(probe.session.header.agentPreset, "probe");
     assert.deepEqual(names(tools.schemas(probe as object)), ["ask_user_question", "bash", "read"], "allow ∩ tree, unknown names dropped (S2)");
     const probePrompt = renderPrompt(await systemPrompt.assemble({ scope: probe as object }));
-    assert.ok(probePrompt.includes("You are Probe, a test voice."), "the bot's persona shadows Kairos's (S1)");
-    assert.equal(probePrompt.includes("You are Kairos"), false, "and Kairos's text is gone from the bot's prompt");
+    assert.ok(probePrompt.includes("You are Probe, a test voice."), "the bot's persona shadows Gravit's (S1)");
+    assert.equal(probePrompt.includes("You are Gravit"), false, "and Gravit's text is gone from the bot's prompt");
 
     /* A broken preset fails the session, visibly, and nothing else. */
     const res = await fetch(`${base}/api/session.create`, {
@@ -1658,7 +1658,7 @@ test("bots smoke: roster, mask, persona, and an inert default on a real tree", {
 ```
 
 Run: `cd face && FACE_SMOKE=1 npx tsx --test tests/bots-smoke.test.ts`
-Expected: PASS. **If S1 fails** (the path row does not load): switch `renderComposition` to a package specifier by adding `"exports": { "./bot": "./plugins/bot.js" }` to `face/package.json` and `BOT_PLUGIN_RELATIVE = "kairos-face/bot"`, re-run; record which form worked in the spec's amendments block. **If S2 fails** (the bot sees all tools): stop — the mask cannot be a preset row; redesign §2.2 of the spec before continuing (the plan's remaining tasks do not depend on it, but the product claim does).
+Expected: PASS. **If S1 fails** (the path row does not load): switch `renderComposition` to a package specifier by adding `"exports": { "./bot": "./plugins/bot.js" }` to `face/package.json` and `BOT_PLUGIN_RELATIVE = "gravit-face/bot"`, re-run; record which form worked in the spec's amendments block. **If S2 fails** (the bot sees all tools): stop — the mask cannot be a preset row; redesign §2.2 of the spec before continuing (the plan's remaining tasks do not depend on it, but the product claim does).
 
 - [ ] **Step 2: Write `face/tests/bot-sandbox-smoke.test.ts` (S4 — the recorded probe)**
 
@@ -1812,15 +1812,15 @@ A bot is a dsh **agent preset**: one directory under `bots/` holding `agent.cord
 (the composition dsh mounts), `preset.yml` (name, description), `SOUL.md` (the persona
 SOURCE), `skills/` (its stance pack, a dsh skill root) and `journal/` (the one directory it
 may write, from its home). The face mounts `@deepseek-ai/dsh-agent-presets` with `bots/`
-as its only root (`faceOverlay`, `AGENT_PRESETS_ROW_ID`) and `kairos` — an EMPTY composition —
-as the default every session joins when it names none, so Kairos's own sessions keep the
+as its only root (`faceOverlay`, `AGENT_PRESETS_ROW_ID`) and `gravit` — an EMPTY composition —
+as the default every session joins when it names none, so Gravit's own sessions keep the
 host's flat roster unchanged (`bots-smoke.test.ts` pins the two tool sets equal).
 
-**Kairos is the host plane; a bot is a mask.** Kairos is told who it is by the
+**Gravit is the host plane; a bot is a mask.** Gravit is told who it is by the
 `system-prompt` row's `persona`, set from `dsh/profile/persona.md` by `composeFace`
 (D11 closed; a malformed template refuses the boot with the file named — `readPersona`).
-A bot's composition names one face-owned plugin, `plugins/bot.js` (`kairos-bot`), which
-registers the bot's persona section — shadowing Kairos's for that preset's agents — and an
+A bot's composition names one face-owned plugin, `plugins/bot.js` (`gravit-bot`), which
+registers the bot's persona section — shadowing Gravit's for that preset's agents — and an
 **allow-list** `tools.restrict`. Allow, not deny: dsh admits later-registered globals through
 a deny mask and excludes them through an allow mask, and the tools a voice must never see
 (`agent_<bin>` on connect, `mcp__…__place_order` when the MCP server comes up, `dispatch` in
@@ -1847,7 +1847,7 @@ and the gateway's own `session.create` mounts the preset (no in-process agent cr
 The sidebar buckets a bot's sessions under its name from the session summary's `agentPreset`
 (`grouping.js` `bucketFor`, `BOT_KEY_PREFIX`); the strategy picker never offers a journal as a
 "local folder". Ids are dsh's preset grammar `[a-z0-9][a-z0-9-]*`; the form proposes one from
-the display name (`botId.js`) and the server refuses anything else, plus `kairos` and
+the display name (`botId.js`) and the server refuses anything else, plus `gravit` and
 `_template` (`isBotId`).
 
 | Route | What |
@@ -1873,8 +1873,8 @@ A mask never pulled is presumed decorative.
 **Step 0, no model, no key.** `FACE_SMOKE=1 npm test` boots the real tree three extra times:
 `bots-smoke.test.ts` proves the roster lists a broken fixture with its reason and never
 `_template`, that a session created with `agentPreset` carries it on its header, that the bot
-sees exactly its allow-list ∩ the tree while Kairos sees the host's whole roster unchanged, and
-that the bot's prompt opens with its own persona while Kairos's opens with `persona.md`.
+sees exactly its allow-list ∩ the tree while Gravit sees the host's whole roster unchanged, and
+that the bot's prompt opens with its own persona while Gravit's opens with `persona.md`.
 `bot-sandbox-smoke.test.ts` and `askuser-noclient-smoke.test.ts` print one `observed:` line each
 (S4, S7); their findings are recorded in the spec's amendments block.
 
@@ -1889,7 +1889,7 @@ cache headers.
    `preset.yml`, `SOUL.md`, `skills/README.md`, `journal/notes.md`; the boot log of a restart
    lists the id under `agent presets:`.
 3. `open home`, say something. PASS, part three: the sidebar shows the session under the bot's
-   name, not under `ungrouped`; the reply speaks in the bot's persona, not Kairos's.
+   name, not under `ungrouped`; the reply speaks in the bot's persona, not Gravit's.
 4. Ask the bot to list its tools. PASS, part four: it names the shell, file and web tools and
    `ask_user_question`, and does not name `subagent`, `place_order`, or any `agent_<bin>` — and
    if the alpaca-kit MCP server is connected, it names the market-data reads and not `orders`.
@@ -1900,10 +1900,10 @@ cache headers.
 
 - [ ] **Step 3: `DEVELOPMENT.md`** — one row each (symbols, not lines):
 
-- §4.2 module table: `| \`bots.ts\` | bots = \`bots/<id>/\` agent presets: \`isBotId\`, \`renderComposition\` (persona text written into the composition), \`createBot\`, \`updateSoul\`, \`listBots\` (dsh's roster merged in, \`broken\`/\`listed\`); three routes |`, `| \`persona.ts\` | Kairos's deployment persona: \`readPersona\` validates the strict \`{{}}\` template and refuses the boot on a bad file |`, and a row for `plugins/bot.js`: `| \`plugins/bot.js\` | the \`kairos-bot\` composition plugin: scoped \`deployment:persona\` section + allow-list \`tools.restrict\`, dependency-free (resolved by path from a preset) |`.
+- §4.2 module table: `| \`bots.ts\` | bots = \`bots/<id>/\` agent presets: \`isBotId\`, \`renderComposition\` (persona text written into the composition), \`createBot\`, \`updateSoul\`, \`listBots\` (dsh's roster merged in, \`broken\`/\`listed\`); three routes |`, `| \`persona.ts\` | Gravit's deployment persona: \`readPersona\` validates the strict \`{{}}\` template and refuses the boot on a bad file |`, and a row for `plugins/bot.js`: `| \`plugins/bot.js\` | the \`gravit-bot\` composition plugin: scoped \`deployment:persona\` section + allow-list \`tools.restrict\`, dependency-free (resolved by path from a preset) |`.
 - §4.4 route table: the three bot routes with their status ladders (400 grammar/`{{`, 404, 409, 500 template missing).
 - §4.5 persistent state: `| \`bots/<id>/\` | \`createBot\`, \`updateSoul\` | copied from \`_template\`; \`preset.yml\`, \`SOUL.md\` and the composition's persona row rewritten together; never overwritten by create |`, `| \`dsh/profile/persona.md\` | the operator | read by \`composeFace\` into the \`system-prompt\` row |`.
-- §3: a new `### 3.5 The bot directory contract` in the shape of §3.4: the file list with one parenthetical each; `preset.yml` keys; Naming (`[a-z0-9][a-z0-9-]*`, proposal by `proposeBotId`, `kairos`/`_template` refused); State on the date this lands (`bots/kairos` inert default; `_template` only).
+- §3: a new `### 3.5 The bot directory contract` in the shape of §3.4: the file list with one parenthetical each; `preset.yml` keys; Naming (`[a-z0-9][a-z0-9-]*`, proposal by `proposeBotId`, `gravit`/`_template` refused); State on the date this lands (`bots/gravit` inert default; `_template` only).
 - §7.4 drills table: `| **Bots** — automated (\`bots-smoke\`, \`bot-sandbox-smoke\`, \`askuser-noclient-smoke\`) | roster listing incl. broken; header \`agentPreset\`; mask = allow ∩ tree; persona shadow; inert default; S4/S7 observations | a bot in a room (plan 2) | passes as of <date> |` and `| **Bots** — manual (\`face/README.md\`) | create → home → persona → tools named/not named → \`{{\` refused | | <run/not run> |`.
 - §8 conventions: extend the never-edit bullet with `anything under \`bots/\``; add `- **A bot's mask is visibility, not authority.** Write sentences that say so; the sandbox mode and Gate 2 are the fences.`
 - §10 forward: add `**Rooms** (spec §14 plans 2–4): \`dispatch\`, member sessions with the \`read-only\` pin, the participants strip, the roster's \`bots[]\`, the charter amendment. Done when the live room drill passes.`
@@ -1928,10 +1928,10 @@ with `/tmp/msg.txt`: `docs: bots without rooms - the Bots section and drill, mec
 **Spec coverage (plan 1 scope, spec §14 item 1):**
 - S1 → Task 7 (path-row mount + persona text) with the package-specifier fallback named. ✓
 - S2 → Task 1 (unit) + Task 7 (real tree). ✓
-- S3 → Task 3 (`bots/kairos` = `[]`, boot assertion) + Task 7 (schema equality). ✓
+- S3 → Task 3 (`bots/gravit` = `[]`, boot assertion) + Task 7 (schema equality). ✓
 - S4, S7 → Task 7 probes, recorded in Task 8. ✓
 - S6 → deviation 3: not needed for home sessions; recorded for plan 2. ✓
-- Mount presets → Task 3. Kairos persona (D11) → Tasks 2–3. `bot-mask` → Task 1 (folded into `kairos-bot`, deviation 1). `bots/_template`, `bots/kairos` → Tasks 3–4. Bots roster page + New bot form → Task 6. Home sessions → Task 6 (client) + Task 7 (gateway path proven). §8 tests that need no room → Tasks 1–7. ✓
+- Mount presets → Task 3. Gravit persona (D11) → Tasks 2–3. `bot-mask` → Task 1 (folded into `gravit-bot`, deviation 1). `bots/_template`, `bots/gravit` → Tasks 3–4. Bots roster page + New bot form → Task 6. Home sessions → Task 6 (client) + Task 7 (gateway path proven). §8 tests that need no room → Tasks 1–7. ✓
 - Spec §2.1 "New bot form folds a display name to an id" → `proposeBotId` (Task 4 server, Task 6 client, pinned equal by `botId.test.ts`). ✓
 - Spec §2.2.1 kept/denied families → `DEFAULT_ALLOW` (Task 4), asserted by `bots.test.ts`. ✓
 - Spec §7 home = `journal/` cwd, workspace-write → Task 6 `openBotHome`; the sandbox scope test ("writes to `../SOUL.md` refused") is **not** in this plan: a home session is `workspace-write` with `cwd = journal/`, which the sandbox grants by construction, but proving the refusal needs a bash write through the real sandbox from a session whose cwd is the journal — Task 7's S4 file exercises the read-only case; add the home-scope case to plan 2 alongside the member-session pin. Recorded here so it is not lost.

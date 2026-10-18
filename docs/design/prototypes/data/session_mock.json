@@ -1,5 +1,5 @@
 {
-  "note": "FABRICATED research-session transcript for the conversational Strategy face prototypes - render under SAMPLE marking. The tool-card payloads embed REAL readings copied from market_mock.json (the 2026-07-08 breadth flag day) so the instruments in the timeline are honest; the dialogue itself is invented. Voice registers: operator turns are Chinese in the operator sans voice; Kairos turns are English argued serif; tool cards are machine mono, signed by their producer.",
+  "note": "FABRICATED research-session transcript for the conversational Strategy face prototypes - render under SAMPLE marking. The tool-card payloads embed REAL readings copied from market_mock.json (the 2026-07-08 breadth flag day) so the instruments in the timeline are honest; the dialogue itself is invented. Voice registers: operator turns are Chinese in the operator sans voice; Gravit turns are English argued serif; tool cards are machine mono, signed by their producer.",
   "session": {
     "id": "dsh-s_9f2c41",
     "strategy": "tt-breakout",
@@ -27,7 +27,7 @@
       "danger_rule": "declines led advances in 2 of the last 5 sessions; net new highs negative"
     },
     {
-      "n": 3, "role": "kairos", "t": "09:42",
+      "n": 3, "role": "gravit", "t": "09:42",
       "text": "Both pivots are technically valid - ALAB and ANET cleared their bases on volume. But the tape disagrees with the setup: decliners led 575 to 221 today after 456 to 339 yesterday, and net new highs just went negative for the first time in this window. The doctrine's risk-off signal is two decline-led sessions inside five; we are there. The kill-line on this strategy is a win-rate floor, and entering breakouts into deteriorating breadth is exactly how that floor gets tested. My read: stand aside today, keep both names on the watch list, and let the follow-through day rule re-arm us."
     },
     {
@@ -37,7 +37,7 @@
     {
       "n": 5, "role": "tool", "t": "09:44", "kind": "arena_write",
       "producer": "strategies/tt-breakout/journal.md", "monogram": "TT",
-      "raw": "git 1f3a9e2 - the arena is Kairos's to write; git is the record, not a gate",
+      "raw": "git 1f3a9e2 - the arena is Gravit's to write; git is the record, not a gate",
       "payload": {
         "file": "journal.md",
         "commit": "1f3a9e2",
@@ -69,7 +69,7 @@
       }
     },
     {
-      "n": 8, "role": "kairos", "t": "09:50",
+      "n": 8, "role": "gravit", "t": "09:50",
       "text": "Flag-day entries ran a 29 percent win rate against the 47 percent baseline - negative gross even before costs. Fourteen trades is thin, so treat this as the direction of the effect rather than its size. It is consistent enough with this morning's call that I would codify it: add a breadth veto to the entry rules - no new entries when declines led in two of the last five sessions. That is a THESIS.md rules change, so it is yours to judge. Draft below."
     },
     {
@@ -103,7 +103,7 @@
       }
     },
     {
-      "n": 12, "role": "kairos", "t": "09:54",
+      "n": 12, "role": "gravit", "t": "09:54",
       "text": "Parked and journaled. Watch list carries ALAB and ANET with their pivot levels; I will flag the next follow-through day against this window. Nothing else is actionable today under the veto we just declined to codify - which is the correct kind of irony."
     }
   ]

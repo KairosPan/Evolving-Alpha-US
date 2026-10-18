@@ -129,7 +129,7 @@ growth theme `exhaustion`, momo `washout` ↔ growth `correction`/panic).
 - As **runtime code** it is the wrong layer, and the manuscript forbids it twice:
   - §0.3 (轮回锚点规则): the only source of truth for old→new mapping is Appendix A; live entries
     carry at most a one-line `轮回锚 → A-xx` ID reference, **never inlined judgment**, and **at
-    distillation the anchors are stripped** — "旧动作语义绝不进 Kairos 的上下文". A code-level
+    distillation the anchors are stripped** — "旧动作语义绝不进 Gravit 的上下文". A code-level
     momo→growth mapping table re-imports exactly the momo action-semantics the doctrine bans from
     the growth context.
   - §0.4: a live bridge between the two token spaces is itself a co-residence coupling — it lets
@@ -156,7 +156,7 @@ Rationale, in priority order:
 4. **Seeds-v2 distillation consumes scale/phase tags.** B's scale-keyed tag is the natural target;
    A/C flatten the scale the manuscript deliberately encodes.
 5. **§0.3 is a direct instruction against C-as-code** (strip anchors, never inline old action
-   semantics into Kairos's context).
+   semantics into Gravit's context).
 
 **Sub-decision deferred to P0.3/seeds-v2 build (NOT part of this ratification):** whether the growth
 H expresses scale as (a) a `scale` field beside a per-clock `phase` on the existing

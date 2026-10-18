@@ -21,7 +21,7 @@ First line of the file: the exact `@dsCard` comment your task names.
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KAIROS · ⟨FACE⟩ — R2</title>
+<title>GRAVIT · ⟨FACE⟩ — R2</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2305070b'/%3E%3Cpath d='M8 2 L11 8 L8 14 L5 8 Z' fill='%23c8a552'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="shell.css">
 <style>/* page-local styles only — see the one rule */</style>
@@ -30,7 +30,7 @@ First line of the file: the exact `@dsCard` comment your task names.
 
 <header class="masthead">
   <div class="wrap mast-top">
-    <a class="wordmark" href="landing.html"><span class="dia" aria-hidden="true"></span>KAIROS</a>
+    <a class="wordmark" href="landing.html"><span class="dia" aria-hidden="true"></span>GRAVIT</a>
     <span class="facename">⟨FACE⟩</span>
     <span class="spacer"></span>
     <span class="seg">as of <b id="k-asof" class="mono">—</b></span>
@@ -55,9 +55,9 @@ First line of the file: the exact `@dsCard` comment your task names.
 
 <footer class="foot-band">
   <div class="wrap foot">
-    <span>KAIROS · <b>⟨FACE⟩</b> — round-2 face prototype · zero authority · read-only</span>
+    <span>GRAVIT · <b>⟨FACE⟩</b> — round-2 face prototype · zero authority · read-only</span>
     <span class="spacer"></span>
-    <span>intent · <b>Kairos-Design.md</b></span>
+    <span>intent · <b>Gravit-Design.md</b></span>
     <span>mechanism · <b>the skeleton spec &amp; code</b></span>
   </div>
 </footer>
@@ -77,7 +77,7 @@ Data scripts (relative to `r2/`):
 - `market.html` → `<script src="../data/market_mock.js"></script>` only.
 - `strategy.html` and `account.html` → BOTH, in this order:
   `<script src="../data/market_mock.js"></script>` (masthead bed facts + gate) then
-  `<script src="../data/workbench_mock.js"></script>` (`window.KAIROS_FACES`, FABRICATED —
+  `<script src="../data/workbench_mock.js"></script>` (`window.GRAVIT_FACES`, FABRICATED —
   everything rendered from it carries a SAMPLE stamp).
 
 ## Shell-fill snippet (copy verbatim, first thing in your page script)
@@ -89,7 +89,7 @@ no reading, never fake.
 /* ── shell fill — shared across all R2 faces ── */
 (function(){
   "use strict";
-  var D = window.KAIROS_DATA || null;
+  var D = window.GRAVIT_DATA || null;
   if(!D) return; // dashes stand: no reading, never fake
   function t(id, s){ var el = document.getElementById(id); if(el) el.textContent = s; }
   t("k-asof", D.as_of);
@@ -159,7 +159,7 @@ data's `raw` field via JS where one exists:
 </section>
 ```
 
-**SAMPLE stamps** (engraved voice): every readout rendered from `KAIROS_FACES` or
+**SAMPLE stamps** (engraved voice): every readout rendered from `GRAVIT_FACES` or
 `account_mock` is fabricated. A wholly fabricated panel puts
 `<span class="stamp-plate">sample — fabricated shape</span>` in its `.panel-head` (before
 the trailing eyebrow); a single fabricated readout inside an otherwise-real context gets an

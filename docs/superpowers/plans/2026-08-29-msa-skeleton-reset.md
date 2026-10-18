@@ -1122,10 +1122,10 @@ git commit -m "feat: strategy template, backtest rules, workspace docs"
 
 ---
 
-### Task 10: dsh/ config + skills (mechanics + style-kairos from seeds_v2)
+### Task 10: dsh/ config + skills (mechanics + style-gravit from seeds_v2)
 
 **Files:**
-- Create: `dsh/README.md`, `dsh/profile/cordis.yml`, `dsh/skills/mechanics/backtest-rules/SKILL.md`, `dsh/skills/mechanics/alpaca-kit-guide/SKILL.md`, `dsh/skills/style-kairos/{doctrine,signals,lessons}/SKILL.md`, `scripts/convert_seeds.py`
+- Create: `dsh/README.md`, `dsh/profile/cordis.yml`, `dsh/skills/mechanics/backtest-rules/SKILL.md`, `dsh/skills/mechanics/alpaca-kit-guide/SKILL.md`, `dsh/skills/style-gravit/{doctrine,signals,lessons}/SKILL.md`, `scripts/convert_seeds.py`
 - Delete: `seeds_v2/` (after conversion)
 
 **Interfaces:**
@@ -1135,7 +1135,7 @@ git commit -m "feat: strategy template, backtest rules, workspace docs"
 - [ ] **Step 1: Write scripts/convert_seeds.py**
 
 ```python
-"""One-shot: convert seeds_v2 JSON packs into style-kairos SKILL.md files."""
+"""One-shot: convert seeds_v2 JSON packs into style-gravit SKILL.md files."""
 from __future__ import annotations
 
 import json
@@ -1146,7 +1146,7 @@ STYLE_HEADER = """> **Scope: operator style, not market law.** These are the ope
 > conflict with an entry here, REPORT the conflict; do not silently defer.
 
 """
-ROOT = Path("dsh/skills/style-kairos")
+ROOT = Path("dsh/skills/style-gravit")
 
 
 def main() -> None:
@@ -1188,7 +1188,7 @@ If a JSON field name differs (inspect the files first: `python -c "import json; 
 
 ```bash
 python scripts/convert_seeds.py
-head -30 dsh/skills/style-kairos/doctrine/SKILL.md
+head -30 dsh/skills/style-gravit/doctrine/SKILL.md
 ```
 Expected: 39 doctrine sections, 6 signals, 21 lessons, each file opening with the style-scope header.
 
@@ -1250,7 +1250,7 @@ git rm -r -q seeds_v2
 ```bash
 python -m pytest -q
 git add dsh scripts/convert_seeds.py
-git commit -m "feat: dsh profile template and skills - mechanics plus style-kairos from seeds_v2"
+git commit -m "feat: dsh profile template and skills - mechanics plus style-gravit from seeds_v2"
 ```
 
 ---
