@@ -42,6 +42,7 @@ test("the shipped persona.md is valid and names Gravit", () => {
   const text = readPersona(PERSONA_PATH);
   assert.match(text, /You are Gravit/);
   assert.equal(validatePersonaTemplate(text), undefined);
+  assert.equal(text.includes("through report"), false, "the 0.1.1 report tool left dsh at 0.2.0 (tool-subagent-report, b91e7ce366); the persona must not name it");
 });
 
 /* The validator is only worth its refusal if it is never LOOSER than the
