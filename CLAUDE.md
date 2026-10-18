@@ -15,7 +15,8 @@ are `alpaca_kit` — one Python package, two faces: importable library and MCP s
 |---|---|
 | `Gravit-Design.md` | the product charter — intent, principles, write map, debts, revisit triggers; outranks everything on intent |
 | `DEVELOPMENT.md` | the as-built front/back-end reference — processes, contracts, gates, tests, drills, residuals, forward list; on mechanism the code is the fact and this document follows it |
-| `AGENTS.md` | the map written for Gravit: the strategy contract, bed windows, never-edit list (dsh's instruction loader hands Gravit this file *and* `CLAUDE.md`) |
+| `AGENTS.md` | for coding agents (Claude Code and Codex read it); Gravit does not — see GRAVIT.md |
+| `GRAVIT.md` | the workspace instructions every dsh agent in the tree reads on its first request — facts only, ≤ 4,500 bytes (face/tests/gravit-md.test.ts); the face patches dsh's agent-instructions row to read it and GRAVIT.local.md, nothing else |
 | `ROADMAP.md` | the five-item forward index from the reset plus a built log; `DEVELOPMENT.md` §10 is the ordered detail and cites its items by number |
 | `alpaca_kit/{source,firewall}.py` | MarketDataSource Protocol + FakeSource; the AsOfGuard/GuardedSource lookahead firewall (six surfaces pinned by name in `tests/test_us0_firewall_surfaces.py`) |
 | `alpaca_kit/{alpaca,registry,composite,account}.py` | Alpaca REST + corp-action normalization · source selection · per-capability routing · the paper-pinned trading host (the order functions live here; Gate 1 is in `mcp/tools.py`) |
@@ -25,7 +26,7 @@ are `alpaca_kit` — one Python package, two faces: importable library and MCP s
 | `dsh/` | the harness config: `profile/cordis.yml` template (indicative shape, not a validated dsh config) + `skills/mechanics` (rules, tool guide) + `skills/style-gravit` (operator style). Install is `cd face && npm run setup`, then the operator's rows per `dsh/README.md` |
 | `face/` | gravit-face: Node 22, hosts dsh 0.2.0-rc.2 in-process from profile `face`, serves chat + `/market` + `/account` at 127.0.0.1:3090; `strategies/*` are rostered channels; `src/orders.ts` is Gate 2, the per-order approval card |
 | `face/src/akshare.ts` | project-owned AKShare MCP connection for public A-share queries; composed below operator profile/home patches; no PIT guard; install/version and live-query limits in `face/README.md` |
-| `bots/` | one directory per bot (`_template` is the copy source, `gravit` the inert default, `drill-bull`/`drill-bear` the room drill's two voices), declared by the face as a dsh agent preset (`face/src/bot-presets.ts`, re-declared on every save) — persona + allow-list mask via `face/plugins/bot.js`; in a room (a channel session with bots rostered) `face/src/room.ts` creates one `read-only` member session per bot and Gravit calls `dispatch` |
+| `bots/` | one directory per bot (`_template` is the copy source, `gravit` the default, carrying the face's `gravit.js` row (the date section), `drill-bull`/`drill-bear` the room drill's two voices), declared by the face as a dsh agent preset (`face/src/bot-presets.ts`, re-declared on every save) — persona + allow-list mask via `face/plugins/bot.js`; in a room (a channel session with bots rostered) `face/src/room.ts` creates one `read-only` member session per bot and Gravit calls `dispatch` |
 | `docs/` | `backtest-rules.md` (the five honest-eval rules) · `superpowers/{specs,plans,runbooks}` (per-feature decision history; everything dated 2026-06/07, and `runbooks/p-b-p-c-activation.md`, describes the retired product; `runbooks/2026-09-30-dsh-0.2.0-rc.2-go-live.md` is the operator's go-live procedure) · `research/` (frozen inputs) · `design/prototypes` (face rounds R1–R4) |
 | `tests/` · `face/tests/` | offline pytest, no keys · `node --test` via tsx; `FACE_SMOKE=1` adds the 12 real boots (`room-smoke` and `order-gate-smoke` among them) |
 | `demo/` | git submodule → [linqizhe07/buyer-agent-demo](https://github.com/linqizhe07/buyer-agent-demo), pinned by commit — at 0ef5131 since 2026-10-08, its `main` head after PR #6 (always-on Account, desktop wallet) and PR #7 (Connect an account asks each venue a keyless first question and marks the tiles that refuse this location) merged 2026-10-07 (`git submodule update --init`; own `npm test`). Account-first: `npm run account` puts the user's real exchange, broker, prediction-market and wallet accounts on one page (Portfolio · Markets · Trade) behind owner-signed EIP-712 instructions, always on across restarts (`account:service` is a macOS LaunchAgent), per-agent keys and agent wallets, payments over x402 / MPP / AP2; real orders and moves are ON by default under a $100 per-move cap, `--read-only` turns them off; `npx tsx test/standin/ui-standin.ts --port 4821` is the same page over in-process stand-in venues, no network, no money. The earlier four-venue demo (manifest plugins, mandate → human card → one-shot grant → venue, hash-chained ledger), the wallet skeleton and `--classic` stay runnable and are described in its `docs/earlier-demos.md`, which carries the 回灌 Gravit table. Nothing in `face/` or `dsh/` calls it |
@@ -53,7 +54,7 @@ npm start                   # prints http://127.0.0.1:3090/?token=… — open t
   outside it a snapshot read raises `SnapshotMissingError`, but bar and corp-action reads just
   return empty, so bounding is on you. Neither bed carries **warmup**: long indicators mature
   only from mid-2025 on 2yr and never on broad. Exact dates and the five honest-eval rules:
-  `docs/backtest-rules.md` (`AGENTS.md` carries the same table).
+  `docs/backtest-rules.md` (`GRAVIT.md` carries the same table).
 - **Two order gates, both on the MCP tool surface.** Gate 1 = registration (flag AND keys, in
   `alpaca_kit/mcp/tools.py`); Gate 2 = the face's per-order card (`face/src/orders.ts`), which
   exists only when dsh runs inside the face. Neither is containment — a shell turn can read
@@ -69,4 +70,4 @@ npm start                   # prints http://127.0.0.1:3090/?token=… — open t
   edit, or you drill a stale `chat.js`.
 
 Reading order for a new session: `Gravit-Design.md` §1–§2 → the `DEVELOPMENT.md` section you
-are touching → `AGENTS.md` for what Gravit itself sees.
+are touching → GRAVIT.md for what Gravit itself sees.

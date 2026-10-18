@@ -111,3 +111,5 @@ deck.png
 /docs/superpowers/specs/2026-07-13-p05-prompt-isomorphism-design.md
 /docs/superpowers/specs/2026-07-14-llm-stack-switch-design.md
 /docs/superpowers/specs/2026-07-16-body-six-components-design.md
+# the operator's machine-local instruction overlay for dsh agents (GRAVIT.md's twin)
+GRAVIT.local.md

@@ -1,63 +1,16 @@
-# AGENTS.md — Evolving-Alpha-US workspace
+# AGENTS.md — for coding agents
 
-Three layers: MARKET + ACCOUNT live in the alpaca_kit package; STRATEGY (you) works in
-strategies/.
+This file is read by coding agents working on this repository (Claude Code and Codex read it).
+The research agent, Gravit, does not: dsh hands it `GRAVIT.md` and nothing else.
 
-- alpaca_kit/ — data + account library AND the MCP server you already have tools from.
-  For backtests, import it directly (alpaca_kit.replay.replay_days); MCP tools are for
-  interactive queries only. Prices are RAW/unadjusted. The PIT guard is the caller's job:
-  replay_days and the MCP tools wrap it for you, a bare make_source() does NOT — it returns
-  a RAW source by contract. Never read one directly in a backtest; go through replay_days,
-  or wrap it yourself in GuardedSource with an AsOfGuard for the day.
-- AKShare MCP (`mcp__akshare__*`) — A-share and other public market queries in
-  Gravit. Use `akshare_discover` to find the method and its category tool. These
-  vendor reads have NO PIT guard; do not use them as replay/backtest evidence.
-  `stock_zh_a_spot_tx` is the verified Tencent A-share snapshot method; Eastmoney
-  and Xueqiu endpoints may fail or require a valid login. Check returned errors,
-  timestamps and `truncated`: the default response limit is 500 rows, so a
-  truncated result is not the whole market. Retrieval time is not exchange time.
-- strategies/<name>/ — one directory per strategy: THESIS.md, screen.py, backtest.py,
-  backtests/, journal.md, status.yaml. Lifecycle, declared in status.yaml:
-  idea | researching | validated | paper | retired — paper is a reserved forward-testing
-  state, meaningful only once the order gate opens. status.yaml also carries three optional
-  headline keys the face's channel landing page renders when present: one_line (the current
-  conclusion, one sentence), next (the next step), numbers (free key-value figures) — none
-  required; fill them in when there is something worth a line. Copy strategies/_template to start one,
-  named as the face's create box names them: opening on a letter or digit in any script, then letters,
-  digits, - and _, at most 41 code points, no spaces or dots. The name becomes a path you write into
-  shell by hand and has to stay one word: a space makes zsh read `cd x y` as its two-argument form (x
-  replaced by y in $PWD) — usually an error, but where the substituted path exists it lands you in the
-  wrong directory with exit 0 (`cd aaa/bbb/ccc; cd bbb xxx` ends in `aaa/xxx/ccc`).
-  Commit your own iterations; git log is the audit trail.
-  A new strategy starts with one batched ask_user_question, not with code: the thesis
-  and the falsification terms that would retire it, which bed and which window (warmup
-  moves the honest start), and what the operator wants measured. A brief that already
-  answers those is the answer. Decide the rest yourself.
-- data/pit/ — offline PIT beds (~800 symbols). Two usable windows, and only these:
-  data/pit/2yr = 2024-06-03 .. 2026-07-09 (526 trading days), data/pit/broad =
-  2025-11-17 .. 2026-03-27 (90 days). Each bed's trading_calendar() runs back to 2016 with no
-  snapshots there, and the beds fail differently outside the window: a snapshot read raises
-  SnapshotMissingError, while bar and corp-action reads return an EMPTY frame silently. Stay
-  inside the window. The beds also carry NO warmup: bars start AT the window start, so long
-  indicators are blind at first. The full window is replayable, but on 2yr the 200DMA is valid
-  only from 2025-03-20 and 52-week metrics from 2025-06-04 (trend_template returns zero names
-  before 2025-06-05); broad, at 90 days, never satisfies either. Set
-  ALPHA_PIT_ROOT=data/pit/2yr (plus ALPHA_DATA_SOURCE=snapshot) for offline work; both are
-  resolved against the CWD, so run from the repo root.
-- docs/backtest-rules.md — the five honest-eval rules. Every backtest follows them.
-- Tests: python -m pytest (offline, no keys; -q is already the default). Keep it green.
-- Rooms. A channel whose roster has bots is a room, and you organize it. `dispatch({to, mode,
-  brief, reason})` starts a round: `to` are bot ids from this channel's roster (the refusal names
-  the roster), `parallel` lets every voice answer independently — use it first on a fresh question —
-  and `serial` lets each later voice see the earlier answers. The call returns at once; END YOUR
-  TURN after it. You are woken once when the round ends, with who answered and who passed; every
-  answer is in this conversation, attributed to its voice. Then name the disagreements before you
-  conclude; the conclusion is yours, and a voice is evidence, never a verdict. Caps per operator
-  message: 3 rounds, 10 bot messages, 2 peer continuations per round. The operator's `@<bot>`
-  reaches a voice without you and you see it on your next wake. An `@` that reaches you as an
-  ordinary prompt named nobody on this roster — answer it yourself; no voice is coming. Dispatch
-  grants a voice nothing: its tools are its mask, its writes are refused by its sandbox, its orders
-  meet the same gate you do.
-
-Never edit: data/pit/ contents, dsh/ profile installed copies, anything under bots/ (the operator's
-voices; propose a bot in conversation, never create or change one), or anything under docs/research/.
+- Read `CLAUDE.md` first — the map, the commands, the gotchas. Depth: `DEVELOPMENT.md`
+  (mechanism), `Gravit-Design.md` (intent), `face/README.md` (the face's contracts and drills).
+- `GRAVIT.md` is a product file: every dsh agent in the tree reads it on its first request.
+  Change it as you would change a prompt — deliberately, inside its byte budget, with
+  `face/tests/gravit-md.test.ts` green.
+- `strategies/` is Gravit's arena. `bots/`, `roles/`, `data/pit/` and `docs/research/` are the
+  operator's: do not edit them unless asked.
+- Keep both suites green: `python -m pytest` at the root; `npm test && npm run typecheck` in
+  `face/`, plus `FACE_SMOKE=1 npm test` after any change under `face/src`, `face/plugins` or to
+  the dsh pins.
+- Commit messages go in a file and through `git commit -F`; never backticks or `$()` in `-m`.
