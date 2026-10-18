@@ -166,3 +166,13 @@ test("structured account strings remain literal data, never parsed as markup or 
   normalized!.evidence.push("local display change");
   assert.equal(literal.evidence.length, 1, "normalization does not mutate the original event");
 });
+
+test("foldMembers: a room recorded under the pre-rename id still folds its members, and its forks stay out", () => {
+  const { rooms, members } = foldMembers([
+    { sessionId: "legacy-room", agentPreset: "kairos" },
+    { sessionId: "m-legacy", parentSessionId: "legacy-room", agentPreset: "buffett" },
+    { sessionId: "legacy-fork", parentSessionId: "legacy-room", agentPreset: "kairos" },
+  ]);
+  assert.deepEqual(rooms.get("legacy-room")?.map((r) => r.sessionId), ["m-legacy"]);
+  assert.deepEqual([...members], ["m-legacy"]);
+});

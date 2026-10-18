@@ -1,6 +1,9 @@
 /** Pure view and persistence helpers for a market-qualified personal watchlist. */
 
 export const STORAGE_KEY = "gravit.market.watchlist.v1";
+/** Where a browser kept its list before the 2026-10-08 rename: read while the new
+ *  key is absent, never written or deleted (rename spec 2026-10-18 §5.2). */
+export const LEGACY_STORAGE_KEY = "kairos.market.watchlist.v1";
 export const MARKET_INFO = Object.freeze({
   us: Object.freeze({ label: "美股", currency: "USD" }),
   cn: Object.freeze({ label: "A 股", currency: "CNY" }),
@@ -68,6 +71,7 @@ export function readWatchlist(storage) {
   try {
     if (!storage) throw new Error("Storage unavailable");
     raw = storage.getItem(STORAGE_KEY);
+    if (raw === null) raw = storage.getItem(LEGACY_STORAGE_KEY);
   } catch {
     return { items: [], error: "无法读取本机自选列表。" };
   }

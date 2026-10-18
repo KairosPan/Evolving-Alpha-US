@@ -60,7 +60,7 @@ import { ARCHIVED_KEY, bucketFor, isBotKey, UNGROUPED_KEY } from "./grouping.js"
 import { proposeBotId } from "./botId.js";
 import { botModelChoices, botSettingsPayload, botToolLabel, draftBotSoul, normalizeBotModel } from "./botSettings.js";
 import { foldChannelName } from "./channelName.js";
-import { HOST_NAME, speakerFor } from "./speaker.js";
+import { HOST_NAME, isHostPreset, speakerFor } from "./speaker.js";
 import { composeSubagentCatalog, isSubagentRow, normalizeSubagentCatalog, subagentAddress, subagentControls, subagentResult } from "./subagents.js";
 import { avatarGlyph, foldMembers, gateSpeaker, isMemberSession, isMentionText, normalizeRoomDiscussion, roomAnswerDisplay, roundEndLine, stripChips } from "./room.js";
 
@@ -358,7 +358,7 @@ function renderSubagents() {
   const toolbar = el("div", "subagent-toolbar");
   toolbar.append(subagentButton("刷新状态", () => loadSubagentInfo()));
   const summary = lastSessions.find((s) => String(s.sessionId) === activeSession);
-  if (!isSubagentSession(activeSession) && !memberFold.members.has(activeSession) && (!summary?.agentPreset || summary.agentPreset === "gravit")) {
+  if (!isSubagentSession(activeSession) && !memberFold.members.has(activeSession) && (!summary?.agentPreset || isHostPreset(summary.agentPreset))) {
     toolbar.append(subagentButton("委派子任务", () => {
       const input = /** @type {HTMLInputElement} */ ($("#composer-input"));
       if (input.value.trim() === "") input.value = "请委派一个临时子任务，任务是：";
@@ -531,7 +531,7 @@ function renderStrip() {
   if (roomInfo === null || (roomInfo.roster.length === 0 && !isRoom)) { strip.hidden = true; strip.replaceChildren(); return; }
   const running = lastSessions.find((s) => String(s.sessionId) === activeSession)?.running === true;
   const chips = stripChips({
-    roster: roomInfo.roster.filter((b) => b.id !== "gravit"),
+    roster: roomInfo.roster.filter((b) => !isHostPreset(b.id)),
     projection,
     members: roomInfo.members,
     gates: new Set([...gates.values()].map((g) => g.sessionId)),
@@ -2415,7 +2415,7 @@ async function loadBotIndex() {
  * `null` for Gravit and for a preset-less session. */
 function botOf(summary) {
   const id = summary?.agentPreset;
-  if (typeof id !== "string" || id === "gravit") return null;
+  if (typeof id !== "string" || isHostPreset(id)) return null;
   const bot = botIndex.find((b) => b.id === id);
   return { id, label: bot?.name ?? id };
 }

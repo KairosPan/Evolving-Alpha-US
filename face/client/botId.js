@@ -4,7 +4,7 @@
  * a non-empty proposal is always an id the server accepts).
  *
  * WHAT IT IS NOT. It is not a fence. `createBot` (src/bots.ts) keeps the only
- * gate: dsh's preset grammar `[a-z0-9][a-z0-9-]*`, minus `gravit` and
+ * gate: dsh's preset grammar `[a-z0-9][a-z0-9-]*`, minus the two host ids and
  * `_template`. This runs before the POST so the operator sees the id a name
  * becomes and can type another; a name with no ASCII letters proposes
  * nothing, and the form then requires the id field. Fail-closed.

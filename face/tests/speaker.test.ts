@@ -21,7 +21,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 // speaker.js is plain ESM JS (it ships to the browser); tsconfig `allowJs`
 // lets this test import it, the same way botId.test.ts imports botId.js.
-import { HOST_NAME, speakerFor } from "../client/speaker.js";
+import { HOST_NAME, HOST_PRESETS, isHostPreset, speakerFor } from "../client/speaker.js";
 
 /** A roster in the shape `/data/bots.json` returns. */
 const bots = [
@@ -77,7 +77,7 @@ test("the FALLBACK is never the host: no bot is labelled Gravit by DEFAULT", () 
   // Every id here is dsh's preset grammar `[a-z0-9][a-z0-9-]*` minus `gravit`
   // — the closed domain `createBot` (src/bots.ts) admits. The id fallback is
   // safe precisely because a lowercase-only id can never BE the host's name.
-  const presets = ["ghost", "buffett-type", "nameless", "spaced", "gravit-2", "gravits", "x", "9lives"];
+  const presets = ["ghost", "buffett-type", "nameless", "spaced", "gravit-2", "gravits", "kairos-2", "kaiross", "x", "9lives"];
   for (const preset of presets) {
     const rosters = [bots, [], [{ id: preset, name: "" }], [{ id: preset, name: HOST_NAME + " Jr" }]];
     for (const roster of rosters) {
@@ -88,4 +88,18 @@ test("the FALLBACK is never the host: no bot is labelled Gravit by DEFAULT", () 
   // and then Gravit is what the transcript writes. That is the roster's own
   // choice, deliberate and visible, not this function falling back to it.
   assert.equal(speakerFor({ agentPreset: "x" }, [{ id: "x", name: HOST_NAME }]), HOST_NAME);
+});
+
+test("isHostPreset: exactly gravit and its pre-rename id kairos", () => {
+  assert.deepEqual([...HOST_PRESETS], ["gravit", "kairos"]);
+  assert.equal(HOST_NAME, "Gravit");
+  for (const id of HOST_PRESETS) assert.equal(isHostPreset(id), true, id);
+  for (const id of ["gravit-2", "gravits", "kairos-2", "kaiross", "Gravit", " gravit", "", null, undefined, 42, {}]) {
+    assert.equal(isHostPreset(id), false, JSON.stringify(id));
+  }
+});
+
+test("a session recorded under the pre-rename id speaks as the host", () => {
+  assert.equal(speakerFor({ agentPreset: "kairos" }, bots), HOST_NAME);
+  assert.equal(speakerFor({ agentPreset: "kairos" }, [{ id: "kairos", name: "Impostor" }]), HOST_NAME);
 });

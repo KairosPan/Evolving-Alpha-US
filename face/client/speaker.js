@@ -30,9 +30,20 @@
 /** The host agent's display name — the label for every session no bot owns. */
 export const HOST_NAME = "Gravit";
 
+/** The preset ids that ARE the host: `gravit`, and `kairos` — the same agent's
+ *  id before the 2026-10-08 rename, which archived sessions still carry and the
+ *  face declares as a hidden alias (rename spec 2026-10-18 §5.1). */
+export const HOST_PRESETS = Object.freeze(["gravit", "kairos"]);
+
+/** Whether a preset id is the host's.
+ * @param {unknown} id @returns {boolean} */
+export function isHostPreset(id) {
+  return typeof id === "string" && HOST_PRESETS.includes(id);
+}
+
 /**
  * The voice a session speaks with: a bot's display name when `agentPreset`
- * names one (never the default `gravit`, and never a blank string — a header
+ * names one (never a host id, and never a blank string — a header
  * field present but empty is no preset at all), the bot's id when the roster
  * has no name for it, else Gravit.
  * @param {{agentPreset?: unknown}|null|undefined} summary - the session
@@ -43,7 +54,7 @@ export const HOST_NAME = "Gravit";
  */
 export function speakerFor(summary, bots) {
   const id = summary?.agentPreset;
-  if (typeof id !== "string" || id.trim() === "" || id === "gravit") return HOST_NAME;
+  if (typeof id !== "string" || id.trim() === "" || isHostPreset(id)) return HOST_NAME;
   const bot = (Array.isArray(bots) ? bots : []).find((b) => b?.id === id);
   const name = typeof bot?.name === "string" ? bot.name.trim() : "";
   return name === "" ? id : name;

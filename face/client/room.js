@@ -17,8 +17,10 @@
  * @module
  */
 
+import { isHostPreset } from "./speaker.js";
+
 /** A dozen distinguishable shapes; a bot keeps its glyph for life (a hash of its id). */
-export const GLYPHS = ["◆", "●", "▲", "■", "◇", "○", "△", "□", "⬟", "⬢", "✦", "✧"];
+export const GLYPHS =["◆", "●", "▲", "■", "◇", "○", "△", "□", "⬟", "⬢", "✦", "✧"];
 
 /** @param {string} id @returns {string} */
 export function avatarGlyph(id) {
@@ -32,8 +34,8 @@ export const MENTION_RE = /(^|\s)@[^\s@]/u;
 /** @param {string} text @returns {boolean} */
 export const isMentionText = (text) => MENTION_RE.test(text);
 
-/** Whether a row runs the host: no preset, or the inert default. @param {{agentPreset?: unknown}} row */
-const isHost = (row) => typeof row.agentPreset !== "string" || row.agentPreset === "" || row.agentPreset === "gravit";
+/** Whether a row runs the host: no preset, or a host id (the default or its pre-rename alias). @param {{agentPreset?: unknown}} row */
+const isHost = (row) => typeof row.agentPreset !== "string" || row.agentPreset === "" || isHostPreset(row.agentPreset);
 
 /**
  * The fold rule (spec §2.4 as plan 2 rebuilt it): a session is a member of

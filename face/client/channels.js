@@ -7,6 +7,7 @@
  * @module
  */
 import { renderMarkdown } from "./markdown.js";
+import { isHostPreset } from "./speaker.js";
 
 /** @param {string} tag @param {string|null} [cls] @param {string} [text] */
 const el = (tag, cls, text) => {
@@ -100,7 +101,7 @@ export function renderChannelPage(inner, payload, actions) {
   const bchips = el("div", "ch-chips");
   bchips.append(el("span", "ch-chips-label", "bots in this channel"));
   const rosterBots = Array.isArray(payload.bots) ? payload.bots : [];
-  const allBots = (Array.isArray(payload.allBots) ? payload.allBots : []).filter((b) => b.id !== "gravit");
+  const allBots = (Array.isArray(payload.allBots) ? payload.allBots : []).filter((b) => !isHostPreset(b.id));
   const known = new Set(allBots.map((b) => b.id));
   for (const bot of allBots) {
     const on = rosterBots.includes(bot.id);
