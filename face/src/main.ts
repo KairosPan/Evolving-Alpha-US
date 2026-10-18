@@ -30,7 +30,7 @@ import { installRoom, registerRoomRoutes, type RoomContextLike } from "./room.ts
 /** Diagnostic label, the same string boot.ts uses for `BIN`. Not imported
  * because boot.ts does not export it, and it is a label rather than a contract:
  * what matters is that a stack from the face never reads as one from `dsh`. */
-const BIN = "kairos-face";
+const BIN = "gravit-face";
 
 /* `||`, not `??`, on both — mirroring setup.ts. An env var exported empty is
  * one the operator meant to leave at its default, and `??` would take it
@@ -210,7 +210,7 @@ const sessions = booted.ctx.get("sessions") as {
  * their `agentPreset` field at 0.2.0 (NEW packages/api/session-controller/src/
  * types.ts:177-188), and a cold pre-upgrade session's projection cache holds
  * only the title hint, so the persisted header is the client's fallback for
- * bucketing bots vs Kairos (PLAN S8 "Server support for the client":
+ * bucketing bots vs Gravit (PLAN S8 "Server support for the client":
  * `/data/channels.json` gains `presets: Record<sessionId, agentPreset>` built
  * from these heads). A header's preset is the one it was CREATED with; a live
  * re-selection shows in the projection, which the client prefers. */
@@ -289,7 +289,7 @@ disposeRoom = () => { room.dispose(); botRuntime.dispose(); };
 registerRoomRoutes(booted.ctx.webServer, room);
 /* The master rail's feeds: in-process reads of the booted tree (skills /
  * tools / loader), plus the local-agent roster — awaited, because every agent
- * already on the roster is registered as a tool for Kairos before the face
+ * already on the roster is registered as a tool for Gravit before the face
  * reports itself up. */
 await registerPanelRoutes(booted.ctx.webServer, deps);
 /* Every route is mounted: only now may the gateway admit a browser stream

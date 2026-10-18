@@ -13,7 +13,7 @@ const catalog = { parentAvailable: true, entries: [
 
 test("subagents remain separate from room members and ordinary forks", () => {
   assert.equal(isSubagentRow({ parentSessionId: "p", agentPreset: "bot" }), false);
-  assert.equal(isSubagentRow({ parentSessionId: "p", agentPreset: "kairos" }), false);
+  assert.equal(isSubagentRow({ parentSessionId: "p", agentPreset: "gravit" }), false);
   assert.equal(isSubagentRow({ origin: "subagent", parentSessionId: "p" }), true);
 });
 test("catalog keeps diagnostics and makes unknown schemas visible but uncontrollable", () => {
@@ -76,7 +76,7 @@ const rows = [
   { sessionId: "live", origin: "subagent", parentSessionId: "parent", agentAvailable: true, running: true },
   { sessionId: "once", origin: "subagent", parentSessionId: "parent", agentAvailable: false, running: false },
   { sessionId: "grandchild", origin: "subagent", parentSessionId: "live", agentAvailable: false, running: false },
-  { sessionId: "fork", parentSessionId: "once", agentPreset: "kairos" }, // a fork, not a subagent: not a child of `once`
+  { sessionId: "fork", parentSessionId: "once", agentPreset: "gravit" }, // a fork, not a subagent: not a child of `once`
 ];
 
 test("compose: catalog order, modes and labels; activity from the child's running row; hasChildren from subagent rows", () => {
@@ -306,7 +306,7 @@ function viewClient(rows: Record<string, unknown>[], extra: Record<string, unkno
   const failures: unknown[] = [];
   const call: Call = async (endpoint, args) => {
     wireLog.log.push(`call:${endpoint}`);
-    if (endpoint === "session/create") return { sessionId: "fresh", agentPreset: "kairos" };
+    if (endpoint === "session/create") return { sessionId: "fresh", agentPreset: "gravit" };
     if (endpoint === "session/projections") return { asOfSeq: 7, values: { title: "t" } };
     if (endpoint === "session/page") return { records: [{ type: "event", event: { seq: 7, type: "turn/end", data: { turn: 1 } } }], hasMore: false };
     if (endpoint === "commands/execute") return undefined;

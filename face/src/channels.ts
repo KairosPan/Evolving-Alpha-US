@@ -2,7 +2,7 @@
  *
  * A channel is one directory given an identity by the host. The directory is
  * the truth of EXISTENCE — `readdir` decides what a channel is, so a channel
- * Kairos makes with a plain `mkdir` is a channel on the next listing and git
+ * Gravit makes with a plain `mkdir` is a channel on the next listing and git
  * stays the ledger. The dsh workspace registry adds IDENTITY on top: a stable
  * UUID, a display title decoupled from the folder name, durable session
  * membership, and order. See docs/superpowers/specs/2026-09-03-channels-design.md.
@@ -22,7 +22,7 @@ import { ROOM_CAPS } from "./room-rules.ts";
 /** Diagnostic label, the same string every other `${BIN}:`-prefixed line in this
  * program uses (`roster.ts:24`, `main.ts:26`) - copied rather than imported,
  * because it is a label rather than a contract. */
-const BIN = "kairos-face";
+const BIN = "gravit-face";
 
 /** The copy source every new channel starts from, and never a channel. */
 const TEMPLATE = "_template";

@@ -110,7 +110,7 @@ test("init ignores dsh 0.2's (header, inheritedEventCount) arguments", () => {
 });
 
 test("an `@` folded while a round is open joins that round instead of wiping it", () => {
-  /* `say` posts the operator's message and it waits in the outbox while Kairos
+  /* `say` posts the operator's message and it waits in the outbox while Gravit
    * is mid-turn, so the log can carry it AFTER a dispatch that came later in
    * wall time (room.ts holds the same twin on the bus). */
   const s = fold([
@@ -129,7 +129,7 @@ test("a second dispatch bumps the round and forgets who was in the last one", ()
   assert.deepEqual(s.members, { speculator: { state: "called" } });
 });
 
-test("Kairos's own turn boundaries drive `organizing` only once the session is a room", () => {
+test("Gravit's own turn boundaries drive `organizing` only once the session is a room", () => {
   const room = fold([dispatchCall(["buffett"], "parallel"), ev("turn/end", { turn: 1, reason: { kind: "completed" } })]);
   assert.equal(room.organizing, false);
   const again = applyRoomEvent(room, ev("turn/start", { turn: 2 }));

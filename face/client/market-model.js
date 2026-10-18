@@ -1,6 +1,6 @@
 /** Pure view and persistence helpers for a market-qualified personal watchlist. */
 
-export const STORAGE_KEY = "kairos.market.watchlist.v1";
+export const STORAGE_KEY = "gravit.market.watchlist.v1";
 export const MARKET_INFO = Object.freeze({
   us: Object.freeze({ label: "美股", currency: "USD" }),
   cn: Object.freeze({ label: "A 股", currency: "CNY" }),

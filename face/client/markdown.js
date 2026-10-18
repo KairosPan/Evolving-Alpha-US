@@ -1,8 +1,8 @@
-/** Markdown for Kairos bubbles, DOM-built.
+/** Markdown for Gravit bubbles, DOM-built.
  *
- * Kairos answers in markdown — headings, bold tickers, GFM tables — and a
+ * Gravit answers in markdown — headings, bold tickers, GFM tables — and a
  * plain-text bubble shows the asterisks and pipes literally. This renders the
- * subset Kairos actually writes, with the same discipline as the rest of the
+ * subset Gravit actually writes, with the same discipline as the rest of the
  * client: every string lands via `textContent`, no `innerHTML` path at all, so
  * nothing in the text can smuggle markup. Anything outside the subset falls
  * through as literal text inside a paragraph — degraded, never dropped.

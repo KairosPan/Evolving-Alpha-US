@@ -41,7 +41,7 @@
  * (connection/src/browser-auth.ts:238-280; rpc-host.ts:104-113;
  * gateway/src/index.ts:253-257). Same-origin fetch and WebSocket send it with
  * no code here; its absence is a 401, which `call` reports as "open the URL
- * kairos-face printed".
+ * gravit-face printed".
  * @module
  */
 
@@ -327,7 +327,7 @@ export async function call(endpoint, args = {}) {
     // Admission runs before any RPC handling (rpc-host.ts:104-113, 181-187): no
     // valid browser-session cookie. Only the tokenized URL can mint one.
     throw callError(
-      `${endpoint}: not signed in - open the URL kairos-face printed when it started (…/?token=…); ` +
+      `${endpoint}: not signed in - open the URL gravit-face printed when it started (…/?token=…); ` +
         "that visit sets a 30-day cookie for this host:port",
       { status: 401 },
     );

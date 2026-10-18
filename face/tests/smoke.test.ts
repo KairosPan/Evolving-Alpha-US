@@ -194,7 +194,7 @@ async function openEvents(port: number, cookie: string): Promise<EventsClient> {
   return { clientId: String(ready.clientId), next, close: () => socket.close() };
 }
 
-test("boot smoke: sign-in gates /api and the mux, the pages and /data answer, Kairos can ask, both fences hold", { skip: gated && "set FACE_SMOKE=1" }, async () => {
+test("boot smoke: sign-in gates /api and the mux, the pages and /data answer, Gravit can ask, both fences hold", { skip: gated && "set FACE_SMOKE=1" }, async () => {
   const home = mkdtempSync(join(tmpdir(), "face-smoke-"));
   setupFaceProfile(home);
   const patchPath = join(home, "profiles", "face", "cordis.patch.yml");
@@ -213,7 +213,7 @@ test("boot smoke: sign-in gates /api and the mux, the pages and /data answer, Ka
     const port = ctx.webServer.port;
     const base = `http://127.0.0.1:${port}`;
 
-    /* Kairos's VOICE, drilled. `bootFace` already refuses a tree missing the
+    /* Gravit's VOICE, drilled. `bootFace` already refuses a tree missing the
      * `userQuestions` SERVICE; this is its model-facing half, and the two fail
      * INDEPENDENTLY - dsh-base mounts the service and no tool row for it, so
      * the face booted healthy, offered the model its whole toolset, and could
@@ -280,7 +280,7 @@ test("boot smoke: sign-in gates /api and the mux, the pages and /data answer, Ka
     const index = await fetch(`${base}/`, { headers: { cookie }, redirect: "manual" });
     assert.equal(index.status, 200);
     assert.equal(index.headers.get("content-type"), "text/html; charset=utf-8");
-    assert.match(await index.text(), /KAIROS/);
+    assert.match(await index.text(), /GRAVIT/);
 
     // the `prefix /client` route - registerStatic's other half, and the only
     // place it is exercised against a real webserver rather than a recorder.
@@ -393,7 +393,7 @@ test("boot smoke: sign-in gates /api and the mux, the pages and /data answer, Ka
     for (const path of ["/market", "/account"]) {
       const page = await fetch(`${base}${path}`);
       assert.equal(page.status, 200, path);
-      assert.match(await page.text(), /KAIROS/);
+      assert.match(await page.text(), /GRAVIT/);
     }
 
     /* 8. The data plumbing, end to end through a STUB producer: route → cache →

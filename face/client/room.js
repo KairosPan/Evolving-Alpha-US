@@ -33,13 +33,13 @@ export const MENTION_RE = /(^|\s)@[^\s@]/u;
 export const isMentionText = (text) => MENTION_RE.test(text);
 
 /** Whether a row runs the host: no preset, or the inert default. @param {{agentPreset?: unknown}} row */
-const isHost = (row) => typeof row.agentPreset !== "string" || row.agentPreset === "" || row.agentPreset === "kairos";
+const isHost = (row) => typeof row.agentPreset !== "string" || row.agentPreset === "" || row.agentPreset === "gravit";
 
 /**
  * The fold rule (spec §2.4 as plan 2 rebuilt it): a session is a member of
  * `P` when its header names `P` as parent, it has no `origin`, its preset is
  * a bot, and `P` itself is in the list running the host. Forks carry the
- * source's preset (`kairos` for a room) and subagent children carry
+ * source's preset (`gravit` for a room) and subagent children carry
  * `origin`, so both stay out; a member of a member is not a member.
  * @param {ReadonlyArray<{sessionId: unknown, parentSessionId?: unknown, agentPreset?: unknown, origin?: unknown}>} items
  * @returns {{rooms: Map<string, any[]>, members: Set<string>}} rooms → their member rows, in list order; every member id.
@@ -73,7 +73,7 @@ export function foldMembers(items) {
  * a member too (a member's cwd IS the channel's, so it resolves to the same
  * channel and returns the same roster), while the member's own projection
  * carries no members - so the strip would read the whole roster `idle` and
- * Kairos `organizing` whenever the member itself is mid-turn.
+ * Gravit `organizing` whenever the member itself is mid-turn.
  * @param {unknown} projection - the session's own `room` projection value.
  * @param {ReadonlySet<string>} memberIds - every id the header fold made a member.
  * @param {string|null|undefined} sessionId - the session on screen.
@@ -84,16 +84,16 @@ export function isMemberSession(projection, memberIds, sessionId) {
   return typeof sessionId === "string" && memberIds.has(sessionId);
 }
 
-/** @typedef {{id: string, name: string, state: string, kairos?: boolean, broken?: string, sessionId?: string}} Chip */
+/** @typedef {{id: string, name: string, state: string, gravit?: boolean, broken?: string, sessionId?: string}} Chip */
 
 /**
- * The participants strip (spec §6): Kairos first, then every rostered bot,
+ * The participants strip (spec §6): Gravit first, then every rostered bot,
  * then any member the roster no longer carries (`left`). States, in
  * precedence: a pending gate on the member's session → `waiting for you`;
  * while `called`, the live fine state if any; else the projection's coarse
- * state; else `idle`. Kairos is `organizing` while the projection says so,
+ * state; else `idle`. Gravit is `organizing` while the projection says so,
  * or - before the session is a room - while the list says it is running.
- * @param {{roster: ReadonlyArray<{id: string, name: string, broken?: string}>, projection: any, members: Record<string, {sessionId?: string, name?: string}>, gates: Set<string>, fine: Map<string, string>, running: boolean, kairosName?: string}} input
+ * @param {{roster: ReadonlyArray<{id: string, name: string, broken?: string}>, projection: any, members: Record<string, {sessionId?: string, name?: string}>, gates: Set<string>, fine: Map<string, string>, running: boolean, gravitName?: string}} input
  * @returns {Chip[]}
  */
 export function stripChips(input) {
@@ -101,7 +101,7 @@ export function stripChips(input) {
   const projMembers = room !== null && room.members !== null && typeof room.members === "object" ? room.members : {};
   const organizing = room !== null ? room.organizing === true : input.running === true;
   /** @type {Chip[]} */
-  const chips = [{ id: "kairos", name: input.kairosName ?? "Kairos", state: organizing ? "organizing" : "idle", kairos: true }];
+  const chips = [{ id: "gravit", name: input.gravitName ?? "Gravit", state: organizing ? "organizing" : "idle", gravit: true }];
   const stateOf = (bot) => {
     const sessionId = input.members[bot]?.sessionId ?? projMembers[bot]?.sessionId;
     if (sessionId !== undefined && input.gates.has(sessionId)) return { state: "waiting for you", sessionId };

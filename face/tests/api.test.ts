@@ -136,7 +136,7 @@ test("a 401 says to open the printed URL: the cookie is minted only by the token
       await assert.rejects(
         () => call("session/list", { _request: {} }),
         (err: Error & { status?: number }) => {
-          assert.match(err.message, /not signed in - open the URL kairos-face printed/);
+          assert.match(err.message, /not signed in - open the URL gravit-face printed/);
           assert.match(err.message, /\?token=/);
           assert.equal(err.status, 401);
           return true;
@@ -1018,7 +1018,7 @@ test("the page: answers that won across a reconnect read as the operator's choic
     eventsGeneration: 0, activeSession: "s1", convRows: new Map(), mux: null,
     el: (tag: string, cls?: string, text?: string) => new FakeNode(tag, cls, text),
     dash: (value: unknown) => (typeof value === "string" && value !== "" ? value : "—"),
-    gateWho: () => "Kairos",
+    gateWho: () => "Gravit",
     status: (text: string) => { statuses.push(text); },
     failed: (err: unknown) => { statuses.push(`failed: ${String(err)}`); },
     renderStrip: () => {}, scheduleListRefresh: () => {}, memberSessionIds: () => new Set(), waitingChip: () => new FakeNode("span"),

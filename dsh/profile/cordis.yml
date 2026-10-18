@@ -33,7 +33,7 @@ skills:
   # their parent: pointing at dsh/skills alone would look for dsh/skills/mechanics/SKILL.md.
   paths:
     - <ABSOLUTE PATH TO THIS REPO>/dsh/skills/mechanics
-    - <ABSOLUTE PATH TO THIS REPO>/dsh/skills/style-kairos
+    - <ABSOLUTE PATH TO THIS REPO>/dsh/skills/style-gravit
 
 # Gate 2 (per-order human approval) as INTENT, not as a validated key. The frozen survey has
 # no profile-level per-TOOL always_ask: ApprovalPolicy is a per-SESSION two-value knob

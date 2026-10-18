@@ -114,7 +114,7 @@ createServer(async (request, response) => {
     if (path === "/") {
       const html = (await readFile(join(client, "index.html"), "utf8"))
         .replace(
-          "<title>KAIROS</title>",
+          "<title>GRAVIT</title>",
           "<title>Gravit — Research screenshot fixture</title>",
         )
         .replace('src="/client/chat.js"', 'src="/demo-research.js"');

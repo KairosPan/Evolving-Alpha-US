@@ -1,4 +1,4 @@
-"""One hashing utility (kairos-mining §6 order-3): file-bytes + canonical-JSON sha256.
+"""One hashing utility: file-bytes + canonical-JSON sha256.
 
 Stdlib-only and imports nothing from alpha — any layer (harness, data, meta, scripts)
 may use it without cycle risk. canonical_json is THE one canonicalizer for content

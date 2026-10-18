@@ -62,7 +62,7 @@ function traceOf(entries, sessionId, turn) {
     const view = mapFrame({ type: "session/event", sessionId, event });
     if (view.kind === "card") views.push(view);
     else if (view.kind === "bubble" && view.role === "operator" && typeof view.source === "string" && view.source !== "user") views.push(view);
-    else if (view.kind === "bubble" && view.role === "kairos" && view.thinking) views.push({ ...view, text: "" });
+    else if (view.kind === "bubble" && view.role === "gravit" && view.thinking) views.push({ ...view, text: "" });
   }
   // The fold is already applied. Never pass member replacement instructions
   // to the room transcript, whose sequence numbers are a separate namespace.

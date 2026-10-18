@@ -33,7 +33,7 @@ test("the written patch layer loads through dsh's own overlay loader", () => {
   const { dir } = setupFaceProfile(home);
   // Also pins the filename: loadOverlayPatches throws if the file is absent,
   // so writing it under any other name fails here.
-  const patches = loadOverlayPatches("kairos-face", join(dir, PROFILE_PATCH_FILENAME));
+  const patches = loadOverlayPatches("gravit-face", join(dir, PROFILE_PATCH_FILENAME));
   assert.ok(Array.isArray(patches), "patch layer must parse to a top-level array");
   assert.equal(patches.length, 0, "the operator's layer ships empty");
 });

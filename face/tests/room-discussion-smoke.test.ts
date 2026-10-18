@@ -122,7 +122,7 @@ test("room discussion smoke: structured brief, private journals, serial disagree
         const trigger = [...request.messages].reverse().find((message) =>
           kindOf(message).kind === "room" || kindOf(message).kind === "user" || kindOf(message).kind === "tool");
         const source = trigger ? kindOf(trigger) : {};
-        if (who === "kairos") {
+        if (who === "gravit") {
           if (source.kind === "tool") return { kind: "text", text: "Waiting for the discussion round." };
           if (source.kind === "room" && source.form === "round-end") {
             synthesis = request;
@@ -174,7 +174,7 @@ test("room discussion smoke: structured brief, private journals, serial disagree
         remote<Record<string, unknown>>(base, cookie, endpoint, args);
       const created = await rpc("session/create", { request: { workspaceId: ws.id } });
       const roomId = SessionId(String(created.sessionId));
-      assert.equal(created.agentPreset, "kairos");
+      assert.equal(created.agentPreset, "gravit");
       const room = ctx.agents.get(roomId)!;
       assert.ok(room);
       await rpc("session/prompt", { request: {
@@ -259,11 +259,11 @@ test("room discussion smoke: structured brief, private journals, serial disagree
       const wake = synthesis.messages.find((message) => kindOf(message).form === "round-end");
       assert.ok(wake);
       for (const marker of ["BETA-DISAGREEMENT", "ALPHA-CHANGE", "BETA-CHANGE", "Answers without a valid structured view: @gamma"]) {
-        assert.ok(textOf(wake).includes(marker), `Kairos receives ${marker} in the actual wake`);
+        assert.ok(textOf(wake).includes(marker), `Gravit receives ${marker} in the actual wake`);
       }
       assert.match(textOf(wake), /not a vote/);
       assert.ok(allText(synthesis).includes(GAMMA_TEXT), "the malformed contract's original answer still reaches synthesis");
-      assert.doesNotMatch(allText(synthesis), /PRIVATE-.*-JOURNAL/, "private journal snapshots are not directly copied to Kairos");
+      assert.doesNotMatch(allText(synthesis), /PRIVATE-.*-JOURNAL/, "private journal snapshots are not directly copied to Gravit");
 
       // Flush through the public lifecycle barrier, then read the durable log
       // through a fresh persistence READ handle, independent of host memory

@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import type { Config as AgentPresetConfig } from "@deepseek-ai/dsh-agent-preset";
 import { AGENT_PRESET_REGISTRY_ROW_ID, DEFAULT_PRESET, faceOverlay, presetRowId } from "../src/overlay.ts";
 
-/** The default preset a composition hands the overlay: `bots/kairos` as a definition. */
-const KAIROS: AgentPresetConfig = {
-  id: "kairos",
-  name: "Kairos",
+/** The default preset a composition hands the overlay: `bots/gravit` as a definition. */
+const GRAVIT: AgentPresetConfig = {
+  id: "gravit",
+  name: "Gravit",
   description: "the principal agent",
   plugins: [],
 };
@@ -27,17 +27,17 @@ const ROWS: ReadonlyArray<readonly [id: string, pkg: string]> = [
   ["directory-picker", "@deepseek-ai/dsh-host-directory-picker-auto"],
   ["tool-ask-user", "@deepseek-ai/dsh-tool-ask-user"],
   ["agent-preset-registry", "@deepseek-ai/dsh-agent-preset-registry"],
-  ["preset-kairos", "@deepseek-ai/dsh-agent-preset"],
+  ["preset-gravit", "@deepseek-ai/dsh-agent-preset"],
 ];
 
 function rowsById() {
-  const patches = faceOverlay(3090, KAIROS);
+  const patches = faceOverlay(3090, GRAVIT);
   assert.equal(patches.length, 1, "the overlay is ONE insert patch");
   return new Map(patches[0]!.insert!.map((r) => [r.id, r]));
 }
 
 test("overlay inserts exactly the twelve host rows, in order, each naming its package", () => {
-  const rows = faceOverlay(3090, KAIROS)[0]!.insert!;
+  const rows = faceOverlay(3090, GRAVIT)[0]!.insert!;
   assert.deepEqual(rows.map((r) => [r.id, r.name]), ROWS.map(([id, pkg]) => [id, pkg]));
 });
 
@@ -63,22 +63,22 @@ test("connection trusts no extra host and injects nothing", () => {
  * settings namespace upstream - both pinned. The `roots`/`trust`/
  * `includeUserRoot` keys of the retired dsh-agent-presets row must not come
  * back: the registry scans nothing, and a stray key is a dead config. */
-test("the preset registry defaults to kairos and carries nothing else", () => {
+test("the preset registry defaults to gravit and carries nothing else", () => {
   const byId = rowsById();
   assert.equal(AGENT_PRESET_REGISTRY_ROW_ID, "agent-preset-registry");
-  assert.equal(DEFAULT_PRESET, "kairos");
-  assert.deepEqual(byId.get(AGENT_PRESET_REGISTRY_ROW_ID)!.config, { default: "kairos" });
+  assert.equal(DEFAULT_PRESET, "gravit");
+  assert.deepEqual(byId.get(AGENT_PRESET_REGISTRY_ROW_ID)!.config, { default: "gravit" });
 });
 
 /* The default preset is declared statically so it exists before the first
  * session/create, whose preset-less path resolves `defaultId`. The row carries
  * the definition it was handed - a COPY, so the composed tree never aliases the
  * caller's object - under `preset-<config.id>`. */
-test("preset-kairos declares exactly the definition it was handed", () => {
-  const row = rowsById().get(presetRowId("kairos"))!;
-  assert.equal(presetRowId("kairos"), "preset-kairos");
-  assert.deepEqual(row.config, KAIROS);
-  assert.notEqual(row.config, KAIROS, "the overlay must not alias the caller's definition");
+test("preset-gravit declares exactly the definition it was handed", () => {
+  const row = rowsById().get(presetRowId("gravit"))!;
+  assert.equal(presetRowId("gravit"), "preset-gravit");
+  assert.deepEqual(row.config, GRAVIT);
+  assert.notEqual(row.config, GRAVIT, "the overlay must not alias the caller's definition");
 });
 
 /* These rows take the plugins' own defaults. An empty `config: {}` is not the

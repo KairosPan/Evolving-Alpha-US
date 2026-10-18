@@ -9,12 +9,12 @@
  *     `../../face/plugins/bot.js` - which is why this file's bots root is
  *     mkdtemp'd inside the repository, so the rebase lands on the real file.
  * S2: `tools.restrict({allow})` from a preset row masks every agent joined to
- *     the preset - a bot session sees exactly allow ∩ tree, Kairos sees all.
+ *     the preset - a bot session sees exactly allow ∩ tree, Gravit sees all.
  *     The mask FOLLOWS the tree: presets activate when declared (NEW
  *     packages/preset/agent-preset-registry/src/index.ts:80-118), and
  *     plugins/bot.js re-expands on `tools/change`, so a tool registered after
  *     the declaration is admitted when the allow list names it.
- * S3: `kairos` is an empty composition and Kairos's sessions join it: their
+ * S3: `gravit` is an empty composition and Gravit's sessions join it: their
  *     tool set is byte-identical to the host's global view.
  * Also: the roster lists a broken fixture with its reason and never `_template`;
  * a session created through the session controller with `agentPreset` carries
@@ -85,13 +85,13 @@ test("bots smoke: roster, mask, persona, an inert default, the shipped plugin pa
       /* bootFace's declaration handle (PLAN S6) is what this smoke checks:
        * without it every non-default bot would be missing from the roster. */
       assert.ok(botPresets !== undefined, "bootFace returns the face's bot declarations");
-      assert.deepEqual(botPresets.ids(), ["cracked", "probe", "shipped", "trader"], "every bot directory declared by the face - never _template, never kairos");
+      assert.deepEqual(botPresets.ids(), ["cracked", "probe", "shipped", "trader"], "every bot directory declared by the face - never _template, never gravit");
       assert.deepEqual([...botPresets.errors], [], "every composition here is readable");
 
       const presets = ctx.get("agentPresets") as { defaultId: string; list(): Promise<{ id: string; broken?: string }[]> };
       const roster = await presets.list();
-      assert.deepEqual(roster.map((p) => p.id).sort(), ["cracked", "kairos", "probe", "shipped", "trader"], "listed - and never _template");
-      assert.equal(presets.defaultId, "kairos");
+      assert.deepEqual(roster.map((p) => p.id).sort(), ["cracked", "gravit", "probe", "shipped", "trader"], "listed - and never _template");
+      assert.equal(presets.defaultId, "gravit");
       assert.match(roster.find((p) => p.id === "cracked")!.broken ?? "", /list/, "a broken preset carries dsh's reason (Rule 5)");
 
       const base = `http://127.0.0.1:${ctx.webServer.port}`;
@@ -117,17 +117,17 @@ test("bots smoke: roster, mask, persona, an inert default, the shipped plugin pa
         renderPrompt(await ctx.systemPrompt.assemble(assembleContextFor(agent)));
       const names = (schemas: { name: string }[]) => schemas.map((s) => s.name).sort();
 
-      /* S3 - Kairos: a session naming no preset joins `kairos` and keeps the host's tools. */
+      /* S3 - Gravit: a session naming no preset joins `gravit` and keeps the host's tools. */
       const k = await create({ cwd: home });
-      assert.equal(k.agentPreset, "kairos");
-      const kairos = agentOf(k.sessionId);
-      assert.equal(kairos.session.header.agentPreset, "kairos");
-      assert.deepEqual(names(tools.schemas(kairos)), names(tools.schemas()), "the inert default adds and removes nothing");
+      assert.equal(k.agentPreset, "gravit");
+      const gravit = agentOf(k.sessionId);
+      assert.equal(gravit.session.header.agentPreset, "gravit");
+      assert.deepEqual(names(tools.schemas(gravit)), names(tools.schemas()), "the inert default adds and removes nothing");
       /* Compared up to the persona's first `{{`, not its first LINE: line 1 ends
        * `... your working directory is {{cwd}}.` and renderPrompt substitutes it
        * (measured: the rendered text carries this session's cwd). The prefix is
        * still read from the FILE, so rewriting the persona moves this assertion. */
-      assert.ok((await promptOf(kairos)).includes(readPersona(PERSONA_PATH).split("{{")[0]), "D11 closed: Kairos is told who it is");
+      assert.ok((await promptOf(gravit)).includes(readPersona(PERSONA_PATH).split("{{")[0]), "D11 closed: Gravit is told who it is");
 
       /* S1 + S2 - a bot: the session controller mounts the preset; the mask and the persona hold. */
       const p = await create({ cwd: join(bots, "probe", "journal"), agentPreset: "probe" });
@@ -136,9 +136,9 @@ test("bots smoke: roster, mask, persona, an inert default, the shipped plugin pa
       assert.equal(probe.session.header.agentPreset, "probe");
       assert.deepEqual(names(tools.schemas(probe)), ["ask_user_question", "bash", "read"], "allow ∩ tree, unknown names dropped (S2)");
       const probePrompt = await promptOf(probe);
-      assert.ok(probePrompt.includes("You are Probe, a test voice."), "the bot's persona shadows Kairos's (S1)");
-      assert.equal(probePrompt.includes("You are Kairos"), false,
-        "and Kairos's text is gone from the bot's prompt: bot.js's `deployment:persona-prefix` shadows the global prefix");
+      assert.ok(probePrompt.includes("You are Probe, a test voice."), "the bot's persona shadows Gravit's (S1)");
+      assert.equal(probePrompt.includes("You are Gravit"), false,
+        "and Gravit's text is gone from the bot's prompt: bot.js's `deployment:persona-prefix` shadows the global prefix");
 
       /* S1, the SHIPPED form. `shipped`'s composition is untouched since
        * `createBot` wrote it, so its plugin row is the relative path every real
@@ -162,7 +162,7 @@ test("bots smoke: roster, mask, persona, an inert default, the shipped plugin pa
        * ADMITS it. The refusal below therefore cannot be the mask's: it is the
        * tree-wide guard, and it is the same refusal `order-gate.test.ts` drills
        * for a bare session. Gate 2 is tree-wide: a preset-joined agent whose
-       * mask admits an order tool meets the same guard as Kairos (spec
+       * mask admits an order tool meets the same guard as Gravit (spec
        * decision 4). */
       let bodyRan = false;
       const unregister = tools.register({
@@ -197,7 +197,7 @@ test("bots smoke: roster, mask, persona, an inert default, the shipped plugin pa
           name: "mcp__drill__place_order", callId: "bot-ask", arguments: { symbol: "AAPL", qty: 1, side: "buy" },
           agent: trader, signal: new AbortController().signal,
         }, () => Promise.resolve({ kind: "allow" }));
-        assert.equal(decision.kind, "ask", "an order from a bot raises the same card Kairos's would");
+        assert.equal(decision.kind, "ask", "an order from a bot raises the same card Gravit's would");
         assert.match(decision.reason ?? "", /AAPL/);
       } finally {
         unregister();

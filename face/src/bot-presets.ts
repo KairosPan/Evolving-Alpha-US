@@ -33,8 +33,8 @@
  *   passes through untouched, so the registry marks the preset broken in its
  *   own words (definition.ts:18-23; index.ts:106-117).
  *
- * `definitionFor` is the pure half: boot's static `preset-kairos` overlay row
- * is `definitionFor(botsRoot, DEFAULT_PRESET)`, so `bots/kairos` stays
+ * `definitionFor` is the pure half: boot's static `preset-gravit` overlay row
+ * is `definitionFor(botsRoot, DEFAULT_PRESET)`, so `bots/gravit` stays
  * authoritative for the default. `declareBots` is the live half: every other
  * bot is declared from the booted root context once the tree has settled,
  * because activation is EAGER (NEW agent-preset-registry/src/index.ts:80-118)
@@ -54,7 +54,7 @@ import { load } from "js-yaml";
 import { isBotId } from "./bots.ts";
 import { DEFAULT_PRESET } from "./overlay.ts";
 
-const BIN = "kairos-face";
+const BIN = "gravit-face";
 /** The composition file, as 0.1.1's dsh named it (OLD agent-presets/src/discovery.ts:26). */
 export const COMPOSITION_FILE = "agent.cordis.yml";
 /** The display-metadata file, as 0.1.1's dsh named it (OLD agent-presets/src/metadata.ts). */
@@ -225,7 +225,7 @@ export interface DeclareBotsOptions {
  * Declare every bot under `botsRoot` into the booted tree's preset registry.
  *
  * Every directory whose name passes {@link isBotId} - so never `_template`,
- * never the reserved default `kairos`, which the overlay's static row declares
+ * never the reserved default `gravit`, which the overlay's static row declares
  * - is declared through its own child plugin of `ctx`, exactly the registry's
  * own declaration model (NEW agent-preset-registry/tests/harness.ts:35-40):
  * `ctx.plugin({ inject: ["agentPresets"], async *apply(c) { yield await

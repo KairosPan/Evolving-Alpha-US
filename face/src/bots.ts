@@ -16,8 +16,8 @@
  * until `updateSoul` runs again (spec R4).
  *
  * `_template` is never declared (src/bot-presets.ts declares only `isBotId`
- * directories) and is refused as an id here; `kairos` is the default preset,
- * declared from `bots/kairos` by the overlay's static `preset-kairos` row,
+ * directories) and is refused as an id here; `gravit` is the default preset,
+ * declared from `bots/gravit` by the overlay's static `preset-gravit` row,
  * never a bot. Ids keep the retired dsh-agent-presets grammar
  * `[a-z0-9][a-z0-9-]*` (OLD packages/preset/agent-presets/src/preset.ts:18):
  * dsh 0.2.0 requires only a non-blank id (NEW
@@ -35,14 +35,14 @@ import { isJsonBody, isTrustedDataRequest } from "./data.ts";
 import { FORBIDDEN, HttpError, readBody } from "./http.ts";
 import type { RouteRegistrar } from "./static.ts";
 
-const BIN = "kairos-face";
+const BIN = "gravit-face";
 
 export const TEMPLATE = "_template";
 /** The retired dsh-agent-presets preset-id grammar (OLD preset.ts:18), bounded
  *  to 64 code points - kept as the face's own gate now that dsh has none. */
 export const BOT_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 /** Ids the grammar admits but the face refuses: the default preset is not a bot. */
-export const RESERVED_IDS: ReadonlySet<string> = new Set(["kairos"]);
+export const RESERVED_IDS: ReadonlySet<string> = new Set(["gravit"]);
 export const isBotId = (value: unknown): value is string =>
   typeof value === "string" && BOT_ID_RE.test(value) && !RESERVED_IDS.has(value);
 
@@ -53,7 +53,7 @@ export const isBotId = (value: unknown): value is string =>
  *  when it builds the declaration (src/bot-presets.ts `definitionFor`). */
 export const BOT_PLUGIN_RELATIVE = "../../face/plugins/bot.js";
 
-/** What a voice keeps of Kairos's roster (spec §2.2.1): the shell, file read
+/** What a voice keeps of Gravit's roster (spec §2.2.1): the shell, file read
  *  and edit, search, web, skills, the question tool, and the market-data reads
  *  of the alpaca-kit MCP server under whatever the operator named it. Absent
  *  by design: delegation (`subagent*`, `workflow`, `ralph`), goals and todos,
@@ -126,7 +126,7 @@ export interface BotRow {
   setupIssues: string[];
   /** `preset.yml`'s `model:` verbatim, absent when the default route serves the bot. */
   model?: string;
-  /** `kairos`: the host composition, not a bot. */
+  /** `gravit`: the host composition, not a bot. */
   isDefault: boolean;
   /** Why the bot cannot be used (Rule 5: shown, never skipped): dsh's own
    *  reason when its declared composition cannot mount, or the face's reason
@@ -231,7 +231,7 @@ async function rowFor(
   const soul = files["SOUL.md"]?.trim() ?? "";
   let compositionSoul: string | null = null;
   let allow: string[] = [];
-  if (id !== "kairos") {
+  if (id !== "gravit") {
     if (soul === "") setupIssues.push("SOUL.md is empty or missing.");
     try {
       const rows: unknown = load(files["agent.cordis.yml"] ?? "", { schema: entryListSchema });
@@ -262,7 +262,7 @@ async function rowFor(
     id, name: typeof meta.name === "string" ? meta.name : id, description: typeof meta.description === "string" ? meta.description : "", dir, homeCwd: join(dir, "journal"), soul,
     revision: configRevision(files), allow, compositionSoul, soulInSync: compositionSoul !== null && compositionSoul.trim() === soul, skills, setupIssues,
     ...(typeof meta.model === "string" ? { model: meta.model } : {}),
-    isDefault: id === "kairos",
+    isDefault: id === "gravit",
     ...(broken === undefined ? {} : { broken }),
     listed: preset !== undefined,
   };
@@ -348,7 +348,7 @@ export async function createBot(root: string, body: Record<string, unknown>): Pr
   const name = typeof body.name === "string" && body.name.trim() !== "" ? body.name.trim() : undefined;
   const id = body.id !== undefined ? body.id : (name === undefined ? undefined : proposeBotId(name));
   if (!isBotId(id)) {
-    throw new HttpError(400, "invalid bot id (lowercase letters, digits and -; starts with a letter or digit; up to 64; not kairos or _template)");
+    throw new HttpError(400, "invalid bot id (lowercase letters, digits and -; starts with a letter or digit; up to 64; not gravit or _template)");
   }
   const description = typeof body.description === "string" ? body.description.trim() : "";
   const soul = rejectSoul(body.soul === undefined ? TEMPLATE_SOUL.replace("<bot name>", () => name ?? id) : body.soul);

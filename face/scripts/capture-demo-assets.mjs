@@ -68,7 +68,6 @@ const account = {
 };
 
 const labels = {
-  'KAIROS': 'GRAVIT', 'Kairos': 'Gravit',
   '搜索股票、加密货币': 'Search stocks and crypto', '自选股': 'Watchlist',
   '美股、A 股与加密货币，关注尽在一处。': 'US equities, China A-shares and crypto assets, in one view.',
   '添加自选': 'Add asset', '按市场筛选': 'Filter by market', '全部市场': 'All markets',
@@ -155,7 +154,7 @@ function captureDocumentSetup() {
   }
   document.addEventListener('DOMContentLoaded', update, { once: true });
 }
-const setup = `window.__captureLabels=${JSON.stringify(labels)};localStorage.setItem('kairos.market.watchlist.v1',${JSON.stringify(JSON.stringify({ version: 1, items: assets }))});(${captureDocumentSetup.toString()})();`;
+const setup = `window.__captureLabels=${JSON.stringify(labels)};localStorage.setItem('gravit.market.watchlist.v1',${JSON.stringify(JSON.stringify({ version: 1, items: assets }))});(${captureDocumentSetup.toString()})();`;
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, origin);

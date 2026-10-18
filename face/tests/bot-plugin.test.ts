@@ -86,8 +86,8 @@ function fakeTree(initial: readonly string[]) {
   };
 }
 
-test("kairos-bot: name and inject are what the composition relies on", () => {
-  assert.equal(name, "kairos-bot");
+test("gravit-bot: name and inject are what the composition relies on", () => {
+  assert.equal(name, "gravit-bot");
   assert.deepEqual(inject, ["systemPrompt", "tools"]);
 });
 
@@ -119,10 +119,10 @@ test("expandAllow's star matches mcp__<server>__<raw> exactly, never a longer na
 });
 
 /* dsh 0.2.0 renamed the slot: 0.1.1's `deployment:persona` names NO section
- * now, so a bot registering it would carry Kairos's persona AND its own. Only
+ * now, so a bot registering it would carry Gravit's persona AND its own. Only
  * the prefix slot's name shadows the deployment prefix (NEW
  * packages/core/system-prompt/src/index.ts:179, 251-253). */
-test("the persona is dsh's persona-PREFIX slot at the central prefix order - the one name that shadows Kairos's", () => {
+test("the persona is dsh's persona-PREFIX slot at the central prefix order - the one name that shadows Gravit's", () => {
   assert.equal(PERSONA_PREFIX_SECTION, DSH_PERSONA_PREFIX_SECTION, "bot.js restates the installed constant exactly");
   const tree = fakeTree(["bash", "read"]);
   apply(tree.ctx, { persona: "You are Probe, a test voice.", allow: ["bash"] });

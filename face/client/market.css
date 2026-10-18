@@ -1,4 +1,4 @@
-/* Shared KAIROS palette, with the watchlist as the sole primary workspace. */
+/* Shared GRAVIT palette, with the watchlist as the sole primary workspace. */
 .market-body { height: auto; min-height: 100%; overflow: auto; background: #f6f7f9; font-size: 14px; }
 .market-body [hidden] { display: none !important; }
 .market-body :is(button, input, select) { font: inherit; }

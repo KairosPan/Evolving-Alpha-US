@@ -12,7 +12,7 @@
  *   negotiates at all is a live-drill check (PLAN S10 step 7);
  * - a connected server's `instructions` now enter the system prompt as section
  *   `mcp:<serverName>` (NEW packages/mcp/mcp-client/src/server-context.ts:
- *   28-39), with no switch - akshare-mcp sets them, so Kairos's prompt (and
+ *   28-39), with no switch - akshare-mcp sets them, so Gravit's prompt (and
  *   every bot's: sections are not masked like tools) gains an `mcp:akshare`
  *   section; instructions over `maxInstructionBytes` (32 KiB default) now FAIL
  *   the connection. */

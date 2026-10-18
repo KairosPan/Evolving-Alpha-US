@@ -47,7 +47,7 @@ test("message events become bubbles, attributed by role", () => {
   assert.equal(views[0].sessionId, "s1");
 
   assert.equal(views[1].kind, "bubble");
-  assert.equal(views[1].role, "kairos");
+  assert.equal(views[1].role, "gravit");
   assert.equal(views[1].text, "Both pivots are technically valid.");
   // Reasoning is not chat text: it rides the view on its own field, never the bubble.
   assert.doesNotMatch(views[1].text ?? "", /200DMA/);
@@ -233,7 +233,7 @@ test("normalized follow records map like live events", () => {
   assert.equal(views[10].role, "operator");
   assert.equal(views[10].seq, 10);
   assert.equal(views[11].kind, "bubble");
-  assert.equal(views[11].role, "kairos");
+  assert.equal(views[11].role, "gravit");
   assert.equal(views[11].seq, 11);
   assert.equal(views[11].text, "Breadth is still positive.");
 
@@ -288,7 +288,7 @@ test("every other rendered event says plainly that it appends", () => {
 
 test("an interrupted answer is never presented as a complete one", () => {
   assert.equal(views[16].kind, "bubble");
-  assert.equal(views[16].role, "kairos");
+  assert.equal(views[16].role, "gravit");
   assert.equal(views[16].text, "The first pivot looks like");
   assert.equal(views[16].interrupted, true);
   // The flag is present-and-false on whole messages, so a renderer reads one field.

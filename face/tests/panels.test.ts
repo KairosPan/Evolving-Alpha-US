@@ -35,7 +35,7 @@ function row(name: string, pack: string | null, extra: Partial<SkillRow> = {}): 
  * @param home - a real directory only for tests that touch the roster file. */
 function fakeDeps(home = "/face-panels-nowhere"): PanelDeps {
   const skills: SkillBody[] = [
-    row("doctrine", "style-kairos"),
+    row("doctrine", "style-gravit"),
     row("backtest-rules", "mechanics"),
     row("alpaca-kit-guide", "mechanics"),
     { ...row("dsh-badge", null, { source: "bundled" }), content: "" },
@@ -162,7 +162,7 @@ test("detection: candidates are the known list, in its order, that answer and ar
     return null;
   };
   const listing = await agentsListing(deps);
-  assert.deepEqual(listing.main, { name: "Kairos", runtime: `dsh ${DSH_PIN}` });
+  assert.deepEqual(listing.main, { name: "Gravit", runtime: `dsh ${DSH_PIN}` });
   assert.deepEqual(listing.local, [], "nothing is fixed in place — the roster starts empty");
   assert.deepEqual(listing.candidates, [
     { bin: "claude", label: "Claude Code", version: "2.1.251 (Claude Code)" },
@@ -310,14 +310,14 @@ test("syncAgentTools: registered tools follow the roster — at boot, on connect
 
 test("skillGroup: pack directory wins, source is the fallback", () => {
   assert.equal(skillGroup(row("a", "mechanics")), "mechanics");
-  assert.equal(skillGroup(row("b", "style-kairos")), "style-kairos");
+  assert.equal(skillGroup(row("b", "style-gravit")), "style-gravit");
   assert.equal(skillGroup(row("c", null, { source: "bundled" })), "bundled");
   assert.equal(skillGroup({ name: "d", description: "" }), "other");
 });
 
 test("memoryListing groups by pack, mechanics first, wire fields only", async () => {
   const listing = await memoryListing(fakeDeps());
-  assert.deepEqual(listing.groups.map((group) => group.name), ["mechanics", "style-kairos", "bundled"]);
+  assert.deepEqual(listing.groups.map((group) => group.name), ["mechanics", "style-gravit", "bundled"]);
   const mechanics = listing.groups[0]!.skills as Record<string, unknown>[];
   assert.deepEqual(mechanics.map((skill) => skill.name), ["backtest-rules", "alpaca-kit-guide"]);
   assert.deepEqual(Object.keys(mechanics[0]!).sort(),
@@ -328,7 +328,7 @@ test("skillDetail: body through, bad name 400, unknown 404", async () => {
   const deps = fakeDeps();
   const detail = await skillDetail(deps, "doctrine") as Record<string, unknown>;
   assert.equal(detail.name, "doctrine");
-  assert.equal(detail.group, "style-kairos");
+  assert.equal(detail.group, "style-gravit");
   assert.match(String(detail.content), /^# doctrine/);
   await assert.rejects(skillDetail(deps, "../evil"), (err: { status?: number }) => err.status === 400);
   await assert.rejects(skillDetail(deps, "Not-Kebab"), (err: { status?: number }) => err.status === 400);

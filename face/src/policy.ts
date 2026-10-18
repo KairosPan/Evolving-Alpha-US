@@ -1,7 +1,7 @@
 /** The face's policy layer: the 0.1.1-rc.2 product defaults that dsh-base
  * 0.2.0-rc.2 changed, restored in ONE reviewable place (PLAN §2, S4).
  *
- * Everything here changes what Kairos can do or what leaves the machine, so
+ * Everything here changes what Gravit can do or what leaves the machine, so
  * every entry is a DECISION the operator owns (PLAN §6), named by its id. The
  * default is always "keep 0.1.1's behaviour"; following upstream instead is a
  * one-row operator patch, not a code change.

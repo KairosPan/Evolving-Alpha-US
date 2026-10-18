@@ -94,14 +94,14 @@ test("every shipped bot's plugin row lands on the real face/plugins/bot.js, and 
       }
     }
   }
-  const kairos = definitionFor(botsRoot, "kairos");
-  assert.deepEqual(kairos.plugins, [], "the shipped default composes nothing: Kairos keeps the host's flat roster");
-  assert.equal(typeof kairos.name, "string");
+  const gravit = definitionFor(botsRoot, "gravit");
+  assert.deepEqual(gravit.plugins, [], "the shipped default composes nothing: Gravit keeps the host's flat roster");
+  assert.equal(typeof gravit.name, "string");
 });
 
-test("the kairos definition is exactly its id, published metadata and an empty plugin list", async () => {
+test("the gravit definition is exactly its id, published metadata and an empty plugin list", async () => {
   const root = await makeBotsRoot();
-  assert.deepEqual(definitionFor(root, "kairos"), { id: "kairos", name: "Kairos", description: "the principal agent", plugins: [] });
+  assert.deepEqual(definitionFor(root, "gravit"), { id: "gravit", name: "Gravit", description: "the principal agent", plugins: [] });
 });
 
 test("preset.yml is read as 0.1.1's dsh read it: trimmed, blank omitted, order kept, model never published", async () => {
@@ -271,7 +271,7 @@ test("a refused registration is recorded, and redeclare refuses non-bot ids and 
   const presets = await declareBots(rootWith(registry.service), root, { log: () => undefined });
   assert.match(presets.errors.get("probe") ?? "", /registry refused it: Duplicate agent preset: probe/);
   assert.deepEqual(presets.ids(), []);
-  await assert.rejects(presets.redeclare("kairos"), /not a bot id/);
+  await assert.rejects(presets.redeclare("gravit"), /not a bot id/);
   await assert.rejects(presets.redeclare("_template"), /not a bot id/);
   await assert.rejects(presets.redeclare("../escape"), /not a bot id/);
   await presets.dispose();

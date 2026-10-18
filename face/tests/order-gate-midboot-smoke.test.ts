@@ -219,7 +219,7 @@ interface MidbootDrill {
 }
 
 /** The fixtures' key (tests/fixtures/midboot-*.js). */
-const DRILL = Symbol.for("kairos-face.order-gate-midboot-drill");
+const DRILL = Symbol.for("gravit-face.order-gate-midboot-drill");
 
 /** The fixture directory, for the rows' `file:` URLs. */
 const FIXTURES = fileURLToPath(new URL("./fixtures/", import.meta.url));

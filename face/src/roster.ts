@@ -1,4 +1,4 @@
-/** `$DSH_HOME/face/channels.json`: which agents a channel offers Kairos.
+/** `$DSH_HOME/face/channels.json`: which agents a channel offers Gravit.
  *
  * Operator-owned and keyed by workspace id, so renaming a directory does not
  * lose it. Two properties this file needs that the face's other state files
@@ -9,7 +9,7 @@
  * every agent call rather than silently offering everything.
  *
  * What this is NOT: containment. dsh registers agent tools tree-wide with no
- * per-session scope, and Kairos has an unrestricted shell and unrestricted
+ * per-session scope, and Gravit has an unrestricted shell and unrestricted
  * network. The roster is a menu that states intent; see spec §5.
  * @module
  */
@@ -22,7 +22,7 @@ import { HttpError } from "./http.ts";
 /** Diagnostic label, the same string every other `${BIN}:`-prefixed line in
  * this program uses (main.ts's own copy, `main.ts:26`, carries the same
  * rationale: not imported, because it is a label rather than a contract). */
-const BIN = "kairos-face";
+const BIN = "gravit-face";
 
 const ROSTER_FILE = ["face", "channels.json"] as const;
 

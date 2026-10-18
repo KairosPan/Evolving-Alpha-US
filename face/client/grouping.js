@@ -44,7 +44,7 @@ export function isBotKey(key) {
  *   to none.
  * @param {boolean} archived - the session is archived (face-local ∪ host).
  * @param {{id: string, label: string}|null} bot - the session's bot when its
- *   `agentPreset` names one (never the default `kairos`), else `null`.
+ *   `agentPreset` names one (never the default `gravit`), else `null`.
  * @param {boolean} [member] - the session is a room member (folded under its
  *   room); a room member is reached through its room (folded under it); it
  *   never files under the bot's home bucket, even though its header names

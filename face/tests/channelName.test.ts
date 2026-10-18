@@ -8,13 +8,13 @@
  * WHY FOLD RATHER THAN ADMIT THE SPACE. The closed class guarantees a channel
  * path is exactly ONE shell word opening on an alphanumeric. Nothing in the
  * face builds a shell string — `spawn` takes argv arrays and a `cwd` option
- * (src/agents.ts) — but Kairos does, and `cd` is the command it has to write: a
+ * (src/agents.ts) — but Gravit does, and `cd` is the command it has to write: a
  * channel session's cwd is `strategies/<name>` while AGENTS.md tells it to work
  * from the repo root. Two words after `cd` are zsh's two-argument form, word 1
  * replaced by word 2 in $PWD — usually an error, but exit 0 in the WRONG
  * directory whenever the substituted path exists. That is the failure worth
  * spending a dash on: `python` and `git add` at least refuse a spaced path out
- * loud. AGENTS.md carries the same rule for Kairos, worked example included.
+ * loud. AGENTS.md carries the same rule for Gravit, worked example included.
  *
  * The fold is NOT a fence. `createChannel` stays the only gate on a path, and
  * this file pins that folding a hostile name never widens what reaches disk.

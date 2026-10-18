@@ -15,7 +15,7 @@
  * — the declaration says only `exec.signal` may change, `:155-158`, but the
  * object is a plain unfrozen spread, `:1445`), and the body then re-resolves
  * the tool by its CURRENT name (`:1578`) — so a `tools/execute` wrapper can
- * rename a guard-approved call into `place_order` after the fact. Nothing here changes that, and Kairos has an unrestricted
+ * rename a guard-approved call into `place_order` after the fact. Nothing here changes that, and Gravit has an unrestricted
  * shell besides. Per charter Rule 2 — enforce below the layer that runs
  * arbitrary code, or admit the gate is prose — this gates the model's ordinary
  * tool calls. It is not containment. `face/README.md` says so where an operator

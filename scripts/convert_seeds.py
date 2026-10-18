@@ -1,6 +1,6 @@
-"""One-shot: convert the retired seeds_v2 JSON packs into style-kairos SKILL.md files.
+"""One-shot: convert the retired seeds_v2 JSON packs into style-gravit SKILL.md files.
 
-Kept in the tree as the provenance record for dsh/skills/style-kairos/: the JSON packs it
+Kept in the tree as the provenance record for dsh/skills/style-gravit/: the JSON packs it
 reads (seeds_v2/) were deleted in the same commit, so this file is the only remaining
 statement of where that prose came from and how it was rendered. Re-running it needs the
 packs restored from git history.
@@ -35,7 +35,7 @@ STYLE_HEADER = """> **Scope: operator style, not market law.** These are the ope
 """
 _REPO = Path(__file__).resolve().parents[1]
 SEEDS = _REPO / "seeds_v2"
-ROOT = _REPO / "dsh" / "skills" / "style-kairos"
+ROOT = _REPO / "dsh" / "skills" / "style-gravit"
 
 
 def _write(name: str, description: str, lines: list[str]) -> Path:

@@ -21,7 +21,7 @@ test("ROOM_CAPS is the spec's block, verbatim", () => {
   });
 });
 
-/** AGENTS.md's "Rooms." paragraph states the caps as literal figures for Kairos's
+/** AGENTS.md's "Rooms." paragraph states the caps as literal figures for Gravit's
  * benefit (a controller ruling, not this test's call to revisit) - but nothing
  * else ties that prose to ROOM_CAPS, and `dispatchDescription`'s own comment
  * names exactly this failure mode: "a wrong one here is invisible to the type
@@ -106,7 +106,7 @@ const user = (id: string, text: string, seq: number, source: Record<string, unkn
 const answer = (id: string, bot: string, name: string, text: string, seq: number): EventLike =>
   user(id, text, seq, { kind: "room", form: "answer", bot, name, sessionId: "s-b", turn: 1, round: 1 });
 
-test("roomLinesOf: operator prompts, Kairos replies and member answers, in order; room events, context and tool results are not lines", () => {
+test("roomLinesOf: operator prompts, Gravit replies and member answers, in order; room events, context and tool results are not lines", () => {
   const events: EventLike[] = [
     user("u1", "开个会", 1),
     /* dsh 0.2's context sources (the 0.1.1 `plugin` kind is gone): instructions,
@@ -127,14 +127,14 @@ test("roomLinesOf: operator prompts, Kairos replies and member answers, in order
   const lines = roomLinesOf(events, pending, roster);
   assert.deepEqual(lines.map((l) => l.id), ["u1", "m3", "a1", "u2", "a2"], "pending lines follow the log; an id already in the log is not repeated");
   assert.deepEqual(lines[0].speaker, { kind: "operator" });
-  assert.deepEqual(lines[1].speaker, { kind: "kairos" });
+  assert.deepEqual(lines[1].speaker, { kind: "gravit" });
   assert.deepEqual(lines[2].speaker, { kind: "bot", bot: "buffett", name: "巴菲特型" });
   assert.deepEqual(lines[4].speaker, { kind: "bot", bot: "speculator", name: "投机型" });
 });
 
 test("formatDelta attributes every line and marks the reader's own", () => {
   const lines = roomLinesOf([user("u1", "开个会", 1), msg(1, "先各说各的", 3), answer("a1", "buffett", "巴菲特型", "买\n理由：便宜", 5), answer("a2", "speculator", "投机型", "卖", 6)], [], roster);
-  assert.equal(formatDelta(lines, "buffett"), "操作员: 开个会\nKairos: 先各说各的\n巴菲特型 (you): 买\n  理由：便宜\n投机型: 卖");
+  assert.equal(formatDelta(lines, "buffett"), "操作员: 开个会\nGravit: 先各说各的\n巴菲特型 (you): 买\n  理由：便宜\n投机型: 卖");
   assert.equal(formatDelta([], "buffett"), "(nothing new)");
 });
 
@@ -150,7 +150,7 @@ test("memberPrompt carries the delta, the brief when given, the trigger, and the
   assert.match(text, /投机型/, "the other voices are named so a peer mention can be spelled");
   const mention = memberPrompt({ roomName: "x", roster, self: "buffett", delta: "(nothing new)", trigger: "mention" });
   assert.match(mention, /operator addressed you directly/i);
-  assert.doesNotMatch(mention, /Kairos asks this batch/);
+  assert.doesNotMatch(mention, /Gravit asks this batch/);
   const cont = memberPrompt({ roomName: "x", roster, self: "buffett", delta: "(nothing new)", trigger: "continuation" });
   assert.match(cont, /continuation/i);
 });

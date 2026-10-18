@@ -1,5 +1,5 @@
 /** The agent tools: a connected local CLI becomes `agent_<bin>` in the dsh
- * tree, and Kairos calls it from a channel session.
+ * tree, and Gravit calls it from a channel session.
  *
  * Split out of panels.ts because that module had grown to hold four unrelated
  * jobs; the per-channel roster check lives here, on `execute`.
@@ -45,7 +45,7 @@ const EXEC_SPECS: Readonly<Record<string, ExecSpec>> = {
      * = no MCP servers from any config (a strategy dir's .mcp.json included) ·
      * --disallowedTools Read(./.env*) = the workbench's key files stay unread
      * even when the run's directory is the root that holds them (it is
-     * variadic, so it goes LAST). A call from Kairos is a READER: it answers
+     * variadic, so it goes LAST). A call from Gravit is a READER: it answers
      * about the tree, it does not act on it. */
     lastMessageFile: false,
     argv: (resume) => [
@@ -181,7 +181,7 @@ export interface RunOutcome {
 }
 
 /** What a runner is asked for: where, what to feed on stdin, which env, how
- * long, and the caller's cancellation (Kairos's tool call being aborted). */
+ * long, and the caller's cancellation (Gravit's tool call being aborted). */
 export interface RunOptions {
   cwd: string;
   input: string;
@@ -404,12 +404,12 @@ export interface AgentToolValue {
 }
 
 /**
- * The tool Kairos gets for one connected agent. `execute` first checks the
+ * The tool Gravit gets for one connected agent. `execute` first checks the
  * calling session's channel roster (see the module docstring), then runs the
  * recipe in the CALLING SESSION's directory (a strategy's workspace),
  * forwards the call's cancellation to the child, and throws on a failed run
- * so the registry hands Kairos an error result with the cause. The rendered
- * text carries the CLI's session id so Kairos can continue the conversation.
+ * so the registry hands Gravit an error result with the cause. The rendered
+ * text carries the CLI's session id so Gravit can continue the conversation.
  * @param deps - the process seams.
  * @param bin - a connected bin with a recipe.
  * @param label - its pretty label, for the description and the card title.

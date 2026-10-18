@@ -100,7 +100,7 @@ export function renderChannelPage(inner, payload, actions) {
   const bchips = el("div", "ch-chips");
   bchips.append(el("span", "ch-chips-label", "bots in this channel"));
   const rosterBots = Array.isArray(payload.bots) ? payload.bots : [];
-  const allBots = (Array.isArray(payload.allBots) ? payload.allBots : []).filter((b) => b.id !== "kairos");
+  const allBots = (Array.isArray(payload.allBots) ? payload.allBots : []).filter((b) => b.id !== "gravit");
   const known = new Set(allBots.map((b) => b.id));
   for (const bot of allBots) {
     const on = rosterBots.includes(bot.id);

@@ -38,23 +38,23 @@ const PROFILE_PKG = {
  * the face's own rows. */
 const PATCH_HEADER = `# face profile patch layer. The face's own host rows (webserver :3090,
 # connection, the Remote controllers, the agent preset registry) are inserted
-# programmatically by kairos-face at boot - do NOT add them here. This file is
+# programmatically by gravit-face at boot - do NOT add them here. This file is
 # the operator's: mount the alpaca_kit MCP server and skill roots here per
 # dsh/README.md steps 3-6.
 #
 # Face-owned rows are applied AFTER this file and win over it, silently: a
 # patch here targeting webserver, connection, api-remotes, file-upload,
 # workspace, session-controller, workspace-controller, settings-controller,
-# directory-picker, tool-ask-user, agent-preset-registry, preset-kairos, the
+# directory-picker, tool-ask-user, agent-preset-registry, preset-gravit, the
 # system-prompt persona (personaPrefix only - other system-prompt keys set
 # here are kept), or the hmr / session-telemetry-otel switches (the latter
 # is DSH_TELEMETRY_DISABLED, applied only while it is set) is accepted,
-# overridden, and never reported. Change those in kairos-face's overlay, not
+# overridden, and never reported. Change those in gravit-face's overlay, not
 # here.
 #
 # The storage chain (storage, storage-json, storage-domain) and
 # session-projection-cache now come from dsh-base, and a patch here reaches
-# them. kairos-face's policy defaults (src/policy.ts) sit BELOW this file;
+# them. gravit-face's policy defaults (src/policy.ts) sit BELOW this file;
 # patch those rows here to override them.
 []
 `;
