@@ -16,8 +16,8 @@
  * guarantees a channel path is exactly ONE shell word opening on an
  * alphanumeric. The face never builds a shell string — `spawn` gets an argv
  * array and a `cwd` option — but Gravit does, and `cd` is what it has to
- * compose: a channel session starts in `strategies/<name>` while AGENTS.md tells
- * it to work from the repo root. Two words after `cd` are zsh's two-argument
+ * compose: a channel session starts in `strategies/<name>`, and GRAVIT.md has it use
+ * the absolute bed path there. Two words after `cd` are zsh's two-argument
  * form — word 1 replaced by word 2 in $PWD — which usually errors but exits 0
  * in the WRONG directory when the substituted path exists. `python` and
  * `git add` at least mis-parse a spaced path loudly; this one is silent.

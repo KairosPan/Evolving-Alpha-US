@@ -21,15 +21,15 @@ test("ROOM_CAPS is the spec's block, verbatim", () => {
   });
 });
 
-/** GRAVIT.md's "Rooms." paragraph states the caps as literal figures for Gravit's
+/** GRAVIT.md's "Rooms" paragraph states the caps as literal figures for Gravit's
  * benefit (a controller ruling, not this test's call to revisit) - but nothing
  * else ties that prose to ROOM_CAPS, and `dispatchDescription`'s own comment
  * names exactly this failure mode: "a wrong one here is invisible to the type
  * checker and to every test." This test is that check. */
 test("GRAVIT.md's caps sentence matches ROOM_CAPS - the model-facing prose must never drift from the engine that enforces it", () => {
-  const agentsMd = readFileSync(fileURLToPath(new URL("../../GRAVIT.md", import.meta.url)), "utf8")
+  const gravitMd = readFileSync(fileURLToPath(new URL("../../GRAVIT.md", import.meta.url)), "utf8")
     .replace(/\s+/g, " ");
-  const m = agentsMd.match(
+  const m = gravitMd.match(
     /Caps per operator message: (\d+) rounds?, (\d+) bot messages?, (\d+) peer continuations? per round\./,
   );
   assert.ok(m, "GRAVIT.md's caps sentence is missing or reworded past what this test recognizes - " +

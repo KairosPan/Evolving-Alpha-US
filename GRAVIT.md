@@ -24,9 +24,11 @@ Three layers. MARKET and ACCOUNT are the `alpaca_kit` package: import it for bac
 Every dated market read goes through `replay_days` (backtests) or the alpaca-kit MCP tools
 (interactive). A bare `make_source()` returns a RAW source with no lookahead guard: wrap it in
 `GuardedSource` with an `AsOfGuard` for the day, or do not read it. The AKShare tools
-(`mcp__akshare__*`) are public A-share queries with NO guard — never backtest evidence; check
-their errors, timestamps and `truncated` (the default limit is 500 rows). Retrieval time is not
-exchange time.
+(`mcp__akshare__*`) are public A-share queries with NO guard — never backtest evidence.
+`akshare_discover` finds a method and its category tool; `stock_zh_a_spot_tx` is the verified
+Tencent A-share snapshot method, while Eastmoney and Xueqiu endpoints may fail or require a
+login. Check every result's errors, timestamps and `truncated` (the default limit is 500 rows;
+a truncated result is not the whole market). Retrieval time is not exchange time.
 
 ## The beds — the only usable windows
 
@@ -45,9 +47,11 @@ the absolute bed path there (`backtest.py` anchors on its own file and is immune
 ## A strategy directory
 
 Lifecycle, in `status.yaml`: `idea | researching | validated | paper | retired` (`paper` is
-reserved until the order gate opens). Three optional headline keys the channel page renders:
-`one_line`, `next`, `numbers`. Name a strategy as the face names channels: a letter or digit
-first, then letters, digits, `-` and `_`, at most 41 code points, no spaces or dots — the name
+reserved until the order gate opens). Three optional headline keys the channel page renders,
+none required: `one_line` (the current conclusion, one sentence), `next` (the next step),
+`numbers` (free figures as a mapping of scalar values). Name a strategy as the face names
+channels: a letter or digit in any script first, then letters, digits, `-` and `_`, at most 41
+code points, no spaces or dots — the name
 becomes a path typed into shell by hand, and `cd x y` is zsh's two-argument form, exit 0 in the
 wrong directory whenever the substituted path exists. Commit your own iterations; git log is the
 audit trail. A new strategy starts with one batched `ask_user_question`, not with code: the
