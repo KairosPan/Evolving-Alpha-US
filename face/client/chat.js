@@ -769,7 +769,7 @@ function collapsibleHead(node, kind) {
 }
 
 /**
- * An injected user-role message (source plugin/tool/model — AGENTS.md and
+ * An injected user-role message (source plugin/tool/model — GRAVIT.md and
  * skill-catalog context, file-change notices, cron wake-ups) as one collapsed
  * line, dsh-style: the injection is a fact worth a row, not a wall of text.
  * @param {Record<string, any>} view @returns {HTMLElement}

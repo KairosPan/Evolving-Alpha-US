@@ -78,7 +78,7 @@ inventory's PART 2, so a step can be cited.
 
 **Prove on real boots**
 
-10. `FACE_SMOKE=1 npm test`: the twelve real boots. A dropped `snapshotEvents()` fails Gate 2
+10. `FACE_SMOKE=1 npm test`: the thirteen real boots. A dropped `snapshotEvents()` fails Gate 2
     and the room engine closed and loudly here (D7).
 
 **Prove on a copy of the home** (never the live one)
@@ -145,7 +145,7 @@ These are the upgrade's real work. Everything else in §3.2 fails a test first.
 | G10 | the MCP server is a child of the face process; its writes bypass the sandbox | behaviour | residual R5 if dsh starts sandboxing MCP children |
 | G12 | FastMCP (`mcp` 1.x) negotiates with dsh's `@modelcontextprotocol/client` 2.0 | `alpaca_kit/mcp/server.py`; the akshare-mcp install | both servers silently register zero tools (G4) |
 | H2 | `SKILL.md` frontmatter `name` + `description`, or discovery drops the skill at warn level | `dsh/skills/*/*/SKILL.md` | a new required key empties the catalog with no error |
-| H6 | the `agent-instructions` row: candidates, budget, the user-global file | installed `dsh-base/cordis.patch.yml`; after the 2026-10-15 redesign lands, the face's own patch (§7.3) | 0.2.1 removes the per-row `dshHome` and reads the global file via `DSH_AGENTS_HOME` |
+| H6 | the `agent-instructions` row's user-global file: hard-coded `$DSH_HOME/AGENTS.md`, outside the candidate lists the face restates | installed `dsh-agent-instructions/lib/index.js` (`USER_GLOBAL_FILE`); the candidates and the budget are the face's own patch, `face/src/instructions.ts` (H10) | 0.2.1 removes the per-row `dshHome` and reads the global file via `DSH_AGENTS_HOME` |
 | I5 | credential precedence: `.credentials.yaml` refs outrank both `.env` layers, the inherited environment wins | `boot.ts` `loadLayeredEnv`; the operator's shell | 0.2.1 changes API-key precedence for headless runs |
 | I12 | state outside `~/.dsh` and the repo is `tmpdir()` scratch only | `agents.ts`, `alpaca_kit/mcp/cache.py` | a new state directory the backup misses |
 | — | the MCP live roster: `/data/plugins.json` = `alpaca-kit active 10`, `akshare active 14` | runbook §7 A | the only visible sign of G4 |
@@ -160,7 +160,7 @@ Each row: the seam, the file that pins it. Depth: the inventory's row, `DEVELOPM
 fixture validator's private paths (`check:fixture`); A7–A8 the install anchor, `PluginPackages`
 and its native addon (every `FACE_SMOKE` boot); A10 the profile manifest and patch-file shapes
 `setup` writes (`setup.test.ts`); A11 the `satisfies` contract (tsc); A12 the structural `*Like`
-types hide drift from tsc, so the twelve real boots are the contract; A14 `FiberState.ACTIVE`
+types hide drift from tsc, so the thirteen real boots are the contract; A14 `FiberState.ACTIVE`
 as the literal `2` (`smoke.test.ts`, `panels.test.ts`); A15 Node 22's `zstdDecompress`
 (`sessions.test.ts`).
 
@@ -274,7 +274,8 @@ by catalog name (`smoke.test.ts`); H7 the prompt sections the face relies on:
 `deployment:persona-prefix`, `mcp:<server>`, the `bot-journal` context (`persona.test.ts`,
 `bot-plugin.test.ts`, `bots-smoke`, `bot-runtime-smoke`); H8 the system prompt as the leading
 `role:'system'` message, `request/header` as the durable proof a tool was offered
-(`bot-runtime-smoke`, `room-discussion-smoke`).
+(`bot-runtime-smoke`, `room-discussion-smoke`); H10 the face's instructions patch
+(`boot.test.ts`, `instructions-smoke`).
 
 **I · environment and home layout.** I1 `DSH_HOME` resolution and the dry run's live-home
 refusal (`check-home.test.ts`, `boot.test.ts`); I2 `DSH_PERMISSION_MODE` and `danger-full-access`
@@ -428,14 +429,16 @@ listed in §7.3 and enter §3 as their plans merge. The doc debts the compilatio
   D11. Recorded nowhere else in the repo as of 2026-10-15.
 - The room sources (`kind:'room'`, forms `answer` / `round-end` / `delta`) are admitted at v4 by
   the "any non-empty kind but `plugin`" rule; a stricter edge reopens D11 for 0.2-born rooms.
-- `dsh/profile/persona.md` still names the `report` tool, deleted at 0.2.0 (the redesign's plan
-  1 removes the sentence).
+- Landed in plan 1 (`5d8c95d`): `dsh/profile/persona.md` named the `report` tool, deleted at
+  0.2.0; the sentence is gone.
 
 ### 7.3 Seams the 2026-10-15 agent redesign adds (spec §8 and §11)
 
 - the `agent-instructions` row patched by `composeFace`: `instructionFileCandidates`,
   `localInstructionFileCandidates`, `maxBytes` restated whole (a named config replaces the
-  row's) — pinned by `boot.test.ts` and an instructions smoke;
+  row's) — pinned by `boot.test.ts` and an instructions smoke. Landed in plan 1: the patch
+  `8983555`, the smoke `2c494a1`, the `GRAVIT.md` it reads `dbbd19a` and `119c9da`; entered as
+  H10 in §3.2;
 - per-role `@deepseek-ai/dsh-tool-subagent` rows inside the default preset: `persona`,
   `toolFilter`, `backgroundMode: one-shot`, the `spawn` provider — the config keys, the
   capability flags the backend declares, and whether the row's persona shadows the global
@@ -452,8 +455,9 @@ listed in §7.3 and enter §3 as their plans merge. The doc debts the compilatio
 
 ### 7.4 Doc debts found while compiling the inventory (fix in the next docs pass, after the rename lands)
 
-- `face/README.md` "Tests" says eleven real boots in one line and twelve in the next; its table
-  has eleven rows and omits `order-gate-midboot-smoke.test.ts`. The code has twelve.
+- Fixed in plan 1: `face/README.md` "Tests" said eleven real boots in one line and twelve in
+  the next, and its table had eleven rows without `order-gate-midboot-smoke.test.ts`. It now
+  counts thirteen (the code's twelve and the instructions smoke) and its table has thirteen rows.
 - The go-live of 2026-10-01 is recorded nowhere in the repo: `DEVELOPMENT.md` §10 item 14 and
   §7.4, `ROADMAP.md`, the runbook §1 (still "the global `dsh` (0.1.1-rc.2 …)") and
   `dsh/README.md` "Installed state" read as if pending; the runbook's §3 expected-findings table

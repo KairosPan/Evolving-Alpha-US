@@ -52,8 +52,8 @@ const ROLE_TOOL = /^role_[a-z0-9_]+$/;
 
 /** What would fail at mount or render, as a reason; `undefined` when the config
  *  is valid. `{}` is the shipped config. `cycle` and `roles` are the keys plans
- *  3 and 2 fill; they are checked here when present so a typo refuses the
- *  mount, loudly, instead of loading a silently dead config. */
+ *  3 and 2 fill; they are checked here when present so a malformed value
+ *  refuses the mount, loudly, instead of loading a silently dead config. */
 export function validateGravitConfig(config) {
   if (config === null || typeof config !== "object" || Array.isArray(config)) return "config must be an object";
   const { cycle, roles } = config;

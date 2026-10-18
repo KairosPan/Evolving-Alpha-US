@@ -383,8 +383,8 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
    * Guarded like the persona patch: an unmatched patch is silent. */
   if (rows.has(AGENT_INSTRUCTIONS_ROW_ID)) patches.push(instructionsPatch());
   /* The static `preset-gravit` row IS `bots/gravit` (src/bot-presets.ts
-   * `definitionFor`): its preset.yml name/description and its `[]`
-   * composition - the host composition itself, no mask, no shadowed persona.
+   * `definitionFor`): its preset.yml name/description and its one row, the
+   * face's `gravit.js` (the date section) - no mask, no shadowed persona.
    * Static, not declared after boot like the other bots, because the default
    * must exist before the first `session/create` resolves it (NEW
    * packages/api/session-controller/src/agent.ts:380-397). `definitionFor`

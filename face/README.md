@@ -343,6 +343,15 @@ layers below left there, so an operator's `includeRuntimeContext`,
 `includeHarnessIdentity`, `personaSuffix` or `toolOrder` survives. At 0.1.1
 the face replaced the row's whole config and discarded them without a word.
 
+The instruction files are the face's as well: it restates dsh-base's
+`agent-instructions` row whole (`src/instructions.ts`, in layer 6 beside the
+persona key), so every agent in the tree reads `GRAVIT.md` and its gitignored
+twin `GRAVIT.local.md` in each directory from the repo root down to the
+session's cwd, and no other name — `AGENTS.md` and `CLAUDE.md` are the coding
+agents' files — except the user-global `$DSH_HOME/AGENTS.md`, a name dsh
+hard-codes, which still loads if you keep one. Unlike the persona key, nothing
+of yours on that row survives, and the patch file's header lists it.
+
 ## The policy layer (src/policy.ts)
 
 dsh-base 0.2.0 changed several product defaults that decide what Gravit can do
@@ -657,7 +666,7 @@ title in the sidebar's group header — the chevron still only folds it. Seven
 blocks, every one quietly skipped when its source is absent: header (title,
 inline-rename, status badge, a `missing-dir` warning, the roster's agent
 chips, the directory path); the optional `status.yaml` headline (`one_line`,
-`next`, `numbers` — see `AGENTS.md`); the thesis (`THESIS.md`, with an
+`next`, `numbers` — see `GRAVIT.md`); the thesis (`THESIS.md`, with an
 untouched `_template` copy detected byte-exact and shown as "no thesis yet"
 rather than presented as content); latest evidence (the newest
 `backtests/*.json`, flattened to a summary table, with the FULL json always
@@ -680,7 +689,7 @@ naming the channel and its current roster verbatim. The tool pipeline
 carrying that message, so what Gravit actually sees is a tool result, never a
 crash — but the mechanism there is a thrown `Error`, not a returned value.
 That refusal message IS the roster's contract; it is deliberately not written
-into the channel's own `AGENTS.md`, which is Gravit-writable and would drift
+into the channel's own `GRAVIT.md`, which is Gravit-writable and would drift
 from the operator-owned file. A channel with no roster entry yet (created
 straight through the registry, before a listing has seeded it) reads as "no
 roster yet" and refuses; an unparseable `channels.json` reads as "no rosters"
@@ -919,9 +928,11 @@ the face builds each definition from `bots/<id>/` itself (`src/bot-presets.ts`),
 and the declaration only ever READS those files; the authoring routes below are
 their only writer.
 
-- **`bots/gravit` is the default** every session joins when it names none: an
-  EMPTY composition, so Gravit's own sessions keep the host's flat roster
-  unchanged (`bots-smoke.test.ts` pins the two tool sets equal). It is the
+- **`bots/gravit` is the default** every session joins when it names none: one
+  row, the face's `plugins/gravit.js` — the `deployment:today` section, scoped
+  to Gravit's sessions and never a bot's — which masks no tool, so Gravit's own
+  sessions keep the host's flat roster unchanged (`bots-smoke.test.ts` pins the
+  two tool sets equal, and the date in Gravit's prompt alone). It is the
   overlay's static `preset-gravit` row, built by `definitionFor` at compose
   time, so it exists before the first `session/create` resolves it. The face
   also declares `preset-kairos`, the same definition under `kairos`, Gravit's
@@ -1460,10 +1471,10 @@ the seam is dropped and the table's meta line says so.
 ```bash
 npm test                  # offline unit tests - no keys, no network, no port
 npm run typecheck         # strict tsc against the pinned .d.ts (skipLibCheck: false) - the contract test
-FACE_SMOKE=1 npm test     # + the 11 isolated real boots; local stubs, no external model calls
+FACE_SMOKE=1 npm test     # + the 13 isolated real boots; local stubs, no external model calls
 ```
 
-Offline, `npm test` skips the 12 real boots listed below; `FACE_SMOKE=1` runs
+Offline, `npm test` skips the 13 real boots listed below; `FACE_SMOKE=1` runs
 them too. The typecheck includes the dependencies' own `.d.ts`, so a green one
 means the face compiles against the installed dsh, not just against itself.
 
@@ -1480,6 +1491,7 @@ and `node --test` gives each file its own:
 | `smoke.test.ts` | the sign-in (`/` 401, token 303 + cookie, page 200); `session/list` over the new wire; `/api` 401 without the cookie and 403 on a forged `Host` even with one (the fence runs before auth); the mux upgrade has NO route until `commitReady()`, then answers 401 without the cookie and 101 with it; the Gate-2 answer channel end to end — two signed-in `$events` tabs get the same approval, one answers, the other gets `cancel`, the grant lands in the session log; `ask_user_question`, `str_replace_editor` and `ralph` registered, `web_fetch` and the MCP resource tools not; zero inactive rows; `/market`, `/account`, `/client/*` and `/data` served without the cookie, the `/data` fence drilled on its own |
 | `order-gate.test.ts` (its real-tree case) | Gate 2's listener is registered: it asks for `mcp__drill__place_order` (the card naming `AAPL` and `side=buy`), `cancel_order` and a renamed server's twin, refuses an agentless call, lets `mcp__drill__orders` through; the guard refuses a marked tool the gate cannot name, and a session whose log it cannot read with its own sentence |
 | `order-gate-smoke.test.ts` | Gate 2's POSITIVE path: an approved stand-in order dispatches, a rejected one does not; then the same through the real `$events` channel |
+| `order-gate-midboot-smoke.test.ts` | Gate 2 armed while `boot()` is still pending: a slow fixture row holds the boot open while an order stand-in registers, and with `bootFace` unresolved and unary `/api` already serving, the order call is HELD with `approval/asked` logged and its body not run, an agentless call is denied by the listener, a marked tool the gate cannot name is denied by the guard alone; once the boot is released the held card reaches the first tab and `allowed-once` dispatches exactly once; a restart of the real `approval` row re-arms the listener once |
 | `client-mux-smoke.test.ts` | the page's own `client/api.js` and `client/mapper.js`, unmodified, against the host: ready, calls, emits, the control baseline, a follow's snapshot and tail, an approval answered and one rejected, a second tab's `cancel` and its refused late answer, Stop withdrawing a gate, a question answered, a gate replayed to a late tab, the non-activating page and projections reads |
 | `askuser-noclient-smoke.test.ts` | with no browser connected, an agent's question BLOCKS (parked for the next client); an agentless one is refused `NO_PROVIDER` |
 | `bots-smoke.test.ts` | the roster (a broken fixture listed with its reason, never `_template`); the shipped relative plugin path rebased onto the real `plugins/bot.js`; a bot sees allow ∩ tree while Gravit sees the whole roster; a tool registered after the declaration is admitted; the bot's persona shadows Gravit's; a session naming a broken preset is refused with dsh's `agent-preset/*` code; Gate 2 holds for a bot |
@@ -1488,6 +1500,7 @@ and `node --test` gives each file its own:
 | `room-smoke.test.ts` | a round on a stub model: dispatch to three bots, answers on the room log before the one wake, the synthesis; every member parented, preset-joined, `read-only` from its first event, without `dispatch`; the `room` value in the list row and in the per-record cache file; the operator's `@` and its refused write; a home session's journal write |
 | `room-discussion-smoke.test.ts` | a structured serial round: peer context, declared disagreements, the malformed-answer fallback, each member's own journal, Gravit's synthesis request, metadata surviving a flush and a re-read |
 | `subagents-smoke.test.ts` | the native subagent tools and Remotes: creation, child messages kept apart from settlement notices, permission inheritance, parent ownership, ordinary writes to managed children refused, and — after a reboot — catalog and history reads that activate neither side |
+| `instructions-smoke.test.ts` | what the `agent-instructions` baseline carries on a first request after the face's instructions patch: `GRAVIT.md` and `GRAVIT.local.md` for Gravit at the repo root; the root file plus the channel's own `strategies/x/GRAVIT.md` for a channel session; the root file for a bot session; `AGENTS.md` for none of them, `CLAUDE.md` for neither Gravit nor the channel session |
 
 `bot-sandbox-smoke.test.ts` and `askuser-noclient-smoke.test.ts` also print one
 `observed:` line each (S4, S7), the measurements the bots spec's amendments were
@@ -1901,8 +1914,9 @@ and NO model-facing tool for it. The tool is a separate package,
 `@deepseek-ai/dsh-tool-ask-user`, and upstream it reaches a session through an
 agent PRESET — dsh-web-app disables dsh-base's tool rows and carries
 `ask_user_question` inside each shipped preset's composition. The face keeps
-dsh-base's flat tool roster (its `gravit` preset is empty), so it inherits the
-one hole, and fills it with its own overlay row, `tool-ask-user` — configless,
+dsh-base's flat tool roster (its `gravit` preset carries one row, the face's
+`gravit.js`, which masks no tool), so it inherits the one hole, and fills it
+with its own overlay row, `tool-ask-user` — configless,
 which at 0.2.0 means the blocking `legacy` mode 0.1.1 shipped (the package also
 has a `timed` mode the face does not use). It is face-owned for the same reason
 `webserver` is: this layer composes last, so an operator patch aimed at it is
@@ -1969,7 +1983,7 @@ written.
    then on.
 6. PASS, part two — the instruction half, in a FRESH session: ask for a new
    strategy with a deliberately thin brief ("build me a strategy for storage
-   names"). Gravit asks before it builds, per `AGENTS.md`. This half is
+   names"). Gravit asks before it builds, per `GRAVIT.md`. This half is
    behavioural, not mechanical: a turn that answers with prose is not proof the
    seam is broken. Re-prompt once before concluding anything.
 7. The log, in the session's directory
@@ -2008,7 +2022,7 @@ card rendered with its options; the answer returned as the tool result
 Answered here the card reads `answered`; killed with Stop, `closed · cancelled`
 with the sidebar chip cleared and no resurrection on a session switch; and the
 Gate-2 approval card still reads `answered · deny`, which the settle path had to
-be taught to keep. Step 6 — the AGENTS.md instruction — is the operator's to run.
+be taught to keep. Step 6 — the GRAVIT.md instruction — is the operator's to run.
 Those runs were on the 0.1.1 face, where a stopped question read `closed ·
 cancelled`. **On 0.2.0-rc.2: step 0 passes at `8f0dedb`; the live run is still
 owed** (go-live runbook).
@@ -2129,7 +2143,7 @@ route, three bots in a temp channel, one operator prompt → Gravit dispatches a
 parallel → alpha answers, beta passes, gamma's model fails → the answer is on the room log before
 the round-end wake, the wake is one turn, Gravit's synthesis is in it; every member is parented,
 preset-joined, `read-only` as its first event (and its only permission pin before its first
-turn), carries the channel's `AGENTS.md` chain and lacks `dispatch`; the `room` value rides the
+turn), carries the channel's `GRAVIT.md` chain and lacks `dispatch`; the `room` value rides the
 session row and the per-record cache file (`storages/session_projcache/sessions/<id>.json`); an
 `@` turns alpha, whose write into the channel is refused inside the tool content (D12) and never
 woke Gravit; a home session writes its journal and is refused on `../SOUL.md`.
@@ -2203,8 +2217,8 @@ the answer sent while Gravit's turn was open landed right after its `turn/end`. 
 restart the cold listing carried the room's title and its `room` value from the cache, the fold and
 the strip's coarse states survived. Three observations, none a failure: the landing page lists the
 member sessions as plain `untitled` rows (shown and counted, not yet labelled by voice); Gravit,
-handed an un-rostered `@` as a prompt, assumed the voice would answer — `AGENTS.md` should say that
-such an `@` named nobody (the sentence landed the same day, in its Rooms paragraph); the peer-`@` continuation was superseded by the operator's next `@` before
+handed an un-rostered `@` as a prompt, assumed the voice would answer — `GRAVIT.md` should say that
+such an `@` named nobody (the sentence landed the same day, in the Rooms paragraph of `AGENTS.md`, then Gravit's file); the peer-`@` continuation was superseded by the operator's next `@` before
 it ran (by design), so that path stands on the engine tests, not on this drill. That run was on
 the 0.1.1 face; **on 0.2.0-rc.2 step 0 passes at `8f0dedb`, and the live run is still owed**
 (go-live runbook).

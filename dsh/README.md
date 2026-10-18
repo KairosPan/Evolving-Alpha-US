@@ -62,7 +62,7 @@ deferring. Every style-gravit SKILL.md carries that scope header at the top.
    (`market_snapshot`, `screen`, `breadth`) do not register at all. `data/` is gitignored, so a
    fresh clone has NO bed — restore `data/pit/2yr` from the operator backup
    (`alpha-us-backup-20260829`) or capture a new one with `scripts/capture_window.py`; the bed
-   windows and their out-of-window failure modes are in `AGENTS.md`.
+   windows and their out-of-window failure modes are in `GRAVIT.md`.
 5. **Check what registered, before blaming dsh.** The toolset is a pure function of the
    environment, so it is checkable without the harness — but check it under the environment the
    PROFILE gives the server, not whatever your shell happens to carry. dsh spawns the server with
@@ -173,4 +173,4 @@ actually bound, for the next install or the next pin bump:
   `FASTMCP_`-prefixed variables; verified against mcp 1.28.1). Do not edit
   `alpaca_kit/mcp/server.py` for this.
 - **Editing.** The repo copy under `dsh/` is the source of truth to edit. Installed copies
-  under the harness home are operator territory — `AGENTS.md` puts them on the never-edit list.
+  under the harness home are operator territory — `GRAVIT.md` puts them on the never-edit list.

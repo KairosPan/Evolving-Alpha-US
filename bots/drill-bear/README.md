@@ -15,4 +15,4 @@ One directory = one bot = one dsh agent preset. Copied by the face's **New bot**
 Rules: no `{{` anywhere in `SOUL.md` (the system prompt is a strict template with no escape);
 the mask in `agent.cordis.yml` is visibility, not authority — the sandbox and Gate 2 are the
 fences, and neither is containment.
-Gravit never edits anything under `bots/` (AGENTS.md).
+Gravit never edits anything under `bots/` (GRAVIT.md).
