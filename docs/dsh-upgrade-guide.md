@@ -20,7 +20,7 @@ that adds a dependency on dsh adds its row to §3 in the same commit.
 
 | Component | Version | Pinned where | Checked by |
 |---|---|---|---|
-| the dsh family, 29 `@deepseek-ai/dsh-*` packages, every one exact | **0.2.0-rc.2** | `face/package.json`; `face/src/version.ts` `DSH_PIN` | `face/tests/version.test.ts` sweeps manifest, installed tree and constant |
+| the dsh family, 30 `@deepseek-ai/dsh-*` packages (29 on 2026-10-15; `dsh-agent-instructions` added by plan 1), every one exact | **0.2.0-rc.2** | `face/package.json`; `face/src/version.ts` `DSH_PIN` | `face/tests/version.test.ts` sweeps manifest, installed tree and constant |
 | `@deepseek-ai/cordis` (every dsh package peers it `~4.0.4`) | 4.0.4 | `package.json`; `CORDIS_PIN` | `version.test.ts` |
 | `@deepseek-ai/cordis-plugin-include` (imported directly for `entryListSchema`) | 1.0.9 | `package.json`; `CORDIS_INCLUDE_PIN` | `version.test.ts` |
 | `cordis-plugin-loader` / `-group` / `-timer` | 1.0.5 / 1.0.4 / 1.1.6 | **lockfile only** | nothing: a lockfile-only move of these is an upgrade and gets the whole §2 |
@@ -175,12 +175,12 @@ disabled (`boot.test.ts`); B6 the persona patch restating every inherited `syste
 (`smoke.test.ts`); B13 the four required service keys (`smoke.test.ts`); B16 `bootFace`
 materializes `$DSH_HOME` once per process (`boot.test.ts`); B17 exactly thirteen overlay rows in
 order, the thirteenth `preset-kairos`, the alias of the default (`overlay.test.ts`); B18 the four
-storage rows composed once, from dsh-base (`boot.test.ts`);
-B19–B23 each overlay row's config and inject (tsc, `overlay.test.ts`, every
-boot); B24–B30 the policy rows D3–D7 and D9, each pinned against the installed dsh-base
-(`policy.test.ts`, `smoke.test.ts`); B31 the policy guard reports a missing target on stderr
-(`policy.test.ts`); B32 the `extraPatches` seam the dry run uses (`check-home.test.ts`); B34
-every dsh-base row the face addresses by id (`boot.test.ts`, `policy.test.ts`).
+storage rows composed once, from dsh-base (`boot.test.ts`); B19–B23 each overlay row's config and
+inject (tsc, `overlay.test.ts`, every boot); B24–B30 the policy rows D3–D7 and D9, each pinned
+against the installed dsh-base (`policy.test.ts`, `smoke.test.ts`); B31 the policy guard reports a
+missing target on stderr (`policy.test.ts`); B32 the `extraPatches` seam the dry run uses
+(`check-home.test.ts`); B34 every dsh-base row the face addresses by id (`boot.test.ts`,
+`policy.test.ts`).
 
 **C · agent plane.** C1 the registry row and its `Pick<Config, "default">` (tsc,
 `overlay.test.ts`); C2 `defaultId` = the default preset (every boot refuses otherwise); C3 the
@@ -256,10 +256,9 @@ join, read-only pin (`room-smoke`); F3 cold rooms resumed through `sessionContro
 (`room-engine`); F9 room facts on known event types only (`room-projection.test.ts`,
 `room-smoke`); F10 a member's pending gate read off its log (`room-engine`); F11 the channel's
 instruction chain reaches a member (`room-smoke`; landed in plan 1 as the `GRAVIT.md` chain,
-`dbbd19a` and the patch `8983555`); F12
-members attached to the channel workspace (`room-smoke`); F13 the legacy-format wording matched
-by error name (`room-engine`); F14 the caps sentence generated from `ROOM_CAPS`
-(`room-rules.test.ts`).
+`dbbd19a` and the patch `8983555`); F12 members attached to the channel workspace (`room-smoke`);
+F13 the legacy-format wording matched by error name (`room-engine`); F14 the caps sentence
+generated from `ROOM_CAPS` (`room-rules.test.ts`).
 
 **G · MCP.** G1 the stdio row config keys (tsc, `boot.test.ts`, `check-home.test.ts`); G4
 `failOnStartupError: false` leaves a dead server's row ACTIVE with no tools
@@ -362,12 +361,12 @@ arc and in `DEVELOPMENT.md` §4.
 
 **What the face did** (branch `worktree-dsh-0.2.0-rc.2`, five commits 3bbaa25..a6a6f45,
 merged to local `main @ 23827c0`, pushed 2026-10-06 as part of `a6126d1`): S0 the pins; S1 the
-boot mirror with its ten divergences; S2 the overlay rows (now thirteen); S3 the browser-cookie sign-in;
-S4 the policy layer restoring the 0.1.1 posture (D3–D7, D9); S5 the server modules on the new
-services; S6 bots as face-declared presets with `bot.js` re-expanding its mask on `tools/change`;
-S7 Gate 2 on `snapshotEvents()`, armed inside `prepare` after a review proved the mid-boot
-window, its approved path automated; S8 the client transport; `scripts/check-home.ts` for the
-dry run; the go-live runbook; the docs pass. Suite at the end: 654 tests, 642 pass / 12
+boot mirror with its ten divergences; S2 the overlay rows (now thirteen); S3 the browser-cookie
+sign-in; S4 the policy layer restoring the 0.1.1 posture (D3–D7, D9); S5 the server modules on the
+new services; S6 bots as face-declared presets with `bot.js` re-expanding its mask on
+`tools/change`; S7 Gate 2 on `snapshotEvents()`, armed inside `prepare` after a review proved the
+mid-boot window, its approved path automated; S8 the client transport; `scripts/check-home.ts` for
+the dry run; the go-live runbook; the docs pass. Suite at the end: 654 tests, 642 pass / 12
 skipped offline, `FACE_SMOKE=1` 654/654, tsc clean.
 
 **Decisions:** D1–D18 (§4).

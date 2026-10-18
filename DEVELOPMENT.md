@@ -410,10 +410,11 @@ findings never overrule them. Style yields to findings, but the conflict is repo
 ### 3.3 `GRAVIT.md`
 
 The workspace map every dsh agent in the tree reads on its first request — Gravit, its role
-children and the bots alike — so it states facts only: the three layers and where each lives,
-the PIT rule, the strategy directory contract and lifecycle, the bed windows (its table is
-pinned row for row to `docs/backtest-rules.md`), the room caps sentence (pinned to
-`ROOM_CAPS`), the never-edit list. Budget 4,500 bytes, no `{{` (`face/tests/gravit-md.test.ts`).
+children (plan 2 of the 2026-10-15 redesign) and the bots alike — so it states facts only: the
+three layers and where each lives, the PIT rule, the strategy directory contract and lifecycle,
+the bed windows (its table is pinned row for row to `docs/backtest-rules.md`), the room caps
+sentence (pinned to `ROOM_CAPS`), the never-edit list. Budget 4,500 bytes, no `{{`
+(`face/tests/gravit-md.test.ts`).
 
 Discovery is dsh's (`dsh-agent-instructions`, the `agent-instructions` row dsh-base mounts,
 64 KiB budget), but the candidates are the face's: `composeFace` restates the row's config
@@ -1400,21 +1401,20 @@ through `tsx`:
   dsh-base, and reachable by an operator patch; the persona patch setting `personaPrefix` and
   keeping the operator's other `system-prompt` keys; the instructions patch restating
   `agent-instructions` to `GRAVIT.md` and `GRAVIT.local.md`, after the persona patch and before
-  only the overlay; a skipped bundle refused; the static
-  `preset-gravit` row equal to `definitionFor(bots, "gravit")` and the `preset-kairos` alias equal
-  to it under the legacy id, and a missing default composition refused), `overlay` (exactly the
-  thirteen rows, in order; loopback config; the rows dsh-base owns now and the retired ones never
-  inserted), `policy` (every target a row the installed dsh-base composes; the composed posture;
-  an operator row overriding a default; `DSH_TELEMETRY_DISABLED` winning over an operator
-  re-enable), `setup`, `static` (`/` asks the index gate first and writes nothing on a refusal;
-  the instrument pages and `/client` never consult it), `version` (the three pins, the retired
-  names), `persona` (cross-checked against the installed strict renderer), `gravit-md`
-  (`GRAVIT.md` within its 4,500 bytes and free of `{{`; its bed table equal to
-  `docs/backtest-rules.md`'s, row for row; no line that tells the reader who it is),
-  `gravit-plugin` (`name` and `inject`; `validateGravitConfig` accepting `{}` and checking `cycle`
-  and `roles` when present; `todayText` rendering the zone's local date, ISO then weekday; `apply`
-  registering one scoped, uninterpolated section right after the persona slot, which unload
-  removes; a bad config refused with its reason), `check-home` (the
+  only the overlay; a skipped bundle refused; the static `preset-gravit` row equal to
+  `definitionFor(bots, "gravit")` and the `preset-kairos` alias equal to it under the legacy id,
+  and a missing default composition refused), `overlay` (exactly the thirteen rows, in order;
+  loopback config; the rows dsh-base owns now and the retired ones never inserted), `policy`
+  (every target a row the installed dsh-base composes; the composed posture; an operator row
+  overriding a default; `DSH_TELEMETRY_DISABLED` winning over an operator re-enable), `setup`,
+  `static` (`/` asks the index gate first and writes nothing on a refusal; the instrument pages
+  and `/client` never consult it), `version` (the three pins, the retired names), `persona`
+  (cross-checked against the installed strict renderer), `gravit-md` (`GRAVIT.md` within its 4,500
+  bytes and free of `{{`; its bed table equal to `docs/backtest-rules.md`'s, row for row; no line
+  that tells the reader who it is), `gravit-plugin` (`name` and `inject`; `validateGravitConfig`
+  accepting `{}` and checking `cycle` and `roles` when present; `todayText` rendering the zone's
+  local date, ISO then weekday; `apply` registering one scoped, uninterpolated section right after
+  the persona slot, which unload removes; a bad config refused with its reason), `check-home` (the
   go-live dry run's pieces, offline: the live-home refusal by device and inode — through a
   symlink, in another letter case, inside or above the home — and the marker; the refusal classes;
   the multi-frame log reader; the inventory diff; the MCP row walk; the `extraPatches` seam

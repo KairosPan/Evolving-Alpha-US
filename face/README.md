@@ -1496,7 +1496,7 @@ and `node --test` gives each file its own:
 | `order-gate-midboot-smoke.test.ts` | Gate 2 armed while `boot()` is still pending: a slow fixture row holds the boot open while an order stand-in registers, and with `bootFace` unresolved and unary `/api` already serving, the order call is HELD with `approval/asked` logged and its body not run, an agentless call is denied by the listener, a marked tool the gate cannot name is denied by the guard alone; once the boot is released the held card reaches the first tab and `allowed-once` dispatches exactly once; a restart of the real `approval` row re-arms the listener once |
 | `client-mux-smoke.test.ts` | the page's own `client/api.js` and `client/mapper.js`, unmodified, against the host: ready, calls, emits, the control baseline, a follow's snapshot and tail, an approval answered and one rejected, a second tab's `cancel` and its refused late answer, Stop withdrawing a gate, a question answered, a gate replayed to a late tab, the non-activating page and projections reads |
 | `askuser-noclient-smoke.test.ts` | with no browser connected, an agent's question BLOCKS (parked for the next client); an agentless one is refused `NO_PROVIDER` |
-| `bots-smoke.test.ts` | the roster (a broken fixture listed with its reason, never `_template`); the shipped relative plugin path rebased onto the real `plugins/bot.js`; a bot sees allow ∩ tree while Gravit sees the whole roster; a tool registered after the declaration is admitted; the bot's persona shadows Gravit's; a session naming a broken preset is refused with dsh's `agent-preset/*` code; Gate 2 holds for a bot |
+| `bots-smoke.test.ts` | the roster (a broken fixture listed with its reason, never `_template`); the shipped relative plugin path rebased onto the real `plugins/bot.js`; a bot sees allow ∩ tree while Gravit sees the whole roster; a tool registered after the declaration is admitted; the bot's persona shadows Gravit's; Gravit's prompt carries the `deployment:today` line and a bot's does not; a session naming a broken preset is refused with dsh's `agent-preset/*` code; Gate 2 holds for a bot |
 | `bot-runtime-smoke.test.ts` | a saved route reaches the real request without changing the host default; a save re-declares — the old conversation keeps the old soul, a new one gets the new; the journal as a runtime-context snapshot; `agentPresets/select` |
 | `bot-sandbox-smoke.test.ts` | a `read-only` session's write is refused inside the tool's content (`[sandbox: file access denied under read-only mode]`), never silently |
 | `room-smoke.test.ts` | a round on a stub model: dispatch to three bots, answers on the room log before the one wake, the synthesis; every member parented, preset-joined, `read-only` from its first event, without `dispatch`; the `room` value in the list row and in the per-record cache file; the operator's `@` and its refused write; a home session's journal write |
@@ -2219,8 +2219,9 @@ the answer sent while Gravit's turn was open landed right after its `turn/end`. 
 restart the cold listing carried the room's title and its `room` value from the cache, the fold and
 the strip's coarse states survived. Three observations, none a failure: the landing page lists the
 member sessions as plain `untitled` rows (shown and counted, not yet labelled by voice); Gravit,
-handed an un-rostered `@` as a prompt, assumed the voice would answer — `GRAVIT.md` should say that
-such an `@` named nobody (the sentence landed the same day and sits in `GRAVIT.md`'s Rooms paragraph); the peer-`@` continuation was superseded by the operator's next `@` before
-it ran (by design), so that path stands on the engine tests, not on this drill. That run was on
-the 0.1.1 face; **on 0.2.0-rc.2 step 0 passes at `8f0dedb`, and the live run is still owed**
-(go-live runbook).
+handed an un-rostered `@` as a prompt, assumed the voice would answer — `AGENTS.md` should say that
+such an `@` named nobody (the sentence landed the same day in its Rooms paragraph, and is now in
+`GRAVIT.md`'s); the peer-`@` continuation was superseded by the operator's next `@` before it ran
+(by design), so that path stands on the engine tests, not on this drill. That run was on the 0.1.1
+face; **on 0.2.0-rc.2 step 0 passes at `8f0dedb`, and the live run is still owed** (go-live
+runbook).

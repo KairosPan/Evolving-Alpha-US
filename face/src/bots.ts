@@ -128,7 +128,7 @@ export interface BotRow {
   setupIssues: string[];
   /** `preset.yml`'s `model:` verbatim, absent when the default route serves the bot. */
   model?: string;
-  /** `gravit`: the host composition, not a bot. */
+  /** `gravit`: the host composition (plus the face's date row), not a bot. */
   isDefault: boolean;
   /** Why the bot cannot be used (Rule 5: shown, never skipped): dsh's own
    *  reason when its declared composition cannot mount, or the face's reason
