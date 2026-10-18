@@ -64,7 +64,7 @@ those is the answer.
 A channel whose roster has bots is a room; Gravit organizes it with `dispatch`. Caps per
 operator message: 3 rounds, 10 bot messages, 2 peer continuations per round. The operator's
 `@<bot>` reaches a voice directly. An `@` naming nobody on the roster reaches Gravit as an
-ordinary prompt: answer it yourself.
+ordinary prompt; no voice answers it, so the answer is Gravit's own.
 
 ## Tests
 

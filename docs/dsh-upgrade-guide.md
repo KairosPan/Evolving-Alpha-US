@@ -277,7 +277,12 @@ by catalog name (`smoke.test.ts`); H7 the prompt sections the face relies on:
 `bot-plugin.test.ts`, `bots-smoke`, `bot-runtime-smoke`); H8 the system prompt as the leading
 `role:'system'` message, `request/header` as the durable proof a tool was offered
 (`bot-runtime-smoke`, `room-discussion-smoke`); H10 the face's instructions patch
-(`boot.test.ts`, `instructions-smoke`).
+(`boot.test.ts`, `instructions-smoke`); H11 the face's date section: `face/plugins/gravit.js`,
+the first row of `bots/gravit/agent.cordis.yml`, registers `deployment:today` at
+`getSectionOrder("DEPLOYMENT_PERSONA_PREFIX") + 1` with `interpolate: false` and a function text
+re-evaluated at each assembly, scoped to the preset revision so a bot's prompt never carries it
+(`gravit-plugin.test.ts`: order, shape, unload; `bots-smoke`: Gravit's prompt has it, a bot's
+does not).
 
 **I · environment and home layout.** I1 `DSH_HOME` resolution and the dry run's live-home
 refusal (`check-home.test.ts`, `boot.test.ts`); I2 `DSH_PERMISSION_MODE` and `danger-full-access`
@@ -448,7 +453,9 @@ listed in §7.3 and enter §3 as their plans merge. The doc debts the compilatio
   prefix for the child (spec §11 (a));
 - preset-scoped tool rows under eager activation and the roster audit (spec §11 (b));
 - `face/plugins/gravit.js`: `ctx.systemPrompt.section` with `interpolate: false`, the orders
-  `getSectionOrder` allocates for the first-party tail (spec §11 (d));
+  `getSectionOrder` allocates for the first-party tail (spec §11 (d)). Landed in plan 1
+  (`6af2eb2`): the date section at `getSectionOrder("DEPLOYMENT_PERSONA_PREFIX") + 1`, entered as
+  H11 in §3.2; the `roles` section (plan 2) and the `cycle` section (plan 3) are still to land;
 - `dsh-goal` + `dsh-goal-round-driver` + `dsh-tool-goal`: the `<goal_round>` prompt text, the
   `round-limit` blocker, the disarm-after-resume rule (spec §11 (e));
 - `dsh-compaction-tool-result-pruner` thresholds (8,192 / 4,096 / 1,024) that role reports are
