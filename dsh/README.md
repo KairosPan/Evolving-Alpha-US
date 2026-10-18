@@ -6,12 +6,12 @@ STRATEGY runs on DeepSeek Harness (dsh). This directory is the repo's half of th
 |---|---|
 | `profile/cordis.yml` | profile TEMPLATE — mounts the alpaca-kit MCP server, the skill roots, and the INTENDED approval list (see step 6) |
 | `skills/mechanics/` | neutral mechanics, always apply: `backtest-rules`, `alpaca-kit-guide` |
-| `skills/style-kairos/` | the operator's own style: `doctrine`, `signals`, `lessons` — converted from the retired `seeds_v2/` JSON packs by `scripts/convert_seeds.py` |
+| `skills/style-gravit/` | the operator's own style: `doctrine`, `signals`, `lessons` — converted from the retired `seeds_v2/` JSON packs by `scripts/convert_seeds.py` |
 
 Mechanics vs style is the load-bearing split. Mechanics are how the data and the honest-eval
 bed work — findings never overrule them. Style is the operator's preference: follow it by
 default, but when research contradicts an entry, REPORT the conflict instead of silently
-deferring. Every style-kairos SKILL.md carries that scope header at the top.
+deferring. Every style-gravit SKILL.md carries that scope header at the top.
 
 ## Install
 
@@ -36,14 +36,14 @@ deferring. Every style-kairos SKILL.md carries that scope header at the top.
    location per the current dsh docs — as of the frozen survey that is
    `$DSH_HOME/profiles/<name>/` and its patch file is `cordis.patch.yml` (for the `face`
    profile, put this file's rows INTO `$DSH_HOME/profiles/face/cordis.patch.yml` — that
-   patch file is the only one to edit there, because `kairos-face` rewrites
+   patch file is the only one to edit there, because `gravit-face` rewrites
    `<profile>/cordis.yml` on every boot; see `face/README.md`). Fill in every
    `<ABSOLUTE PATH TO THIS REPO>` placeholder in the copy; the repo copy keeps the
    placeholders. In the same pass, replace the bare `python` in the server `command:` with the
    ABSOLUTE path of the interpreter step 1 installed into (`python -c "import sys;
    print(sys.executable)"`) — dsh spawns the server as a subprocess whose `PATH` need not be
    your shell's, and a bare `python` can resolve to a system interpreter that has none of the
-   deps. Add Kairos's default model to the same file — the face reads no `settings.yaml`, so
+   deps. Add Gravit's default model to the same file — the face reads no `settings.yaml`, so
    without this row it runs dsh-base's `deepseek-official/deepseek-flash`, and nothing in the
    running face saves a model choice back:
    ```yaml
@@ -136,7 +136,7 @@ actually bound, for the next install or the next pin bump:
   one, so the server is spawned twice per connect.
 - **The default-model row lives there too** (`agent-default-model`, step 3). 0.1.1 took the
   model from `$DSH_HOME/settings.yaml`; the face at 0.2.0 reads no settings file (it provides
-  no `profileContext`), so the row is the only place Kairos's model is set.
+  no `profileContext`), so the row is the only place Gravit's model is set.
 - **`toolCallTimeoutMs: 300000` on the MCP row is load-bearing.** `screen(trend_template)`
   computes ~188 s for one day on the 2yr bed (measured 2026-08-31); the 60 s default kills
   it every time, as `MCP error -32001: Request timed out`. Since then screen/breadth results
@@ -161,7 +161,7 @@ actually bound, for the next install or the next pin bump:
 ## Notes
 
 - **Skill roots are the group directories.** Discovery expects `<root>/<name>/SKILL.md`, so
-  the profile lists `dsh/skills/mechanics` and `dsh/skills/style-kairos` separately rather
+  the profile lists `dsh/skills/mechanics` and `dsh/skills/style-gravit` separately rather
   than their shared parent.
 - **SKILL.md frontmatter is mandatory.** dsh's skill discovery drops any SKILL.md whose
   YAML frontmatter is missing `name` and `description` — SILENTLY, at warn level in a log
