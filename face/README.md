@@ -345,14 +345,19 @@ layers below left there, so an operator's `includeRuntimeContext`,
 `includeHarnessIdentity`, `personaSuffix` or `toolOrder` survives. At 0.1.1
 the face replaced the row's whole config and discarded them without a word.
 
-The instruction files are the face's as well: it restates dsh-base's
-`agent-instructions` row whole (`src/instructions.ts`, in layer 6 beside the
-persona key), so every agent in the tree reads `GRAVIT.md` and its gitignored
-twin `GRAVIT.local.md` in each directory from the repo root down to the
-session's cwd, and no other name — `AGENTS.md` and `CLAUDE.md` are the coding
-agents' files — except the user-global `$DSH_HOME/AGENTS.md`, a name dsh
-hard-codes, which still loads if you keep one. Unlike the persona key, nothing
-of yours on that row survives, and the patch file's header lists it.
+The instruction files are the face's as well, but only their two candidate
+lists: it patches dsh-base's `agent-instructions` row (`src/instructions.ts`,
+in layer 6 beside the persona key) the way the persona patch does, spreading
+the config the layers below left and applying `GRAVIT.md` and
+`GRAVIT.local.md` last. So every agent in the tree reads `GRAVIT.md` and its
+machine-local twin `GRAVIT.local.md` (gitignored at the repo root) in each
+directory from the repo root down to the session's cwd, and no other name —
+`AGENTS.md` and `CLAUDE.md` are the coding agents' files — except the
+user-global `$DSH_HOME/AGENTS.md`, a name dsh hard-codes, which still loads
+if you keep one. As with the persona key, everything else of yours on that row
+survives — `projectRootMarkers`, `maxSourceBytes`, `maxBytes` — and so does
+`disabled`; only the two candidate lists are overridden, and the patch file's
+header says so.
 
 ## The policy layer (src/policy.ts)
 
@@ -375,7 +380,7 @@ operator row wins). Every row is an upgrade decision, named by its id:
 | D9 `str_replace_editor` | `tool-str-replace-editor` — dropped from dsh-base; the face inserts it, configless (`maxOutputChars` now defaults to 0.1.1's 16000) | mounted | absent | `- { id: tool-str-replace-editor, disabled: true }` |
 
 Two patch rules decide how such rows are written: a row that names `config`
-replaces that row's WHOLE config (hence the full restatements for D6), while
+replaces that row's WHOLE config (hence D6's configs written out in full), while
 `{ id, disabled }` keeps it. A policy target missing from the bundle — a row
 renamed upstream — is reported on stderr at boot (`gravit-face: warning:
 policy D…: dsh-base composes no "<id>" row …`), never skipped silently.

@@ -417,21 +417,22 @@ sentence (pinned to `ROOM_CAPS`), the never-edit list. Budget 4,500 bytes, no `{
 (`face/tests/gravit-md.test.ts`).
 
 Discovery is dsh's (`dsh-agent-instructions`, the `agent-instructions` row dsh-base mounts,
-64 KiB budget), but the candidates are the face's: `composeFace` restates the row's config
+64 KiB budget), but the candidates are the face's: `composeFace` sets the row's two lists
 (`src/instructions.ts`: `instructionFileCandidates: ["GRAVIT.md"]`,
-`localInstructionFileCandidates: ["GRAVIT.local.md"]`) after the operator's layers, so
-`AGENTS.md` and `CLAUDE.md` are never read by any agent in the tree — `AGENTS.md` is the coding
-agents' file now, `CLAUDE.md` Claude Code's. The loader walks from the `.git` root down to the
-session's cwd, so a channel session also reads any `strategies/<name>/GRAVIT.md`; a gitignored
-`GRAVIT.local.md` beside the root file is the operator's machine-local overlay
-(`tests/instructions-smoke.test.ts` pins all three readers and both exclusions). Two dsh facts
-the patch does not change (installed `dsh-agent-instructions/lib/index.js`, `USER_GLOBAL_FILE`
-and the baseline identity): the user-global file is hard-coded `$DSH_HOME/AGENTS.md` and still
-loads when the operator has one, and the candidate list is part of the baseline's identity, so
-a session resumed across this change receives one replacement baseline. The facts
-`GRAVIT.md` shares with `CLAUDE.md` (beds, RAW, warmup) are repeated in `docs/backtest-rules.md`,
-both mechanics skills, `scripts/face_data.py`, `strategies/_template/backtest.py` and §2.4; when a
-bed changes, all of them move.
+`localInstructionFileCandidates: ["GRAVIT.local.md"]`) after the operator's layers, keeping every
+other key they left on the row, so `AGENTS.md` and `CLAUDE.md` are never read by any agent in the
+tree — `AGENTS.md` is the coding agents' file now, `CLAUDE.md` Claude Code's. The loader walks
+from the `.git` root down to the session's cwd, so a channel session also reads any
+`strategies/<name>/GRAVIT.md`; a gitignored `GRAVIT.local.md` beside the root file is the
+operator's machine-local overlay (`tests/instructions-smoke.test.ts` pins all three readers and
+both exclusions). Two dsh facts the patch does not change (installed
+`dsh-agent-instructions/lib/index.js`, `USER_GLOBAL_FILE` and the baseline identity): the
+user-global file is hard-coded `$DSH_HOME/AGENTS.md` and still loads when the operator has one,
+and the candidate list is part of the baseline's identity, so a session resumed across this
+change receives one replacement baseline. The facts `GRAVIT.md` shares with `CLAUDE.md` (beds,
+RAW, warmup) are repeated in `docs/backtest-rules.md`, both mechanics skills,
+`scripts/face_data.py`, `strategies/_template/backtest.py` and §2.4; when a bed changes, all of
+them move.
 
 ### 3.4 The strategy directory contract
 
@@ -652,8 +653,8 @@ row audit; and the policy layer.
    `scripts/check-home.ts` disables a home copy's MCP rows with it) — apply the guarded
    switches (`session-telemetry-otel` disabled when `DSH_TELEMETRY_DISABLED` is non-empty and
    the row is composed; `hmr` disabled whenever composed), patch Gravit's persona into
-   `system-prompt` (`personaPrefix` only, §4.3), restate the `agent-instructions` row after it
-   (`instructionsPatch`, §4.3), then push **the face overlay last**. This
+   `system-prompt` (`personaPrefix` only, §4.3), set the `agent-instructions` row's two
+   candidate lists after it (`instructionsPatch`, §4.3), then push **the face overlay last**. This
    inverts the CLI's layering deliberately: loopback-only binding must survive an operator
    patch, so face rows win silently; the policy layer is the other way round and yields to an
    operator row with the same id.
@@ -743,9 +744,9 @@ smoke that boots without `main.ts` relies on.
 | `room-projection.ts` | the `room` projection unit: a pure fold of the known events that carry room facts (`dispatch` calls and their `role:'tool'` results, room-sourced messages, turn boundaries) into `{kind, round, members, organizing}`; zod schemas; `stateVersion` (`ROOM_STATE_VERSION` 2) |
 | `room.ts` | the engine on the root context: `installRoom` (the `dispatch` tool, the unit, the bus); `RoomEngine` — members created with `ctx.agents.create` (`parentSession`, `agentPreset`, the model ref, `read-only` pinned inside `setup(agentCtx, agent)`) or resumed, and a member whose log dsh 0.2 cannot open is a `failed` turn naming the legacy format, never a crashed round or a silent fresh member; logs read through `eventsOf` (`snapshotEvents()`), failing closed without it; a cold room resumed through `sessionController.resolveAgent`; `driveTurn` with the extending deadline and the hard-cap cancel (`keepInbox`); rounds parallel/serial, peer continuations, the three caps, `settled`/`capped`/`superseded`; answers appended to a quiet room log, the round-end `followup`; `say` (the operator's `@`), `describe`; two routes |
 | `persona.ts` | Gravit's deployment persona (`personaPrefix`): `readPersona` validates the strict `{{}}` template and refuses the boot on a bad file |
-| `instructions.ts` | the instructions patch (§4.3): `AGENT_INSTRUCTIONS_ROW_ID`, `INSTRUCTION_FILE` and `LOCAL_INSTRUCTION_FILE` (`GRAVIT.md`, `GRAVIT.local.md`), `INSTRUCTIONS_CONFIG` (`satisfies` the package's own `Config`) and `instructionsPatch()`, a fresh object on every call; imports the package's type only |
+| `instructions.ts` | the instructions patch (§4.3): `AGENT_INSTRUCTIONS_ROW_ID`, `INSTRUCTION_FILE` and `LOCAL_INSTRUCTION_FILE` (`GRAVIT.md`, `GRAVIT.local.md`), `INSTRUCTIONS_CONFIG` (`satisfies` the package's own `Config`) and `instructionsPatch(inherited?)`, which spreads the inherited row config and applies the two lists last, a fresh object on every call; imports the package's type only |
 | `plugins/bot.js` | the `gravit-bot` composition plugin: a scoped `deployment:persona-prefix` section (shadows Gravit's prefix; no suffix) + an allow-list `tools.restrict`, re-expanded after each burst of `tools/change` — coalesced to one timer turn, so a tool that registers after the declaration is admitted when the allow list names it (`expandAllow` resolves `mcp__*__<raw>` against the live tree); dependency-free |
-| `plugins/gravit.js` | the `gravit` composition plugin, the first row of `bots/gravit/agent.cordis.yml`: a scoped `deployment:today` section (`Today is YYYY-MM-DD, Weekday (Zone).`), its text a function re-evaluated at every assembly, ordered right after the persona prefix, `interpolate: false`; `inject` is `systemPrompt` alone, so it masks no tool; `validateGravitConfig` accepts `{}` and checks `cycle` and `roles` when present; dependency-free |
+| `plugins/gravit.js` | the `gravit` composition plugin, the first row of `bots/gravit/agent.cordis.yml`: a scoped `deployment:today` section (`Today is YYYY-MM-DD, Weekday (Zone).`), its text a function re-evaluated at every assembly, in the process's own zone — `resolveZone()` falls back to `UTC`, labelled `(UTC)`, when `TZ` is empty or not a zone Intl can format in, so an unusable `TZ` cannot throw at assembly — ordered right after the persona prefix, `interpolate: false`; `inject` is `systemPrompt` alone, so it masks no tool; `validateGravitConfig` accepts `{}` and checks `cycle` and `roles` when present; dependency-free |
 | `panels.ts` | the master rail's feeds: host facts (`/data/host.json`), the local-agent roster (probe, auth, connect, disconnect), memory (skills), plugins (loader rows + tool schemas); builds `PanelDeps` (it requires `skills`, `tools`, `loader`, `workspaceRegistry` and `agents`), whose `channelFor` answers `{workspaceId, name, dir}` — the `dir` is what the room engine gives a member as its `cwd` |
 | `version.ts` | the three pins |
 
@@ -791,23 +792,28 @@ config as the layers below left it and sets `personaPrefix` from `dsh/profile/pe
 face sets no suffix), so an operator's `includeRuntimeContext`, `includeHarnessIdentity`,
 `personaSuffix` or `toolOrder` on that row survives.
 
-**The instructions patch** is `composeFace`'s too, pushed right after the persona patch. It
-restates dsh-base's `agent-instructions` row (`dsh-agent-instructions`) whole, with
-`INSTRUCTIONS_CONFIG` from `src/instructions.ts`: `maxBytes: 65536`, dsh-base's own value,
+**The instructions patch** is `composeFace`'s too, pushed right after the persona patch. Like the
+persona patch it spreads the `agent-instructions` row's config (`dsh-agent-instructions`) as the
+layers below left it, then applies the two candidate lists last —
 `instructionFileCandidates: ["GRAVIT.md"]` and
-`localInstructionFileCandidates: ["GRAVIT.local.md"]`, `satisfies` the package's own `Config`
-(so `@deepseek-ai/dsh-agent-instructions` is among `face/package.json`'s exact pins), because a
-named config replaces the row's and the candidates must be exactly the face's. It is guarded on
+`localInstructionFileCandidates: ["GRAVIT.local.md"]` — because a named config replaces the row's
+whole config and the candidates must be exactly the face's. `maxBytes: 65536`, dsh-base's own
+value, applies only when no layer set one; the three values are `INSTRUCTIONS_CONFIG` in
+`src/instructions.ts`, `satisfies` the package's own `Config` (so
+`@deepseek-ai/dsh-agent-instructions` is among `face/package.json`'s exact pins). It is guarded on
 `rows.has(AGENT_INSTRUCTIONS_ROW_ID)` like the persona patch, so a tree without the row gets no
-patch and boot says nothing, and `instructionsPatch()` returns a fresh object every call because
-the include algorithm assigns into rows by reference. The row is host-plane: Gravit, a bot and a
-room's member read the same candidates (`instructions-smoke`, `room-smoke`). An operator's patch
-aimed at the row is overridden silently, as a persona row is, with one difference: the persona
-patch merges the operator's other keys in and this one merges nothing, so every key of theirs is
-dropped; `PATCH_HEADER` (`src/setup.ts`) names the row as the face's ("restated whole: GRAVIT.md
-and GRAVIT.local.md are the only candidates"). The user-global `$DSH_HOME/AGENTS.md` is a name
-hard-coded upstream, which the patch neither renames nor suppresses; the operator's home has none
-(checked 2026-10-18).
+patch and boot says nothing (`boot.test.ts` pins it on a profile that bundles nothing), and
+`instructionsPatch(inherited?)` clones what it is given and returns a fresh object every call
+because the include algorithm assigns into rows by reference. The row is host-plane: Gravit, a bot
+and a room's member read the same candidates (`instructions-smoke`, `room-smoke`). An operator's
+patch aimed at the row is accepted, and only the two lists are overridden, silently:
+`projectRootMarkers` (the fix that lets a checkout with no `.git` read the root `GRAVIT.md` at
+all), `maxSourceBytes`, `dshHome`, a `maxBytes` of their own and `disabled` all survive —
+`disabled` because the include assigns only the keys a patch carries. `PATCH_HEADER`
+(`src/setup.ts`) says so where the operator looks ("its two candidate lists are the face's:
+GRAVIT.md and GRAVIT.local.md; every other key of yours and disabled are kept"). The user-global
+`$DSH_HOME/AGENTS.md` is a name hard-coded upstream, which the patch neither renames nor
+suppresses; the operator's home has none (checked 2026-10-18).
 
 **The policy layer** (`src/policy.ts`) composes directly above the bundle layer and BELOW
 AKShare, the profile and the home, so an operator row with the same id wins — the opposite of
@@ -819,7 +825,7 @@ posture dsh-base 0.2.0 changed, and each is an operator decision (§4.8):
 | D3 telemetry | `session-telemetry-otel` | disabled | `FEEDBACK_ONLY`: a session-log prefix uploaded after `/feedback`, with `.anonymous-user-id` |
 | D4 session-log upload | `session-log-deepseek` | disabled | up to 8 MiB of session events on every DeepSeek request |
 | D5 package inventory | `plugin-package-inventory-deepseek` | disabled | the active package list on every DeepSeek request |
-| D6 `web_fetch` | `tool-web` `{fetch: false, searchTimeoutMs: 60000}`, `web` `{searchProvider: deepseek-official}`, `web-fetch-http` disabled | 0.1.1's values, each config restated whole | `web_fetch` on |
+| D6 `web_fetch` | `tool-web` `{fetch: false, searchTimeoutMs: 60000}`, `web` `{searchProvider: deepseek-official}`, `web-fetch-http` disabled | 0.1.1's values, each config written out in full | `web_fetch` on |
 | D7 MCP resource tools | `mcp-resources` | disabled | three model-facing tools and a prompt section |
 | D9 `ralph` | `tool-ralph` | `disabled: false`, base config kept | disabled |
 | D9 `str_replace_editor` | `tool-str-replace-editor` | inserted, configless (0.1.1's 16,000-character cap is now the default) | row removed |
@@ -1363,9 +1369,9 @@ the pulses of each LIVE member's own `session/follow`.
 | Command | From | Needs | Measured 2026-09-30 |
 |---|---|---|---|
 | `python -m pytest` | repo root | nothing — offline, no keys, no bed | 381 passed in a clean checkout, ~2 s (the operator's tree adds the untracked `tests/strategies/`) |
-| `cd face && npm test` | `face/` | nothing — no port, no key | 676 tests, 663 pass, 13 skipped (2026-10-18) |
+| `cd face && npm test` | `face/` | nothing — no port, no key | 680 tests, 667 pass, 13 skipped (2026-10-18) |
 | `cd face && npm run typecheck` | `face/` | | clean, the dependencies' `.d.ts` included (`skipLibCheck: false`) |
-| `cd face && FACE_SMOKE=1 npm test` | `face/` | boots thirteen real trees into `mkdtemp` homes and binds ports; still no LLM or key (four of the smokes also create, and remove, a gitignored `.bots-smoke-*` bots root at the repo root) | the thirteen skipped tests; 676/676, ~11 s (2026-10-18) |
+| `cd face && FACE_SMOKE=1 npm test` | `face/` | boots thirteen real trees into `mkdtemp` homes and binds ports; still no LLM or key (four of the smokes also create, and remove, a gitignored `.bots-smoke-*` bots root at the repo root) | the thirteen skipped tests; 680/680, ~10 s (2026-10-18) |
 | `cd face && npm run check:fixture` | `face/` | the installed dsh | 26 fixture lines: 23 validated, 0 rejected, 3 with no upstream validator |
 
 ### 7.2 The Python suite
@@ -1393,15 +1399,17 @@ order path.
 
 ### 7.3 The face suite
 
-676 tests in 59 files (663 pass, 13 skipped without `FACE_SMOKE=1`), run by `node --test`
+680 tests in 59 files (667 pass, 13 skipped without `FACE_SMOKE=1`), run by `node --test`
 through `tsx`:
 
 - **Composition and boot** — `boot` (the layer order ending with the overlay; the policy layer
   between bundle and AKShare; the storage chain and projection cache composed once, from
   dsh-base, and reachable by an operator patch; the persona patch setting `personaPrefix` and
-  keeping the operator's other `system-prompt` keys; the instructions patch restating
-  `agent-instructions` to `GRAVIT.md` and `GRAVIT.local.md`, after the persona patch and before
-  only the overlay; a skipped bundle refused; the static `preset-gravit` row equal to
+  keeping the operator's other `system-prompt` keys; the instructions patch setting
+  `agent-instructions`' two candidate lists to `GRAVIT.md` and `GRAVIT.local.md`, after the
+  persona patch and before only the overlay, keeping an operator's other keys on the row and its
+  `disabled`, cloning what it is given, and absent from a composition that has no such row; a
+  skipped bundle refused; the static `preset-gravit` row equal to
   `definitionFor(bots, "gravit")` and the `preset-kairos` alias equal to it under the legacy id,
   and a missing default composition refused), `overlay` (exactly the thirteen rows, in order;
   loopback config; the rows dsh-base owns now and the retired ones never inserted), `policy`
@@ -1414,7 +1422,9 @@ through `tsx`:
   that tells the reader who it is), `gravit-plugin` (`name` and `inject`; `validateGravitConfig`
   accepting `{}` and checking `cycle` and `roles` when present; `todayText` rendering the zone's
   local date, ISO then weekday; `apply` registering one scoped, uninterpolated section right after
-  the persona slot, which unload removes; a bad config refused with its reason), `check-home` (the
+  the persona slot — whose order must be finite, so a missing slot cannot pass as `NaN` — which
+  unload removes; a bad config refused with its reason; an empty or non-zone `TZ` rendered in
+  UTC and labelled, never thrown at assembly), `check-home` (the
   go-live dry run's pieces, offline: the live-home refusal by device and inode — through a
   symlink, in another letter case, inside or above the home — and the marker; the refusal classes;
   the multi-frame log reader; the inventory diff; the MCP row walk; the `extraPatches` seam

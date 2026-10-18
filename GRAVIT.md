@@ -1,8 +1,8 @@
 # GRAVIT.md — the workspace, for every agent dsh runs here
 
-Read by Gravit, its role children and the bots alike, as workspace instructions: facts about
-this tree, never anyone's identity or orders. When this file and the tree disagree, the tree is
-right and this file is wrong.
+Read by Gravit, its role children and the bots alike, as workspace instructions: facts and
+rules of this tree, never anyone's identity or persona. When this file and the tree disagree,
+the tree is right and this file is wrong.
 
 Three layers. MARKET and ACCOUNT are the `alpaca_kit` package: import it for backtests
 (`alpaca_kit.replay.replay_days`), call its MCP tools for interactive reads. STRATEGY is
@@ -73,4 +73,5 @@ ordinary prompt; no voice answers it, so the answer is Gravit's own.
 ## Never edit
 
 `data/pit/` contents; the installed dsh profile copies under the harness home; anything under
-`bots/` or `roles/` (propose in conversation — the operator authors them); `docs/research/`.
+`bots/` (a bot's own `journal/` aside) or `roles/` (propose in conversation — the operator
+authors them); `docs/research/`.

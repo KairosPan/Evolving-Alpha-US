@@ -145,7 +145,7 @@ These are the upgrade's real work. Everything else in §3.2 fails a test first.
 | G10 | the MCP server is a child of the face process; its writes bypass the sandbox | behaviour | residual R5 if dsh starts sandboxing MCP children |
 | G12 | FastMCP (`mcp` 1.x) negotiates with dsh's `@modelcontextprotocol/client` 2.0 | `alpaca_kit/mcp/server.py`; the akshare-mcp install | both servers silently register zero tools (G4) |
 | H2 | `SKILL.md` frontmatter `name` + `description`, or discovery drops the skill at warn level | `dsh/skills/*/*/SKILL.md` | a new required key empties the catalog with no error |
-| H6 | the `agent-instructions` row's user-global file: hard-coded `$DSH_HOME/AGENTS.md`, outside the candidate lists the face restates | installed `dsh-agent-instructions/lib/index.js` (`USER_GLOBAL_FILE`); the candidates and the budget are the face's own patch, `face/src/instructions.ts` (H10) | 0.2.1 removes the per-row `dshHome` and reads the global file via `DSH_AGENTS_HOME` |
+| H6 | the `agent-instructions` row's user-global file: hard-coded `$DSH_HOME/AGENTS.md`, outside the candidate lists the face sets | installed `dsh-agent-instructions/lib/index.js` (`USER_GLOBAL_FILE`); the candidates and the budget are the face's own patch, `face/src/instructions.ts` (H10) | 0.2.1 removes the per-row `dshHome` and reads the global file via `DSH_AGENTS_HOME` |
 | I5 | credential precedence: `.credentials.yaml` refs outrank both `.env` layers, the inherited environment wins | `boot.ts` `loadLayeredEnv`; the operator's shell | 0.2.1 changes API-key precedence for headless runs |
 | I12 | state outside `~/.dsh` and the repo is `tmpdir()` scratch only | `agents.ts`, `alpaca_kit/mcp/cache.py` | a new state directory the backup misses |
 | — | the MCP live roster: `/data/plugins.json` = `alpaca-kit active 10`, `akshare active 14` | runbook §7 A | the only visible sign of G4 |
@@ -275,13 +275,14 @@ by catalog name (`smoke.test.ts`); H7 the prompt sections the face relies on:
 `deployment:persona-prefix`, `mcp:<server>`, the `bot-journal` context (`persona.test.ts`,
 `bot-plugin.test.ts`, `bots-smoke`, `bot-runtime-smoke`); H8 the system prompt as the leading
 `role:'system'` message, `request/header` as the durable proof a tool was offered
-(`bot-runtime-smoke`, `room-discussion-smoke`); H10 the face's instructions patch
-(`boot.test.ts`, `instructions-smoke`); H11 the face's date section: `face/plugins/gravit.js`,
-the first row of `bots/gravit/agent.cordis.yml`, registers `deployment:today` at
-`getSectionOrder("DEPLOYMENT_PERSONA_PREFIX") + 1` with `interpolate: false` and a function text
-re-evaluated at each assembly, scoped to the preset revision so a bot's prompt never carries it
-(`gravit-plugin.test.ts`: order, shape, unload; `bots-smoke`: Gravit's prompt has it, a bot's
-does not).
+(`bot-runtime-smoke`, `room-discussion-smoke`); H10 the face's instructions patch: the two
+candidate lists the face's over the inherited config, an operator's other keys and `disabled`
+kept, no row and no patch (`boot.test.ts`, `instructions-smoke`); H11 the face's date section:
+`face/plugins/gravit.js`, the first row of `bots/gravit/agent.cordis.yml`, registers
+`deployment:today` at `getSectionOrder("DEPLOYMENT_PERSONA_PREFIX") + 1` with `interpolate: false`
+and a function text re-evaluated at each assembly, in UTC when `TZ` is unusable, scoped to the
+preset revision so a bot's prompt never carries it (`gravit-plugin.test.ts`: order, which must be
+finite, shape, unload, the `TZ` fallback; `bots-smoke`: Gravit's prompt has it, a bot's does not).
 
 **I · environment and home layout.** I1 `DSH_HOME` resolution and the dry run's live-home
 refusal (`check-home.test.ts`, `boot.test.ts`); I2 `DSH_PERMISSION_MODE` and `danger-full-access`
@@ -304,7 +305,7 @@ D9 by id).
 | D1 | no `profileContext` (no settings forms, no persisted model save, no hmr, no plugin manager) | upstream makes it required or un-gates `settings` (B8) |
 | D2 | the default model is the operator's `agent-default-model` row | the DeepSeek catalog renames a model id (C18) |
 | D3–D5 | telemetry, session-log upload, package inventory off | a policy target row is renamed: the face warns on stderr and the egress is ON (B24–B26) |
-| D6 | `web_fetch` off, both configs restated whole | a new key on `tool-web` or `web` is dropped by the restatement (B27) |
+| D6 | `web_fetch` off, both configs written out in full | a new key on `tool-web` or `web` is dropped by the full-config patch (B27) |
 | D7 | MCP resource tools off | mcp-client starts hard-injecting `mcpResources` (B28, G6) |
 | D8 | the browser cookie only on `/` and `/api` | upstream's static posture changes (E17) |
 | D9 | `ralph` re-enabled; `str_replace_editor` inserted | **0.2.1-alpha.3 moves `tool-ralph` out of dsh-base** (§7.1); dsh-base shipping the editor row again skips the insert (B29–B30) |
@@ -441,11 +442,12 @@ listed in §7.3 and enter §3 as their plans merge. The doc debts the compilatio
 
 ### 7.3 Seams the 2026-10-15 agent redesign adds (spec §8 and §11)
 
-- the `agent-instructions` row patched by `composeFace`: `instructionFileCandidates`,
-  `localInstructionFileCandidates`, `maxBytes` restated whole (a named config replaces the
-  row's) — pinned by `boot.test.ts` and an instructions smoke. Landed in plan 1: the patch
-  `8983555`, the smoke `2c494a1`, the `GRAVIT.md` it reads `dbbd19a` and `119c9da`; entered as
-  H10 in §3.2;
+- the `agent-instructions` row patched by `composeFace`: `instructionFileCandidates` and
+  `localInstructionFileCandidates` are the face's, applied last over the config the layers below
+  left (a named config replaces the row's, so the patch spreads that config as the persona patch
+  does; `maxBytes` is dsh-base's value only when no layer set one) — pinned by `boot.test.ts`
+  and an instructions smoke. Landed in plan 1: the patch `8983555`, the smoke `2c494a1`, the
+  `GRAVIT.md` it reads `dbbd19a` and `119c9da`; entered as H10 in §3.2;
 - per-role `@deepseek-ai/dsh-tool-subagent` rows inside the default preset: `persona`,
   `toolFilter`, `backgroundMode: one-shot`, the `spawn` provider — the config keys, the
   capability flags the backend declares, and whether the row's persona shadows the global
