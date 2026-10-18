@@ -56,7 +56,7 @@ external services on five hostnames — plus the market watchlist's quote and se
  │  ├─ dsh-base bundle: LLM (deepseek), sessions, storage + projection cache, tools       │
  │  │   (§3.6), sandbox, approvals, skills, the `/api` gateway (`typert-gateway`)         │
  │  ├─ face policy layer (§4.3): the 0.1.1 tool roster, egress and telemetry restored     │
- │  ├─ face overlay rows (twelve, §4.3): webserver · connection (sign-in) · api-remotes · │
+ │  ├─ face overlay rows (13, §4.3): webserver · connection (sign-in) · api-remotes ·     │
  │  │   file-upload · workspace · three Remote controllers · directory-picker ·           │
  │  │   ask-user · agent-preset-registry · preset-gravit · preset-kairos                  │
  │  ├─ bots: each `bots/<id>/` declared as a dsh preset after boot (§3.7)                 │

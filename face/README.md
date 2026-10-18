@@ -324,9 +324,9 @@ Two things about that directory are NOT yours:
 - **The face's own host rows compose LAST and win silently.** They are applied
   after your patch layer and after the machine-local home layer — the inverse
   of the dsh CLI's layering, and deliberate: loopback-only binding surviving
-  an operator patch is the point. A patch of yours aimed at one of the twelve
-  overlay rows — `webserver`, `connection`, `api-remotes`, `file-upload`,
-  `workspace`, `session-controller`, `workspace-controller`,
+  an operator patch is the point. A patch of yours aimed at one of the
+  thirteen overlay rows — `webserver`, `connection`, `api-remotes`,
+  `file-upload`, `workspace`, `session-controller`, `workspace-controller`,
   `settings-controller`, `directory-picker`, `tool-ask-user`,
   `agent-preset-registry`, `preset-gravit`, `preset-kairos` — or at the `hmr`
   switch, at `system-prompt`'s `personaPrefix`, or (while
