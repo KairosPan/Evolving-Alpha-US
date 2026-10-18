@@ -12,7 +12,7 @@ record.
 
 ## Lineage (inherited principles, not inherited pixels)
 
-From the 2026-07-07 SoniaKairos face round (recovered from the design repo's git history):
+From the 2026-07-07 face round of the previous product (recovered from the design repo's git history):
 
 1. **Narrative lives on the landing; instruments stay terse.** The operator's own feedback —
    "every face has too many words" — root cause: faces narrating the system instead of letting

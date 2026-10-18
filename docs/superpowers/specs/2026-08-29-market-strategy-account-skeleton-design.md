@@ -1,14 +1,14 @@
 # Market-Strategy-Account Skeleton — Design (Approach A)
 
 **Date:** 2026-08-29 · **Status:** approved in brainstorming, pending user review of this spec ·
-**Supersedes:** the Sonia-Kairos self-evolving-H product concept (charter, H=(p,K,M,C,W,A),
+**Supersedes:** the previous product's self-evolving-H concept (charter, H=(p,K,M,C,W,A),
 write-waist governance, two entities) — retired by operator decision 2026-08-29.
 
 ---
 
 ## 1. Context and decision history
 
-The operator is resetting this project from the Sonia-Kairos concept to a three-layer product:
+The operator is resetting this project from the previous product's concept to a three-layer product:
 
 - **MARKET** — market data: bars, snapshots, screening, corporate actions, breadth.
 - **STRATEGY** — where the LLM agent mainly operates; strategies are first-class objects.

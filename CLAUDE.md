@@ -6,7 +6,7 @@ lives in `DEVELOPMENT.md`, `Kairos-Design.md`, `face/README.md`, docstrings, and
 
 ## What this is
 A market-strategy-account research workbench for one operator, one principal agent (Kairos) and
-operator-authored bots, reset 2026-08-29 from the retired Sonia-Kairos product. MARKET + ACCOUNT
+operator-authored bots, reset 2026-08-29 from the previous product. MARKET + ACCOUNT
 are `alpaca_kit` — one Python package, two faces: importable library and MCP server. STRATEGY is
 `strategies/`, the agent's arena, run on DeepSeek Harness (dsh) inside `face/`, the chat face.
 
