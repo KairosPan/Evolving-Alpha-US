@@ -425,7 +425,8 @@ tree — `AGENTS.md` is the coding agents' file now, `CLAUDE.md` Claude Code's. 
 from the `.git` root down to the session's cwd, so a channel session also reads any
 `strategies/<name>/GRAVIT.md`; a gitignored `GRAVIT.local.md` beside the root file is the
 operator's machine-local overlay (`tests/instructions-smoke.test.ts` pins all three readers and
-both exclusions). Two dsh facts the patch does not change (installed
+both exclusions; `tests/roles-smoke.test.ts` pins the root file in a role child's first-request
+baseline). Two dsh facts the patch does not change (installed
 `dsh-agent-instructions/lib/index.js`, `USER_GLOBAL_FILE` and the baseline identity): the
 user-global file is hard-coded `$DSH_HOME/AGENTS.md` and still loads when the operator has one,
 and the candidate list is part of the baseline's identity, so a session resumed across this
@@ -489,14 +490,18 @@ local agent or room (measured 2026-09-30 against a boot of the 0.1.1 composition
 sessions see that roster plus the role tools. dsh-base 0.2.0 alone would differ — `web_fetch` and
 three MCP resource tools on, `ralph` and `str_replace_editor` gone — and the policy layer undoes
 each (PLAN D6, D7, D9). The rows a running face actually composed, and its MCP and `agent_<bin>`
-tools, are listed by the plugin panel (`/data/plugins.json`).
+tools, are listed by the plugin panel (`/data/plugins.json`). The `role_<id>` tools never are:
+they are scoped to Gravit's preset and the panel reads the global tool view. They show in the
+`tools` of each `request/header` event in Gravit's own session log, and the boot's `agent
+presets:` line lists `gravit` only when every role row mounted (a row that fails lists the
+default broken, and the boot refuses).
 
 | Tool(s) | Row (`dsh-base` unless noted) | Note |
 |---|---|---|
 | `bash` (and `pwsh` on Windows) | `tool-bash`, `tool-pwsh` | sandboxed to the calling session's cwd (§4.1); env scrubbed as in §1 |
 | `read`, `write`, `edit`, `read_image`, `glob`, `grep` | `tool-fs`, `tool-fs-search` | same sandbox boundary |
 | `str_replace_editor` | `tool-str-replace-editor`, inserted by the face's policy layer (PLAN D9) | dsh-base 0.2.0 dropped the row; same sandbox boundary |
-| `job_output`, `job_list`, `job_kill` | `tool-jobs` | a job outlives the turn that started it |
+| `job_output`, `job_list`, `job_kill` | `tool-jobs` | a job outlives the turn that started it; owner-fenced — a session lists, reads and stops only its own — and cancelled with its owner, which is why a `bash` role carries them for its own jobs (§3.8) |
 | `subagent`, `subagent_fork`, `send_message`, `interrupt_agent`, `list_agents` | `tool-subagent` (continuable), `tool-subagent-fork` (one-shot), `tool-subagent-control`, `tool-subagent-list-agents` (in-process spawn/fork) | a continuable child reaches its parent with `send_message`, delivered as an `agent-message` relay (0.1.1's `report` tool is gone); Gate 2's `tools.guard` is tree-wide, so a gated tool stays gated inside a subagent |
 | `ralph` | `tool-ralph`, re-enabled by the policy layer (PLAN D9) | fresh-subagent iteration, up to 64 rounds per call; dsh-base 0.2.0 ships the row disabled |
 | `todo_write`, `create_goal` / `get_goal` / `update_goal`, `workflow`, `exit_plan_mode` | `tool-todo`, `tool-goal`, `tool-workflow`, `plan-mode` | |
@@ -507,7 +512,7 @@ tools, are listed by the plugin panel (`/data/plugins.json`).
 | `mcp__akshare__*` | project `mcp-akshare` row | public A-share/other market queries, unguarded; check source errors and truncation |
 | `agent_<bin>` | face `agents.ts` | roster-gated per channel (§6.5) |
 | `dispatch` | face `room.ts` (`installRoom`) | Gravit's own: refused in any session whose header or `agentPreset` projection names a bot (§6.8) |
-| `role_<id>` (one per `roles/<id>/`) | one `dsh-tool-subagent` row per role inside Gravit's preset, rendered by `src/roles.ts` (§3.8) | scoped: a bot never sees one, and a child removes them through its own allow list; a one-shot `spawn` child with the role's persona and exactly the role's tools; the arguments are `description` (its label in the 临时子任务 panel) and `prompt`, and the call waits unless `run_in_background` is set |
+| `role_<id>` (one per `roles/<id>/`) | one `dsh-tool-subagent` row per role inside Gravit's preset, rendered by `src/roles.ts` (§3.8) | scoped: a bot never sees one, and a role child removes them through its own allow list (a `subagent_fork` child, restricted by nothing, keeps them); a one-shot `spawn` child with the role's persona and exactly the role's tools; the arguments are `description` (its label in the 临时子任务 panel) and `prompt`, and the call waits unless `run_in_background` is set |
 
 Not tools, but in the same prompt: a connected MCP server's `instructions` (the `mcp:akshare`
 section, §3.1). The MCP resource tools and their prompt section are off by policy (PLAN D7).
@@ -602,8 +607,9 @@ like one is not a member (§9, R16).
 characters; `allow`, a non-empty list of exact tool names; an optional `model:
 <provider>/<model>` in `MODEL_ROUTE_RE`'s grammar; keys it does not know are ignored).
 `roles/_template/` is the copy source and carries a `README.md`, the contract for whoever opens
-the directory; it is never a role, and neither is anything under `roles/` that is not a directory
-or whose name is not an id. Three roles ship — `screener`, `backtester`, `reviewer` — each ending
+the directory; it is never a role. A hidden entry or a plain file under `roles/` is skipped; a
+symbolic link, or a directory whose name is not an id, is refused (below). Three roles ship —
+`screener`, `backtester`, `reviewer` — each ending
 its report on the same four headings (status, what was measured, paths, limits). The operator is
 the only writer, by file edit; Gravit proposes a role in conversation and never creates or edits
 one (charter §4), and nothing in the face writes under `roles/`, so, unlike a bot, a role has no
@@ -620,13 +626,15 @@ reaches 69. The summary is one line because `plugins/gravit.js` emits one bullet
 `readRoles(root)` (`src/roles.ts`) reads and validates every role synchronously, sorted by id, and
 returns plain data (`RoleFile`). The first problem throws an `Error` whose message opens with the
 absolute path of the file or directory at fault: the roles directory missing or not a directory,
-`ROLE.md` or `role.yml` missing or unreadable, a persona empty, over its budget or carrying `{{`,
-YAML that does not parse or is not a mapping, a blank `name` or `description`, a description on
-two lines or over its cap, an `allow` that is not a non-empty list of strings in the tool-name
-grammar, an entry the never-list below refuses, a `model` that is not a route. `composeFace` calls
-it LAST, just before the overlay is pushed, and does not catch: one bad role, or no `roles/` at
-all, ends the compose and so the boot (the fail-loud contract of spec §5.1, as 0.1.1's roster
-check refused a boot), and a face that ships `bots/` therefore ships `roles/` beside it.
+a symbolic link in it or a directory there whose name is not an id, `ROLE.md` or `role.yml`
+missing or unreadable, a persona empty, over its budget or carrying `{{`, YAML that does not
+parse or is not a mapping, a blank `name` or `description`, a description on two lines or over
+its cap, an `allow` that is not a non-empty list of strings in the tool-name grammar, an entry
+listed twice, an entry the never-list below refuses, a `model` that is not a route.
+`composeFace` calls it LAST, just before the overlay is pushed, and does not catch: one bad
+role, or no `roles/` at all, ends the compose and so the boot (the fail-loud contract of spec
+§5.1, as 0.1.1's roster check refused a boot), and a face that ships `bots/` therefore ships
+`roles/` beside it.
 `FaceBootOptions.rolesRoot` points a test at a fixture. `gravitRows(roles, {plugin})` then renders
 the default preset's composition: the `gravit` plugin row — named by `GRAVIT_PLUGIN_URL`, an
 absolute `file:` URL that `definitionFor`'s rebase passes through — whose config `roles: [{tool,
@@ -640,7 +648,10 @@ a route (otherwise the child inherits its parent's). The rows go to `definitionF
 "gravit", rows)`, which rebases them as a file's would be and reads only `bots/gravit/preset.yml`
 (the display metadata); the `preset-kairos` alias carries the same definition (§4.3). A role row
 that fails to mount marks the default preset `broken`, and the roster audit (§4.1 step 8) refuses
-the boot.
+the boot. A row whose `spawn` provider is absent has not failed: `dsh-tool-subagent` logs at info
+level that the tool will register when the provider appears and mounts without it, so the preset
+is not broken and the boot does not refuse; the visibility gate below then leaves that role out
+of Gravit's prompt until its tool exists.
 
 `bots/gravit/agent.cordis.yml` is a GENERATED mirror: `renderGravitComposition` dumps the same
 rows — the plugin spelled by its shipped relative path, `GRAVIT_PLUGIN_RELATIVE`, as a bot's
@@ -656,18 +667,18 @@ cycle text the redesign's next plan adds; the render takes none until then.
 digits, `_` and `-` only (a `*` is refused where the file is read), under the server name the
 operator's profile mounts the server with — `serverName: alpaca-kit`, `dsh/README.md`; the shipped
 roles say `mcp__alpaca-kit__screen`, and a server under another name means editing every role that
-names its tools, and the account and order names in the never-list. The reason is the backend's,
-not a taste: dsh's spawn backend applies a child's `toolFilter` inside the child's creation
-window — `applyChildComposition` in the installed `dsh-subagent` calls the child context's
-`tools.restrict(filter)` — and `restrict()` in `dsh-tools` checks every name by set membership
-against the tools the child inherits, throwing `tools.restrict() names unknown global tool "…";
-known global tools: …` for a name outside the set. There is no glob and no prefix match. The
-spec's §5.2–§5.3 still say a `mcp__*__<raw>` wildcard expands against the live tree as
-`plugins/bot.js` does for a bot; its own §11.1 (a) is the correction, and the code follows §11.1
-(a). Whether a named tool exists is a fact about the tree at the moment the role is CALLED — an
-MCP tool is there only while its server is mounted, started and not given up on (§4.1 step 7) —
-not about the file, so the reader checks nothing of it: a missing tool fails THAT delegation (the
-tool result is the `restrict()` error and no child is created), never the boot
+names its tools (the never-list matches the account and order names under any server name). The
+reason is the backend's, not a taste: dsh's spawn backend applies a child's `toolFilter` inside
+the child's creation window — `applyChildComposition` in the installed `dsh-subagent` calls the
+child context's `tools.restrict(filter)` — and `restrict()` in `dsh-tools` checks every name by
+set membership against the tools the child inherits, throwing `tools.restrict() names unknown
+global tool "…"; known global tools: …` for a name outside the set. There is no glob and no
+prefix match. The spec's §5.2–§5.3 still say a `mcp__*__<raw>` wildcard expands against the live
+tree as `plugins/bot.js` does for a bot; its own §11.1 (a) is the correction, and the code follows
+§11.1 (a). Whether a named tool exists is a fact about the tree at the moment the role is CALLED
+— an MCP tool is there only while its server is mounted, started and not given up on (§4.1 step
+7) — not about the file, so the reader checks nothing of it: a missing tool fails THAT delegation
+(the tool result is the `restrict()` error and no child is created), never the boot
 (`roles-smoke.test.ts`).
 
 A role also never carries what a delegated child cannot use or must not hold, and the reader
@@ -677,10 +688,23 @@ refuses such an `allow` entry with the reason in the message (`NEVER` in `src/ro
 `DELEGATED_CALLER`, so a role that needs the operator says so in its report); the open web
 (`web_search`, `web_fetch` — no as-of guard); delegation (`subagent`, `subagent_fork`,
 `send_message`, `interrupt_agent`, `list_agents`, `workflow`, `ralph`, `dispatch`, and any `role_*`
-or `agent_*` name — Gravit alone delegates); goal, todo and job tools (Gravit tracks them); the
-alpaca-kit account and order tools (`account`, `positions`, `orders`, `place_order`,
-`cancel_order` — orders stay behind the two gates, §4.7); and the `mcp__akshare__` prefix (no
-point-in-time guard, never backtest evidence).
+or `agent_*` name — Gravit alone delegates); goal and todo tools (Gravit tracks them); `run_code`,
+the reserved PTC transport, which `tools.restrict()` refuses to name, so a role naming it would
+fail every delegation; the account and order tools under any server name — `account`,
+`positions`, `orders`, `place_order`, `cancel_order`, bare or as any `mcp__<server>__<raw>`,
+matched by raw suffix as Gate 2's `isOrderTool` matches the order tools (orders stay behind the
+two gates, §4.7); and the `mcp__akshare__` prefix (no point-in-time guard, never backtest
+evidence).
+
+The job tools are a `bash` role's own. A child's `bash` command runs under the deadline of
+dsh-base's `bash-sandbox` row, 60,000 ms by default; a call may pass `timeoutMs`, capped at
+600,000 by `LocalBashExecutor` (which `SandboxBashExecutor` extends). A command still running at
+its deadline is not killed: `dsh-tool-bash`'s `promoteOnTimeout` (on by default) moves it to a
+background job. Jobs are owner-fenced — a session lists, reads and stops only its own, so Gravit
+cannot read a child's — and an owner's disposal cancels them, so a one-shot child's jobs end with
+it. `screener` and `backtester` therefore carry `job_output`, `job_list` and `job_kill`, and their
+`ROLE.md` says to pass `timeoutMs` for a long run and to read or stop a moved job before finishing;
+the reviewer has no `bash` and none of the three.
 
 What a delegated child sees (spec §5.4 as corrected by §11.1 (a)). It JOINS the preset it was
 delegated from (`applyChildComposition` calls `agentPresets.composeFrom(childCtx, parent.ctx)`), so
@@ -691,23 +715,31 @@ rejected, so it states the limit in its reply); the row's `persona` as a child-s
 `deployment:persona-prefix` that shadows Gravit's at order 0; and `tools.restrict({allow})`, which
 removes everything the role does not name, the preset layer's `role_<id>` tools included, so a
 role cannot delegate to a role. The `gravit:roles` section would reach it as well — a scoped
-section cannot be filtered by an allow list — so its text is a function of the assembly context and
-resolves to `''` when the assembled agent's session header says `origin: 'subagent'` (`isDelegated`
-in `plugins/gravit.js`; dsh drops an empty section): the child is never told of roles it cannot
-call. `deployment:today` is left on for it, and `GRAVIT.md` reaches it as it reaches every agent
-(§3.3). Its cwd is its parent's. It has no `ask_user_question`, by the never-list and by dsh. Two
-limits are upstream's. dsh exempts a scope's own registrations from `restrict()`, so
-`roles-smoke.test.ts` compares the child's tool list to `allow` exactly rather than checking a
-subset. And the child's prompt still carries dsh's generic tool-policy paragraphs for tools it
-lacks (`create_goal`, `workflow`, `ralph`, the background-job `job_output` text), because those
-sections are global and ignore the restriction: a small model may be told of a tool it cannot call
+section cannot be filtered by an allow list — so its text is a function of the assembly context:
+it lists only the roles whose tool the assembling scope resolves (`canCall` in
+`plugins/gravit.js`: `ctx.tools.get(name, context.scope)`, the gate `dsh-tool-web` and
+`dsh-tool-subagent` put on their own sections), and a role child, whose allow list removed every
+role tool, gets `''` (dsh drops an empty section): it is never told of roles it cannot call. A
+`subagent_fork` child is seeded with Gravit's completed turns and restricted by nothing, so it
+resolves every role tool and is assembled Gravit's system text byte for byte — the prefix its
+inherited history was cached under; a gate on the header's `origin` blanked the section for
+forks too and broke that reuse. `deployment:today` is left on for every child, and `GRAVIT.md`
+reaches it as it reaches every agent (§3.3). Its cwd is its parent's. It has no
+`ask_user_question`, by the never-list and by dsh. Two limits are upstream's. dsh exempts a
+scope's own registrations from `restrict()`, so `roles-smoke.test.ts` compares the child's tool
+list to `allow` exactly rather than checking a subset. And the child's prompt still carries
+dsh's generic tool-policy paragraphs for tools it lacks (`create_goal`, `workflow`, `ralph`, and
+for the reviewer the background-job `job_output` text), because those sections are global and
+ignore the restriction: a small model may be told of a tool it cannot call
 (`docs/dsh-upgrade-guide.md` §7.3 watches for a dsh that scopes them to the child's view).
 
 Pinned by `tests/roles.test.ts` (the reader, the render, the mirror), `tests/gravit-plugin.test.ts`
-(the section, blank for a child), `tests/boot.test.ts` and `tests/bot-presets.test.ts` (the
-default rendered in memory and never read from the file), `tests/bots-smoke.test.ts` (Gravit's
-roster is the host's plus the role tools; a bot sees none) and `tests/roles-smoke.test.ts` (a real
-boot: persona, exact tools, the result, the loud failure); the live check is the role drill
+(the section, listing exactly the roles the assembling scope can call), `tests/boot.test.ts` and
+`tests/bot-presets.test.ts` (the default rendered in memory and never read from the file; a
+missing roles directory refusing the compose), `tests/bots-smoke.test.ts` (Gravit's roster is the
+host's plus the role tools; a bot sees none) and `tests/roles-smoke.test.ts` (a real boot:
+persona, exact tools, the result, the reviewer child's `GRAVIT.md` baseline, a fork child's system
+text and tools equal to Gravit's, the loud failure); the live check is the role drill
 (`face/README.md`, §7.4).
 
 ---
@@ -873,7 +905,7 @@ smoke that boots without `main.ts` relies on.
 | `persona.ts` | Gravit's deployment persona (`personaPrefix`): `readPersona` validates the strict `{{}}` template and refuses the boot on a bad file |
 | `instructions.ts` | the instructions patch (§4.3): `AGENT_INSTRUCTIONS_ROW_ID`, `INSTRUCTION_FILE` and `LOCAL_INSTRUCTION_FILE` (`GRAVIT.md`, `GRAVIT.local.md`), `INSTRUCTIONS_CONFIG` (`satisfies` the package's own `Config`) and `instructionsPatch(inherited?)`, which spreads the inherited row config and applies the two lists last, a fresh object on every call; imports the package's type only |
 | `plugins/bot.js` | the `gravit-bot` composition plugin: a scoped `deployment:persona-prefix` section (shadows Gravit's prefix; no suffix) + an allow-list `tools.restrict`, re-expanded after each burst of `tools/change` — coalesced to one timer turn, so a tool that registers after the declaration is admitted when the allow list names it (`expandAllow` resolves `mcp__*__<raw>` against the live tree); dependency-free |
-| `plugins/gravit.js` | the `gravit` composition plugin, the first row of the default preset's rendered composition (`gravitRows` in `src/roles.ts`; `bots/gravit/agent.cordis.yml` is its generated mirror): a scoped `deployment:today` section (`Today is YYYY-MM-DD, Weekday (Zone).`), its text a function re-evaluated at every assembly, in the process's own zone — `resolveZone()` falls back to `UTC`, labelled `(UTC)`, when `TZ` is empty or not a zone Intl can format in, so an unusable `TZ` cannot throw at assembly — ordered right after the persona prefix, `interpolate: false`; and, only when its `roles` config is present, a scoped `gravit:roles` section at `getSectionOrder("TOOL_SUBAGENT") + 1` (the role intro and one `- role_<id> — <summary>` line per role, `interpolate: false`, resolving to `''` when the assembled agent's session header says `origin: 'subagent'` — `isDelegated`, §3.8); `inject` is `systemPrompt` alone, so it masks no tool; `validateGravitConfig` accepts `{}` and checks `cycle` and `roles` when present; dependency-free |
+| `plugins/gravit.js` | the `gravit` composition plugin, the first row of the default preset's rendered composition (`gravitRows` in `src/roles.ts`; `bots/gravit/agent.cordis.yml` is its generated mirror): a scoped `deployment:today` section (`Today is YYYY-MM-DD, Weekday (Zone).`), its text a function re-evaluated at every assembly, in the process's own zone — `resolveZone()` falls back to `UTC`, labelled `(UTC)`, when `TZ` is empty or not a zone Intl can format in, so an unusable `TZ` cannot throw at assembly — ordered right after the persona prefix, `interpolate: false`; and, only when its `roles` config is present, a scoped `gravit:roles` section at `getSectionOrder("TOOL_SUBAGENT") + 1` (the role intro and one `- role_<id> — <summary>` line per role, `interpolate: false`, listing only the roles whose tool the assembling scope resolves — `canCall`, `ctx.tools.get(name, context.scope)`, so a role child reads none and a `subagent_fork` child Gravit's whole list, §3.8); `inject` is `systemPrompt` and `tools`, the registry only read, so it masks no tool; `validateGravitConfig` accepts `{}` and checks `cycle` and `roles` when present; dependency-free |
 | `panels.ts` | the master rail's feeds: host facts (`/data/host.json`), the local-agent roster (probe, auth, connect, disconnect), memory (skills), plugins (loader rows + tool schemas); builds `PanelDeps` (it requires `skills`, `tools`, `loader`, `workspaceRegistry` and `agents`), whose `channelFor` answers `{workspaceId, name, dir}` — the `dir` is what the room engine gives a member as its `cwd` |
 | `version.ts` | the three pins |
 
@@ -1037,7 +1069,7 @@ passes on `Host` alone — `curl` works, which is residual R3 in §9.
 | `bots/<id>/` | `createBot`, `updateBotSettings`, `updateSoul` | copied from `_template`; `preset.yml`, `SOUL.md` and the composition's persona row rewritten together, staged then renamed; never overwritten by create |
 | `bots/<id>/journal/` | a bot's HOME session | workspace-write, cwd = the journal; the only directory a bot writes (the write to `../SOUL.md` is refused, proven in `room-smoke`) |
 | `roles/<id>/` (`ROLE.md`, `role.yml`) | the operator | not written by the face — read once per boot by `composeFace` (`readRoles`) and rendered into Gravit's preset (§3.8); a missing roles directory or a malformed role refuses the boot |
-| `bots/gravit/agent.cordis.yml` | `npm run render:roles` (the operator runs it) | the generated mirror of that render, for readers; the face never reads it, and `tests/roles.test.ts` fails while it differs from the render |
+| `bots/gravit/agent.cordis.yml` | `npm run render:roles` (the operator runs it) | the generated mirror of that render, for readers; the face composes nothing from it (`listBots` hashes it into the row's `revision` and parses nothing), and `tests/roles.test.ts` fails while it differs from the render |
 | `dsh/profile/persona.md` | the operator | not written by the face — read by `composeFace` into `system-prompt`'s `personaPrefix`, and a malformed template refuses the boot |
 | `data/.face_cache` | the producer, not the face | |
 
@@ -1500,9 +1532,9 @@ the pulses of each LIVE member's own `session/follow`.
 | Command | From | Needs | Measured 2026-09-30 |
 |---|---|---|---|
 | `python -m pytest` | repo root | nothing — offline, no keys, no bed | 381 passed in a clean checkout, ~2 s (the operator's tree adds the untracked `tests/strategies/`) |
-| `cd face && npm test` | `face/` | nothing — no port, no key | 694 tests, 680 pass, 14 skipped (2026-10-19) |
+| `cd face && npm test` | `face/` | nothing — no port, no key | 696 tests, 682 pass, 14 skipped (2026-10-19) |
 | `cd face && npm run typecheck` | `face/` | | clean, the dependencies' `.d.ts` included (`skipLibCheck: false`) |
-| `cd face && FACE_SMOKE=1 npm test` | `face/` | boots fourteen real trees into `mkdtemp` homes and binds ports; still no LLM or key (four of the smokes also create, and remove, a gitignored `.bots-smoke-*` bots root at the repo root) | the fourteen skipped tests; 694/694, ~13 s (2026-10-19) |
+| `cd face && FACE_SMOKE=1 npm test` | `face/` | boots fourteen real trees into `mkdtemp` homes and binds ports; still no LLM or key (four of the smokes also create, and remove, a gitignored `.bots-smoke-*` bots root at the repo root) | the fourteen skipped tests; 696/696, ~10 s (2026-10-19) |
 | `cd face && npm run check:fixture` | `face/` | the installed dsh | 26 fixture lines: 23 validated, 0 rejected, 3 with no upstream validator |
 
 ### 7.2 The Python suite
@@ -1530,7 +1562,7 @@ order path.
 
 ### 7.3 The face suite
 
-694 tests in 61 files (680 pass, 14 skipped without `FACE_SMOKE=1`), run by `node --test`
+696 tests in 61 files (682 pass, 14 skipped without `FACE_SMOKE=1`), run by `node --test`
 through `tsx`:
 
 - **Composition and boot** — `boot` (the layer order ending with the overlay; the policy layer
@@ -1542,8 +1574,9 @@ through `tsx`:
   `disabled`, cloning what it is given, and absent from a composition that has no such row; a
   skipped bundle refused; the static `preset-gravit` row rendered from `roles/` in memory — the
   `gravit` row by absolute URL, one `spawn` row per role — and never read from the mirror, the
-  `preset-kairos` alias equal to it under the legacy id, and a roles root with a bad role refusing
-  the compose with the file's path), `overlay` (exactly the thirteen rows, in order;
+  `preset-kairos` alias equal to it under the legacy id, a roles root with a bad role refusing
+  the compose with the file's path, and a missing roles directory refusing it with the
+  directory's), `overlay` (exactly the thirteen rows, in order;
   loopback config; the rows dsh-base owns now and the retired ones never inserted), `policy`
   (every target a row the installed dsh-base composes; the composed posture; an operator row
   overriding a default; `DSH_TELEMETRY_DISABLED` winning over an operator re-enable), `setup`,
@@ -1557,14 +1590,18 @@ through `tsx`:
   the persona slot — whose order must be finite, so a missing slot cannot pass as `NaN` — which
   unload removes; a bad config refused with its reason; an empty or non-zone `TZ` rendered in
   UTC and labelled, never thrown at assembly; the `gravit:roles` section only when `roles` is
-  configured, one past dsh's subagent section, listing every role and empty for a session whose
-  header says `origin: subagent`, an empty list rendering nothing), `roles` (the reader: the three
-  shipped roles with exact names and nothing forbidden, `_template` skipped, every refusal — a
-  missing root or file, an oversize persona, bad YAML, a wildcard, a blank or two-line
-  description, a never-list entry checked against an independent copy of the names, a
-  65-character tool name — opening with an absolute path, the limits inclusive at 2,000 bytes /
-  300 characters / 64; `gravitRows`, whose `agentOptions` appear only with a model; the committed
-  mirror byte-equal to the render, so drift fails), `check-home` (the
+  configured, one past dsh's subagent section, read at assembly and never at mount, listing
+  exactly the roles whose tool the assembling scope resolves — all, none, one of two — through
+  `canCall`, whose lookup is handed the context's own scope; an empty list rendering nothing),
+  `roles` (the reader: the three shipped roles with exact names and nothing forbidden, the job
+  tools on both `bash` roles and only beside `bash`; `_template`, hidden entries and plain files
+  skipped; every refusal — a missing root or file, a symbolic link or a misnamed directory, an
+  oversize persona, bad YAML, a wildcard, an entry listed twice, a blank or two-line
+  description, a never-list entry checked against an independent copy of the names (the account
+  and order names under a renamed server too), a 65-character tool name — opening with an
+  absolute path, the limits inclusive at 2,000 bytes / 300 characters / 64; `gravitRows`, whose
+  `agentOptions` appear only with a model; the committed mirror byte-equal to the render, so
+  drift fails), `check-home` (the
   go-live dry run's pieces, offline: the live-home refusal by device and inode — through a
   symlink, in another letter case, inside or above the home — and the marker; the refusal classes;
   the multi-frame log reader; the inventory diff; the MCP row walk; the `extraPatches` seam
@@ -1671,10 +1708,10 @@ each speaks the browser's wire through `tests/remote.ts` (`mountClient`, `signIn
   header's `agentPreset`; mask = allow ∩ tree, and a tool registered after the declaration
   admitted by the re-expansion; the persona shadow; the default's tool set equal to the host's
   plus the role tools (the gravit plugin masks nothing; no bot sees a `role_*` tool) and its
-  prompt carrying the date, which a bot's does not; the
-  SHIPPED relative plugin path rebased onto the real `face/plugins/bot.js` — its bots
-  root is `mkdtemp`'d inside the repository as `.bots-smoke-*`, gitignored and removed in
-  `finally` — beside an absolute one; **Gate 2 from a bot session**, both outcomes (a bot whose
+  prompt carrying the date, which a bot's does not; the SHIPPED relative plugin path rebased
+  onto the real `face/plugins/bot.js` — its bots root is `mkdtemp`'d inside the repository as
+  `.bots-smoke-*`, gitignored and removed in `finally` — beside an absolute one; **Gate 2 from
+  a bot session**, both outcomes (a bot whose
   own mask NAMES the `mcp__drill__submit_order` stand-in still meets the tree-wide guard, and
   `mcp__drill__place_order` fired with that bot's agent returns `ask` with the symbol on the
   card, so the refusal cannot be credited to the mask); a `session/create` naming the broken
@@ -1707,16 +1744,20 @@ each speaks the browser's wire through `tests/remote.ts` (`mountClient`, `signIn
   the channel's own, a bot session reads the root file (the row is host-plane); `AGENTS.md`
   reaches none of the three, `CLAUDE.md` neither Gravit nor the channel session.
 - `roles-smoke.test.ts` — role delegation on a real tree: `role_reviewer` and `role_screener`
-  each spawn a one-shot child whose system prompt carries the role's persona (shadowing
-  Gravit's), the date line and no `gravit:roles` section, whose tool list EQUALS the role's
-  `allow` (every `role_*` tool and the forbidden tools gone — an exact comparison, because dsh
-  exempts a scope's own registrations from `restrict()`), whose header says `origin: subagent`,
-  `agentPreset: gravit` and the channel's cwd, and whose text returns through the tool, while
-  Gravit's own prompt carries the roles section; then a role naming a tool the tree lacks fails at
-  delegation with `tools.restrict() names unknown global tool "…"` (anchored on the quoted name)
-  and no child is created. The MCP tools the roles name are stand-ins under their production
-  names; a foreground one-shot child leaves `ctx.sessions` as its result returns, so the smoke
-  copies each session's header while serving its request.
+  each spawn a one-shot child whose tool list EQUALS the role's `allow` (every `role_*` tool and
+  the forbidden tools gone — an exact comparison, because dsh exempts a scope's own
+  registrations from `restrict()`). For the reviewer's child it also asserts the system prompt
+  — the role's persona shadowing Gravit's, the date line, no `gravit:roles` section — the header
+  (`origin: subagent`, `agentPreset: gravit`, its parent's cwd), the root `GRAVIT.md` in its
+  `agent-instructions` baseline (a marker planted in the fixture root's file; Gravit's own
+  baseline is the positive pair), and its text returning through the tool, while Gravit's own
+  prompt carries the roles section. A `subagent_fork` child (`isSeeded`) is then asserted to
+  open its first request with Gravit's system text, whole, and to offer Gravit's tools in order.
+  Last, a role naming a tool the tree lacks fails at delegation with `tools.restrict() names
+  unknown global tool "…"` (anchored on the quoted name) and no child is created. The MCP tools
+  the roles name are stand-ins under their production names; a foreground one-shot child leaves
+  `ctx.sessions` as its result returns, so the smoke copies each session's header while serving
+  its request.
 
 The drills use `mcp__drill__*` stand-ins so `ALPACA_KIT_ENABLE_ORDERS` is never armed.
 
@@ -1752,8 +1793,8 @@ the re-host added (§10, item 14).
 | **Room** — automated (`room-smoke`, `room-discussion-smoke`) | a real round on a stub model: dispatch → three members (answered / passed / failed) → answers on the log before one wake → synthesis in one turn; members parented, preset-joined, `read-only` first, `GRAVIT.md` chain, no `dispatch`; the projection on the row and in the cache; the `@` route with a member's write refused in content; a home refused on `../SOUL.md`; the structured brief and views; the journal | that a human can read the strip; a real model's behaviour on the four standing rules | passes 2026-09-30 |
 | **Room** — manual (`face/README.md`, eight parts) | check-in → dispatch line → attributed bubbles and the strip → the fold → `@` → an inline member question with the needs-you mark → a member's write refused → `left` and re-check → a restart keeps states and titles | per-message attribution across a reconnect; convergence of four voices on one model (spec §12, R3); the peer-`@` continuation, which the operator's next `@` superseded before it ran (by design) — that path stands on the engine tests | **Drilled and PASSED 2026-09-09** on the operator's own face (`feat/rooms` @ `31b2e68`, two fresh template bots, DeepSeek as the model); one client finding (F1, the strip missing on a session's first round) fixed the same day and re-verified; owed on 0.2.0, whose 0.1.1 room sessions no longer open (§9, R20) |
 | **Ask-user** — `ask_user_question` offered, called, answered, cancelled | the seam | that it is a gate (the answer is model-visible); the instruction half (README step 6 — on a thin brief that does not name the tool, Gravit asks before it builds, per `GRAVIT.md`), left to the operator and not run | passed 2026-09-03 with a real model, 26 tools offered; re-run 2026-09-08 on `main`, passed (34 tools offered; answered, then Stop → `closed · cancelled`); owed on 0.2.0 |
-| **Role** — automated (`roles-smoke`; `roles`, `gravit-plugin`, `boot`, `bot-presets`) | on a real tree, `role_reviewer` and `role_screener` each spawn a one-shot child with the role's persona shadowing Gravit's, exactly the role's tools (compared as sets, not as a subset), the date and no roles section, its text coming back through the tool; a role naming a tool the tree lacks failing at delegation, naming it, with no child; the reader's refusals, the render and the mirror's drift | that a real model chooses and calls a role sensibly; what the child's log shows on a live home; the generic tool paragraphs the child's prompt still carries | passes 2026-10-19 |
-| **Role** — manual (`face/README.md`, four steps and a clean-up) | on a scratch copy of the operator's home: Gravit calls `role_screener`; the child's log shows exactly the screener's tools and its persona, not Gravit's; an unmounted alpaca-kit row fails the delegation with `tools.restrict()` naming the tool and creates no child; Gravit's own log shows the role tools and the roles paragraph | a real model's judgement over several delegations | **not yet run** |
+| **Role** — automated (`roles-smoke`; `roles`, `gravit-plugin`, `boot`, `bot-presets`) | on a real tree, `role_reviewer` and `role_screener` each spawn a one-shot child with exactly the role's tools (compared as sets, not as a subset); the reviewer's child carries the role's persona shadowing Gravit's, the date, no roles section and the root `GRAVIT.md` in its baseline, its text coming back through the tool; a `subagent_fork` child gets Gravit's system text and tools unchanged; a role naming a tool the tree lacks failing at delegation, naming it, with no child; the visibility gate on the roles section; the reader's refusals, the render and the mirror's drift | that a real model chooses and calls a role sensibly; what the child's log shows on a live home; a `bash` run long enough to be moved to a job; the generic tool paragraphs the child's prompt still carries | passes 2026-10-19 |
+| **Role** — manual (`face/README.md`, five steps and a clean-up) | on a scratch copy of the operator's home: Gravit calls `role_screener`; the child's log shows exactly the screener's tools and its persona, not Gravit's; a `role_backtester` run past bash-sandbox's 60 s default either passes `timeoutMs` or reads its moved job before reporting; an unmounted alpaca-kit row fails the delegation with `tools.restrict()` naming the tools and creates no child; Gravit's own log shows the role tools and the roles paragraph | a real model's judgement over several delegations | **not yet run** |
 
 Owed besides, from the re-host, never yet run in a browser: the Gate-2 drill's new card endings
 — a second tab's `closed`, a lost race's `closed · settled elsewhere`, a stale card's `closed ·

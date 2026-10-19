@@ -7,6 +7,7 @@ STRATEGY runs on DeepSeek Harness (dsh). This directory is the repo's half of th
 | `profile/cordis.yml` | profile TEMPLATE — mounts the alpaca-kit MCP server, the skill roots, and the INTENDED approval list (see step 6) |
 | `skills/mechanics/` | neutral mechanics, always apply: `backtest-rules`, `alpaca-kit-guide` |
 | `skills/style-gravit/` | the operator's own style: `doctrine`, `signals`, `lessons` — converted from the retired `seeds_v2/` JSON packs by `scripts/convert_seeds.py` |
+| `../roles/` (the repo root's, not this directory's) | the role library the face renders into Gravit's preset (`face/src/roles.ts`, `DEVELOPMENT.md` §3.8); each `role.yml` names an MCP tool as `mcp__<serverName>__<raw>`, so it spells the server name this profile mounts — `alpaca-kit` |
 
 Mechanics vs style is the load-bearing split. Mechanics are how the data and the honest-eval
 bed work — findings never overrule them. Style is the operator's preference: follow it by
@@ -133,7 +134,11 @@ actually bound, for the next install or the next pin bump:
   config, which is fine here because dsh-base mounts the row configless). Both are unchanged
   and valid at 0.2.0-rc.2: the stdio config and the `customSkillDirs` / `includeDefaultRoots`
   keys are the same. Since 0.2.0 stdio negotiation starts a probe process before the serving
-  one, so the server is spawned twice per connect.
+  one, so the server is spawned twice per connect. The `serverName` you choose is what
+  `roles/*/role.yml` spells after `mcp__` (`mcp__alpaca-kit__screen`): rename the server and
+  every role naming its tools must change with it, or each of those delegations fails at
+  `tools.restrict()`, naming the tool (never the boot). The face's never-list refuses the
+  account and order tools under any server name, so a rename cannot slip one into a role.
 - **The default-model row lives there too** (`agent-default-model`, step 3). 0.1.1 took the
   model from `$DSH_HOME/settings.yaml`; the face at 0.2.0 reads no settings file (it provides
   no `profileContext`), so the row is the only place Gravit's model is set.

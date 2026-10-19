@@ -2,8 +2,10 @@
 # ([a-z0-9][a-z0-9-]*); the tool Gravit sees is role_<id> with - as _.
 name: <role name>
 description: <one line Gravit reads when it chooses a role, at most 300 characters>
-# Exact tool names only (no wildcards): host tools by name, MCP tools as
+# Exact tool names only (no wildcards), each once: host tools by name, MCP tools as
 # mcp__<server>__<raw> with the server named as the installed profile mounts it.
+# A role with bash adds job_output, job_list and job_kill: a command past the 60 s
+# default moves to a background job that is the child's own, cancelled with it.
 allow:
   - read
   - glob

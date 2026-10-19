@@ -5,7 +5,7 @@ import {
   AGENT_PRESET_REGISTRY_ROW_ID, DEFAULT_PRESET, LEGACY_PRESET, LEGACY_PRESET_DESCRIPTION, faceOverlay, isHostPreset, presetRowId,
 } from "../src/overlay.ts";
 
-/** The default preset a composition hands the overlay: `bots/gravit` as a definition. */
+/** The default preset a composition hands the overlay: the definition `composeFace` renders from `roles/`. */
 const GRAVIT: AgentPresetConfig = {
   id: "gravit",
   name: "Gravit",

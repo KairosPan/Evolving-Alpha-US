@@ -149,13 +149,14 @@ These are the upgrade's real work. Everything else in §3.2 fails a test first.
 | H6 | the `agent-instructions` row's user-global file: hard-coded `$DSH_HOME/AGENTS.md`, outside the candidate lists the face sets | installed `dsh-agent-instructions/lib/index.js` (`USER_GLOBAL_FILE`); the candidates and the budget are the face's own patch, `face/src/instructions.ts` (H10) | 0.2.1 removes the per-row `dshHome` and reads the global file via `DSH_AGENTS_HOME` |
 | I5 | credential precedence: `.credentials.yaml` refs outrank both `.env` layers, the inherited environment wins | `boot.ts` `loadLayeredEnv`; the operator's shell | 0.2.1 changes API-key precedence for headless runs |
 | I12 | state outside `~/.dsh` and the repo is `tmpdir()` scratch only | `agents.ts`, `alpaca_kit/mcp/cache.py` | a new state directory the backup misses |
-| — | the operator's MCP server name, as the roles spell it: every `mcp__alpaca-kit__…` in `roles/*/role.yml`, and the account and order names in `NEVER` (`face/src/roles.ts`), must equal `mcp__<serverName>__…` for the row's `serverName` | `~/.dsh/profiles/face/cordis.patch.yml` (`serverName: alpaca-kit`); `roles/*/role.yml`; `face/src/roles.ts` | a renamed server, or a dsh that mints MCP tool names differently: each delegation that names the tools fails at `tools.restrict()` (never the boot), and the never-list stops covering the account tools |
+| — | the operator's MCP server name, as the roles spell it: every `mcp__alpaca-kit__…` in `roles/*/role.yml` must equal `mcp__<serverName>__…` for the row's `serverName` | `~/.dsh/profiles/face/cordis.patch.yml` (`serverName: alpaca-kit`); `roles/*/role.yml` | a renamed server, or a dsh that mints MCP tool names differently: each delegation that names the tools fails at `tools.restrict()` (never the boot) |
 | — | the MCP live roster: `/data/plugins.json` = `alpaca-kit active 10`, `akshare active 14` | runbook §7 A | the only visible sign of G4 |
 
 ### 3.2 By test: the pinned seams and what fails first
 
 Each row: the seam, the file that pins it. Depth: the inventory's row, `DEVELOPMENT.md` §4.1
-(boot), §4.3 (overlay and policy), §4.7 (Gate 2), §5.2 (the wire), §6.8 (rooms), §3.7 (bots).
+(boot), §4.3 (overlay and policy), §4.7 (Gate 2), §5.2 (the wire), §6.8 (rooms), §3.7 (bots),
+§3.8 (roles, C20).
 
 **A · pins and install.** A1–A3 the three constants vs manifest vs installed tree
 (`version.test.ts`); A5 the retired packages never declared (`version.test.ts`); A6 the
@@ -288,11 +289,15 @@ registrations: `face/plugins/gravit.js`, the first row of the default preset's r
 composition (`bots/gravit/agent.cordis.yml` is its mirror), registers `deployment:today` at
 `getSectionOrder("DEPLOYMENT_PERSONA_PREFIX") + 1` with `interpolate: false` and a function text
 re-evaluated at each assembly, in UTC when `TZ` is unusable, and `gravit:roles` at
-`getSectionOrder("TOOL_SUBAGENT") + 1`, blank for a session whose header says `origin: subagent`,
-each scoped to the preset revision so a bot's prompt carries neither (`gravit-plugin.test.ts`:
-order, which must be finite, shape, unload, the `TZ` fallback, the roles section's order, lines and
-blank; `bots-smoke`: Gravit's prompt has the date, a bot's does not; `roles-smoke`: Gravit's has
-the roles section, a delegated child's has the date and not the roles).
+`getSectionOrder("TOOL_SUBAGENT") + 1`, listing only the roles whose tool the assembling scope
+resolves (`ctx.tools.get(name, context.scope)`, the gate `dsh-tool-web` and
+`dsh-tool-subagent` put on their own sections, so the plugin rests on `get` applying a scope's
+restrictions and on `assembleContextFor` setting `scope` to the agent); both are scoped to the
+preset revision so a bot's prompt carries neither (`gravit-plugin.test.ts`: order, which must be
+finite, shape, unload, the `TZ` fallback, the roles section's order, lines and visibility cases;
+`bots-smoke`: Gravit's prompt has the date, a bot's does not; `roles-smoke`: Gravit's has the
+roles section, a role child's has the date and not the roles, a `subagent_fork` child's system
+text equals Gravit's).
 
 **I · environment and home layout.** I1 `DSH_HOME` resolution and the dry run's live-home
 refusal (`check-home.test.ts`, `boot.test.ts`); I2 `DSH_PERMISSION_MODE` and `danger-full-access`
@@ -350,7 +355,7 @@ named as still to run on 0.2.0).
 | room, automated | `room-smoke`, `room-discussion-smoke` + the offline room suites | passes |
 | room, manual (a NEW round on `strategies/room-drill`) | README steps 1–8 | one round ran live 2026-09-30 on a scratch home; the `@`, an inline member question, a refused write, `left` and re-check, a restart **owed** |
 | roles, automated | `roles-smoke`, `roles.test.ts`, `gravit-plugin.test.ts` | passes (plan 2) |
-| roles, manual (a NEW round on `strategies/room-drill`, then the alpaca-kit row disabled in a scratch copy) | README "The role drill", steps 1–5 | **not yet run** — the operator's, on a COPY of the real home |
+| roles, manual (a NEW round on `strategies/room-drill`, a backtester run past the 60 s bash default, then the alpaca-kit row disabled in a scratch copy) | README "The role drill", steps 1–6 | **not yet run** — the operator's, on a COPY of the real home |
 | the subagents dock | `subagents-smoke`; the panel in a browser | manual **owed** |
 | the MCP live roster | `curl …/data/plugins.json` | 10 + 14 on 2026-09-30 (scratch) and 2026-10-01 (live) |
 | the first-live-boot checks (runbook §7 C) | the six checks | done 2026-10-01 (§6.1) |
@@ -479,7 +484,8 @@ listed in §7.3 and enter §3 as their plans merge. The doc debts the compilatio
   `getSectionOrder` allocates for the first-party tail (spec §11 (d)). Landed in plan 1
   (`6af2eb2`): the date section at `getSectionOrder("DEPLOYMENT_PERSONA_PREFIX") + 1`, entered as
   H11 in §3.2; the `roles` section landed in plan 2 (`994ef5d`, at `getSectionOrder("TOOL_SUBAGENT")
-  + 1`, also H11); the `cycle` section (plan 3) is still to land;
+  + 1`, also H11), gated on the assembling scope's tool view since `e389160`; the `cycle` section
+  (plan 3) is still to land;
 - `dsh-goal` + `dsh-goal-round-driver` + `dsh-tool-goal`: the `<goal_round>` prompt text, the
   `round-limit` blocker, the disarm-after-resume rule (spec §11 (e));
 - `dsh-compaction-tool-result-pruner` thresholds (8,192 / 4,096 / 1,024) that role reports are
