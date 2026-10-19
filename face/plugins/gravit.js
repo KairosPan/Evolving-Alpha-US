@@ -1,10 +1,12 @@
 // face/plugins/gravit.js
 /**
  * `gravit` - the face-owned plugin Gravit's own preset mounts, and the first
- * row of `bots/gravit/agent.cordis.yml`. It holds what only Gravit is told; at
- * plan 1 of the 2026-10-15 redesign that is one section, the date. Plans 2 and
- * 3 add the `roles` and `cycle` config keys: the validator below already
- * checks them, nothing reads them yet, and the shipped row is `config: {}`.
+ * row of `bots/gravit/agent.cordis.yml`. It holds what only Gravit is told: the
+ * date (`deployment:today`) and the list of its roles (`gravit:roles`, from the
+ * `roles` config key, which src/roles.ts `gravitRows` fills from `roles/`). The
+ * `cycle` config key is the third section's, plan 3 of the 2026-10-15
+ * redesign: the validator below already checks it, nothing reads it yet, and
+ * the shipped row carries none.
  *
  * WHY A DATE. The 2026-10-10 prompt trace found no date anywhere in the
  * assembled prompt, so Gravit could not tell a fresh bar from a stale one or
@@ -25,37 +27,62 @@
  * against `bots/gravit/` while it builds the declaration (src/bot-presets.ts
  * `definitionFor`), and a file URL is all the loader needs.
  *
+ * THE ROLE LIST. The `role_<id>` tools are registered by the sibling
+ * `@deepseek-ai/dsh-tool-subagent` rows, one per role, and that package has no
+ * description key: this section is where Gravit reads what each role is for -
+ * a sentence on what a role is and why its report is a claim to check, then one
+ * line per entry of the `roles` config, `- <tool> — <summary>`. It sits one
+ * past dsh's own subagent section (`TOOL_SUBAGENT` + 1), so it reads straight
+ * after the delegation tool it extends. A `roles: []` config mounts the section
+ * and renders nothing: dsh drops an empty section from the prompt.
+ *
+ * BLANK FOR A DELEGATED CHILD. A child JOINS the preset it was delegated from,
+ * so a scoped section reaches it too, and the child's allow-list removes the
+ * `role_<id>` tools but cannot remove a sentence. The roles text is therefore a
+ * function of the assembly context and resolves to `""` when the assembled
+ * agent's session header says `origin: "subagent"` (see {@link isDelegated}): a
+ * child keeps its own persona and is never told of roles it cannot call. The
+ * date is left on for it.
+ *
  * SCOPED, NOT GLOBAL. `ctx.systemPrompt.section` registers into the CALLING
- * context's scope, the preset revision's standing layer, so the section
+ * context's scope, the preset revision's standing layer, so each section
  * reaches every session joined to the `gravit` preset (and to its `kairos`
  * alias, which declares the same rows) and nobody else: a bot is its own
  * preset and never sees it. tests/bots-smoke.test.ts pins both halves on a real
  * boot.
  *
- * It masks nothing. `inject` names `systemPrompt` and never `tools`, so
- * Gravit's roster stays exactly the host's flat roster (bots-smoke S3).
+ * It masks nothing. `inject` names `systemPrompt` and never `tools`, so this
+ * plugin neither adds nor removes a tool: the `role_<id>` tools come from the
+ * sibling rows (bots-smoke S3 pins the roster).
  *
- * `interpolate: false` because the text is a sentence, not a template: the dsh
- * system prompt is a strict `{{...}}` template with no escape. The order is the
- * persona slot's + 1, so the date follows identity - harness identity, the
- * persona prefix, then the date - and precedes every centrally ordered policy
- * and tool section.
+ * `interpolate: false` on both sections because their text is prose, not a
+ * template: the dsh system prompt is a strict `{{...}}` template with no
+ * escape. The date's order is the persona slot's + 1, so the date follows
+ * identity - harness identity, the persona prefix, then the date - and
+ * precedes every centrally ordered policy and tool section.
  */
 export const name = "gravit";
 export const inject = ["systemPrompt"];
 
-/** The one section this plugin registers. Its own name: it shadows nothing, and
- *  nothing shadows it. */
+/** The date section. Its own name: it shadows nothing, and nothing shadows it. */
 export const TODAY_SECTION = "deployment:today";
+
+/** The role list. Registered only when the config carries `roles`; its own name,
+ *  like the date's. */
+export const ROLES_SECTION = "gravit:roles";
+
+/** What a role is, said once above the list. The list's lines follow it. */
+const ROLES_INTRO = "Roles. One-shot delegates on your team, each with its own persona and tools; call one by its tool name with a self-contained brief, and treat its report as a claim to check, never a result to copy. Every report carries four headings: status, what was measured, paths, limits.";
 
 /** A role's tool name: the `role_` prefix keeps the roster's role tools apart
  *  from every host and MCP tool. */
 const ROLE_TOOL = /^role_[a-z0-9_]+$/;
 
 /** What would fail at mount or render, as a reason; `undefined` when the config
- *  is valid. `{}` is the shipped config. `cycle` and `roles` are the keys plans
- *  3 and 2 fill; they are checked here when present so a malformed value
- *  refuses the mount, loudly, instead of loading a silently dead config. */
+ *  is valid. `{}` is valid (no roles, no cycle); the shipped row carries
+ *  `roles`. `roles` and `cycle` are the optional keys of plans 2 and 3; they are
+ *  checked here when present so a malformed value refuses the mount, loudly,
+ *  instead of loading a silently dead config. */
 export function validateGravitConfig(config) {
   if (config === null || typeof config !== "object" || Array.isArray(config)) return "config must be an object";
   const { cycle, roles } = config;
@@ -100,6 +127,21 @@ export function resolveZone() {
   }
 }
 
+/** Whether the prompt being assembled is a delegated child's: the assembly
+ *  context carries the agent, and a child's session header says
+ *  `origin: "subagent"` (the same key dsh's own code tests). Total on any
+ *  context: a missing link is "not delegated". */
+export function isDelegated(context) {
+  return context?.agent?.session?.header?.origin === "subagent";
+}
+
+/** The role list: `""` for no roles, else {@link ROLES_INTRO} and one line per
+ *  role, `- <tool> — <summary>`. */
+export function rolesText(roles) {
+  if (roles.length === 0) return "";
+  return [ROLES_INTRO, ...roles.map((role) => `- ${role.tool} — ${role.summary}`)].join("\n");
+}
+
 export function apply(ctx, config) {
   const problem = validateGravitConfig(config);
   if (problem !== undefined) throw new Error(`gravit: ${problem}`);
@@ -111,4 +153,12 @@ export function apply(ctx, config) {
     interpolate: false,
     text: () => todayText(new Date(), resolveZone()),
   }));
+  if (config.roles !== undefined) {
+    ctx.effect(() => ctx.systemPrompt.section({
+      name: ROLES_SECTION,
+      order: ctx.systemPrompt.getSectionOrder("TOOL_SUBAGENT") + 1,
+      interpolate: false,
+      text: (context) => isDelegated(context) ? "" : rolesText(config.roles),
+    }));
+  }
 }

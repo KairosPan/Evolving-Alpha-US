@@ -2,7 +2,7 @@
 /** The role library: one directory per role under `roles/<id>/`.
  *
  * A role is a one-shot child Gravit hands a bounded piece of work. Its directory holds
- * `ROLE.md` (the child's persona, verbatim) and `role.yml` (`name`; `description`, the
+ * `ROLE.md` (the child's persona, trimmed) and `role.yml` (`name`; `description`, the
  * one-line summary Gravit reads when it chooses a role; `allow`, the child's tools; an
  * optional `model` route). The operator owns both files and Gravit never writes here.
  * {@link readRoles} reads and validates the directory and returns plain data; `_template`
@@ -21,13 +21,30 @@
  * profile mounts - not about this directory, so nothing here checks it. A missing tool fails
  * that delegation (no child is created and `restrict()`'s error names the tool), never the
  * face's boot.
+ *
+ * A role never carries what a delegated child cannot use or must not hold: a tool that needs
+ * a human, the open web, delegation, the cycle's goal, todo and job bookkeeping, the account
+ * and order tools, the AKShare tools (the `NEVER` table, with the reason for each). The
+ * reader refuses such an `allow` entry where it reads the file, and refuses a role id whose
+ * tool name would pass {@link TOOL_NAME_MAX} characters.
+ *
+ * {@link gravitRows} renders the roles as Gravit's composition: the `gravit` plugin row,
+ * whose config carries each role's tool and summary for the `gravit:roles` section
+ * (plugins/gravit.js), then one `@deepseek-ai/dsh-tool-subagent` row per role.
+ * {@link renderGravitComposition} dumps those rows as `bots/gravit/agent.cordis.yml`, a
+ * GENERATED mirror (`cd face && npm run render:roles`); tests/roles.test.ts fails while the
+ * committed file differs from the render.
  * @module
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { load } from "js-yaml";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { entryListSchema } from "@deepseek-ai/cordis-plugin-include";
+import type { Config as ToolSubagentConfig } from "@deepseek-ai/dsh-tool-subagent";
+import { dump, load } from "js-yaml";
+import type { PresetRow } from "./bot-presets.ts";
 import { MODEL_ROUTE_RE } from "./bots.ts";
+import { GRAVIT_PLUGIN_RELATIVE } from "./overlay.ts";
 
 /** The repository's role directory - where the face reads the role library from.
  *  Module-relative, as `BOTS_ROOT` is. */
@@ -44,6 +61,45 @@ export const SUMMARY_MAX = 300;
 /** The largest `ROLE.md`, in bytes as `wc -c` counts them: it becomes a section of the
  *  child's system prompt. */
 export const ROLE_MD_MAX_BYTES = 2000;
+/** The longest tool name Gravit may be handed, in characters: a model API caps a function
+ *  name (64 is the common cap), and {@link ROLE_ID_RE} admits ids of 64 characters, so
+ *  `role_` plus an id can pass it. */
+export const TOOL_NAME_MAX = 64;
+
+/** What a role never carries, and why: for each reason, the exact names and the name prefixes
+ *  it covers. {@link readMeta} refuses an `allow` entry that matches, with the reason in the
+ *  message. The shipped roles obey it, and tests/roles.test.ts holds an independent copy of
+ *  the names. The account and order names carry the `serverName: alpaca-kit` the operator's
+ *  patch row mounts the server by (dsh/README.md); a server mounted under another name needs
+ *  its names added here. */
+const NEVER: ReadonlyArray<{ what: string; because: string; names: readonly string[]; prefixes: readonly string[] }> = [
+  { what: "a tool that needs a human",
+    because: "a delegated child has no human to ask or to review a plan (dsh refuses ask_user_question to it with DELEGATED_CALLER); a role that needs the operator says so in its report",
+    names: ["ask_user_question", "exit_plan_mode"], prefixes: [] },
+  { what: "a web tool",
+    because: "the open web carries no as-of guard, and a role reads the market only through the PIT channels",
+    names: ["web_search", "web_fetch"], prefixes: [] },
+  { what: "a delegation tool",
+    because: "Gravit alone delegates; a role is one hand, not a team",
+    names: ["subagent", "subagent_fork", "send_message", "interrupt_agent", "list_agents", "workflow", "ralph", "dispatch"],
+    prefixes: ["role_", "agent_"] },
+  { what: "a goal, todo or job tool",
+    because: "Gravit tracks the goal, the todos and the background jobs; a role is one bounded call",
+    names: ["create_goal", "get_goal", "update_goal", "todo_write", "job_output", "job_list", "job_kill"], prefixes: [] },
+  { what: "an account or order tool",
+    because: "orders stay behind the two order gates, and a role has no reason to read the account",
+    names: ["mcp__alpaca-kit__account", "mcp__alpaca-kit__positions", "mcp__alpaca-kit__orders", "mcp__alpaca-kit__place_order", "mcp__alpaca-kit__cancel_order"],
+    prefixes: [] },
+  { what: "an AKShare tool",
+    because: "the AKShare tools carry no point-in-time guard and are never backtest evidence",
+    names: [], prefixes: ["mcp__akshare__"] },
+];
+
+/** Why a role may not carry `entry`, as the end of a refusal; `undefined` when it may. */
+function neverCarries(entry: string): string | undefined {
+  const rule = NEVER.find((candidate) => candidate.names.includes(entry) || candidate.prefixes.some((prefix) => entry.startsWith(prefix)));
+  return rule === undefined ? undefined : `a role never carries ${rule.what}: ${rule.because}`;
+}
 
 const PERSONA_FILE = "ROLE.md";
 const META_FILE = "role.yml";
@@ -126,6 +182,8 @@ function readMeta(file: string): Pick<RoleFile, "name" | "description" | "allow"
     if (typeof entry !== "string") throw refusal(file, `allow entry ${index + 1} is not a string`);
     if (entry.includes("*")) throw refusal(file, `allow entry ${JSON.stringify(entry)}: wildcards are not accepted; name the exact tool, e.g. mcp__alpaca-kit__screen`);
     if (!TOOL_NAME_RE.test(entry)) throw refusal(file, `allow entry ${JSON.stringify(entry)} is not a tool name (letters, digits, _ and - only)`);
+    const never = neverCarries(entry);
+    if (never !== undefined) throw refusal(file, `allow entry ${JSON.stringify(entry)}: ${never}`);
     return entry;
   });
 
@@ -142,8 +200,10 @@ function readMeta(file: string): Pick<RoleFile, "name" | "description" | "allow"
 
 function readRole(root: string, id: string): RoleFile {
   const dir = join(root, id);
+  const tool = toolNameFor(id);
+  if (tool.length > TOOL_NAME_MAX) throw refusal(dir, `the tool name ${tool} is ${tool.length} characters; the limit is ${TOOL_NAME_MAX} - shorten the directory name`);
   /* ROLE.md first, so its refusals come before role.yml's. */
-  return { id, tool: toolNameFor(id), persona: readPersona(join(dir, PERSONA_FILE)), ...readMeta(join(dir, META_FILE)) };
+  return { id, tool, persona: readPersona(join(dir, PERSONA_FILE)), ...readMeta(join(dir, META_FILE)) };
 }
 
 /** The role ids under `root`, sorted. A directory whose name is not a {@link ROLE_ID_RE} id,
@@ -166,4 +226,69 @@ function listRoleIds(root: string): string[] {
 export function readRoles(root: string): RoleFile[] {
   const base = resolve(root);
   return listRoleIds(base).map((id) => readRole(base, id));
+}
+
+/** The id of Gravit's own plugin row; `bots/gravit/agent.cordis.yml` leads with it. */
+export const GRAVIT_ROW_ID = "gravit";
+/** The id of a role's `dsh-tool-subagent` row. */
+export const roleRowId = (id: string): string => "role-" + id;
+/** `plugins/gravit.js` as the in-memory form of the row's `name`: an absolute `file:` URL,
+ *  module-relative, which the face's rebase passes through untouched (`rebaseName` in
+ *  src/bot-presets.ts). The committed mirror spells it {@link GRAVIT_PLUGIN_RELATIVE}. */
+export const GRAVIT_PLUGIN_URL: string = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), "..", "plugins", "gravit.js")).href;
+const TOOL_SUBAGENT_PLUGIN = "@deepseek-ai/dsh-tool-subagent";
+
+/** What {@link gravitRows} takes besides the roles. */
+export interface GravitRowsOptions {
+  /** The first row's `name`: how this composition spells the plugin. */
+  plugin: string;
+  /** The text of the `gravit:cycle` section; absent when there is none. */
+  cycle?: string;
+}
+
+/**
+ * Gravit's composition rows for `roles`: the `gravit` plugin row first, its config the
+ * summaries (and the cycle text, when given) the plugin turns into sections, then one
+ * `@deepseek-ai/dsh-tool-subagent` row per role. The role row is a one-shot spawn child with
+ * the role's persona, an exact tool allow-list, and its route when `role.yml` names one;
+ * `dsh-tool-subagent` has no description key, which is why the summaries ride on the first
+ * row. Pure: the same roles give the same rows.
+ */
+export function gravitRows(roles: readonly RoleFile[], options: GravitRowsOptions): PresetRow[] {
+  return [
+    {
+      id: GRAVIT_ROW_ID,
+      name: options.plugin,
+      config: {
+        roles: roles.map((role) => ({ tool: role.tool, summary: role.description })),
+        ...(options.cycle === undefined ? {} : { cycle: options.cycle }),
+      },
+    },
+    ...roles.map((role): PresetRow => ({
+      id: roleRowId(role.id),
+      name: TOOL_SUBAGENT_PLUGIN,
+      config: {
+        provider: "spawn",
+        toolName: role.tool,
+        backgroundMode: "one-shot",
+        persona: role.persona,
+        toolFilter: { allow: [...role.allow] },
+        /* `model` is `<provider>/<model>` with exactly two segments (MODEL_ROUTE_RE). */
+        ...(role.model === undefined ? {} : { agentOptions: { provider: role.model.split("/")[0], model: role.model.split("/")[1] } }),
+      } satisfies ToolSubagentConfig,
+    })),
+  ];
+}
+
+const GENERATED_HEADER =
+  "# GENERATED by face/src/roles.ts renderGravitComposition from roles/ and dsh/profile/cycle.md - do not hand-edit.\n" +
+  "# A role's summary, persona and tools are edited in roles/<id>/ (the cycle in dsh/profile/cycle.md), then:\n" +
+  "# cd face && npm run render:roles   (tests/roles.test.ts fails while this file differs from the render)\n";
+
+/** The text of `bots/gravit/agent.cordis.yml`: the generated header, then {@link gravitRows}
+ *  with the plugin spelled by its shipped relative path, dumped in the Loader's own dialect
+ *  as `renderComposition` (src/bots.ts) dumps a bot's. `face/scripts/render-roles.ts` writes it. */
+export function renderGravitComposition(roles: readonly RoleFile[], options: { cycle?: string }): string {
+  const rows = gravitRows(roles, { plugin: GRAVIT_PLUGIN_RELATIVE, cycle: options.cycle });
+  return GENERATED_HEADER + dump(rows, { schema: entryListSchema, lineWidth: -1, noRefs: true });
 }

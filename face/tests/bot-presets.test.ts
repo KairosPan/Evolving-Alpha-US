@@ -20,6 +20,7 @@ import { Context } from "@deepseek-ai/cordis";
 import { entryListProblem, type PresetDefinition } from "@deepseek-ai/dsh-agent-preset-registry";
 import { declareBots, definitionFor } from "../src/bot-presets.ts";
 import { BOT_PLUGIN_RELATIVE, DEFAULT_ALLOW, createBot, isBotId, renderComposition, updateSoul } from "../src/bots.ts";
+import { ROLES_ROOT, gravitRows, readRoles } from "../src/roles.ts";
 import { GRAVIT_PLUGIN_ABS, makeBotsRoot, PLUGIN_ABS, REPO } from "./bots-fixture.ts";
 
 const SKILLS_PLUGIN = "@deepseek-ai/dsh-skill-filesystem";
@@ -95,8 +96,14 @@ test("every shipped bot's plugin row lands on the real face/plugins/bot.js, and 
     }
   }
   const gravit = definitionFor(botsRoot, "gravit");
-  assert.deepEqual(gravit.plugins, [{ id: "gravit", name: pathToFileURL(GRAVIT_PLUGIN_ABS).href, config: {} }],
-    "the shipped default composes the gravit plugin and nothing else; the host roster is untouched because the plugin masks no tool");
+  const roles = readRoles(ROLES_ROOT);
+  const gravitUrl = pathToFileURL(GRAVIT_PLUGIN_ABS).href;
+  assert.deepEqual(rowsOf(gravit).map((row) => row.id), ["gravit", "role-backtester", "role-reviewer", "role-screener"]);
+  assert.deepEqual(gravit.plugins[0], { id: "gravit", name: gravitUrl, config: { roles: roles.map((r) => ({ tool: r.tool, summary: r.description })) } },
+    "the mirror's relative plugin path rebases to the real face/plugins/gravit.js");
+  assert.ok(rowsOf(gravit).slice(1).every((row) => row.name === "@deepseek-ai/dsh-tool-subagent"), "every other row is a role's subagent tool");
+  assert.deepEqual(gravit.plugins, gravitRows(roles, { plugin: gravitUrl }),
+    "the shipped default composes the gravit plugin and the three role rows; none of them masks a host tool, so the host roster is kept");
   assert.equal(typeof gravit.name, "string");
 });
 

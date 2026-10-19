@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import SystemPrompt from "@deepseek-ai/dsh-system-prompt";
-import { TODAY_SECTION, apply, inject, name, resolveZone, todayText, validateGravitConfig } from "../plugins/gravit.js";
+import { ROLES_SECTION, TODAY_SECTION, apply, inject, isDelegated, name, resolveZone, rolesText, todayText, validateGravitConfig } from "../plugins/gravit.js";
 
-const dshSectionOrder = (slot: "DEPLOYMENT_PERSONA_PREFIX"): number => SystemPrompt.prototype.getSectionOrder(slot);
+const dshSectionOrder = (slot: "DEPLOYMENT_PERSONA_PREFIX" | "TOOL_SUBAGENT"): number => SystemPrompt.prototype.getSectionOrder(slot);
 
 function fakeScope() {
   const sections: Array<{ name: string; order: number; interpolate?: boolean; text: unknown }> = [];
@@ -15,7 +15,7 @@ function fakeScope() {
         sections.push(section);
         return () => { sections.splice(sections.indexOf(section), 1); };
       },
-      getSectionOrder: (slot: "DEPLOYMENT_PERSONA_PREFIX") => dshSectionOrder(slot),
+      getSectionOrder: (slot: "DEPLOYMENT_PERSONA_PREFIX" | "TOOL_SUBAGENT") => dshSectionOrder(slot),
     },
   };
   return { ctx, sections, unload: () => { for (const d of disposers.splice(0).reverse()) d(); } };
@@ -89,4 +89,27 @@ test("an unusable TZ is rendered in UTC and labelled, never thrown at assembly",
     if (saved === undefined) delete process.env.TZ;
     else process.env.TZ = saved;
   }
+});
+
+test("gravit: the roles section follows dsh's subagent section, lists every role, and is empty for a delegated child", () => {
+  const tree = fakeScope();
+  const roles = [{ tool: "role_screener", summary: "runs the screen" }, { tool: "role_reviewer", summary: "audits" }];
+  apply(tree.ctx, { roles });
+  const section = tree.sections.find((s) => s.name === ROLES_SECTION)!;
+  assert.ok(section, "registered");
+  assert.equal(section.order, dshSectionOrder("TOOL_SUBAGENT") + 1);
+  assert.equal(section.interpolate, false);
+  const root = (section.text as (c: unknown) => string)({ agent: { session: { header: { origin: undefined } } } });
+  assert.match(root, /^Roles\. /);
+  assert.ok(root.includes("- role_screener — runs the screen") && root.includes("- role_reviewer — audits"));
+  assert.equal((section.text as (c: unknown) => string)({ agent: { session: { header: { origin: "subagent" } } } }), "", "a child joins the preset and must not read Gravit's role list");
+  assert.equal(isDelegated({ agent: { session: { header: { origin: "subagent" } } } }), true);
+  assert.equal(isDelegated({}), false);
+});
+
+test("gravit: without a roles key there is no roles section; an empty list renders nothing", () => {
+  const tree = fakeScope();
+  apply(tree.ctx, {});
+  assert.equal(tree.sections.some((s) => s.name === ROLES_SECTION), false);
+  assert.equal(rolesText([]), "");
 });

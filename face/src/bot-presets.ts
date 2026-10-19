@@ -66,7 +66,9 @@ const SKILL_FILESYSTEM = "@deepseek-ai/dsh-skill-filesystem";
  * packages/boot/app-boot/src/index.ts:730-737). */
 const FIBER_ACTIVE = 2;
 
-type PresetRow = PresetDefinition["plugins"][number];
+/** One row of a preset's composition: what {@link definitionFor} hands the registry, and
+ * the type `gravitRows` (src/roles.ts) builds Gravit's composition in. */
+export type PresetRow = PresetDefinition["plugins"][number];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
