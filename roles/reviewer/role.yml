@@ -1,0 +1,11 @@
+name: Reviewer
+description: Read-only audit of THESIS.md, the backtest artifacts and the journal against the five rules and the pre-registered falsification terms; reports violations with file and line and ends with recommend validated, retired or continue.
+allow:
+  - read
+  - glob
+  - grep
+  - skill
+  - mcp__alpaca-kit__daily_bars
+  - mcp__alpaca-kit__calendar
+  - mcp__alpaca-kit__corp_actions
+  - mcp__alpaca-kit__market_snapshot

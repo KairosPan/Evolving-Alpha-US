@@ -1,0 +1,16 @@
+name: Screener
+description: Runs the strategy's screen over the PIT bed for the days you name and returns the candidates with the measured fields and the days discarded; writes only the candidates file, draws no conclusion.
+allow:
+  - bash
+  - read
+  - write
+  - glob
+  - grep
+  - skill
+  - mcp__alpaca-kit__screen
+  - mcp__alpaca-kit__market_snapshot
+  - mcp__alpaca-kit__breadth
+  - mcp__alpaca-kit__daily_bars
+  - mcp__alpaca-kit__calendar
+  - mcp__alpaca-kit__corp_actions
+  - mcp__alpaca-kit__earnings

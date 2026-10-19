@@ -1,0 +1,12 @@
+# roles/_template/role.yml - copy the directory, then edit. The directory name is the id
+# ([a-z0-9][a-z0-9-]*); the tool Gravit sees is role_<id> with - as _.
+name: <role name>
+description: <one line Gravit reads when it chooses a role, at most 300 characters>
+# Exact tool names only (no wildcards): host tools by name, MCP tools as
+# mcp__<server>__<raw> with the server named as the installed profile mounts it.
+allow:
+  - read
+  - glob
+  - grep
+  - skill
+# model: deepseek-official/deepseek-v4-flash   # optional: the route this role's children run on

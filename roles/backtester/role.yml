@@ -1,0 +1,14 @@
+name: Backtester
+description: Runs backtest.py (or the variant you name) under the five honest-eval rules, bounded to the bed window, writes the artifact under backtests/ and returns the headline numbers with each rule marked kept or broken; never edits THESIS.md.
+allow:
+  - bash
+  - read
+  - write
+  - edit
+  - glob
+  - grep
+  - skill
+  - mcp__alpaca-kit__daily_bars
+  - mcp__alpaca-kit__calendar
+  - mcp__alpaca-kit__corp_actions
+  - mcp__alpaca-kit__earnings
