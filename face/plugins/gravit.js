@@ -3,11 +3,11 @@
  * `gravit` - the face-owned plugin Gravit's own preset mounts, and the first
  * row of the composition the face renders for that preset (src/roles.ts
  * `gravitRows`; `bots/gravit/agent.cordis.yml` is the render's generated
- * mirror). It holds what only Gravit is told: the date (`deployment:today`) and
+ * mirror). It holds what only Gravit is told: the date (`deployment:today`),
  * the list of its roles (`gravit:roles`, from the `roles` config key, which
- * `gravitRows` fills from `roles/`). The `cycle` config key is the third
- * section's, plan 3 of the 2026-10-15 redesign: the validator below already
- * checks it, nothing reads it yet, and the shipped row carries none.
+ * `gravitRows` fills from `roles/`) and the research-cycle contract
+ * (`gravit:cycle`, from the `cycle` config key, which `composeFace` fills from
+ * `dsh/profile/cycle.md` through src/cycle.ts).
  *
  * WHY A DATE. The 2026-10-10 prompt trace found no date anywhere in the
  * assembled prompt, so Gravit could not tell a fresh bar from a stale one or
@@ -51,6 +51,19 @@
  * tool never registered (no `spawn` provider, a row that did not mount) is not
  * advertised. The date is left on for every child.
  *
+ * THE CYCLE. `gravit:cycle` carries `dsh/profile/cycle.md` - how to run one
+ * research cycle, from the single batched question to the verdict - at
+ * `DEPLOYMENT_PERSONA_SUFFIX - 50` (installed: 10150, the suffix being 10200),
+ * after every dsh-ordered tool and policy section and just before the persona
+ * suffix. It is gated the way the role list is, on `create_goal`: the contract
+ * is written for the session that opens a goal, and a role child, whose allow
+ * list removed the goal tools (a role never carries them, src/roles.ts), is told
+ * nothing about a goal it cannot open and would otherwise try to. A
+ * `subagent_fork` child resolves `create_goal` as Gravit does, so it reads the
+ * identical text and the prefix its inherited history was cached under stays
+ * byte-identical. The text is the file's, not a template: `interpolate: false`,
+ * so a brace in it is literal.
+ *
  * SCOPED, NOT GLOBAL. `ctx.systemPrompt.section` registers into the CALLING
  * context's scope, the preset revision's standing layer, so each section
  * reaches every session joined to the `gravit` preset (and to its `kairos`
@@ -62,7 +75,7 @@
  * the assembling scope; this plugin never registers or restricts a tool: the
  * `role_<id>` tools come from the sibling rows (bots-smoke S3 pins the roster).
  *
- * `interpolate: false` on both sections because their text is prose, not a
+ * `interpolate: false` on all three sections because their text is prose, not a
  * template: the dsh system prompt is a strict `{{...}}` template with no
  * escape. The date's order is the persona slot's + 1, so the date follows
  * identity - harness identity, the persona prefix, then the date - and
@@ -78,6 +91,10 @@ export const TODAY_SECTION = "deployment:today";
  *  like the date's. */
 export const ROLES_SECTION = "gravit:roles";
 
+/** The research-cycle contract. Registered only when the config carries `cycle`; its
+ *  own name, like the date's. */
+export const CYCLE_SECTION = "gravit:cycle";
+
 /** What a role is, said once above the list. The list's lines follow it. */
 const ROLES_INTRO = "Roles. One-shot delegates on your team, each with its own persona and tools; call one by its tool name with a self-contained brief, and treat its report as a claim to check, never a result to copy. Every report carries four headings: status, what was measured, paths, limits.";
 
@@ -87,9 +104,9 @@ const ROLE_TOOL = /^role_[a-z0-9_]+$/;
 
 /** What would fail at mount or render, as a reason; `undefined` when the config
  *  is valid. `{}` is valid (no roles, no cycle); the shipped row carries
- *  `roles`. `roles` and `cycle` are the optional keys of plans 2 and 3; they are
- *  checked here when present so a malformed value refuses the mount, loudly,
- *  instead of loading a silently dead config. */
+ *  `roles` and `cycle`. Both are optional keys, checked here when present so a
+ *  malformed value refuses the mount, loudly, instead of loading a silently
+ *  dead config. */
 export function validateGravitConfig(config) {
   if (config === null || typeof config !== "object" || Array.isArray(config)) return "config must be an object";
   const { cycle, roles } = config;
@@ -169,6 +186,17 @@ export function apply(ctx, config) {
       order: ctx.systemPrompt.getSectionOrder("TOOL_SUBAGENT") + 1,
       interpolate: false,
       text: (context) => rolesText(config.roles.filter((role) => canCall(ctx, context, role.tool))),
+    }));
+  }
+  /* Just before the persona suffix, after every dsh-ordered section. `create_goal` is the
+   * probe: visible to Gravit and to a fork child (the same text, the same cached prefix),
+   * removed from a role child (nothing). */
+  if (config.cycle !== undefined) {
+    ctx.effect(() => ctx.systemPrompt.section({
+      name: CYCLE_SECTION,
+      order: ctx.systemPrompt.getSectionOrder("DEPLOYMENT_PERSONA_SUFFIX") - 50,
+      interpolate: false,
+      text: (context) => canCall(ctx, context, "create_goal") ? config.cycle : "",
     }));
   }
 }

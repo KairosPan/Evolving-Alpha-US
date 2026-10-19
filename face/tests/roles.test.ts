@@ -77,6 +77,7 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { GRAVIT_PLUGIN_URL, GRAVIT_ROW_ID, gravitRows, renderGravitComposition, roleRowId } from "../src/roles.ts";
 import { GRAVIT_PLUGIN_RELATIVE } from "../src/overlay.ts";
+import { CYCLE_PATH, readCycle } from "../src/cycle.ts";
 
 test("gravitRows: the gravit row carries the summaries; one one-shot spawn row per role with persona and an exact allow list", () => {
   const roles = readRoles(ROLES_ROOT);
@@ -109,7 +110,7 @@ test("gravitRows: a role.yml model becomes the row's agentOptions, provider and 
 
 test("the committed mirror bots/gravit/agent.cordis.yml is exactly the render of roles/ (drift fails here)", () => {
   const mirror = readFileSync(new URL("../../bots/gravit/agent.cordis.yml", import.meta.url), "utf8");
-  assert.equal(mirror, renderGravitComposition(readRoles(ROLES_ROOT), {}), "run: cd face && npm run render:roles");
+  assert.equal(mirror, renderGravitComposition(readRoles(ROLES_ROOT), { cycle: readCycle(CYCLE_PATH) }), "run: cd face && npm run render:roles");
   assert.ok(mirror.includes(`name: ${GRAVIT_PLUGIN_RELATIVE}`), "the mirror names the plugin by the shipped relative path");
   assert.equal(mirror.includes("file:"), false, "and never by a machine-specific URL");
 });

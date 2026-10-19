@@ -9,6 +9,7 @@ import { setupFaceProfile } from "../src/setup.ts";
 import { composeFace } from "../src/boot.ts";
 import { AKSHARE_MCP_ROW_ID } from "../src/akshare.ts";
 import { PERSONA_PATH, readPersona } from "../src/persona.ts";
+import { CYCLE_PATH, readCycle } from "../src/cycle.ts";
 import { AGENT_INSTRUCTIONS_ROW_ID, INSTRUCTIONS_CONFIG, instructionsPatch } from "../src/instructions.ts";
 import { facePolicyPatches } from "../src/policy.ts";
 import { definitionFor } from "../src/bot-presets.ts";
@@ -367,7 +368,9 @@ test("composeFace returns the loaded profile the runtime resolution needs", () =
  * metadata - its `agent.cordis.yml` is a mirror for readers that roles.test.ts
  * holds to the render. A regression back to reading that file, to a hard-coded
  * literal or to a silently empty default fails here. The `preset-kairos` alias
- * carries the very same definition under the id archived sessions persist. */
+ * carries the very same definition under the id archived sessions persist. The
+ * gravit row also carries `dsh/profile/cycle.md` as its `cycle` key (src/cycle.ts),
+ * read by `composeFace` beside the roles. */
 test("composeFace builds preset-gravit from roles/ in memory: the gravit row by absolute URL, one spawn row per role", async () => {
   const home = freshHome();
   const bots = await makeBotsRoot();
@@ -375,11 +378,12 @@ test("composeFace builds preset-gravit from roles/ in memory: the gravit row by 
   try {
     const { patches } = composeFace({ profileName: "face", port: 3090, dshHome: home, botsRoot: bots, rolesRoot });
     const row = composeEntries([patches]).find((entry) => entry.id === "preset-gravit");
-    const expected = definitionFor(bots, "gravit", gravitRows(readRoles(rolesRoot), { plugin: GRAVIT_PLUGIN_URL }));
+    const expected = definitionFor(bots, "gravit", gravitRows(readRoles(rolesRoot), { plugin: GRAVIT_PLUGIN_URL, cycle: readCycle(CYCLE_PATH) }));
     assert.deepEqual(row?.config, expected);
-    const plugins = (row?.config as unknown as { plugins: Array<{ id: string; name: string }> }).plugins;
+    const plugins = (row?.config as unknown as { plugins: Array<{ id: string; name: string; config: unknown }> }).plugins;
     assert.deepEqual(plugins.map((p) => p.id), ["gravit", "role-probe"]);
     assert.equal(plugins[0].name, GRAVIT_PLUGIN_URL);
+    assert.equal((plugins[0].config as { cycle: string }).cycle, readCycle(CYCLE_PATH));
 
     const legacy = composeEntries([patches]).find((entry) => entry.id === "preset-kairos");
     assert.deepEqual(legacy?.config, { ...expected, id: "kairos", description: LEGACY_PRESET_DESCRIPTION });
@@ -406,6 +410,25 @@ test("composeFace refuses a missing roles directory, naming it", () => {
   const rolesRoot = join(tmpdir(), "no-such-roles");
   assert.throws(() => composeFace({ profileName: "face", port: 3090, dshHome: home, rolesRoot }),
     (e: Error) => e.message.startsWith(`${rolesRoot}: `) && /the roles directory is missing/.test(e.message));
+});
+
+/* The cycle contract is read where the roles are and refused the same way: an empty `cycle.md` (or an
+ * oversized one) refuses the compose with its path, so Gravit never boots with a silently blank
+ * contract - the section would just not exist, and nothing else would say so. `cyclePath` points the
+ * read at a fixture; the roles root is a valid fixture, so the cycle is the only thing that can fail. */
+test("composeFace refuses an empty cycle file, naming it", async () => {
+  const home = freshHome();
+  const rolesRoot = await makeRolesRoot();
+  const dir = mkdtempSync(join(tmpdir(), "face-cycle-"));
+  try {
+    const cyclePath = join(dir, "empty.md");
+    await writeFile(cyclePath, "  \n");
+    assert.throws(() => composeFace({ profileName: "face", port: 3090, dshHome: home, rolesRoot, cyclePath }),
+      (e: Error) => e.message.includes(cyclePath) && /empty/.test(e.message));
+  } finally {
+    await rm(rolesRoot, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 /* Spec §4.1 L3: dsh-base's default candidates are AGENTS.md and CLAUDE.md; the

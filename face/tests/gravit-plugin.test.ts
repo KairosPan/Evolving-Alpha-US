@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import SystemPrompt from "@deepseek-ai/dsh-system-prompt";
-import { ROLES_SECTION, TODAY_SECTION, apply, canCall, inject, name, resolveZone, rolesText, todayText, validateGravitConfig } from "../plugins/gravit.js";
+import { CYCLE_SECTION, ROLES_SECTION, TODAY_SECTION, apply, canCall, inject, name, resolveZone, rolesText, todayText, validateGravitConfig } from "../plugins/gravit.js";
 
-const dshSectionOrder = (slot: "DEPLOYMENT_PERSONA_PREFIX" | "TOOL_SUBAGENT"): number => SystemPrompt.prototype.getSectionOrder(slot);
+const dshSectionOrder = (slot: "DEPLOYMENT_PERSONA_PREFIX" | "DEPLOYMENT_PERSONA_SUFFIX" | "TOOL_SUBAGENT"): number => SystemPrompt.prototype.getSectionOrder(slot);
 
 /** A stand-in scope for `apply`. `systemPrompt` records the sections; `tools.get(name, scope)`
  *  resolves a name when the scope it is handed lists it in `visible`, and records every lookup -
@@ -20,7 +20,7 @@ function fakeScope() {
         sections.push(section);
         return () => { sections.splice(sections.indexOf(section), 1); };
       },
-      getSectionOrder: (slot: "DEPLOYMENT_PERSONA_PREFIX" | "TOOL_SUBAGENT") => dshSectionOrder(slot),
+      getSectionOrder: (slot: "DEPLOYMENT_PERSONA_PREFIX" | "DEPLOYMENT_PERSONA_SUFFIX" | "TOOL_SUBAGENT") => dshSectionOrder(slot),
     },
     tools: {
       get(name: string, scope?: FakeToolScope) {
@@ -141,4 +141,24 @@ test("gravit: without a roles key there is no roles section; an empty list rende
   apply(tree.ctx, {});
   assert.equal(tree.sections.some((s) => s.name === ROLES_SECTION), false);
   assert.equal(rolesText([]), "");
+});
+
+/* The cycle section is gated the way the roles section is: on what the ASSEMBLING scope can call.
+ * `create_goal` is the probe because the contract is written for the session that opens a goal -
+ * Gravit, and a `subagent_fork` child, which resolves every tool Gravit does and so reads the
+ * identical text (its inherited prefix stays byte-identical; roles-smoke pins that on a real boot) -
+ * while a role child, whose allow list removed the goal tools, is told nothing about a goal it cannot open. */
+test("gravit: the cycle section sits just before the persona suffix, is literal, and is blank where create_goal is not visible", () => {
+  const tree = fakeScope();
+  const cycle = "# The research cycle\n\nStep 0 — ask once.";
+  apply(tree.ctx, { cycle });
+  const section = tree.sections.find((s) => s.name === CYCLE_SECTION)!;
+  assert.ok(section);
+  assert.equal(section.order, dshSectionOrder("DEPLOYMENT_PERSONA_SUFFIX") - 50);
+  assert.equal(section.interpolate, false);
+  assert.equal(tree.lookups.length, 0, "nothing is looked up at mount: the gate is read at every assembly");
+  const textFor = (visible: string[]) => (section.text as (c: unknown) => string)({ scope: { visible } });
+  assert.equal(textFor(["read", "create_goal", "update_goal"]), cycle, "create_goal visible (Gravit, or a fork child): the cycle, verbatim");
+  assert.equal(textFor(["read", "grep"]), "", "create_goal not visible (a role child's allow list removed it): nothing");
+  assert.equal(fakeScope().sections.length, 0);
 });

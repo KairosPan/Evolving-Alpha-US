@@ -51,13 +51,9 @@ reserved until the order gate opens). Three optional headline keys the channel p
 none required: `one_line` (the current conclusion, one sentence), `next` (the next step),
 `numbers` (free figures as a mapping of scalar values). Name a strategy as the face names
 channels: a letter or digit in any script first, then letters, digits, `-` and `_`, at most 41
-code points, no spaces or dots — the name
-becomes a path typed into shell by hand, and `cd x y` is zsh's two-argument form, exit 0 in the
-wrong directory whenever the substituted path exists. Commit your own iterations; git log is the
-audit trail. A new strategy starts with one batched `ask_user_question`, not with code: the
-thesis and the falsification terms that would retire it, which bed and which window (warmup
-moves the honest start), and what the operator wants measured; a brief that already answers
-those is the answer.
+code points, no spaces or dots — the name becomes a path typed into shell by hand, and `cd x y` is
+zsh's two-argument form, exit 0 in the wrong directory whenever the substituted path exists.
+Commit your own iterations; git log is the audit trail.
 
 ## Rooms
 
