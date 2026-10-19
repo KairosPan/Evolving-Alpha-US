@@ -38,31 +38,38 @@
  * after the delegation tool it extends. A `roles: []` config mounts the section
  * and renders nothing: dsh drops an empty section from the prompt.
  *
- * GATED ON WHAT THE ASSEMBLING SCOPE CAN CALL. A child JOINS the preset it was
- * delegated from, so a scoped section reaches it too, and an allow list removes
- * tools but cannot remove a sentence. The roles text is therefore a function of
- * the assembly context: it lists only the roles whose tool the assembling scope
- * resolves ({@link canCall}, the lookup dsh-tool-web and dsh-tool-subagent gate
- * their own sections with). A role child, whose allow list restricts the
- * `role_<id>` tools away, gets `""` and is never told of roles it cannot call;
- * a `subagent_fork` child - seeded and unrestricted - resolves every role tool,
+ * GATED ON WHAT THE ASSEMBLING SCOPE CAN CALL, AND ON WHO IS ASSEMBLING. A child
+ * JOINS the preset it was delegated from, so a scoped section reaches it too, and
+ * an allow list removes tools but cannot remove a sentence. Both of Gravit's own
+ * sections - the role list and the cycle contract - are therefore functions of
+ * the assembly context, and each resolves to `""` for a delegated child that is
+ * not a fork: `canCall(ctx, context, name) && isRootOrFork(context)`.
+ * {@link canCall} is the registry lookup dsh-tool-web and dsh-tool-subagent gate
+ * their own sections with; {@link isRootOrFork} reads the header
+ * (`context.agent.session.header`: no `origin`, or `origin: "subagent"` with
+ * `isSeeded`). A `subagent_fork` child - seeded and unrestricted - passes both,
  * so it gets Gravit's text unchanged and the system prompt its inherited history
- * was cached under stays byte-identical (roles-smoke pins both); a role whose
- * tool never registered (no `spawn` provider, a row that did not mount) is not
- * advertised. The date is left on for every child.
+ * was cached under stays byte-identical. A plain `subagent` spawn, a workflow or
+ * a ralph worker is unrestricted too and passes the visibility half, but it
+ * inherits no prefix and cannot open a goal (`create_goal` needs a direct human
+ * turn on a top-level agent), so the header half blanks both sections for it. A
+ * role child gets `""` either way: its allow list removes the `role_<id>` tools
+ * and the goal tools. roles-smoke pins the fork, the spawn and the role child on
+ * a real boot. In the role list, a role whose tool never registered (no `spawn`
+ * provider, a row that did not mount) is not advertised. The date is left on for
+ * every child.
  *
  * THE CYCLE. `gravit:cycle` carries `dsh/profile/cycle.md` - how to run one
  * research cycle, from the single batched question to the verdict - at
  * `DEPLOYMENT_PERSONA_SUFFIX - 50` (installed: 10150, the suffix being 10200),
  * after every dsh-ordered tool and policy section and just before the persona
- * suffix. It is gated the way the role list is, on `create_goal`: the contract
- * is written for the session that opens a goal, and a role child, whose allow
- * list removed the goal tools (a role never carries them, src/roles.ts), is told
- * nothing about a goal it cannot open and would otherwise try to. A
- * `subagent_fork` child resolves `create_goal` as Gravit does, so it reads the
- * identical text and the prefix its inherited history was cached under stays
- * byte-identical. The text is the file's, not a template: `interpolate: false`,
- * so a brace in it is literal.
+ * suffix. Its probe is `create_goal`: the contract is written for the session
+ * that opens a goal. The face's cycle contract is withheld from a role child
+ * (its allow list removed the goal tools: a role never carries them,
+ * src/roles.ts) and from every other delegated child that is not a fork; dsh's
+ * global `tool:goal` paragraph still reaches them all, as dsh's other generic
+ * tool-policy paragraphs do. The text is the file's, not a template:
+ * `interpolate: false`, so a brace in it is literal.
  *
  * SCOPED, NOT GLOBAL. `ctx.systemPrompt.section` registers into the CALLING
  * context's scope, the preset revision's standing layer, so each section
@@ -162,6 +169,17 @@ export function canCall(ctx, context, name) {
   return ctx.tools.get(name, context?.scope) !== undefined;
 }
 
+/** Whether the session whose prompt is being assembled is one Gravit's own sections are written
+ *  for: a root session, or a `subagent_fork` child. Read from the assembly context's
+ *  `agent.session.header` (`assembleContextFor` sets `agent` beside `scope`): a delegated child
+ *  (`origin: "subagent"`) that is not seeded - a plain `subagent` spawn, a workflow or ralph
+ *  worker, a role child - is not one, whatever its scope can call. A context with no agent (the
+ *  global view) reads as a root. */
+export function isRootOrFork(context) {
+  const header = context?.agent?.session?.header;
+  return header?.origin !== "subagent" || header?.isSeeded === true;
+}
+
 /** The role list: `""` for no roles, else {@link ROLES_INTRO} and one line per
  *  role, `- <tool> — <summary>`. */
 export function rolesText(roles) {
@@ -185,18 +203,19 @@ export function apply(ctx, config) {
       name: ROLES_SECTION,
       order: ctx.systemPrompt.getSectionOrder("TOOL_SUBAGENT") + 1,
       interpolate: false,
-      text: (context) => rolesText(config.roles.filter((role) => canCall(ctx, context, role.tool))),
+      text: (context) => isRootOrFork(context) ? rolesText(config.roles.filter((role) => canCall(ctx, context, role.tool))) : "",
     }));
   }
   /* Just before the persona suffix, after every dsh-ordered section. `create_goal` is the
    * probe: visible to Gravit and to a fork child (the same text, the same cached prefix),
-   * removed from a role child (nothing). */
+   * removed from a role child; a spawn, workflow or ralph child sees it but is no fork
+   * (nothing). */
   if (config.cycle !== undefined) {
     ctx.effect(() => ctx.systemPrompt.section({
       name: CYCLE_SECTION,
       order: ctx.systemPrompt.getSectionOrder("DEPLOYMENT_PERSONA_SUFFIX") - 50,
       interpolate: false,
-      text: (context) => canCall(ctx, context, "create_goal") ? config.cycle : "",
+      text: (context) => isRootOrFork(context) && canCall(ctx, context, "create_goal") ? config.cycle : "",
     }));
   }
 }

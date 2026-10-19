@@ -39,8 +39,20 @@ const idOf = (path: string): string | undefined => {
   }
 };
 
-/** Is `ancestor` the directory `path` or one of its parents? By device and inode, so case,
- * symlinks and `..` cannot disguise it. */
+/** The canonical spelling of an existing path (`realpathSync.native`, as check-home.ts's guard
+ * canonicalizes its target before it walks), or the path as given when it does not exist yet. */
+function canonical(path: string): string {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return path;
+  }
+}
+
+/** Is `ancestor` the directory `path` or one of its parents? By device and inode, so case and `..`
+ * cannot disguise it. The walk climbs `path` by `dirname`, a string operation, so both paths come
+ * in canonical ({@link canonical}): a symlink to a directory INSIDE the live home, or a live home
+ * that is itself a symlink, would otherwise climb a spelling that never meets it. */
 function sameOrAbove(ancestor: string, path: string): boolean {
   const want = idOf(ancestor);
   for (let at = path; want !== undefined; at = dirname(at)) {
@@ -54,11 +66,13 @@ function sameOrAbove(ancestor: string, path: string): boolean {
  * @param live - the homes that must never be booted. `DSH_HOME` names the target here, so these
  * are the homes an environment WITHOUT it resolves to: `liveHomeCandidates({})`. */
 export function refusal(home: string, live: readonly string[], profile = "face"): string | undefined {
+  const target = canonical(home);
   for (const l of live) {
-    if (home === l || sameOrAbove(l, home)) {
+    const liveHome = canonical(l);
+    if (target === liveHome || sameOrAbove(liveHome, target)) {
       return `${home} is, or is inside, the live harness home ${l}. Point DSH_HOME at a COPY: cp -a ~/.dsh "$SCRATCH/dsh-sizes"`;
     }
-    if (sameOrAbove(home, l)) return `${home} contains the live harness home ${l}; pass the COPY itself`;
+    if (sameOrAbove(target, liveHome)) return `${home} contains the live harness home ${l}; pass the COPY itself`;
   }
   return existsSync(join(home, "profiles", profile, "package.json")) ? undefined
     : `${home} has no profiles/${profile}: copy a home the face has booted, or run DSH_HOME=${home} npm run setup`;

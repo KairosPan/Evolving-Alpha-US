@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import SystemPrompt from "@deepseek-ai/dsh-system-prompt";
-import { CYCLE_SECTION, ROLES_SECTION, TODAY_SECTION, apply, canCall, inject, name, resolveZone, rolesText, todayText, validateGravitConfig } from "../plugins/gravit.js";
+import { CYCLE_SECTION, ROLES_SECTION, TODAY_SECTION, apply, canCall, inject, isRootOrFork, name, resolveZone, rolesText, todayText, validateGravitConfig } from "../plugins/gravit.js";
 
 const dshSectionOrder = (slot: "DEPLOYMENT_PERSONA_PREFIX" | "DEPLOYMENT_PERSONA_SUFFIX" | "TOOL_SUBAGENT"): number => SystemPrompt.prototype.getSectionOrder(slot);
 
@@ -106,7 +106,9 @@ test("an unusable TZ is rendered in UTC and labelled, never thrown at assembly",
  * dsh-tool-subagent put on their own sections: a role child, whose allow list restricts the
  * `role_<id>` tools away, is told of none; a `subagent_fork` child - seeded, unrestricted - sees
  * every role tool, so it gets Gravit's text unchanged and its inherited prefix stays byte-identical
- * (roles-smoke pins that on a real boot); a role whose tool never registered is not advertised. */
+ * (roles-smoke pins that on a real boot); a role whose tool never registered is not advertised.
+ * These contexts carry no agent, so the header half of the gate (`isRootOrFork`, the last test)
+ * reads them as a root. */
 test("gravit: the roles section follows dsh's subagent section and lists exactly the roles the assembling scope can call", () => {
   const tree = fakeScope();
   const roles = [{ tool: "role_screener", summary: "runs the screen" }, { tool: "role_reviewer", summary: "audits" }];
@@ -143,11 +145,12 @@ test("gravit: without a roles key there is no roles section; an empty list rende
   assert.equal(rolesText([]), "");
 });
 
-/* The cycle section is gated the way the roles section is: on what the ASSEMBLING scope can call.
- * `create_goal` is the probe because the contract is written for the session that opens a goal -
- * Gravit, and a `subagent_fork` child, which resolves every tool Gravit does and so reads the
- * identical text (its inherited prefix stays byte-identical; roles-smoke pins that on a real boot) -
- * while a role child, whose allow list removed the goal tools, is told nothing about a goal it cannot open. */
+/* The cycle section is gated the way the roles section is: on what the ASSEMBLING scope can call
+ * (and on the header, the last test). `create_goal` is the probe because the contract is written
+ * for the session that opens a goal - Gravit, and a `subagent_fork` child, which resolves every
+ * tool Gravit does and so reads the identical text (its inherited prefix stays byte-identical;
+ * roles-smoke pins that on a real boot) - while a role child, whose allow list removed the goal
+ * tools, is not given the face's contract. */
 test("gravit: the cycle section sits just before the persona suffix, is literal, and is blank where create_goal is not visible", () => {
   const tree = fakeScope();
   const cycle = "# The research cycle\n\nStep 0 — ask once.";
@@ -162,4 +165,36 @@ test("gravit: the cycle section sits just before the persona suffix, is literal,
   assert.equal(textFor(["read", "grep"]), "", "create_goal not visible (a role child's allow list removed it): nothing");
   tree.unload();
   assert.equal(tree.sections.length, 0, "unloading the preset revision takes the cycle section out with the date's");
+});
+
+/* Visibility alone admits every UNRESTRICTED child: a plain `subagent` spawn, a workflow or a ralph
+ * worker resolves `create_goal` and every role tool as Gravit does. So both sections also read the
+ * assembling session's header (`context.agent.session.header`): a delegated child (`origin:
+ * "subagent"`) that is not a fork (`isSeeded` false) reads neither - it inherits no prefix to keep
+ * identical, and `create_goal` needs a direct human turn on a top-level agent, which it never has -
+ * while a `subagent_fork` child (seeded) and a root session read Gravit's text, byte for byte. The
+ * scope here resolves every tool, so only the header can blank a section. */
+test("gravit: both sections are blank for a delegated child that is not a fork, and Gravit's text for a fork child and a root session", () => {
+  const tree = fakeScope();
+  const roles = [{ tool: "role_screener", summary: "runs the screen" }, { tool: "role_reviewer", summary: "audits" }];
+  const cycle = "# The research cycle\n\nStep 0 — ask once.";
+  apply(tree.ctx, { roles, cycle });
+  const everything = { visible: ["read", "create_goal", "update_goal", "role_screener", "role_reviewer"] };
+  const textOf = (sectionName: string, header?: object): string =>
+    (tree.sections.find((s) => s.name === sectionName)!.text as (c: unknown) => string)(
+      header === undefined ? { scope: everything } : { scope: everything, agent: { session: { header } } });
+  const cases = [
+    { label: "a root session", header: { id: "root", isSeeded: false }, reads: true },
+    { label: "a subagent_fork child (seeded)", header: { id: "fork", origin: "subagent", isSeeded: true }, reads: true },
+    { label: "a session the operator forked (seeded, no origin)", header: { id: "forked", isSeeded: true }, reads: true },
+    { label: "a delegated child that is not a fork (subagent, workflow, ralph)", header: { id: "spawn", origin: "subagent", isSeeded: false }, reads: false },
+    { label: "a context with no agent (the global view)", header: undefined, reads: true },
+  ];
+  for (const { label, header, reads } of cases) {
+    assert.equal(textOf(ROLES_SECTION, header), reads ? rolesText(roles) : "", `roles section, ${label}`);
+    assert.equal(textOf(CYCLE_SECTION, header), reads ? cycle : "", `cycle section, ${label}`);
+    assert.equal(isRootOrFork(header === undefined ? {} : { agent: { session: { header } } }), reads, `isRootOrFork, ${label}`);
+  }
+  assert.equal(isRootOrFork(undefined), true, "total on a missing context");
+  tree.unload();
 });

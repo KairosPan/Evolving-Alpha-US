@@ -74,9 +74,12 @@ test("bots smoke: roster, mask, persona, a default that masks nothing, the shipp
     await createBot(bots, { id: "probe", name: "Probe", soul: "You are Probe, a test voice." });
     /* `role_screener` is a role tool: it lives in Gravit's preset layer, not the global set a mask is matched
      * against, so allow ∩ tree drops it like `no_such_tool` and S2's expectation below does not move. Naming
-     * it is what lets "a bot never sees a role tool" fail if a mask ever admitted one. */
+     * it is what lets "a bot never sees a role tool" fail if a mask ever admitted one. `create_goal` is a
+     * global tool, so the mask admits it and the bot CAN call it: the bot's missing cycle contract below is
+     * then the preset scoping's doing, not the `create_goal` gate's, and a cycle section registered globally
+     * but gated would fail it. */
     await writeFile(join(bots, "probe", "agent.cordis.yml"),
-      renderComposition({ soul: "You are Probe, a test voice.", allow: ["bash", "read", "ask_user_question", "role_screener", "no_such_tool"], plugin: PLUGIN_ABS }));
+      renderComposition({ soul: "You are Probe, a test voice.", allow: ["bash", "read", "ask_user_question", "create_goal", "role_screener", "no_such_tool"], plugin: PLUGIN_ABS }));
     await createBot(bots, { id: "shipped", name: "Shipped", soul: "You are Shipped, the relative-path probe." });
     /* The Gate-2 bot: its mask ADMITS the order stand-in. That is the point -
      * the guard must refuse it anyway, so the refusal cannot be credited to
@@ -150,14 +153,14 @@ test("bots smoke: roster, mask, persona, a default that masks nothing, the shipp
       assert.equal(p.agentPreset, "probe");
       const probe = agentOf(p.sessionId);
       assert.equal(probe.session.header.agentPreset, "probe");
-      assert.deepEqual(names(tools.schemas(probe)), ["ask_user_question", "bash", "read"], "allow ∩ tree, unknown names dropped (S2)");
+      assert.deepEqual(names(tools.schemas(probe)), ["ask_user_question", "bash", "create_goal", "read"], "allow ∩ tree, unknown names dropped (S2)");
       assert.equal(names(tools.schemas(probe)).some((n) => n.startsWith("role_")), false, "a bot never sees a role tool");
       const probePrompt = await promptOf(probe);
       assert.ok(probePrompt.includes("You are Probe, a test voice."), "the bot's persona shadows Gravit's (S1)");
       assert.equal(probePrompt.includes("You are Gravit"), false,
         "and Gravit's text is gone from the bot's prompt: bot.js's `deployment:persona-prefix` shadows the global prefix");
       assert.equal(probePrompt.includes("Today is "), false, "the section is scoped to Gravit's preset: a bot never sees it");
-      assert.equal(probePrompt.includes(CYCLE_HEADING), false, "nor the cycle contract: `gravit:cycle` is scoped to Gravit's preset too, so a bot never has it");
+      assert.equal(probePrompt.includes(CYCLE_HEADING), false, "nor the cycle contract, though the bot can call create_goal: `gravit:cycle` is scoped to Gravit's preset too, so a bot never has it");
 
       /* S1, the SHIPPED form. `shipped`'s composition is untouched since
        * `createBot` wrote it, so its plugin row is the relative path every real

@@ -53,7 +53,8 @@ none required: `one_line` (the current conclusion, one sentence), `next` (the ne
 channels: a letter or digit in any script first, then letters, digits, `-` and `_`, at most 41
 code points, no spaces or dots — the name becomes a path typed into shell by hand, and `cd x y` is
 zsh's two-argument form, exit 0 in the wrong directory whenever the substituted path exists.
-Commit your own iterations; git log is the audit trail.
+Commit your own iterations between cycles; a cycle commits once, with its verdict. git log is
+the audit trail.
 
 ## Rooms
 
@@ -68,6 +69,6 @@ ordinary prompt; no voice answers it, so the answer is Gravit's own.
 
 ## Never edit
 
-`data/pit/` contents; the installed dsh profile copies under the harness home; anything under
-`bots/` (a bot may write its own `journal/`) or `roles/` (propose in conversation — the
-operator authors them); `docs/research/`.
+`data/pit/` contents; `dsh/profile/` and the installed dsh profile copies under the harness
+home; anything under `bots/` (a bot may write its own `journal/`) or `roles/` (propose in
+conversation — the operator authors them); `docs/research/`.

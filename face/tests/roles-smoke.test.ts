@@ -6,9 +6,11 @@
  * `agent-instructions` baseline; a `subagent_fork` child - seeded and
  * unrestricted - is assembled Gravit's system text byte for byte (the roles
  * list and the cycle contract included) and Gravit's tools, the premise of its
- * inherited prefix's cache reuse; a role naming a tool the tree lacks fails
- * loudly at delegation. The MCP tools the roles name are stand-ins registered
- * under the exact production names. Own file, gated. */
+ * inherited prefix's cache reuse; a plain `subagent` child - unseeded and as
+ * unrestricted - reads neither section although it can call `create_goal` and
+ * every role tool; a role naming a tool the tree lacks fails loudly at
+ * delegation. The MCP tools the roles name are stand-ins registered under the
+ * exact production names. Own file, gated. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
@@ -47,7 +49,7 @@ async function waitFor(label: string, check: () => boolean, ms = 30_000) {
   while (!check()) { if (Date.now() >= until) throw new Error(`timed out: ${label}`); await new Promise((r) => setTimeout(r, 20)); }
 }
 
-test("roles smoke: persona, exact tools, the result, the baseline, a fork's identical prefix, and a loud failure for a missing tool", { skip: gated && "set FACE_SMOKE=1", timeout: 180_000 }, async () => {
+test("roles smoke: persona, exact tools, the result, the baseline, a fork's identical prefix, a spawn's blank sections, and a loud failure for a missing tool", { skip: gated && "set FACE_SMOKE=1", timeout: 180_000 }, async () => {
   const bots = await makeBotsRoot();
   const root = await realpath(await mkdtemp(join(tmpdir(), "face-roles-root-")));
   const home = await mkdtemp(join(tmpdir(), "face-roles-home-"));
@@ -83,9 +85,10 @@ test("roles smoke: persona, exact tools, the result, the baseline, a fork's iden
       const trigger = lastHuman(request);
       const text = trigger ? textOf(trigger) : "";
       if (header?.isSeeded === true) return { kind: "text", text: "FORK_DONE" };
-      if (header?.origin === "subagent") return { kind: "text", text: text.includes("REVIEW_FIXTURE") ? "REVIEW_DONE" : "SCREEN_DONE" };
+      if (header?.origin === "subagent") return { kind: "text", text: text.includes("REVIEW_FIXTURE") ? "REVIEW_DONE" : text.includes("SPAWN_FIXTURE") ? "SPAWN_DONE" : "SCREEN_DONE" };
       if (sourceKind(trigger!) === "user" && text === "RUN_REVIEWER") return { kind: "tool", name: "role_reviewer", args: { description: "Audit the fixture", prompt: "REVIEW_FIXTURE: audit the fixture strategy." } };
       if (sourceKind(trigger!) === "user" && text === "RUN_FORK") return { kind: "tool", name: "subagent_fork", args: { description: "Fork the fixture", prompt: "FORK_FIXTURE: continue." } };
+      if (sourceKind(trigger!) === "user" && text === "RUN_SUBAGENT") return { kind: "tool", name: "subagent", args: { description: "Spawn the fixture", prompt: "SPAWN_FIXTURE: check one source.", run_in_background: false } };
       if (sourceKind(trigger!) === "user" && text === "RUN_SCREENER") return { kind: "tool", name: "role_screener", args: { description: "Screen one day", prompt: "SCREEN_FIXTURE: screen 2025-06-05." } };
       return { kind: "text", text: "PARENT_DONE" };
     };
@@ -140,8 +143,8 @@ test("roles smoke: persona, exact tools, the result, the baseline, a fork's iden
     /* fork: `subagent_fork` seeds its child with Gravit's completed turns and restricts nothing, so the
      * child's first request must open with Gravit's system text byte for byte and offer Gravit's tools,
      * or the inherited prefix loses its cache reuse. `gravit:roles` and `gravit:cycle` are gated on what the
-     * assembling scope can call (plugins/gravit.js `canCall`: a role tool, `create_goal`), which is why both
-     * reach the fork unchanged. */
+     * assembling scope can call (plugins/gravit.js `canCall`: a role tool, `create_goal`) and on the header
+     * (`isRootOrFork`: a root, or a seeded child), which is why both reach the fork unchanged. */
     await prompt("RUN_FORK");
     const fork = await childRequestAfter("FORK_FIXTURE");
     await gravit.whenIdle();
@@ -152,10 +155,28 @@ test("roles smoke: persona, exact tools, the result, the baseline, a fork's iden
     const forkSystem = textOf(fork.request.messages[0]);
     assert.ok(gravitSystem.includes(rolesIntro), "Gravit's request at the fork carries the roles section");
     assert.ok(gravitSystem.includes(CYCLE_HEADING), "Gravit's request at the fork carries the cycle contract");
-    assert.ok(forkSystem.includes(CYCLE_HEADING), "and the fork child's does too: `gravit:cycle` is gated on visibility (create_goal), not on origin, and a seeded, unrestricted child can call all that Gravit can");
+    assert.ok(forkSystem.includes(CYCLE_HEADING), "and the fork child's does too: `gravit:cycle` reads create_goal's visibility and the header, and a seeded, unrestricted child passes both");
     assert.equal(forkSystem, gravitSystem, `the fork child's system text is Gravit's, whole (${forkSystem.length} vs ${gravitSystem.length} characters, first difference at ${firstDifference(forkSystem, gravitSystem)})`);
     assert.deepEqual(fork.request.tools!.map((t) => t.name), atFork.tools!.map((t) => t.name), "and its tools are Gravit's, in order");
     assert.ok(gravit.session.snapshotEvents().some((e) => e.type === "tool/result" && JSON.stringify(e.data).includes("FORK_DONE")), "the fork's text returns through the tool");
+    /* spawn: a plain `subagent` child is delegated, unseeded and restricted by nothing, so its scope
+     * resolves `create_goal` and every role tool as Gravit's does - the visibility half of the gate
+     * admits it. It reads neither section all the same: both are gated on the header too
+     * (plugins/gravit.js `isRootOrFork`), and only a fork inherits a prefix worth keeping identical;
+     * the fork above is this step's positive pair. */
+    await prompt("RUN_SUBAGENT");
+    const spawn = await childRequestAfter("SPAWN_FIXTURE");
+    await gravit.whenIdle();
+    assert.equal(spawn.header.origin, "subagent");
+    assert.equal(spawn.header.isSeeded, false, "a subagent child is not seeded");
+    const spawnTools = spawn.request.tools!.map((t) => t.name);
+    for (const visible of ["create_goal", ...readRoles(ROLES_ROOT).map((r) => r.tool)]) assert.ok(spawnTools.includes(visible), `the spawn child can call ${visible}, so only the header blanks the sections`);
+    const spawnSystem = textOf(spawn.request.messages[0]);
+    assert.equal(spawn.request.messages[0].role, "system");
+    assert.equal(spawnSystem.includes(CYCLE_HEADING), false, "no cycle contract for a delegated child that is not a fork");
+    assert.equal(spawnSystem.includes(rolesIntro), false, "and no roles section");
+    assert.match(spawnSystem, /Today is \d{4}-\d{2}-\d{2}/, "the date still reaches it");
+    assert.ok(gravit.session.snapshotEvents().some((e) => e.type === "tool/result" && JSON.stringify(e.data).includes("SPAWN_DONE")), "the spawn's text returns through the tool");
     /* screener */
     await prompt("RUN_SCREENER");
     const screener = await childRequestAfter("SCREEN_FIXTURE");
