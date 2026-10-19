@@ -11,13 +11,14 @@
  * would fail every step of every session; the reader therefore checks the size and nothing else.
  *
  * The text rides in every request Gravit makes, so it is capped at {@link CYCLE_MAX_BYTES} bytes,
- * the prompt budget of spec §7. An empty file and an oversized one are refused where the file is
- * read, with its path first, so a boot names the file at fault instead of shipping a Gravit with
+ * the prompt budget of spec §7. A missing file, an unreadable one, an empty one and an oversized
+ * one are refused where the file is read, each with its absolute path first (src/roles.ts refuses
+ * a role file the same way), so a boot names the file at fault instead of shipping a Gravit with
  * no contract or a heavier prompt than was budgeted.
  * @module
  */
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** Resolved from this module, never from the working directory (persona.ts does the same). */
@@ -26,13 +27,27 @@ export const CYCLE_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", ".
 /** The largest `cycle.md`, in bytes as `wc -c` counts them. */
 export const CYCLE_MAX_BYTES = 3000;
 
-/** The cycle text, trimmed. Throws an `Error` that opens with the path when the file is empty or
- * over {@link CYCLE_MAX_BYTES}; a file that cannot be read throws the read's own error, which names
- * the path too. Braces are allowed: the section does not interpolate. */
+const messageOf = (error: unknown): string => error instanceof Error ? error.message : String(error);
+
+/** Every refusal opens with the absolute path of the file it is about, as src/roles.ts's do. */
+const refusal = (file: string, reason: string, cause?: unknown): Error =>
+  new Error(`${file}: ${reason}`, cause === undefined ? undefined : { cause });
+
+/** The cycle text, trimmed. Throws an `Error` whose message opens with the absolute path of `path`
+ * when the file is missing, cannot be read, is empty, or is over {@link CYCLE_MAX_BYTES}. The cap
+ * is on the file's raw bytes, not the trimmed text's, and is inclusive: exactly the limit is
+ * accepted. Braces are allowed: the section does not interpolate. */
 export function readCycle(path: string): string {
-  const bytes = readFileSync(path);
+  const file = resolve(path);
+  let bytes: Buffer;
+  try {
+    bytes = readFileSync(file);
+  } catch (error) {
+    const missing = (error as NodeJS.ErrnoException).code === "ENOENT";
+    throw refusal(file, missing ? "the cycle file is missing" : `cannot be read: ${messageOf(error)}`, error);
+  }
   const text = bytes.toString("utf8").trim();
-  if (text === "") throw new Error(`${path}: the cycle is empty`);
-  if (bytes.length > CYCLE_MAX_BYTES) throw new Error(`${path}: is ${bytes.length} bytes; the limit is ${CYCLE_MAX_BYTES}`);
+  if (text === "") throw refusal(file, "the cycle is empty");
+  if (bytes.length > CYCLE_MAX_BYTES) throw refusal(file, `is ${bytes.length} bytes; the limit is ${CYCLE_MAX_BYTES}`);
   return text;
 }

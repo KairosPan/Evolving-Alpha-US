@@ -431,6 +431,23 @@ test("composeFace refuses an empty cycle file, naming it", async () => {
   }
 });
 
+/* A cycle file that is not there is refused the same way, path-first: the message OPENS with the file,
+ * as every refusal above does and as `composeFace`'s `@throws` promises, not with Node's own
+ * `ENOENT: no such file or directory, open '...'`, which names the path last. */
+test("composeFace refuses a missing cycle file, its message opening with the path", async () => {
+  const home = freshHome();
+  const rolesRoot = await makeRolesRoot();
+  const dir = mkdtempSync(join(tmpdir(), "face-cycle-"));
+  try {
+    const cyclePath = join(dir, "no-such-cycle.md");
+    assert.throws(() => composeFace({ profileName: "face", port: 3090, dshHome: home, rolesRoot, cyclePath }),
+      (e: Error) => e.message.startsWith(`${cyclePath}: `) && /the cycle file is missing/.test(e.message));
+  } finally {
+    await rm(rolesRoot, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 /* Spec §4.1 L3: dsh-base's default candidates are AGENTS.md and CLAUDE.md; the
  * face sets the row's two candidate lists (the patch carries dsh-base's
  * `maxBytes` beside them, a named config replaces the row's) so Gravit reads

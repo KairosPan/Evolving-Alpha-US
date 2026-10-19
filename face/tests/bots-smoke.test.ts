@@ -14,11 +14,13 @@
  *     packages/preset/agent-preset-registry/src/index.ts:80-118), and
  *     plugins/bot.js re-expands on `tools/change`, so a tool registered after
  *     the declaration is admitted when the allow list names it.
- * S3: `gravit` is rendered from `roles/` (src/roles.ts): the face's gravit
- *     plugin (the date section, the role summaries) and one `dsh-tool-subagent`
- *     row per role, none of which masks a tool. Gravit's sessions join it:
- *     their tool set is the host's global view plus the `role_*` tools, their
- *     prompt carries the date, and a bot's does not (nor does it see a role tool).
+ * S3: `gravit` is rendered from `roles/` (src/roles.ts) and `dsh/profile/cycle.md`
+ *     (src/cycle.ts): the face's gravit plugin (the date section, the role
+ *     summaries, the research-cycle contract) and one `dsh-tool-subagent` row
+ *     per role, none of which masks a tool. Gravit's sessions join it: their
+ *     tool set is the host's global view plus the `role_*` tools, their prompt
+ *     carries the date and the cycle contract, and a bot's carries neither (nor
+ *     does it see a role tool).
  * Also: the roster lists a broken fixture with its reason and never `_template`;
  * a session created through the session controller with `agentPreset` carries
  * it on its header; and Gate 2 is tree-wide, refusing an order tool the bot's
@@ -52,6 +54,10 @@ const gated = process.env.FACE_SMOKE !== "1";
  *  carrying the marker alpaca-kit stamps on its mutating tools. Only the guard
  *  can refuse it, which is exactly the layer under test here. */
 const STAND_IN = "mcp__drill__submit_order";
+
+/** The opening words of the research-cycle contract (`dsh/profile/cycle.md`, the `gravit:cycle` section): enough
+ *  to tell whether the section reached a prompt, without copying the contract into a test. The em dash is U+2014. */
+const CYCLE_HEADING = "Step 0 — ask once";
 
 /** Past plugins/bot.js's coalesced re-expansion, which runs one timer turn
  *  after a burst of `tools/change`. */
@@ -137,6 +143,7 @@ test("bots smoke: roster, mask, persona, a default that masks nothing, the shipp
        * still read from the FILE, so rewriting the persona moves this assertion. */
       assert.ok((await promptOf(gravit)).includes(readPersona(PERSONA_PATH).split("{{")[0]), "D11 closed: Gravit is told who it is");
       assert.match(await promptOf(gravit), /\nToday is \d{4}-\d{2}-\d{2}, [A-Z][a-z]+ \(.+\)\.\n/, "the date section is in Gravit's prompt (plan 1)");
+      assert.ok((await promptOf(gravit)).includes(CYCLE_HEADING), "the cycle contract is in Gravit's prompt (plan 3): `gravit:cycle` is registered in Gravit's preset layer and reads create_goal, which Gravit can call");
 
       /* S1 + S2 - a bot: the session controller mounts the preset; the mask and the persona hold. */
       const p = await create({ cwd: join(bots, "probe", "journal"), agentPreset: "probe" });
@@ -150,6 +157,7 @@ test("bots smoke: roster, mask, persona, a default that masks nothing, the shipp
       assert.equal(probePrompt.includes("You are Gravit"), false,
         "and Gravit's text is gone from the bot's prompt: bot.js's `deployment:persona-prefix` shadows the global prefix");
       assert.equal(probePrompt.includes("Today is "), false, "the section is scoped to Gravit's preset: a bot never sees it");
+      assert.equal(probePrompt.includes(CYCLE_HEADING), false, "nor the cycle contract: `gravit:cycle` is scoped to Gravit's preset too, so a bot never has it");
 
       /* S1, the SHIPPED form. `shipped`'s composition is untouched since
        * `createBot` wrote it, so its plugin row is the relative path every real

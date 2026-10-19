@@ -1,10 +1,11 @@
 /** Role delegation on a real tree: `role_reviewer` and `role_screener` spawn a
  * one-shot child whose persona is the role's (shadowing Gravit's), whose tools
  * are exactly the role's allow list (ancestor-layer `role_*` tools removed,
- * `gravit:roles` blank), and whose result returns through the tool; the
- * reviewer's child reads the root `GRAVIT.md` in its `agent-instructions`
- * baseline; a `subagent_fork` child - seeded and unrestricted - is assembled
- * Gravit's system text byte for byte and Gravit's tools, the premise of its
+ * `gravit:roles` and `gravit:cycle` blank), and whose result returns through
+ * the tool; the reviewer's child reads the root `GRAVIT.md` in its
+ * `agent-instructions` baseline; a `subagent_fork` child - seeded and
+ * unrestricted - is assembled Gravit's system text byte for byte (the roles
+ * list and the cycle contract included) and Gravit's tools, the premise of its
  * inherited prefix's cache reuse; a role naming a tool the tree lacks fails
  * loudly at delegation. The MCP tools the roles name are stand-ins registered
  * under the exact production names. Own file, gated. */
@@ -29,6 +30,9 @@ import { StubAdapter, type StubReply } from "./stub-llm.ts";
 const gated = process.env.FACE_SMOKE !== "1";
 /** Planted in the fixture root's GRAVIT.md: what an `agent-instructions` baseline carries when it read the file. */
 const GRAVIT_MARK = "GRAVIT-ROOT-MARK-7f3a";
+/** The opening words of the research-cycle contract (`dsh/profile/cycle.md`, the `gravit:cycle` section): enough
+ *  to tell whether the section reached a prompt, without copying the contract into a test. The em dash is U+2014. */
+const CYCLE_HEADING = "Step 0 — ask once";
 const sourceKind = (m: { source?: unknown }) => ((m.source ?? {}) as { kind?: string }).kind;
 const textOf = (m: GenerateOptions["messages"][number]) => m.content.map((b) => "text" in b ? b.text : "").join("\n");
 const lastHuman = (r: GenerateOptions) => [...r.messages].reverse().find((m) => ["user", "tool"].includes(String(sourceKind(m))));
@@ -99,6 +103,7 @@ test("roles smoke: persona, exact tools, the result, the baseline, a fork's iden
     const gravitPersona = readPersona(PERSONA_PATH).split("{{")[0];
     assert.ok(gravitPrompt.includes("- role_reviewer — "), "Gravit reads the roles section");
     assert.ok(gravitPrompt.includes(rolesIntro), "Gravit reads the roles intro");
+    assert.ok(gravitPrompt.includes(CYCLE_HEADING), "Gravit reads the cycle contract");
     assert.ok(gravitPrompt.includes(gravitPersona), "Gravit is told who it is");
     const childRequestAfter = async (marker: string) => {
       await waitFor(`child ${marker}`, () => [...requested.entries()].some(([id, rs]) => isChild(id) && rs.some((r) => r.messages.some((m) => textOf(m).includes(marker)))));
@@ -121,6 +126,7 @@ test("roles smoke: persona, exact tools, the result, the baseline, a fork's iden
     assert.ok(textOf(system).includes("You are the reviewer"), "the role persona is the child's");
     assert.equal(textOf(system).includes(gravitPersona), false, "and it shadows Gravit's");
     assert.equal(textOf(system).includes(rolesIntro), false, "the roles section is blank for a role child: its allow list removed every role tool");
+    assert.equal(textOf(system).includes(CYCLE_HEADING), false, "and so is the cycle section: its allow list removed create_goal, the visibility `gravit:cycle` is gated on");
     assert.match(textOf(system), /Today is \d{4}-\d{2}-\d{2}/, "the date reaches the child");
     assert.equal(reviewer.header.origin, "subagent");
     assert.equal(reviewer.header.agentPreset, "gravit");
@@ -133,8 +139,9 @@ test("roles smoke: persona, exact tools, the result, the baseline, a fork's iden
     assert.ok(baselineHasMark(reviewer.request), "so does the reviewer child's first request");
     /* fork: `subagent_fork` seeds its child with Gravit's completed turns and restricts nothing, so the
      * child's first request must open with Gravit's system text byte for byte and offer Gravit's tools,
-     * or the inherited prefix loses its cache reuse. `gravit:roles` is gated on what the assembling scope
-     * can call (plugins/gravit.js `canCall`), which is why it reaches the fork unchanged. */
+     * or the inherited prefix loses its cache reuse. `gravit:roles` and `gravit:cycle` are gated on what the
+     * assembling scope can call (plugins/gravit.js `canCall`: a role tool, `create_goal`), which is why both
+     * reach the fork unchanged. */
     await prompt("RUN_FORK");
     const fork = await childRequestAfter("FORK_FIXTURE");
     await gravit.whenIdle();
@@ -144,6 +151,8 @@ test("roles smoke: persona, exact tools, the result, the baseline, a fork's iden
     const gravitSystem = textOf(atFork.messages[0]);
     const forkSystem = textOf(fork.request.messages[0]);
     assert.ok(gravitSystem.includes(rolesIntro), "Gravit's request at the fork carries the roles section");
+    assert.ok(gravitSystem.includes(CYCLE_HEADING), "Gravit's request at the fork carries the cycle contract");
+    assert.ok(forkSystem.includes(CYCLE_HEADING), "and the fork child's does too: `gravit:cycle` is gated on visibility (create_goal), not on origin, and a seeded, unrestricted child can call all that Gravit can");
     assert.equal(forkSystem, gravitSystem, `the fork child's system text is Gravit's, whole (${forkSystem.length} vs ${gravitSystem.length} characters, first difference at ${firstDifference(forkSystem, gravitSystem)})`);
     assert.deepEqual(fork.request.tools!.map((t) => t.name), atFork.tools!.map((t) => t.name), "and its tools are Gravit's, in order");
     assert.ok(gravit.session.snapshotEvents().some((e) => e.type === "tool/result" && JSON.stringify(e.data).includes("FORK_DONE")), "the fork's text returns through the tool");

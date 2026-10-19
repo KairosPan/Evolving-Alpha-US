@@ -160,5 +160,6 @@ test("gravit: the cycle section sits just before the persona suffix, is literal,
   const textFor = (visible: string[]) => (section.text as (c: unknown) => string)({ scope: { visible } });
   assert.equal(textFor(["read", "create_goal", "update_goal"]), cycle, "create_goal visible (Gravit, or a fork child): the cycle, verbatim");
   assert.equal(textFor(["read", "grep"]), "", "create_goal not visible (a role child's allow list removed it): nothing");
-  assert.equal(fakeScope().sections.length, 0);
+  tree.unload();
+  assert.equal(tree.sections.length, 0, "unloading the preset revision takes the cycle section out with the date's");
 });
