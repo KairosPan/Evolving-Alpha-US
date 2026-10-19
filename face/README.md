@@ -32,6 +32,9 @@ preview), plus `demo-research.webp`, `demo-market.webp` and `demo-account.webp`.
 No API keys, backend, workbench files or runtime data are
 published. The previous public `/market` and `/account` URLs permanently
 redirect to the landing page's `/#product` section.
+Since 2026-10-12 `/account` redirects instead to the Account's own page,
+[linqizhe07.github.io/buyer-agent-demo](https://linqizhe07.github.io/buyer-agent-demo/),
+published by GitHub Pages from the `demo/` submodule's repository (`site/`).
 
 Screenshot fixtures are isolated from the local host. Run
 `node scripts/serve-research-demo.mjs` to serve the real channel renderer with
