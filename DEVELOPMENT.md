@@ -766,13 +766,15 @@ a tilde range) and `CORDIS_INCLUDE_PIN = 1.0.9` (the one cordis plugin the face 
 all three are asserted by `tests/version.test.ts`, which also refuses the three package names
 0.2.0 retired. `face/README.md` carries the run table, the profile rules, the instruments,
 channels, the master rail, bots, roles, the upgrade order, and the drills. Beside the server,
-`face/scripts/` holds three operator tools — `check-home.ts`, the go-live dry run that boots the
+`face/scripts/` holds four operator tools — `check-home.ts`, the go-live dry run that boots the
 face on a COPY of a harness home and read-opens every session (it refuses the live home by
 device and inode, and a copy without its `DRY-RUN-COPY` marker), `validate-fixture.mjs`
-(`npm run check:fixture`, §6.7), and `render-roles.ts` (`npm run render:roles`, §3.8), which
-regenerates the mirror `bots/gravit/agent.cordis.yml` from `roles/` — and, with `face/landing/`,
-the static product landing page (`npm run build` → `face/dist/`) and its demo-asset tooling;
-nothing there runs in the face process.
+(`npm run check:fixture`, §6.7), `render-roles.ts` (`npm run render:roles`, §3.8), which
+regenerates the mirror `bots/gravit/agent.cordis.yml` from `roles/`, and `schema-sizes.ts`
+(§4.3), which boots a COPY with its MCP rows enabled and prices a Gravit request's tools one by
+one (it refuses the live home by device and inode) — and, with `face/landing/`, the static
+product landing page (`npm run build` → `face/dist/`) and its demo-asset tooling; nothing there
+runs in the face process.
 
 ### 4.1 Boot sequence (`main.ts` → `boot.ts`)
 
@@ -1071,8 +1073,62 @@ sitting — plan 1's, plan 3's and a role child's — on the real face with its 
 | one role child's, after plan 3 | — | not yet measured |
 
 Plan 1 specified its one-word session for after the branch merges, so with plans 2 and 3 landed
-first the two Gravit rows are the same composition seen from two sessions. The schema block is
-the largest part of the 2026-10-10 total and is not yet attributed per tool (R31).
+first the two Gravit rows are the same composition seen from two sessions.
+
+**The tool-schema block, attributed** (R31). The block is the largest part of the first request;
+`face/scripts/schema-sizes.ts` prices it per tool. It boots the face's own composition on a COPY of
+a harness home with the MCP rows enabled, opens one Gravit session and prints what
+`tools.schemas(agent)` returns for it — one line per tool, largest first, then a line per prefix
+group and the total — in two units: `chars/4`, dsh's own heuristic (the UTF-16 length of the JSON
+over four: the unit of the 2026-10-10 figure and of `contextBreakdown`), and `bytes/4`, which
+reads higher wherever the text is not ASCII. The same session's prompt assembly
+(`systemPrompt.assemble`) carries the same 43 tools with identical JSON, so these are the objects
+the request carries. The script refuses `~/.dsh` itself (exit 2, by device and inode, before any
+dsh code loads). Measured 2026-10-19 on the tree at `5a7e69d` plus the script, on a scratch home
+made by `setupFaceProfile` — no operator rows, so no alpaca-kit row — with the face's own
+`mcp-akshare` row enabled (`akshare-mcp` started: 13 tools covering 1,090 functions, plus
+`akshare_discover`):
+
+| Group | Tools | Bytes | bytes/4 | chars/4 |
+|---|---|---|---|---|
+| `mcp__akshare__` | 14 | 134,452 | 33,613 | 24,426 |
+| the host's own | 26 | 23,468 | 5,867 | 5,857 |
+| `role_` (Gravit's preset) | 3 | 2,750 | 688 | 685 |
+| `agent_` | 0 | 0 | 0 | 0 (no CLI agent is rostered in a scratch home) |
+| `mcp__alpaca-kit__` | not yet measured: the operator's run | — | — | — |
+| measured total | 43 | 160,670 | 40,168 | 30,967 |
+
+The five largest tools are all AKShare's (bytes · bytes/4 · chars/4): `akshare_stock_a`
+25,727 · 6,432 · 4,435; `akshare_macro` 23,081 · 5,771 · 3,886; `akshare_futures` 15,641 · 3,911 ·
+3,253; `akshare_fund` 11,173 · 2,794 · 1,913; `akshare_index` 9,135 · 2,284 · 1,661 — together
+15,148 chars/4, 49% of the measured block. The largest tool outside the group is `workflow`
+(3,405 · 852 · 848), then `str_replace_editor` and `bash`. **The 2026-10-10 hypothesis — AKShare's
+fourteen tools dominate — holds on what was measured:** 79% of the measured tokens, against 19%
+for the host's 26 tools and 2% for the three `role_*` tools, which add 685 where the spec
+estimated about 600. The 2026-10-10 figure of 32,003 less the host and AKShare tokens measured
+here (30,283) leaves about 1,700 for the alpaca-kit group plus whatever the host's roster has
+gained or lost since: a residual, not a measurement, which the operator's run replaces.
+
+The two units part by 9,187 tokens on the AKShare group alone: its JSON holds 18,375 non-ASCII
+characters (18,211 of them CJK ideographs) among some 97,700, and the heuristic prices every UTF-16
+unit at a quarter of a token. On 2026-10-10 DeepSeek billed 55,635 input tokens for a request the
+heuristic put at 37,665 (1,622 + 4,040 + 32,003), 48% more; how much of that gap is this group is
+not measured, and one request with the row disabled, read in billed tokens, would say.
+
+The alpaca-kit group (and `agent_`, if a CLI agent is rostered) is the operator's run, in the shell
+the face starts from — keys sourced as in `dsh/README.md` step 4, `ALPACA_KIT_ENABLE_ORDERS` unset
+— and sends no prompt. A copy holds `.credentials.yaml` and every session log, hence the last line:
+
+```bash
+SCRATCH=$(mktemp -d)
+cp -a ~/.dsh "$SCRATCH/dsh-sizes"
+cd face && DSH_HOME="$SCRATCH/dsh-sizes" npx tsx scripts/schema-sizes.ts | tail -8
+rm -rf "$SCRATCH/dsh-sizes"
+```
+
+`tail -8` is the group lines, the total and the smallest tool; an alpaca-kit group at 0 tools means
+its row did not connect (stderr says why). Done when the alpaca-kit row above carries its numbers
+and a date (§10, item 15).
 
 ### 4.4 Route table
 
@@ -2123,13 +2179,16 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   not call `update_goal` on "continue". The design spec's §11 (e) took the client to send no slash
   commands; it does, since the 0.2.0 port. The cycle drill's restart step runs the model's path
   on an active goal; a paused goal has not been drilled.
-- **R31 — The tool-schema block is not yet attributed per tool.** 32,003 of the 2026-10-10
-  first request's heuristic tokens were schemas (§4.3), the largest part, and the three
-  `role_*` tools add to it. The trace's hypothesis is that AKShare's fourteen tools, whose
-  descriptions enumerate every method, dominate; nothing has dumped `tools.schemas()` per tool
-  yet, and that is the last task of the cycle plan. Which tools Gravit may lose — the lever is a
-  mask on its own preset, `tools.restrict` in `gravit.js`, as `plugins/bot.js` does for a bot —
-  is the operator's decision on those numbers, in the next round (§10).
+- **R31 — The tool-schema block is AKShare's fourteen tools; the lever is not pulled.** 32,003 of
+  the 2026-10-10 first request's heuristic tokens were schemas (§4.3), the largest part, and the
+  three `role_*` tools add to it. `face/scripts/schema-sizes.ts` priced it per tool on 2026-10-19
+  (a scratch home; §4.3 has the table): AKShare's fourteen tools, whose descriptions enumerate
+  every method, are 24,426 of the 30,967 heuristic tokens measured (79%), the host's 26 tools
+  5,857, the `role_*` tools 685. The alpaca-kit group is the operator's run and not yet
+  measured, and so is the group's price in billed tokens: its schemas hold 18,211 CJK ideographs,
+  which the heuristic prices at a quarter of a token each. Which tools Gravit may lose — the
+  lever is a mask on its own preset, `tools.restrict` in `gravit.js`, as `plugins/bot.js` does
+  for a bot — is the operator's decision on those numbers, in the next round (§10).
 
 ---
 
@@ -2187,10 +2246,12 @@ In order; each with what "done" is and which charter row it reopens.
    second copy; then boot on the home. Done when those drills pass on the real home.
 15. **Take the redesign's owed measurements and drills**, on the real face, in one sitting: the
    first-request totals of §4.3 (plan 1's one-word session, plan 3's first request, one role
-   child's), the role drill (on a copy of the home) and the cycle drill (`face/README.md`; the
-   real face and keys — a cycle's usage is real). Done when the "not yet measured" rows of §4.3
-   and the two manual **Role** and **Cycle** rows of §7.4 carry their date and session id. This is
-   where the 24-round cap, the restart path (R30) and the 12-call count (R29) first meet a model.
+   child's), the alpaca-kit group of its tool-schema table (`face/scripts/schema-sizes.ts` on a
+   copy of the home; no prompt is sent), the role drill (on a copy of the home) and the cycle
+   drill (`face/README.md`; the real face and keys — a cycle's usage is real). Done when the "not
+   yet measured" rows of §4.3 and the two manual **Role** and **Cycle** rows of §7.4 carry their
+   date and session id. This is where the 24-round cap, the restart path (R30) and the 12-call
+   count (R29) first meet a model.
 16. **The next round: persona, memory, the teaching channel.** Deferred by the operator on
    2026-10-15 (charter §9): the persona's mechanics paragraphs move to the tool descriptions,
    scoped sections and skills dsh provides; the style pack moves into a memory substrate the
