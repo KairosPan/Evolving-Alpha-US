@@ -1,13 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import SystemPrompt from "@deepseek-ai/dsh-system-prompt";
-import { ROLES_SECTION, TODAY_SECTION, apply, inject, isDelegated, name, resolveZone, rolesText, todayText, validateGravitConfig } from "../plugins/gravit.js";
+import { ROLES_SECTION, TODAY_SECTION, apply, canCall, inject, name, resolveZone, rolesText, todayText, validateGravitConfig } from "../plugins/gravit.js";
 
 const dshSectionOrder = (slot: "DEPLOYMENT_PERSONA_PREFIX" | "TOOL_SUBAGENT"): number => SystemPrompt.prototype.getSectionOrder(slot);
 
+/** A stand-in scope for `apply`. `systemPrompt` records the sections; `tools.get(name, scope)`
+ *  resolves a name when the scope it is handed lists it in `visible`, and records every lookup -
+ *  the assembly context's `scope` is the agent, and the registry answers what that scope can call. */
+type FakeToolScope = { visible?: readonly string[] };
 function fakeScope() {
   const sections: Array<{ name: string; order: number; interpolate?: boolean; text: unknown }> = [];
   const disposers: Array<() => unknown> = [];
+  const lookups: Array<{ name: string; scope: FakeToolScope | undefined }> = [];
   const ctx = {
     effect(fn: () => unknown) { const d = fn(); assert.equal(typeof d, "function"); disposers.push(d as () => unknown); return d; },
     systemPrompt: {
@@ -17,13 +22,19 @@ function fakeScope() {
       },
       getSectionOrder: (slot: "DEPLOYMENT_PERSONA_PREFIX" | "TOOL_SUBAGENT") => dshSectionOrder(slot),
     },
+    tools: {
+      get(name: string, scope?: FakeToolScope) {
+        lookups.push({ name, scope });
+        return scope?.visible?.includes(name) ? { name } : undefined;
+      },
+    },
   };
-  return { ctx, sections, unload: () => { for (const d of disposers.splice(0).reverse()) d(); } };
+  return { ctx, sections, lookups, unload: () => { for (const d of disposers.splice(0).reverse()) d(); } };
 }
 
 test("gravit: name and inject are what the composition relies on", () => {
   assert.equal(name, "gravit");
-  assert.deepEqual(inject, ["systemPrompt"]);
+  assert.deepEqual(inject, ["systemPrompt", "tools"]);
   assert.equal(TODAY_SECTION, "deployment:today");
 });
 
@@ -91,7 +102,12 @@ test("an unusable TZ is rendered in UTC and labelled, never thrown at assembly",
   }
 });
 
-test("gravit: the roles section follows dsh's subagent section, lists every role, and is empty for a delegated child", () => {
+/* The roles section lists what the ASSEMBLING scope can call, the gate dsh-tool-web and
+ * dsh-tool-subagent put on their own sections: a role child, whose allow list restricts the
+ * `role_<id>` tools away, is told of none; a `subagent_fork` child - seeded, unrestricted - sees
+ * every role tool, so it gets Gravit's text unchanged and its inherited prefix stays byte-identical
+ * (roles-smoke pins that on a real boot); a role whose tool never registered is not advertised. */
+test("gravit: the roles section follows dsh's subagent section and lists exactly the roles the assembling scope can call", () => {
   const tree = fakeScope();
   const roles = [{ tool: "role_screener", summary: "runs the screen" }, { tool: "role_reviewer", summary: "audits" }];
   apply(tree.ctx, { roles });
@@ -99,12 +115,25 @@ test("gravit: the roles section follows dsh's subagent section, lists every role
   assert.ok(section, "registered");
   assert.equal(section.order, dshSectionOrder("TOOL_SUBAGENT") + 1);
   assert.equal(section.interpolate, false);
-  const root = (section.text as (c: unknown) => string)({ agent: { session: { header: { origin: undefined } } } });
-  assert.match(root, /^Roles\. /);
-  assert.ok(root.includes("- role_screener — runs the screen") && root.includes("- role_reviewer — audits"));
-  assert.equal((section.text as (c: unknown) => string)({ agent: { session: { header: { origin: "subagent" } } } }), "", "a child joins the preset and must not read Gravit's role list");
-  assert.equal(isDelegated({ agent: { session: { header: { origin: "subagent" } } } }), true);
-  assert.equal(isDelegated({}), false);
+  assert.equal(tree.lookups.length, 0, "nothing is looked up at mount: the gate is read at every assembly");
+  const textFor = (visible: string[]) => (section.text as (c: unknown) => string)({ scope: { visible } });
+  const all = textFor(["read", "role_screener", "role_reviewer"]);
+  assert.equal(all, rolesText(roles), "every role tool visible: the whole list, as Gravit and a fork child read it");
+  assert.match(all, /^Roles\. /);
+  assert.ok(all.includes("- role_screener — runs the screen") && all.includes("- role_reviewer — audits"));
+  assert.equal(textFor(["read", "grep"]), "", "no role tool visible (a role child's allow list removed them): nothing");
+  assert.equal(textFor(["role_reviewer"]), rolesText([roles[1]]), "one of two visible: that one only");
+  assert.equal(textFor(["role_reviewer"]).includes("role_screener"), false);
+});
+
+test("canCall is the registry's view of the assembling scope: tools.get(name, context.scope)", () => {
+  const tree = fakeScope();
+  const scope = { visible: ["role_screener"] };
+  assert.equal(canCall(tree.ctx, { scope }, "role_screener"), true);
+  assert.equal(canCall(tree.ctx, { scope }, "role_reviewer"), false);
+  assert.deepEqual(tree.lookups.map((l) => [l.name, l.scope === scope]), [["role_screener", true], ["role_reviewer", true]], "each lookup is handed the context's own scope");
+  assert.equal(canCall(tree.ctx, {}, "role_screener"), false, "no scope is the global view, where no preset-scoped tool lives");
+  assert.equal(canCall(tree.ctx, undefined, "role_screener"), false, "total on a missing context");
 });
 
 test("gravit: without a roles key there is no roles section; an empty list renders nothing", () => {

@@ -1,22 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { ROLES_ROOT, readRoles, toolNameFor } from "../src/roles.ts";
 import { makeRolesRoot } from "./bots-fixture.ts";
 
 const FORBIDDEN = new Set(["ask_user_question", "web_search", "web_fetch", "subagent", "subagent_fork", "send_message", "interrupt_agent",
-  "list_agents", "workflow", "ralph", "create_goal", "get_goal", "update_goal", "todo_write", "job_output", "job_list", "job_kill",
+  "list_agents", "workflow", "ralph", "create_goal", "get_goal", "update_goal", "todo_write", "run_code",
   "dispatch", "exit_plan_mode", "mcp__alpaca-kit__account", "mcp__alpaca-kit__positions", "mcp__alpaca-kit__orders",
   "mcp__alpaca-kit__place_order", "mcp__alpaca-kit__cancel_order"]);
+/** The account and order tools under ANY server name, matched by their raw suffix as src/orders.ts
+ *  `isOrderTool` matches the order tools: an independent copy of the reader's rule. */
+const ACCOUNT_OR_ORDER = /(^|__)(account|positions|orders|place_order|cancel_order)$/;
+const JOB_TOOLS = ["job_output", "job_list", "job_kill"];
 
 test("toolNameFor: role_ plus the id with dashes as underscores", () => {
   assert.equal(toolNameFor("screener"), "role_screener");
   assert.equal(toolNameFor("data-check"), "role_data_check");
 });
 
-test("the shipped roles: three, exact names only, skill on every list, nothing forbidden, the reviewer reads only", () => {
+test("the shipped roles: three, exact names only, skill on every list, nothing forbidden, the reviewer reads only, jobs only beside bash", () => {
   const roles = readRoles(ROLES_ROOT);
   assert.deepEqual(roles.map((r) => r.tool), ["role_backtester", "role_reviewer", "role_screener"]);
   for (const role of roles) {
@@ -24,17 +28,27 @@ test("the shipped roles: three, exact names only, skill on every list, nothing f
     assert.ok(role.description.length <= 300 && role.description.length > 0, role.id);
     for (const name of role.allow) {
       assert.equal(name.includes("*"), false, `${role.id}: ${name} is exact`);
-      assert.equal(FORBIDDEN.has(name) || name.startsWith("role_") || name.startsWith("mcp__akshare__") || name.startsWith("agent_"), false, `${role.id}: ${name} is never a role's`);
+      assert.equal(FORBIDDEN.has(name) || ACCOUNT_OR_ORDER.test(name) || name.startsWith("role_") || name.startsWith("mcp__akshare__") || name.startsWith("agent_"), false, `${role.id}: ${name} is never a role's`);
     }
+    /* A bash command past the executor's default moves to a background job the child owns; the job tools
+     * are how it reads and stops one, and they mean nothing to a role that cannot start a command. */
+    if (JOB_TOOLS.some((job) => role.allow.includes(job))) assert.ok(role.allow.includes("bash"), `${role.id}: a job tool only beside bash`);
   }
   const reviewer = roles.find((r) => r.id === "reviewer")!;
   for (const hand of ["bash", "write", "edit", "str_replace_editor"]) assert.equal(reviewer.allow.includes(hand), false, `the reviewer has no ${hand}`);
   assert.ok(roles.find((r) => r.id === "screener")!.allow.includes("mcp__alpaca-kit__screen"));
+  for (const id of ["screener", "backtester"]) {
+    const role = roles.find((r) => r.id === id)!;
+    assert.ok(role.allow.includes("bash"), `${id} runs commands`);
+    for (const job of JOB_TOOLS) assert.ok(role.allow.includes(job), `${id} can read and stop its own background job: ${job}`);
+  }
 });
 
-test("readRoles skips _template and reads a valid role", async () => {
+test("readRoles skips _template, hidden entries and plain files, and reads a valid role", async () => {
   const root = await makeRolesRoot();
   try {
+    await mkdir(join(root, ".drafts"));
+    await writeFile(join(root, "NOTES.md"), "not a role\n");
     const roles = readRoles(root);
     assert.deepEqual(roles.map((r) => r.id), ["probe"]);
     assert.deepEqual(roles[0], { id: "probe", tool: "role_probe", name: "Probe", description: "a test role", persona: "You are the probe, a test role.", allow: ["read", "mcp__alpaca-kit__earnings"] });
@@ -102,10 +116,11 @@ test("the committed mirror bots/gravit/agent.cordis.yml is exactly the render of
 
 /* The refusals the tests above do not reach. A refusal is ONE line that opens with the
  * absolute path of the file (or directory) it is about, so the boot log points at the place
- * to fix. `files` edits the fresh root from makeRolesRoot (null removes a file); `read` is
+ * to fix. `files` edits the fresh root from makeRolesRoot (null removes a file); `links` adds
+ * a symbolic link at a path, pointing at a target, both relative to that root; `read` is
  * what readRoles is given, relative to that root. */
 const LONG_ID = "a".repeat(60);
-const REFUSED: Array<{ label: string; files: Record<string, string | null>; read?: string; path: string; reason: RegExp }> = [
+const REFUSED: Array<{ label: string; files: Record<string, string | null>; links?: Record<string, string>; read?: string; path: string; reason: RegExp }> = [
   { label: "role.yml missing", files: { "probe/role.yml": null }, path: "probe/role.yml", reason: /missing/ },
   { label: "ROLE.md missing", files: { "probe/ROLE.md": null }, path: "probe/ROLE.md", reason: /missing/ },
   { label: "ROLE.md of 2,001 bytes", files: { "probe/ROLE.md": "x".repeat(2001) }, path: "probe/ROLE.md", reason: /is 2001 bytes; the limit is 2000/ },
@@ -120,6 +135,9 @@ const REFUSED: Array<{ label: string; files: Record<string, string | null>; read
   { label: "an allow entry that is not a string", files: { "probe/role.yml": "name: Probe\ndescription: x\nallow: [read, 5]\n" }, path: "probe/role.yml", reason: /allow entry 2 is not a string/ },
   { label: "an allow entry outside the tool-name grammar", files: { "probe/role.yml": "name: Probe\ndescription: x\nallow: ['a b']\n" }, path: "probe/role.yml", reason: /allow entry "a b" is not a tool name/ },
   { label: "an allow entry no role carries", files: { "probe/role.yml": "name: Probe\ndescription: x\nallow: [read, ask_user_question]\n" }, path: "probe/role.yml", reason: /allow entry "ask_user_question": a role never carries/ },
+  { label: "an allow entry listed twice", files: { "probe/role.yml": "name: Probe\ndescription: x\nallow: [read, grep, read]\n" }, path: "probe/role.yml", reason: /allow entry "read" is listed twice/ },
+  { label: "a role directory whose name is not an id", files: { "Probe_Two/ROLE.md": "You are two.\n", "Probe_Two/role.yml": "name: Two\ndescription: x\nallow: [read]\n" }, path: "Probe_Two", reason: /is not a role id/ },
+  { label: "a role directory that is a symbolic link", files: {}, links: { linked: "probe" }, path: "linked", reason: /is a symbolic link/ },
   { label: "a model that is not a string", files: { "probe/role.yml": "name: Probe\ndescription: x\nallow: [read]\nmodel: 5\n" }, path: "probe/role.yml", reason: /model must be a <provider>\/<model> route.*\(got a non-string\)/ },
   { label: "a tool name over 64 characters", files: { [`${LONG_ID}/ROLE.md`]: "You are long.\n", [`${LONG_ID}/role.yml`]: "name: Long\ndescription: x\nallow: [read]\n" }, path: LONG_ID, reason: /role_a{60} is 65 characters; the limit is 64/ },
   { label: "a roles root that is a file", files: { "a-file": "not a directory\n" }, read: "a-file", path: "a-file", reason: /is not a directory/ },
@@ -127,7 +145,7 @@ const REFUSED: Array<{ label: string; files: Record<string, string | null>; read
 ];
 
 test("readRoles refuses every other malformed shape in one line that opens with the path it is about", async () => {
-  for (const { label, files, read = "", path, reason } of REFUSED) {
+  for (const { label, files, links = {}, read = "", path, reason } of REFUSED) {
     const root = await makeRolesRoot();
     try {
       for (const [file, body] of Object.entries(files)) {
@@ -138,6 +156,7 @@ test("readRoles refuses every other malformed shape in one line that opens with 
           await writeFile(target, body);
         }
       }
+      for (const [link, target] of Object.entries(links)) await symlink(join(root, target), join(root, link));
       assert.throws(() => readRoles(join(root, read)), (e: Error) => {
         assert.ok(e.message.startsWith(`${join(root, path)}: `), `${label}: opens with the path it is about, got: ${e.message}`);
         assert.match(e.message, reason, label);
@@ -148,10 +167,14 @@ test("readRoles refuses every other malformed shape in one line that opens with 
   }
 });
 
+/* The account and order names are refused under any server name, the way Gate 2 matches the order
+ * tools by raw suffix (src/orders.ts `isOrderTool`): a server mounted as `broker` cannot slip them in. */
+const RENAMED_SERVER = ["account", "positions", "orders", "place_order", "cancel_order"].map((raw) => `mcp__broker__${raw}`);
+
 test("readRoles refuses every tool a role never carries, naming role.yml and why", async () => {
   const root = await makeRolesRoot();
   try {
-    for (const entry of [...FORBIDDEN, "role_screener", "agent_codex", "mcp__akshare__stock_zh_a_hist"]) {
+    for (const entry of [...FORBIDDEN, ...RENAMED_SERVER, "role_screener", "agent_codex", "mcp__akshare__stock_zh_a_hist"]) {
       await writeFile(join(root, "probe", "role.yml"), `name: Probe\ndescription: x\nallow:\n  - read\n  - ${entry}\n`);
       assert.throws(() => readRoles(root), (e: Error) =>
         e.message.startsWith(`${join(root, "probe", "role.yml")}: allow entry ${JSON.stringify(entry)}: a role never carries `), entry);

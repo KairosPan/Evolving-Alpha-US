@@ -399,6 +399,15 @@ test("composeFace refuses a roles root with a bad role, naming the file", async 
   } finally { await rm(rolesRoot, { recursive: true, force: true }); }
 });
 
+/* The same contract one step earlier: no roles directory at all refuses the compose, naming it, so a
+ * deploy that ships `bots/` without `roles/` never boots a default preset with no roles in it. */
+test("composeFace refuses a missing roles directory, naming it", () => {
+  const home = freshHome();
+  const rolesRoot = join(tmpdir(), "no-such-roles");
+  assert.throws(() => composeFace({ profileName: "face", port: 3090, dshHome: home, rolesRoot }),
+    (e: Error) => e.message.startsWith(`${rolesRoot}: `) && /the roles directory is missing/.test(e.message));
+});
+
 /* Spec §4.1 L3: dsh-base's default candidates are AGENTS.md and CLAUDE.md; the
  * face sets the row's two candidate lists (the patch carries dsh-base's
  * `maxBytes` beside them, a named config replaces the row's) so Gravit reads

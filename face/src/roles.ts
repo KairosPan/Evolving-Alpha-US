@@ -23,10 +23,15 @@
  * face's boot.
  *
  * A role never carries what a delegated child cannot use or must not hold: a tool that needs
- * a human, the open web, delegation, the cycle's goal, todo and job bookkeeping, the account
- * and order tools, the AKShare tools (the `NEVER` table, with the reason for each). The
- * reader refuses such an `allow` entry where it reads the file, and refuses a role id whose
- * tool name would pass {@link TOOL_NAME_MAX} characters.
+ * a human, the open web, delegation, the cycle's goal and todo bookkeeping, the reserved PTC
+ * transport `run_code`, the account and order tools under any server name, the AKShare tools
+ * (the `NEVER` table, with the reason for each). The job tools are a bash role's own: a
+ * command that outruns the executor's default timeout moves to a background job the child
+ * owns, which it reads with `job_output` and stops with `job_kill`, and which is cancelled
+ * when the child is. The reader refuses a never-carried `allow` entry where it reads the
+ * file, an entry listed twice, a role id whose tool name would pass {@link TOOL_NAME_MAX}
+ * characters, and an entry under `roles/` it would otherwise drop without a word: a symbolic
+ * link, or a directory whose name is not an id.
  *
  * {@link gravitRows} renders the roles as Gravit's composition: the `gravit` plugin row,
  * whose config carries each role's tool and summary for the `gravit:roles` section
@@ -36,7 +41,7 @@
  * committed file differs from the render.
  * @module
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, type Dirent } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { entryListSchema } from "@deepseek-ai/cordis-plugin-include";
@@ -66,38 +71,43 @@ export const ROLE_MD_MAX_BYTES = 2000;
  *  `role_` plus an id can pass it. */
 export const TOOL_NAME_MAX = 64;
 
-/** What a role never carries, and why: for each reason, the exact names and the name prefixes
- *  it covers. {@link readMeta} refuses an `allow` entry that matches, with the reason in the
- *  message. The shipped roles obey it, and tests/roles.test.ts holds an independent copy of
- *  the names. The account and order names carry the `serverName: alpaca-kit` the operator's
- *  patch row mounts the server by (dsh/README.md); a server mounted under another name needs
- *  its names added here. */
-const NEVER: ReadonlyArray<{ what: string; because: string; names: readonly string[]; prefixes: readonly string[] }> = [
+/** What a role never carries, and why: for each reason, the exact `names`, the name `prefixes`,
+ *  and the `rawNames` it covers - a raw MCP name refused bare and under ANY server
+ *  (`entry === raw` or `entry.endsWith("__" + raw)`), the match src/orders.ts `isOrderTool`
+ *  applies to the order tools, so a server the operator mounts under another name than
+ *  `alpaca-kit` cannot slip an account or order tool in. {@link readMeta} refuses an `allow`
+ *  entry that matches, with the reason in the message. The shipped roles obey it, and
+ *  tests/roles.test.ts holds an independent copy of the names. */
+const NEVER: ReadonlyArray<{ what: string; because: string; names: readonly string[]; prefixes: readonly string[]; rawNames: readonly string[] }> = [
   { what: "a tool that needs a human",
     because: "a delegated child has no human to ask or to review a plan (dsh refuses ask_user_question to it with DELEGATED_CALLER); a role that needs the operator says so in its report",
-    names: ["ask_user_question", "exit_plan_mode"], prefixes: [] },
+    names: ["ask_user_question", "exit_plan_mode"], prefixes: [], rawNames: [] },
   { what: "a web tool",
     because: "the open web carries no as-of guard, and a role reads the market only through the PIT channels",
-    names: ["web_search", "web_fetch"], prefixes: [] },
+    names: ["web_search", "web_fetch"], prefixes: [], rawNames: [] },
   { what: "a delegation tool",
     because: "Gravit alone delegates; a role is one hand, not a team",
     names: ["subagent", "subagent_fork", "send_message", "interrupt_agent", "list_agents", "workflow", "ralph", "dispatch"],
-    prefixes: ["role_", "agent_"] },
-  { what: "a goal, todo or job tool",
-    because: "Gravit tracks the goal, the todos and the background jobs; a role is one bounded call",
-    names: ["create_goal", "get_goal", "update_goal", "todo_write", "job_output", "job_list", "job_kill"], prefixes: [] },
+    prefixes: ["role_", "agent_"], rawNames: [] },
+  { what: "a goal or todo tool",
+    because: "Gravit tracks the goal and the todos; a role is one bounded call",
+    names: ["create_goal", "get_goal", "update_goal", "todo_write"], prefixes: [], rawNames: [] },
+  { what: "the PTC transport",
+    because: "run_code is the reserved PTC mode presentation transport, which tools.restrict() refuses to name, so every delegation would fail; name the end-capability tools instead",
+    names: ["run_code"], prefixes: [], rawNames: [] },
   { what: "an account or order tool",
     because: "orders stay behind the two order gates, and a role has no reason to read the account",
-    names: ["mcp__alpaca-kit__account", "mcp__alpaca-kit__positions", "mcp__alpaca-kit__orders", "mcp__alpaca-kit__place_order", "mcp__alpaca-kit__cancel_order"],
-    prefixes: [] },
+    names: [], prefixes: [], rawNames: ["account", "positions", "orders", "place_order", "cancel_order"] },
   { what: "an AKShare tool",
     because: "the AKShare tools carry no point-in-time guard and are never backtest evidence",
-    names: [], prefixes: ["mcp__akshare__"] },
+    names: [], prefixes: ["mcp__akshare__"], rawNames: [] },
 ];
 
 /** Why a role may not carry `entry`, as the end of a refusal; `undefined` when it may. */
 function neverCarries(entry: string): string | undefined {
-  const rule = NEVER.find((candidate) => candidate.names.includes(entry) || candidate.prefixes.some((prefix) => entry.startsWith(prefix)));
+  const rule = NEVER.find((candidate) => candidate.names.includes(entry)
+    || candidate.prefixes.some((prefix) => entry.startsWith(prefix))
+    || candidate.rawNames.some((raw) => entry === raw || entry.endsWith(`__${raw}`)));
   return rule === undefined ? undefined : `a role never carries ${rule.what}: ${rule.because}`;
 }
 
@@ -179,13 +189,17 @@ function readMeta(file: string): Pick<RoleFile, "name" | "description" | "allow"
 
   const listed = fields.allow;
   if (!Array.isArray(listed) || listed.length === 0) throw refusal(file, "allow must be a non-empty list of exact tool names");
-  /* Entries are kept exactly as written: no trimming, so a blank one fails the grammar. */
+  /* Entries are kept exactly as written: no trimming, so a blank one fails the grammar. A name
+   * listed twice is refused: harmless to `restrict()`, which takes a set, but a typo'd list. */
+  const seen = new Set<string>();
   const allow = listed.map((entry: unknown, index: number): string => {
     if (typeof entry !== "string") throw refusal(file, `allow entry ${index + 1} is not a string`);
     if (entry.includes("*")) throw refusal(file, `allow entry ${JSON.stringify(entry)}: wildcards are not accepted; name the exact tool, e.g. mcp__alpaca-kit__screen`);
     if (!TOOL_NAME_RE.test(entry)) throw refusal(file, `allow entry ${JSON.stringify(entry)} is not a tool name (letters, digits, _ and - only)`);
     const never = neverCarries(entry);
     if (never !== undefined) throw refusal(file, `allow entry ${JSON.stringify(entry)}: ${never}`);
+    if (seen.has(entry)) throw refusal(file, `allow entry ${JSON.stringify(entry)} is listed twice`);
+    seen.add(entry);
     return entry;
   });
 
@@ -208,18 +222,28 @@ function readRole(root: string, id: string): RoleFile {
   return { id, tool, persona: readPersona(join(dir, PERSONA_FILE)), ...readMeta(join(dir, META_FILE)) };
 }
 
-/** The role ids under `root`, sorted. A directory whose name is not a {@link ROLE_ID_RE} id,
- *  `_template`, and anything that is not a directory are skipped without a word. */
+/** The role ids under `root`, sorted. A symbolic link, whatever its name, and a directory
+ *  whose name is not a {@link ROLE_ID_RE} id are refused with their path: the reader would
+ *  otherwise drop a role the operator meant to ship without a word. Any other hidden entry
+ *  (a leading `.`), `_template` and a plain file are skipped. Entries are walked in name
+ *  order, so the first refusal is the same on every filesystem. */
 function listRoleIds(root: string): string[] {
+  let entries: Dirent[];
   try {
-    return readdirSync(root, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && entry.name !== ROLE_TEMPLATE && ROLE_ID_RE.test(entry.name))
-      .map((entry) => entry.name)
-      .sort();
+    entries = readdirSync(root, { withFileTypes: true });
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     throw refusal(root, code === "ENOENT" ? "the roles directory is missing" : code === "ENOTDIR" ? "is not a directory" : `cannot be listed: ${messageOf(error)}`, error);
   }
+  const ids: string[] = [];
+  for (const entry of [...entries].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+    const path = join(root, entry.name);
+    if (entry.isSymbolicLink()) throw refusal(path, "is a symbolic link; a role is a directory of its own under roles/ - copy it in instead of linking it");
+    if (entry.name.startsWith(".") || entry.name === ROLE_TEMPLATE || !entry.isDirectory()) continue;
+    if (!ROLE_ID_RE.test(entry.name)) throw refusal(path, `is not a role id: a role directory is named [a-z0-9][a-z0-9-]*, at most 64 characters, and only ${ROLE_TEMPLATE} is exempt - rename it or move it out of roles/`);
+    ids.push(entry.name);
+  }
+  return ids;
 }
 
 /** Read and validate every role under `root`, sorted by id. Synchronous. The first problem

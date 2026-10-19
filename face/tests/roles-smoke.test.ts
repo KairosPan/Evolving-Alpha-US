@@ -1,10 +1,13 @@
 /** Role delegation on a real tree: `role_reviewer` and `role_screener` spawn a
  * one-shot child whose persona is the role's (shadowing Gravit's), whose tools
  * are exactly the role's allow list (ancestor-layer `role_*` tools removed,
- * `gravit:roles` blank), and whose result returns through the tool; a role
- * naming a tool the tree lacks fails loudly at delegation. The MCP tools the
- * roles name are stand-ins registered under the exact production names.
- * Own file, gated. */
+ * `gravit:roles` blank), and whose result returns through the tool; the
+ * reviewer's child reads the root `GRAVIT.md` in its `agent-instructions`
+ * baseline; a `subagent_fork` child - seeded and unrestricted - is assembled
+ * Gravit's system text byte for byte and Gravit's tools, the premise of its
+ * inherited prefix's cache reuse; a role naming a tool the tree lacks fails
+ * loudly at delegation. The MCP tools the roles name are stand-ins registered
+ * under the exact production names. Own file, gated. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
@@ -24,22 +27,30 @@ import { mountClient, remote, signIn } from "./remote.ts";
 import { StubAdapter, type StubReply } from "./stub-llm.ts";
 
 const gated = process.env.FACE_SMOKE !== "1";
+/** Planted in the fixture root's GRAVIT.md: what an `agent-instructions` baseline carries when it read the file. */
+const GRAVIT_MARK = "GRAVIT-ROOT-MARK-7f3a";
 const sourceKind = (m: { source?: unknown }) => ((m.source ?? {}) as { kind?: string }).kind;
 const textOf = (m: GenerateOptions["messages"][number]) => m.content.map((b) => "text" in b ? b.text : "").join("\n");
 const lastHuman = (r: GenerateOptions) => [...r.messages].reverse().find((m) => ["user", "tool"].includes(String(sourceKind(m))));
+/** The first UTF-16 index where two strings differ, -1 when they are equal: a failure names where. */
+function firstDifference(a: string, b: string): number {
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) if (a[i] !== b[i]) return i;
+  return a.length === b.length ? -1 : n;
+}
 async function waitFor(label: string, check: () => boolean, ms = 30_000) {
   const until = Date.now() + ms;
   while (!check()) { if (Date.now() >= until) throw new Error(`timed out: ${label}`); await new Promise((r) => setTimeout(r, 20)); }
 }
 
-test("roles smoke: persona, exact tools, the result, and a loud failure for a missing tool", { skip: gated && "set FACE_SMOKE=1", timeout: 180_000 }, async () => {
+test("roles smoke: persona, exact tools, the result, the baseline, a fork's identical prefix, and a loud failure for a missing tool", { skip: gated && "set FACE_SMOKE=1", timeout: 180_000 }, async () => {
   const bots = await makeBotsRoot();
   const root = await realpath(await mkdtemp(join(tmpdir(), "face-roles-root-")));
   const home = await mkdtemp(join(tmpdir(), "face-roles-home-"));
   let dispose: (() => Promise<void>) | undefined;
   try {
     await mkdir(join(root, ".git"));
-    await writeFile(join(root, "GRAVIT.md"), "# fixture\n");
+    await writeFile(join(root, "GRAVIT.md"), `# fixture\n${GRAVIT_MARK}\n`);
     setupFaceProfile(home);
     const patchPath = join(home, "profiles", "face", "cordis.patch.yml");
     const patch = readFileSync(patchPath, "utf8").replace(/^\[\][ \t]*$/m, "");
@@ -67,8 +78,10 @@ test("roles smoke: persona, exact tools, the result, and a loud failure for a mi
       if (header !== undefined && !headers.has(id)) headers.set(id, { ...header });
       const trigger = lastHuman(request);
       const text = trigger ? textOf(trigger) : "";
+      if (header?.isSeeded === true) return { kind: "text", text: "FORK_DONE" };
       if (header?.origin === "subagent") return { kind: "text", text: text.includes("REVIEW_FIXTURE") ? "REVIEW_DONE" : "SCREEN_DONE" };
       if (sourceKind(trigger!) === "user" && text === "RUN_REVIEWER") return { kind: "tool", name: "role_reviewer", args: { description: "Audit the fixture", prompt: "REVIEW_FIXTURE: audit the fixture strategy." } };
+      if (sourceKind(trigger!) === "user" && text === "RUN_FORK") return { kind: "tool", name: "subagent_fork", args: { description: "Fork the fixture", prompt: "FORK_FIXTURE: continue." } };
       if (sourceKind(trigger!) === "user" && text === "RUN_SCREENER") return { kind: "tool", name: "role_screener", args: { description: "Screen one day", prompt: "SCREEN_FIXTURE: screen 2025-06-05." } };
       return { kind: "text", text: "PARENT_DONE" };
     };
@@ -107,12 +120,33 @@ test("roles smoke: persona, exact tools, the result, and a loud failure for a mi
     assert.equal(system.role, "system");
     assert.ok(textOf(system).includes("You are the reviewer"), "the role persona is the child's");
     assert.equal(textOf(system).includes(gravitPersona), false, "and it shadows Gravit's");
-    assert.equal(textOf(system).includes(rolesIntro), false, "the roles section is blank for a child");
+    assert.equal(textOf(system).includes(rolesIntro), false, "the roles section is blank for a role child: its allow list removed every role tool");
     assert.match(textOf(system), /Today is \d{4}-\d{2}-\d{2}/, "the date reaches the child");
     assert.equal(reviewer.header.origin, "subagent");
     assert.equal(reviewer.header.agentPreset, "gravit");
     assert.equal(reviewer.header.cwd, root);
     assert.ok(gravit.session.snapshotEvents().some((e) => e.type === "tool/result" && JSON.stringify(e.data).includes("REVIEW_DONE")), "the child's text returns through the tool");
+    /* The workspace map reaches a role child: dsh's agent-instructions row publishes a baseline on every
+     * agent's first request, a spawn child's included. Gravit's own first request is the positive pair. */
+    const baselineHasMark = (r: GenerateOptions) => r.messages.some((m) => sourceKind(m) === "agent-instructions" && textOf(m).includes(GRAVIT_MARK));
+    assert.ok(baselineHasMark(requested.get(sessionId)![0]), "Gravit's baseline carries the root GRAVIT.md");
+    assert.ok(baselineHasMark(reviewer.request), "so does the reviewer child's first request");
+    /* fork: `subagent_fork` seeds its child with Gravit's completed turns and restricts nothing, so the
+     * child's first request must open with Gravit's system text byte for byte and offer Gravit's tools,
+     * or the inherited prefix loses its cache reuse. `gravit:roles` is gated on what the assembling scope
+     * can call (plugins/gravit.js `canCall`), which is why it reaches the fork unchanged. */
+    await prompt("RUN_FORK");
+    const fork = await childRequestAfter("FORK_FIXTURE");
+    await gravit.whenIdle();
+    assert.equal(fork.header.isSeeded, true, "a subagent_fork child is seeded");
+    const atFork = requested.get(sessionId)!.find((r) => { const t = lastHuman(r); return t !== undefined && sourceKind(t) === "user" && textOf(t) === "RUN_FORK"; })!;
+    assert.equal(fork.request.messages[0].role, "system");
+    const gravitSystem = textOf(atFork.messages[0]);
+    const forkSystem = textOf(fork.request.messages[0]);
+    assert.ok(gravitSystem.includes(rolesIntro), "Gravit's request at the fork carries the roles section");
+    assert.equal(forkSystem, gravitSystem, `the fork child's system text is Gravit's, whole (${forkSystem.length} vs ${gravitSystem.length} characters, first difference at ${firstDifference(forkSystem, gravitSystem)})`);
+    assert.deepEqual(fork.request.tools!.map((t) => t.name), atFork.tools!.map((t) => t.name), "and its tools are Gravit's, in order");
+    assert.ok(gravit.session.snapshotEvents().some((e) => e.type === "tool/result" && JSON.stringify(e.data).includes("FORK_DONE")), "the fork's text returns through the tool");
     /* screener */
     await prompt("RUN_SCREENER");
     const screener = await childRequestAfter("SCREEN_FIXTURE");

@@ -2,6 +2,9 @@ name: Backtester
 description: Runs backtest.py (or the variant you name) under the five honest-eval rules, bounded to the bed window, writes the artifact under backtests/ and returns the headline numbers with each rule marked kept or broken; never edits THESIS.md.
 allow:
   - bash
+  - job_output
+  - job_list
+  - job_kill
   - read
   - write
   - edit

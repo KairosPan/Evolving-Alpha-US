@@ -38,13 +38,18 @@
  * after the delegation tool it extends. A `roles: []` config mounts the section
  * and renders nothing: dsh drops an empty section from the prompt.
  *
- * BLANK FOR A DELEGATED CHILD. A child JOINS the preset it was delegated from,
- * so a scoped section reaches it too, and the child's allow-list removes the
- * `role_<id>` tools but cannot remove a sentence. The roles text is therefore a
- * function of the assembly context and resolves to `""` when the assembled
- * agent's session header says `origin: "subagent"` (see {@link isDelegated}): a
- * child keeps its own persona and is never told of roles it cannot call. The
- * date is left on for it.
+ * GATED ON WHAT THE ASSEMBLING SCOPE CAN CALL. A child JOINS the preset it was
+ * delegated from, so a scoped section reaches it too, and an allow list removes
+ * tools but cannot remove a sentence. The roles text is therefore a function of
+ * the assembly context: it lists only the roles whose tool the assembling scope
+ * resolves ({@link canCall}, the lookup dsh-tool-web and dsh-tool-subagent gate
+ * their own sections with). A role child, whose allow list restricts the
+ * `role_<id>` tools away, gets `""` and is never told of roles it cannot call;
+ * a `subagent_fork` child - seeded and unrestricted - resolves every role tool,
+ * so it gets Gravit's text unchanged and the system prompt its inherited history
+ * was cached under stays byte-identical (roles-smoke pins both); a role whose
+ * tool never registered (no `spawn` provider, a row that did not mount) is not
+ * advertised. The date is left on for every child.
  *
  * SCOPED, NOT GLOBAL. `ctx.systemPrompt.section` registers into the CALLING
  * context's scope, the preset revision's standing layer, so each section
@@ -53,9 +58,9 @@
  * preset and never sees it. tests/bots-smoke.test.ts pins both halves on a real
  * boot.
  *
- * It masks nothing. `inject` names `systemPrompt` and never `tools`, so this
- * plugin neither adds nor removes a tool: the `role_<id>` tools come from the
- * sibling rows (bots-smoke S3 pins the roster).
+ * It masks nothing. `inject` names `tools` only to READ the registry's view of
+ * the assembling scope; this plugin never registers or restricts a tool: the
+ * `role_<id>` tools come from the sibling rows (bots-smoke S3 pins the roster).
  *
  * `interpolate: false` on both sections because their text is prose, not a
  * template: the dsh system prompt is a strict `{{...}}` template with no
@@ -64,7 +69,7 @@
  * precedes every centrally ordered policy and tool section.
  */
 export const name = "gravit";
-export const inject = ["systemPrompt"];
+export const inject = ["systemPrompt", "tools"];
 
 /** The date section. Its own name: it shadows nothing, and nothing shadows it. */
 export const TODAY_SECTION = "deployment:today";
@@ -129,12 +134,15 @@ export function resolveZone() {
   }
 }
 
-/** Whether the prompt being assembled is a delegated child's: the assembly
- *  context carries the agent, and a child's session header says
- *  `origin: "subagent"` (the same key dsh's own code tests). Total on any
- *  context: a missing link is "not delegated". */
-export function isDelegated(context) {
-  return context?.agent?.session?.header?.origin === "subagent";
+/** Whether the scope whose prompt is being assembled can call `name`: the
+ *  registry's view of that scope resolves it. The lookup is the one dsh-tool-web
+ *  and dsh-tool-subagent gate their own sections with -
+ *  `ctx.tools.get(name, context.scope) === void 0` - and `get` applies every
+ *  restriction on the scope's chain, so a tool a child's allow list removed reads
+ *  as absent. `assembleContextFor` sets `scope` to the agent; a context without
+ *  one reads the global view, where no preset-scoped tool lives. */
+export function canCall(ctx, context, name) {
+  return ctx.tools.get(name, context?.scope) !== undefined;
 }
 
 /** The role list: `""` for no roles, else {@link ROLES_INTRO} and one line per
@@ -160,7 +168,7 @@ export function apply(ctx, config) {
       name: ROLES_SECTION,
       order: ctx.systemPrompt.getSectionOrder("TOOL_SUBAGENT") + 1,
       interpolate: false,
-      text: (context) => isDelegated(context) ? "" : rolesText(config.roles),
+      text: (context) => rolesText(config.roles.filter((role) => canCall(ctx, context, role.tool))),
     }));
   }
 }
