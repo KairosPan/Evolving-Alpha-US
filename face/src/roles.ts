@@ -173,6 +173,8 @@ function readMeta(file: string): Pick<RoleFile, "name" | "description" | "allow"
   if (name === undefined) throw refusal(file, "name is missing or blank");
   const description = textOf(fields.description);
   if (description === undefined) throw refusal(file, "description is missing or blank");
+  /* The summary is one line: `rolesText` (plugins/gravit.js) emits one bullet per role. */
+  if (/[\r\n]/.test(description)) throw refusal(file, "description must be one line");
   if (description.length > SUMMARY_MAX) throw refusal(file, `description is ${description.length} characters; the limit is ${SUMMARY_MAX}`);
 
   const listed = fields.allow;

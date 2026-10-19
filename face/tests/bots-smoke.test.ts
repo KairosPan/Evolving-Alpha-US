@@ -14,9 +14,11 @@
  *     packages/preset/agent-preset-registry/src/index.ts:80-118), and
  *     plugins/bot.js re-expands on `tools/change`, so a tool registered after
  *     the declaration is admitted when the allow list names it.
- * S3: `gravit` composes the face's gravit plugin (the date section, no mask)
- *     and Gravit's sessions join it: their tool set is byte-identical to the
- *     host's global view, their prompt carries the date, and a bot's does not.
+ * S3: `gravit` is rendered from `roles/` (src/roles.ts): the face's gravit
+ *     plugin (the date section, the role summaries) and one `dsh-tool-subagent`
+ *     row per role, none of which masks a tool. Gravit's sessions join it:
+ *     their tool set is the host's global view plus the `role_*` tools, their
+ *     prompt carries the date, and a bot's does not (nor does it see a role tool).
  * Also: the roster lists a broken fixture with its reason and never `_template`;
  * a session created through the session controller with `agentPreset` carries
  * it on its header; and Gate 2 is tree-wide, refusing an order tool the bot's
@@ -118,12 +120,13 @@ test("bots smoke: roster, mask, persona, a default that masks nothing, the shipp
         renderPrompt(await ctx.systemPrompt.assemble(assembleContextFor(agent)));
       const names = (schemas: { name: string }[]) => schemas.map((s) => s.name).sort();
 
-      /* S3 - Gravit: a session naming no preset joins `gravit` and keeps the host's tools. */
+      /* S3 - Gravit: a session naming no preset joins `gravit` and keeps the host's tools, plus the role library's. */
       const k = await create({ cwd: home });
       assert.equal(k.agentPreset, "gravit");
       const gravit = agentOf(k.sessionId);
       assert.equal(gravit.session.header.agentPreset, "gravit");
-      assert.deepEqual(names(tools.schemas(gravit)), names(tools.schemas()), "the gravit plugin masks nothing");
+      assert.deepEqual(names(tools.schemas(gravit)), [...names(tools.schemas()), "role_backtester", "role_reviewer", "role_screener"].sort(),
+        "Gravit's tools are the host's plus the role library (spec §5.1)");
       /* Compared up to the persona's first `{{`, not its first LINE: line 1 ends
        * `... your working directory is {{cwd}}.` and renderPrompt substitutes it
        * (measured: the rendered text carries this session's cwd). The prefix is
@@ -137,6 +140,7 @@ test("bots smoke: roster, mask, persona, a default that masks nothing, the shipp
       const probe = agentOf(p.sessionId);
       assert.equal(probe.session.header.agentPreset, "probe");
       assert.deepEqual(names(tools.schemas(probe)), ["ask_user_question", "bash", "read"], "allow ∩ tree, unknown names dropped (S2)");
+      assert.equal(names(tools.schemas(probe)).some((n) => n.startsWith("role_")), false, "a bot never sees a role tool");
       const probePrompt = await promptOf(probe);
       assert.ok(probePrompt.includes("You are Probe, a test voice."), "the bot's persona shadows Gravit's (S1)");
       assert.equal(probePrompt.includes("You are Gravit"), false,
@@ -211,13 +215,13 @@ test("bots smoke: roster, mask, persona, a default that masks nothing, the shipp
       assert.equal(broken.ok, false);
       assert.match(broken.ok ? "" : broken.error.code, /agent-preset/);
 
-      /* The pre-rename id: an archived session names `kairos` and must join the host composition. */
+      /* The pre-rename id: an archived session names `kairos` and must join Gravit's composition. */
       assert.equal(roster.find((p) => p.id === "kairos")?.broken, undefined, "the legacy alias is listed and whole");
       const l = await create({ cwd: home, agentPreset: "kairos" });
       assert.equal(l.agentPreset, "kairos");
       const legacy = agentOf(l.sessionId);
       assert.equal(legacy.session.header.agentPreset, "kairos");
-      assert.deepEqual(names(tools.schemas(legacy)), names(tools.schemas()), "the alias adds and removes nothing");
+      assert.deepEqual(names(tools.schemas(legacy)), names(tools.schemas(gravit)), "the alias declares Gravit's rows: the host's tools plus the role library's, nothing more or less");
       assert.ok((await promptOf(legacy)).includes(readPersona(PERSONA_PATH).split("{{")[0]), "the alias is told it is Gravit");
     } finally {
       await dispose();

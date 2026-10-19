@@ -34,13 +34,15 @@
  *   own words (definition.ts:18-23; index.ts:106-117).
  *
  * `definitionFor` is the pure half: boot's static `preset-gravit` overlay row
- * is `definitionFor(botsRoot, DEFAULT_PRESET)`, so `bots/gravit` stays
- * authoritative for the default. `declareBots` is the live half: every other
- * bot is declared from the booted root context once the tree has settled,
- * because activation is EAGER (NEW agent-preset-registry/src/index.ts:80-118)
- * and a row-time declaration would mount `plugins/bot.js` before the host's
- * late tools exist. It re-declares a bot when the face saves its files -
- * 0.1.1 re-read the directory on every mount; 0.2.0 never re-reads.
+ * is `definitionFor(botsRoot, DEFAULT_PRESET, rows)` with the rows rendered
+ * from `roles/` in memory (src/roles.ts `gravitRows`), so `bots/gravit` gives
+ * the default its display metadata only - its `agent.cordis.yml` is a mirror
+ * of that render, for readers, and is not read. `declareBots` is the live
+ * half: every other bot is declared from the booted root context once the
+ * tree has settled, because activation is EAGER (NEW agent-preset-registry/
+ * src/index.ts:80-118) and a row-time declaration would mount `plugins/bot.js`
+ * before the host's late tools exist. It re-declares a bot when the face saves
+ * its files - 0.1.1 re-read the directory on every mount; 0.2.0 never re-reads.
  * @module
  */
 import { readFileSync } from "node:fs";
@@ -147,19 +149,11 @@ function rebaseRow(row: unknown, dir: string): PresetRow {
   return next as PresetRow;
 }
 
-/**
- * Build the dsh preset definition for `bots/<id>/`.
- * @param botsRoot - the `bots/` directory holding `<id>/`.
- * @param id - the preset id, which is the directory name.
- * @returns the definition to declare: rebased rows, published display metadata.
- * @throws with the composition file's absolute path when it is missing,
- * unreadable or not valid YAML - the caller records the reason and leaves the
- * bot undeclared (0.1.1 listed such a bot as broken, OLD discovery.ts:86-105,
- * 150-156). A readable composition that is not a list does NOT throw.
- */
-export function definitionFor(botsRoot: string, id: string): PresetDefinition {
-  const dir = join(botsRoot, id);
-  const compositionPath = join(dir, COMPOSITION_FILE);
+/** `bots/<id>/agent.cordis.yml` parsed in the Loader's own dialect.
+ * @throws with the file's absolute path when it is missing, unreadable or not
+ * valid YAML. A readable file that is not a list does NOT throw: the caller
+ * hands it over as it parsed. */
+function readComposition(compositionPath: string): unknown {
   let source: string;
   try {
     source = readFileSync(compositionPath, "utf8");
@@ -172,21 +166,41 @@ export function definitionFor(botsRoot: string, id: string): PresetDefinition {
       { cause: error },
     );
   }
-  let rows: unknown;
   try {
-    rows = load(source, { schema: entryListSchema });
+    return load(source, { schema: entryListSchema });
   } catch (error) {
     /* First line only: js-yaml appends a multi-line code frame, and this reason
      * is shown on a roster card (OLD discovery.ts:96-104 trimmed it the same way). */
     throw new Error(`${compositionPath} is not valid YAML: ${messageOf(error).replace(/\n[\s\S]*$/, "")}`, { cause: error });
   }
+}
+
+/**
+ * Build the dsh preset definition for `bots/<id>/`.
+ * @param botsRoot - the `bots/` directory holding `<id>/`.
+ * @param id - the preset id, which is the directory name.
+ * @param rows - the composition, when the caller holds it in memory instead of
+ * on disk: boot renders the default's from `roles/` (src/roles.ts `gravitRows`).
+ * `agent.cordis.yml` is then NOT read - its absence is no error - and the rows
+ * are rebased exactly as the file's would be. Absent, the file is the
+ * composition (every other bot).
+ * @returns the definition to declare: rebased rows, published display metadata.
+ * @throws without `rows`, with the composition file's absolute path when it is
+ * missing, unreadable or not valid YAML - the caller records the reason and
+ * leaves the bot undeclared (0.1.1 listed such a bot as broken, OLD
+ * discovery.ts:86-105, 150-156). A readable composition that is not a list does
+ * NOT throw.
+ */
+export function definitionFor(botsRoot: string, id: string, rows?: readonly unknown[]): PresetDefinition {
+  const dir = join(botsRoot, id);
+  const composition: unknown = rows ?? readComposition(join(dir, COMPOSITION_FILE));
   return {
     id,
     ...readMetadata(join(dir, METADATA_FILE)),
     /* A non-list is handed over as it parsed: the registry refuses it with
      * "the composition must be a top-level list of plugin rows" and lists the
      * preset broken, which is the reason the operator should read. */
-    plugins: Array.isArray(rows) ? rows.map((row) => rebaseRow(row, dir)) : (rows as PresetDefinition["plugins"]),
+    plugins: Array.isArray(composition) ? composition.map((row) => rebaseRow(row, dir)) : (composition as PresetDefinition["plugins"]),
   };
 }
 

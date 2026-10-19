@@ -4,7 +4,6 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { composeEntries } from "@deepseek-ai/dsh-app-boot";
 import { setupFaceProfile } from "../src/setup.ts";
 import { composeFace } from "../src/boot.ts";
@@ -14,7 +13,8 @@ import { AGENT_INSTRUCTIONS_ROW_ID, INSTRUCTIONS_CONFIG, instructionsPatch } fro
 import { facePolicyPatches } from "../src/policy.ts";
 import { definitionFor } from "../src/bot-presets.ts";
 import { LEGACY_PRESET_DESCRIPTION } from "../src/overlay.ts";
-import { GRAVIT_PLUGIN_ABS, makeBotsRoot } from "./bots-fixture.ts";
+import { GRAVIT_PLUGIN_URL, gravitRows, readRoles } from "../src/roles.ts";
+import { makeBotsRoot, makeRolesRoot } from "./bots-fixture.ts";
 
 /** Every row id {@link faceOverlay} owns, as the composed tree should show them. */
 const OVERLAY_ROW_IDS = [
@@ -360,40 +360,43 @@ test("composeFace returns the loaded profile the runtime resolution needs", () =
   assert.equal(join(profile.dir, "cordis.yml"), rootConfig);
 });
 
-/* The static `preset-gravit` row IS `bots/gravit` (src/bot-presets.ts
- * `definitionFor`, PLAN S6): dsh 0.2 reads no bot directory itself, so the
- * default's display metadata and composition must come from the files, and a
- * regression back to a hard-coded literal - or to a silently empty default -
- * fails here. The fixture's preset.yml deliberately differs from the repo's. */
-test("composeFace takes the static preset-gravit row from bots/gravit", async () => {
+/* The static `preset-gravit` row is RENDERED from `roles/` in memory at compose
+ * time (src/boot.ts; src/roles.ts `gravitRows`): the gravit plugin row, named
+ * by an absolute `file:` URL, then one `dsh-tool-subagent` row per role. dsh 0.2
+ * reads no bot directory itself, and `bots/gravit` supplies only the display
+ * metadata - its `agent.cordis.yml` is a mirror for readers that roles.test.ts
+ * holds to the render. A regression back to reading that file, to a hard-coded
+ * literal or to a silently empty default fails here. The `preset-kairos` alias
+ * carries the very same definition under the id archived sessions persist. */
+test("composeFace builds preset-gravit from roles/ in memory: the gravit row by absolute URL, one spawn row per role", async () => {
   const home = freshHome();
   const bots = await makeBotsRoot();
-  await writeFile(join(bots, "gravit", "preset.yml"), "name: Gravit Fixture\ndescription: the default, from the fixture\n");
-  const { patches } = composeFace({ profileName: "face", port: 3090, dshHome: home, botsRoot: bots });
-  const row = composeEntries([patches]).find((entry) => entry.id === "preset-gravit");
-  assert.equal(row?.name, "@deepseek-ai/dsh-agent-preset");
-  assert.deepEqual(row?.config, definitionFor(bots, "gravit"));
-  /* The fixture's gravit composes the one gravit-plugin row, by absolute path
-   * (a temp root rebases the shipped relative one to nowhere): the face rebases
-   * it to a `file:` URL, and the alias below carries the very same row. */
-  const gravitRows = [{ id: "gravit", name: pathToFileURL(GRAVIT_PLUGIN_ABS).href, config: {} }];
-  assert.deepEqual(row?.config, { id: "gravit", name: "Gravit Fixture", description: "the default, from the fixture", plugins: gravitRows });
+  const rolesRoot = await makeRolesRoot();
+  try {
+    const { patches } = composeFace({ profileName: "face", port: 3090, dshHome: home, botsRoot: bots, rolesRoot });
+    const row = composeEntries([patches]).find((entry) => entry.id === "preset-gravit");
+    const expected = definitionFor(bots, "gravit", gravitRows(readRoles(rolesRoot), { plugin: GRAVIT_PLUGIN_URL }));
+    assert.deepEqual(row?.config, expected);
+    const plugins = (row?.config as unknown as { plugins: Array<{ id: string; name: string }> }).plugins;
+    assert.deepEqual(plugins.map((p) => p.id), ["gravit", "role-probe"]);
+    assert.equal(plugins[0].name, GRAVIT_PLUGIN_URL);
 
-  const legacy = composeEntries([patches]).find((entry) => entry.id === "preset-kairos");
-  assert.deepEqual(legacy?.config, { id: "kairos", name: "Gravit Fixture", description: LEGACY_PRESET_DESCRIPTION, plugins: gravitRows });
+    const legacy = composeEntries([patches]).find((entry) => entry.id === "preset-kairos");
+    assert.deepEqual(legacy?.config, { ...expected, id: "kairos", description: LEGACY_PRESET_DESCRIPTION });
+  } finally { await rm(rolesRoot, { recursive: true, force: true }); }
 });
 
-/* 0.1.1's roster check refused a boot whose default preset could not be read;
- * at 0.2 the compose does, naming the file - the registry would otherwise mount
- * a default the operator never wrote. */
-test("composeFace refuses a default preset whose composition is missing", async () => {
+/* Spec §5.1, fail loud: a role the compose cannot read refuses it, with the
+ * file's path - the registry would otherwise mount a default the operator never
+ * wrote. (The default's mirror file is not read at all, so its absence or its
+ * drift is no longer a compose-time matter.) */
+test("composeFace refuses a roles root with a bad role, naming the file", async () => {
   const home = freshHome();
-  const bots = await makeBotsRoot();
-  await rm(join(bots, "gravit", "agent.cordis.yml"));
-  assert.throws(
-    () => composeFace({ profileName: "face", port: 3090, dshHome: home, botsRoot: bots }),
-    /gravit\/agent\.cordis\.yml is missing/,
-  );
+  const rolesRoot = await makeRolesRoot();
+  try {
+    await writeFile(join(rolesRoot, "probe", "ROLE.md"), "You are {{nobody}}.\n");
+    assert.throws(() => composeFace({ profileName: "face", port: 3090, dshHome: home, rolesRoot }), (e: Error) => e.message.includes(join(rolesRoot, "probe", "ROLE.md")));
+  } finally { await rm(rolesRoot, { recursive: true, force: true }); }
 });
 
 /* Spec §4.1 L3: dsh-base's default candidates are AGENTS.md and CLAUDE.md; the

@@ -1,20 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { ROLES_ROOT, ROLE_TEMPLATE, readRoles, toolNameFor } from "../src/roles.ts";
-
-/** A throwaway roles root with one valid role; the caller breaks it. */
-async function makeRolesRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "face-roles-"));
-  await mkdir(join(root, ROLE_TEMPLATE));
-  await writeFile(join(root, ROLE_TEMPLATE, "ROLE.md"), "You are <role name>.\n");
-  await mkdir(join(root, "probe"));
-  await writeFile(join(root, "probe", "ROLE.md"), "You are the probe, a test role.\n");
-  await writeFile(join(root, "probe", "role.yml"), "name: Probe\ndescription: a test role\nallow:\n  - read\n  - mcp__alpaca-kit__earnings\n");
-  return root;
-}
+import { ROLES_ROOT, readRoles, toolNameFor } from "../src/roles.ts";
+import { makeRolesRoot } from "./bots-fixture.ts";
 
 const FORBIDDEN = new Set(["ask_user_question", "web_search", "web_fetch", "subagent", "subagent_fork", "send_message", "interrupt_agent",
   "list_agents", "workflow", "ralph", "create_goal", "get_goal", "update_goal", "todo_write", "job_output", "job_list", "job_kill",
@@ -90,6 +80,19 @@ test("gravitRows: the gravit row carries the summaries; one one-shot spawn row p
   }
 });
 
+test("gravitRows: a role.yml model becomes the row's agentOptions, provider and model split; without one the key is absent", async () => {
+  const root = await makeRolesRoot();
+  try {
+    const rowOf = () => (gravitRows(readRoles(root), { plugin: GRAVIT_PLUGIN_URL }) as Array<{ id: string; config: Record<string, unknown> }>)
+      .find((r) => r.id === roleRowId("probe"))!;
+    assert.equal("agentOptions" in rowOf().config, false, "a role.yml with no model has no agentOptions");
+    await writeFile(join(root, "probe", "role.yml"), "name: Probe\ndescription: a test role\nallow:\n  - read\nmodel: deepseek-official/deepseek-v4-flash\n");
+    const row = rowOf();
+    assert.deepEqual(row.config.agentOptions, { provider: "deepseek-official", model: "deepseek-v4-flash" });
+    assert.deepEqual(Object.keys(row.config).sort(), ["agentOptions", "backgroundMode", "persona", "provider", "toolFilter", "toolName"]);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("the committed mirror bots/gravit/agent.cordis.yml is exactly the render of roles/ (drift fails here)", () => {
   const mirror = readFileSync(new URL("../../bots/gravit/agent.cordis.yml", import.meta.url), "utf8");
   assert.equal(mirror, renderGravitComposition(readRoles(ROLES_ROOT), {}), "run: cd face && npm run render:roles");
@@ -113,6 +116,7 @@ const REFUSED: Array<{ label: string; files: Record<string, string | null>; read
   { label: "a blank name", files: { "probe/role.yml": "name: '  '\ndescription: x\nallow: [read]\n" }, path: "probe/role.yml", reason: /name is missing or blank/ },
   { label: "a blank description", files: { "probe/role.yml": "name: Probe\ndescription: '  '\nallow: [read]\n" }, path: "probe/role.yml", reason: /description is missing or blank/ },
   { label: "a description of 301 characters", files: { "probe/role.yml": `name: Probe\ndescription: ${"d".repeat(301)}\nallow: [read]\n` }, path: "probe/role.yml", reason: /description is 301 characters; the limit is 300/ },
+  { label: "a description on two lines", files: { "probe/role.yml": "name: Probe\ndescription: |\n  first line\n  second line\nallow: [read]\n" }, path: "probe/role.yml", reason: /description must be one line/ },
   { label: "an allow entry that is not a string", files: { "probe/role.yml": "name: Probe\ndescription: x\nallow: [read, 5]\n" }, path: "probe/role.yml", reason: /allow entry 2 is not a string/ },
   { label: "an allow entry outside the tool-name grammar", files: { "probe/role.yml": "name: Probe\ndescription: x\nallow: ['a b']\n" }, path: "probe/role.yml", reason: /allow entry "a b" is not a tool name/ },
   { label: "an allow entry no role carries", files: { "probe/role.yml": "name: Probe\ndescription: x\nallow: [read, ask_user_question]\n" }, path: "probe/role.yml", reason: /allow entry "ask_user_question": a role never carries/ },

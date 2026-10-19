@@ -20,7 +20,7 @@ import { Context } from "@deepseek-ai/cordis";
 import { entryListProblem, type PresetDefinition } from "@deepseek-ai/dsh-agent-preset-registry";
 import { declareBots, definitionFor } from "../src/bot-presets.ts";
 import { BOT_PLUGIN_RELATIVE, DEFAULT_ALLOW, createBot, isBotId, renderComposition, updateSoul } from "../src/bots.ts";
-import { ROLES_ROOT, gravitRows, readRoles } from "../src/roles.ts";
+import { GRAVIT_PLUGIN_URL, ROLES_ROOT, gravitRows, readRoles } from "../src/roles.ts";
 import { GRAVIT_PLUGIN_ABS, makeBotsRoot, PLUGIN_ABS, REPO } from "./bots-fixture.ts";
 
 const SKILLS_PLUGIN = "@deepseek-ai/dsh-skill-filesystem";
@@ -107,12 +107,36 @@ test("every shipped bot's plugin row lands on the real face/plugins/bot.js, and 
   assert.equal(typeof gravit.name, "string");
 });
 
-test("the gravit definition is exactly its id, published metadata and the one gravit plugin row", async () => {
+test("the gravit definition is exactly its id, published metadata and the rows it is given (a file: URL passes through)", async () => {
   const root = await makeBotsRoot();
-  assert.deepEqual(definitionFor(root, "gravit"), {
+  assert.deepEqual(definitionFor(root, "gravit", [{ id: "gravit", name: GRAVIT_PLUGIN_URL, config: {} }]), {
     id: "gravit", name: "Gravit", description: "the principal agent",
-    plugins: [{ id: "gravit", name: pathToFileURL(GRAVIT_PLUGIN_ABS).href, config: {} }],
+    plugins: [{ id: "gravit", name: GRAVIT_PLUGIN_URL, config: {} }],
   });
+});
+
+/* The default is rendered from `roles/` in memory (boot.ts): with `rows` the
+ * composition file is not read, so the mirror's absence is no error - and the
+ * rows are rebased exactly as the file's would be. Without `rows`, a missing
+ * file still throws (the bots' case, above). */
+test("definitionFor with rows never reads the composition file, and rebases the rows as it would the file's", async () => {
+  const root = await makeBotsRoot();
+  await rm(join(root, "gravit", "agent.cordis.yml"));
+  assert.throws(() => definitionFor(root, "gravit"), (error: Error) => /agent\.cordis\.yml is missing/.test(error.message));
+  const rows = [
+    { id: "gravit", name: GRAVIT_PLUGIN_URL, config: {} },
+    { id: "relative", name: "../../face/plugins/gravit.js", config: {} },
+    { id: "skills", name: SKILLS_PLUGIN, config: { customSkillDirs: ["./skills"] } },
+  ];
+  assert.deepEqual(definitionFor(root, "gravit", rows), {
+    id: "gravit", name: "Gravit", description: "the principal agent",
+    plugins: [
+      { id: "gravit", name: GRAVIT_PLUGIN_URL, config: {} },
+      { id: "relative", name: pathToFileURL(resolve(root, "gravit", "../../face/plugins/gravit.js")).href, config: {} },
+      { id: "skills", name: SKILLS_PLUGIN, config: { customSkillDirs: [join(root, "gravit", "skills")] } },
+    ],
+  });
+  assert.deepEqual(definitionFor(root, "gravit", []).plugins, [], "an empty list is a composition too, not a reason to read the file");
 });
 
 test("preset.yml is read as 0.1.1's dsh read it: trimmed, blank omitted, order kept, model never published", async () => {

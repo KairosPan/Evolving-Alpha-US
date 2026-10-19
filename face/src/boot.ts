@@ -121,6 +121,7 @@ import { provideCmdline, type AppReady } from "@deepseek-ai/dsh-cmdline";
 import type { Config as SystemPromptConfig } from "@deepseek-ai/dsh-system-prompt";
 import { BOTS_ROOT, DEFAULT_PRESET, LEGACY_PRESET, SYSTEM_PROMPT_ROW_ID, faceOverlay } from "./overlay.ts";
 import { declareBots, definitionFor, type BotPresets } from "./bot-presets.ts";
+import { GRAVIT_PLUGIN_URL, ROLES_ROOT, gravitRows, readRoles } from "./roles.ts";
 import { PERSONA_PATH, readPersona } from "./persona.ts";
 import { AGENT_INSTRUCTIONS_ROW_ID, instructionsPatch } from "./instructions.ts";
 import { aksharePatches } from "./akshare.ts";
@@ -209,6 +210,10 @@ export interface FaceBootOptions {
   dshHome?: string;
   /** The bots directory (`bots/`); tests point it at a fixture. Defaults to the repository's. */
   botsRoot?: string;
+  /** The role library (`roles/`); tests point it at a fixture. Defaults to the repository's.
+   * {@link composeFace} reads it and renders Gravit's default preset from it, so a role it
+   * cannot read refuses the compose with the file's path (spec §5.1). */
+  rolesRoot?: string;
   /** Leave the gateway's readiness uncommitted: the caller commits it with
    * {@link BootedFace.commitReady} once its OWN routes are mounted. `main.ts`
    * sets it, because it registers `/`, the `/data` routes, the room engine and
@@ -267,7 +272,8 @@ function composedRowIds(layers: readonly FacePatchList[]): Set<string> {
  * outranks the per-profile one), the caller's in-memory
  * {@link FaceBootOptions.extraPatches} (usually none), the telemetry switch,
  * the hmr switch, Gravit's persona, the instructions patch (src/instructions.ts),
- * then the face's host rows last.
+ * then the face's host rows last - among them the default preset, rendered
+ * here from `roles/` (src/roles.ts) rather than read from `bots/gravit`.
  *
  * Pure with respect to the environment — the home is threaded explicitly into
  * every dsh-app-boot call rather than materialized into `$DSH_HOME` — but NOT
@@ -277,8 +283,9 @@ function composedRowIds(layers: readonly FacePatchList[]): Set<string> {
  * @param opts - profile name, webserver port, optional harness home.
  * @returns the composed patch stack, the absolute root config path to boot,
  * and the loaded profile (the runtime resolution needs it).
- * @throws when the profile does not exist, a bundle was skipped, or a
- * patch file cannot load.
+ * @throws when the profile does not exist, a bundle was skipped, a
+ * patch file cannot load, or a role under `roles/` is malformed (the message
+ * opens with that file's absolute path).
  */
 export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; rootConfig: string; profile: Profile } {
   const home = resolveDshHome(opts.dshHome);
@@ -388,17 +395,27 @@ export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; ro
   if (rows.has(AGENT_INSTRUCTIONS_ROW_ID)) {
     patches.push(instructionsPatch(below.find((row) => row.id === AGENT_INSTRUCTIONS_ROW_ID)?.config));
   }
-  /* The static `preset-gravit` row IS `bots/gravit` (src/bot-presets.ts
-   * `definitionFor`): its preset.yml name/description and its one row, the
-   * face's `gravit.js` (the date section) - no mask, no shadowed persona.
-   * Static, not declared after boot like the other bots, because the default
-   * must exist before the first `session/create` resolves it (NEW
-   * packages/api/session-controller/src/agent.ts:380-397). `definitionFor`
-   * throws with the file path when bots/gravit/agent.cordis.yml is missing or
-   * not YAML, which refuses the compose as 0.1.1's roster check refused the
-   * boot. `model` stays face-only - a definition carries no route (NEW
+  /* The static `preset-gravit` row is RENDERED from `roles/` here, in memory
+   * (src/roles.ts `gravitRows`): the face's `gravit.js` row - the date section
+   * and the role summaries, named by an absolute `file:` URL - then one
+   * `@deepseek-ai/dsh-tool-subagent` row per role, each registering a `role_<id>`
+   * tool. None of them masks a host tool, so Gravit's roster is the host's plus
+   * the role tools; no persona is shadowed. `bots/gravit` supplies only the
+   * display metadata (`definitionFor`'s preset.yml read): its
+   * `agent.cordis.yml` is a MIRROR of this render, for readers, held to it by
+   * tests/roles.test.ts and never read here. A role `readRoles` cannot read
+   * throws with the path of the file at fault, which refuses the compose - the
+   * fail-loud contract of spec §5.1, as 0.1.1's roster check refused the boot;
+   * a role row that fails to mount lists the preset `broken`, which the roster
+   * audit in `bootFace` refuses. Static, not declared after boot like the other
+   * bots, because the default must exist before the first `session/create`
+   * resolves it (NEW packages/api/session-controller/src/agent.ts:380-397); the
+   * pre-rename alias `faceOverlay` declares beside it carries this very
+   * definition. `model` stays face-only - a definition carries no route (NEW
    * packages/preset/agent-preset-registry/src/definition.ts:5-11). */
-  patches.push(...faceOverlay(opts.port, definitionFor(opts.botsRoot ?? BOTS_ROOT, DEFAULT_PRESET)));
+  const roles = readRoles(opts.rolesRoot ?? ROLES_ROOT);
+  const gravit = definitionFor(opts.botsRoot ?? BOTS_ROOT, DEFAULT_PRESET, gravitRows(roles, { plugin: GRAVIT_PLUGIN_URL }));
+  patches.push(...faceOverlay(opts.port, gravit));
   return { patches, rootConfig, profile };
 }
 
