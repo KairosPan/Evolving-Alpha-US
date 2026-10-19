@@ -207,9 +207,11 @@ configless = the blocking `legacy` mode (`smoke.test.ts`); C20 per-role `dsh-too
 inside the default preset: config keys `provider` / `toolName` / `backgroundMode` / `persona` /
 `toolFilter` (+ `agentOptions`), the row's `persona` as the child's `deployment:persona-prefix`,
 `toolFilter` as `tools.restrict({allow})` of exact names in the child's creation window
-(`roles.test.ts`, `roles-smoke`); C21 the goal loop `cycle.md` rests on: `create_goal` /
-`update_goal` parameters, the direct-human authority on `resume`,
-`blockedAfterConsecutiveRounds`, the driver's `round-limit` (`cycle.test.ts`, the cycle drill).
+(`roles.test.ts`, `roles-smoke`); C21 the goal loop `cycle.md` rests on: `create_goal`'s
+`max_goal_rounds`, `update_goal`'s `action: resume` (accepted only in a direct human turn) and
+`blocked_reason`, `blockedAfterConsecutiveRounds`, the driver's `round-limit`. `cycle.test.ts`
+pins only that `cycle.md` states them; the goal behaviour is the cycle drill's, and the
+re-check at a pin is §7.3's.
 
 **D · gates and approvals.** D1 the prepended `tools/pre-execute` ask (`order-gate.test.ts`,
 `orders.test.ts`); D2 the monotonic `tools.guard` reading the live description
@@ -337,7 +339,7 @@ D9 by id).
 | D15 | telemetry opt-in is one operator row; the env switch still wins | the switch order in `composeFace` (B4) |
 | D16 | a cold session opens page-only | `session/follow` or `session/page` activation semantics (E6–E7) |
 | D18 | the spill budget stays dsh-base's `maxInlineTokens: 12500` | the row's key or default moves (B34) |
-| B8 (design spec) | the cycle caps are `cycle.md`'s, not a dsh config: 24 rounds is the `max_goal_rounds` the contract passes to `create_goal`, 12 role calls a count Gravit keeps in the journal (charter D16, `DEVELOPMENT.md` R29) | dsh adds a per-session child total or a goal-level cap setting; the first overrun |
+| spec B8 | the cycle caps are `cycle.md`'s, not a dsh config: 24 rounds is the `max_goal_rounds` the contract passes to `create_goal`, 12 role calls a count Gravit keeps in the journal (charter D16, `DEVELOPMENT.md` R29) | dsh adds a per-session child total or a goal-level cap setting; the first overrun |
 
 Decisions the 2026-10-15 agent redesign adds land here with their plans (§7.3).
 

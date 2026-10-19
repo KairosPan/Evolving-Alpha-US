@@ -190,7 +190,7 @@ naming the cause, when:
   broken — sessions created before the rename would not open;
 - `../dsh/profile/persona.md` is not a valid strict template,
   `../dsh/profile/cycle.md` is missing, unreadable, empty or over 3,000 bytes
-  ("The profile" above), or `../roles/` is missing or holds a role the face
+  ("The profile" below), or `../roles/` is missing or holds a role the face
   cannot read ("Roles" below) — all caught at compose time, before anything
   mounts; a role's or the cycle's message opens with the absolute path of the
   file or directory at fault, the persona's with `gravit-face: ` and then the
@@ -966,11 +966,12 @@ their only writer.
 - **`bots/gravit` is the default** every session joins when it names none, and
   its composition is not read from the directory: the face RENDERS it from
   `roles/` at compose time ("Roles" below) — the face's `plugins/gravit.js` row
-  (the `deployment:today` section and the role list, scoped to Gravit's
-  sessions and never a bot's), then one `@deepseek-ai/dsh-tool-subagent` row
-  per role. None of them masks a host tool, so Gravit's own roster is the
-  host's flat roster plus the `role_<id>` tools, and a bot's carries none
-  (`bots-smoke.test.ts` pins both, and the date in Gravit's prompt alone).
+  (the `deployment:today` section, the role list and the cycle contract,
+  scoped to Gravit's sessions and never a bot's), then one
+  `@deepseek-ai/dsh-tool-subagent` row per role. None of them masks a host
+  tool, so Gravit's own roster is the host's flat roster plus the `role_<id>`
+  tools, and a bot's carries none (`bots-smoke.test.ts` pins both, and the
+  date and the cycle contract in Gravit's prompt alone).
   `bots/gravit/preset.yml` still supplies its display metadata; its
   `agent.cordis.yml` is the generated mirror of that render, for readers. The
   default is the overlay's static `preset-gravit` row, built by `definitionFor`
@@ -1751,10 +1752,13 @@ together — every pin whose track moved — then:
    looking wrong. `snapshotEvents()`, which the guard and the room engine read
    now, is deprecated upstream for new callers — a later pin that drops it
    fails them closed, loudly, and this step says so.
-8. Run the drills below — Gate 2, ask-user, transport, bots, room — on a face
-   booted against a SCRATCH `DSH_HOME` first.
+8. Run the drills below — Gate 2, ask-user, transport, bots, room, roles — on a
+   face booted against a SCRATCH `DSH_HOME` first (the role drill on a COPY of
+   the home with the operator's MCP rows, as it says).
 
-Only then trust it — and only then point it at the real harness home.
+Only then trust it — and only then point it at the real harness home, where the
+cycle drill runs last: it needs the real keys and the 2yr bed, and it writes a
+strategy directory.
 
 ### The harness home across the upgrade
 
@@ -2444,17 +2448,32 @@ scratch home: the drill writes a strategy directory and the operator judges the 
    falsification terms, bed and window, what to measure — and no file written before it.
 2. Answer the batch. Expected: Gravit calls `create_goal` (the chat shows the goal), writes
    THESIS.md and `status: researching`, then rounds follow by themselves: the chat shows a round
-   header per round, `role_screener` and `role_backtester` calls with their reports relayed,
-   journal entries with artifact paths, `role_reviewer` before the verdict. No card for the
-   operator; no question after step 1 unless the bed cannot cover the window asked.
+   header per round — the client's collapsed `context · goal` row, whose summary reads
+   `<goal_round>` and whose body carries the objective and `Round: n/24` — `role_screener` and
+   `role_backtester` calls with their reports relayed, journal entries with artifact paths,
+   `role_reviewer` before the verdict. No card for the operator; no question after step 1
+   unless the bed cannot cover the window asked.
 3. The verdict: `status.yaml` reads `validated` or `retired` with the terms cited, or
    `researching` with a blocked goal whose reason starts with `child-limit`, `bed-window`,
    `data-missing` or `needs-operator`; `one_line`, `next`, `numbers` filled; the journal's last
-   entry is the verdict with the usage line; the goal is complete (the log's last `goal/change`).
+   entry is the verdict with the usage line; the goal is complete, or blocked with the reason's
+   first word (or the code `round-limit` when the 24 rounds are spent). `/goal` in the composer
+   prints it on the status line — `Status`, the `Blocker` code and reason, `Rounds: n/24` — and
+   the record is the log's last `goal/change`, read with the ask-user drill's step 7 recipe
+   filtered on that type.
 4. Restart: stop the face mid-cycle on a second drill channel, start it again, send "continue".
    Expected: Gravit calls `update_goal` with `resume` and the rounds continue; the goal did not
    continue on its own after the restart.
-5. Record: rounds used, role calls (count the child history), wall time, the session's usage,
-   and the first-request numbers for Gravit's session and for one child, read from
-   `~/.dsh/storages/session_projcache/sessions/<id>.json` (`contextBreakdown`), into
-   `DEVELOPMENT.md` §4.3 and §7.4 with the date.
+5. Record: rounds used (`/goal` prints `Rounds: n/24`), role calls (count the child history),
+   wall time, the session's usage (the agent panel's "session usage" card), and the
+   first-request numbers for Gravit's session and for one child, read from
+   `~/.dsh/storages/session_projcache/sessions/<id>.json` (`contextBreakdown`; `<id>` is the
+   session's id, the name of its directory under `$DSH_HOME/sessions/<project-slug>/` — the
+   newest by mtime, a child's beside it), into `DEVELOPMENT.md` §4.3 and §7.4 with the date.
+
+**PASS criteria are observations.** Record the run in `DEVELOPMENT.md` §4.3 and §7.4 with the
+date and the pin.
+
+**Not yet run live.** The automated half passes at `4d93481` (`cycle.test.ts`, and the cycle
+assertions of `bots-smoke` and `roles-smoke` under `FACE_SMOKE=1 npm test`); steps 1–5 are the
+operator's.

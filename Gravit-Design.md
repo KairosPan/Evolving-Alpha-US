@@ -2,7 +2,9 @@
 
 **Status:** living charter, written 2026-08-30; revised through 2026-09-09 for bots and rooms;
 revised 2026-09-11 for bot settings, discussion evidence, journal context and temporary
-subagents; §4, §5 and §7.3 pointers re-read 2026-09-30 for the dsh 0.2.0-rc.2 re-host ·
+subagents; §4, §5 and §7.3 pointers re-read 2026-09-30 for the dsh 0.2.0-rc.2 re-host; revised
+2026-10-18..19 for the role library and the research cycle (§1, §3, §4, §5, §7.2, §8, §9; D13
+now names `GRAVIT.md`; D16 added) ·
 **Owner:** the operator ·
 **Authority:** this charter carries intent and principles; mechanism lives in `DEVELOPMENT.md`,
 `face/README.md` (the current face contracts and drills), and code. On a question of intent, the charter
@@ -179,7 +181,7 @@ solved would be worse than carrying them.
 | D13 | Gravit's sessions and delegated tasks can work at the repository root, which includes `bots/`; their prohibition on editing bot files, including journals, is carried by `GRAVIT.md` and review, not by the sandbox | single operator; every edit reviewed; git is the ledger; a bot's own home-journal writes follow §4 | the first unauthorized edit under `bots/` |
 | D14 | Structured room evidence, child-task results and role reports have no independent verification or result-acceptance mechanism; passing runtime drills does not establish better research | originals, request snapshots and task histories remain reviewable; Gravit checks results and the operator judges them | before claiming a research-quality gain or reducing review on the strength of these features |
 | D15 | Bot journal context is a bounded read of historical notes; freshness, conflicts and note selection still depend on manual maintenance | each request records what it consumed and exposes missing or truncated notes | when stale, conflicting or omitted notes materially affect a conclusion |
-| D16 | The per-cycle role-call cap (12) is a count Gravit keeps in the journal, not a threshold the harness enforces (Rule 1) | the round cap is enforced by the goal, every call is in the child history, and the operator reads the journal | the first overrun |
+| D16 | The per-cycle role-call cap (12) is a count Gravit keeps in the journal, not a threshold the harness enforces (Rule 1) | the round cap is enforced by the goal (the 24 is Gravit's argument to create_goal, as cycle.md instructs; dsh's own default is 256), every call is in the child history, and the operator reads the journal | the first overrun |
 
 ## 6. Rules carried forward
 

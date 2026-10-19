@@ -578,9 +578,10 @@ is a strict template with no escape.
 State on 2026-09-30: eight directories are tracked. `bots/gravit` is the default preset every
 session that names no preset joins; since the role library its composition is rendered from
 `roles/` at compose time (§3.8): the `gravit` row (the face's `gravit.js`, whose
-`deployment:today` and `gravit:roles` sections are scoped to Gravit's sessions), then one
-`dsh-tool-subagent` row per role. It masks no host tool, so Gravit's tools are the host's plus
-the `role_<id>` tools, and its `agent.cordis.yml` is the generated mirror of that render.
+`deployment:today`, `gravit:roles` and `gravit:cycle` sections are scoped to Gravit's
+sessions), then one `dsh-tool-subagent` row per role. It masks no host tool, so Gravit's tools
+are the host's plus the `role_<id>` tools, and its `agent.cordis.yml` is the generated mirror of
+that render.
 `bots/_template` is the copy source, never declared and refused as an id.
 `bots/drill-bull/` (看多派) and `bots/drill-bear/` (看空派) are the room drill's two voices, kept
 as tracked fixtures with their channel `strategies/room-drill`; `news-scout` and the AQR room's
@@ -1003,8 +1004,9 @@ context, gated like the roles list (§3.8): the contract when the assembling sco
 `create_goal` (`canCall`), `''` otherwise, which dsh drops. Gravit's sessions resolve
 `create_goal`; a `subagent_fork` child, restricted by nothing, does too and reads the identical
 text, so the prefix its inherited history was cached under stays byte for byte; a role child's
-allow list can never name a goal tool (the never-list, §3.8), so it is told nothing of a goal it
-could not open.
+allow list can never name a goal tool (the never-list, §3.8), so the face's contract is withheld
+from it — dsh's own global `tool:goal` paragraph still reaches it, as the other generic
+tool-policy paragraphs do (§3.8).
 
 The file is the only place that tells Gravit how to run a cycle: Step 0, one batched
 `ask_user_question` before any code unless the brief already answers it; `create_goal` with
@@ -1061,11 +1063,11 @@ request still comes out below the 2026-10-10 baseline is what the rows below are
 is 4,209 bytes (budget 4,500). The first-request totals are the operator's to take, in one
 sitting — plan 1's, plan 3's and a role child's — on the real face with its keys:
 
-| First request | Expected (system · messages · tools; design spec §7, plan 1's Task 7) | Measured, with date and session id |
+| First request | Expected (system · messages · tools) | Measured, with date and session id |
 |---|---|---|
 | Gravit's, 2026-10-10 (the go-live smoke session, before the redesign) | — | 1,622 · 4,040 (3,443 of it the `AGENTS.md` + `CLAUDE.md` baseline) · 32,003; DeepSeek billed 55,635 input tokens |
-| Gravit's, after plan 1 (`GRAVIT.md` for `AGENTS.md` + `CLAUDE.md`; the date line): a one-word session in the repo root | messages well under 4,040; system up by the date line; tools unchanged | not yet measured |
-| Gravit's, after plan 3 (also the roles list and the cycle contract): the first request of the cycle drill (`face/README.md`, step 5) | ≈ 2,200 · ≈ 1,900 · ≈ 32,600 | not yet measured |
+| Gravit's, a one-word session in the repo root: plan 1's measurement, taken once the branch has merged | messages well under 4,040 (`GRAVIT.md` ≈ 1,050 tokens for the 3,443 baseline). Plan 1's own system and tools clauses (the date line only; unchanged) were written before plans 2 and 3 and no longer hold: read them against the next row | not yet measured |
+| Gravit's, the first request of the cycle drill (`face/README.md`, step 5): the composition after plan 3 | ≈ 2,430 · ≈ 1,900 · ≈ 32,600 (spec §7 for the last two; system is the 2026-10-10 1,622 plus the cycle ≈ 550, the roles list ≈ 250 and the date line ≈ 12, where the spec's ≈ 2,200 predates the sizes above) | not yet measured |
 | one role child's, after plan 3 | — | not yet measured |
 
 Plan 1 specified its one-word session for after the branch merges, so with plans 2 and 3 landed
@@ -1658,28 +1660,28 @@ through `tsx`:
   fits its 3,000 bytes, and carries the steps, the 24-round and 12-call caps, the resume path and
   the blocked vocabulary; `readCycle` trims, allows braces, and refuses an empty, an oversized, a
   missing and an unreadable file with the absolute path first, the limit inclusive and counted on
-  raw bytes), `gravit-md` (`GRAVIT.md` within its 4,500
-  bytes and free of `{{`; its bed table equal to `docs/backtest-rules.md`'s, row for row; no line
-  that tells the reader who it is), `gravit-plugin` (`name` and `inject`; `validateGravitConfig`
-  accepting `{}` and checking `cycle` and `roles` when present; `todayText` rendering the zone's
-  local date, ISO then weekday; `apply` registering one scoped, uninterpolated section right after
-  the persona slot — whose order must be finite, so a missing slot cannot pass as `NaN` — which
-  unload removes; a bad config refused with its reason; an empty or non-zone `TZ` rendered in
-  UTC and labelled, never thrown at assembly; the `gravit:roles` section only when `roles` is
-  configured, one past dsh's subagent section, read at assembly and never at mount, listing
-  exactly the roles whose tool the assembling scope resolves — all, none, one of two — through
-  `canCall`, whose lookup is handed the context's own scope; an empty list rendering nothing; the
-  `gravit:cycle` section only when `cycle` is configured, 50 before the persona suffix,
-  uninterpolated, the contract for a scope that can call `create_goal` and `''` for one that
-  cannot, gone on unload), `roles` (the reader: the three shipped roles with exact names and
+  raw bytes), `gravit-md` (`GRAVIT.md` within its 4,500 bytes and free of `{{`; its bed table
+  equal to `docs/backtest-rules.md`'s, row for row; no line that tells the reader who it is),
+  `gravit-plugin` (`name` and `inject`; `validateGravitConfig` accepting `{}` and checking
+  `cycle` and `roles` when present; `todayText` rendering the zone's local date, ISO then
+  weekday; `apply` registering one scoped, uninterpolated section right after the persona slot
+  — whose order must be finite, so a missing slot cannot pass as `NaN` — which unload removes; a
+  bad config refused with its reason; an empty or non-zone `TZ` rendered in UTC and labelled,
+  never thrown at assembly; the `gravit:roles` section only when `roles` is configured, one past
+  dsh's subagent section, read at assembly and never at mount, listing exactly the roles whose
+  tool the assembling scope resolves — all, none, one of two — through `canCall`, whose lookup
+  is handed the context's own scope; an empty list rendering nothing; the `gravit:cycle`
+  section only when `cycle` is configured, 50 before the persona suffix, uninterpolated, the
+  contract for a scope that can call `create_goal` and `''` for one that cannot, gone on
+  unload), `roles` (the reader: the three shipped roles with exact names and
   nothing forbidden, the job tools on both `bash` roles and only beside `bash`; `_template`,
-  hidden entries and plain files skipped; every refusal — a missing root or file, a symbolic link or a misnamed directory, an
-  oversize persona, bad YAML, a wildcard, an entry listed twice, a blank or two-line
-  description, a never-list entry checked against an independent copy of the names (the account
-  and order names under a renamed server too), a 65-character tool name — opening with an
-  absolute path, the limits inclusive at 2,000 bytes / 300 characters / 64; `gravitRows`, whose
-  `agentOptions` appear only with a model; the committed mirror byte-equal to the render, the cycle
-  text included, so drift fails), `check-home` (the
+  hidden entries and plain files skipped; every refusal — a missing root or file, a symbolic
+  link or a misnamed directory, an oversize persona, bad YAML, a wildcard, an entry listed
+  twice, a blank or two-line description, a never-list entry checked against an independent
+  copy of the names (the account and order names under a renamed server too), a 65-character
+  tool name — opening with an absolute path, the limits inclusive at 2,000 bytes / 300
+  characters / 64; `gravitRows`, whose `agentOptions` appear only with a model; the committed
+  mirror byte-equal to the render, the cycle text included, so drift fails), `check-home` (the
   go-live dry run's pieces, offline: the live-home refusal by device and inode — through a
   symlink, in another letter case, inside or above the home — and the marker; the refusal classes;
   the multi-frame log reader; the inventory diff; the MCP row walk; the `extraPatches` seam
@@ -2099,12 +2101,15 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   a model selection changes one session only, and the route is the profile's
   `agent-default-model` row or dsh-base's `deepseek-official/deepseek-flash`.
 - **R29 — The 12-call cap is a count Gravit keeps, not a threshold the harness enforces**
-  (charter D16, Rule 1). A cycle's 24 rounds end in the goal's own `round-limit`, but dsh has no
-  per-cycle child total (`maxActiveSubagents`, default 8, bounds how many children are active at
-  once, not how many a session creates), so `dsh/profile/cycle.md` tells Gravit to count its
-  `role_*` calls in the journal and stop at 12. Every call is in the child history (the
-  临时子任务 panel) and the operator reads the journal. The first overrun adds a face-side
-  counter on `agent/created` for one session's children.
+  (charter D16, Rule 1). A cycle's 24 rounds end in the goal's own `round-limit` (the 24 is
+  Gravit's argument to `create_goal`, as `cycle.md` instructs; dsh's own default is 256), but
+  nothing in dsh bounds the role children: `maxActiveSubagents` (default 8) limits only live
+  CONTINUABLE children, one-shot and external-provider runs are outside it (dsh-subagent's
+  README), and every `role_*` call is one-shot, several of which `run_in_background` lets
+  overlap. So `dsh/profile/cycle.md` tells Gravit to count its `role_*` calls in the journal and
+  stop at 12. Every call is in the child history (the 临时子任务 panel) and the operator reads
+  the journal. The first overrun adds a face-side counter on `agent/created` for one session's
+  children.
 - **R30 — A goal survives a restart disarmed; the operator's next message is the resume path.**
   After a restart the goal is still active and nothing continues it. `cycle.md` tells Gravit to
   call `update_goal` with `resume` when the operator asks to continue, in any wording, and dsh
@@ -2113,9 +2118,11 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   `edit` leaves the phase as it is, so the operator types `/goal resume` — `client/chat.js` sends
   every line that starts with `/` to `commands/execute` before it is a prompt, and dsh-base's
   `command-goal` answers it (observed on a scratch boot, 2026-10-19: `/goal`, `/goal resume`
-  and `/goal pause` each answered). The design spec's §11 (e) took the client to send no slash
-  commands; it does, since the 0.2.0 port. The cycle drill's restart step runs the active-goal
-  path; a paused goal has not been drilled.
+  and `/goal pause` each answered). `/goal resume` also re-arms a restarted goal (dsh-goal's
+  `resume()` accepts an active goal that is not armed): a deterministic fallback should the model
+  not call `update_goal` on "continue". The design spec's §11 (e) took the client to send no slash
+  commands; it does, since the 0.2.0 port. The cycle drill's restart step runs the model's path
+  on an active goal; a paused goal has not been drilled.
 - **R31 — The tool-schema block is not yet attributed per tool.** 32,003 of the 2026-10-10
   first request's heuristic tokens were schemas (§4.3), the largest part, and the three
   `role_*` tools add to it. The trace's hypothesis is that AKShare's fourteen tools, whose
@@ -2151,7 +2158,7 @@ In order; each with what "done" is and which charter row it reopens.
    citation, and the stale line citations. (`dsh/README.md`'s steps 2 and 6 and its installed-state
    bullets were brought to the tree on 2026-09-30.)
 5. **Daily cadence** via dsh `schedule` — deferred until a strategy is worth running daily;
-   reopens D5 (spend metering) the day anything runs unattended.
+   reopens D5 (spend metering) the day anything starts unattended.
 6. **Paper forward-testing** behind the gate (`status: paper`) — after 1 and after an
    independent evaluator exists (D1, D7).
 7. **FINRA and float live endpoints**; then a **second data vendor** for pre-2021 history.
