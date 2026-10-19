@@ -373,11 +373,15 @@ key of the default preset: `composeFace` reads it beside `../roles/`
 `cycle`, which `plugins/gravit.js` mounts as the `gravit:cycle` prompt section,
 after every tool section and just before the persona suffix, with
 `interpolate: false` (a brace in the file is literal). The section's text is the
-file when the assembling scope can call `create_goal` and empty otherwise, so it
-reaches Gravit's sessions and a `subagent_fork` child's — the same text in both —
-and no one else: a role child's allow list can never name a goal tool, and a bot
-is another preset. A missing, unreadable, empty or oversized file (over 3,000
-bytes, counted raw) refuses the boot, naming the file's absolute path first.
+file when the assembling scope can call `create_goal` AND the session is a root or
+a fork (`isRootOrFork`: no `origin`, or `origin: subagent` with `isSeeded`), and
+empty otherwise, so it reaches Gravit's sessions and a `subagent_fork` child's —
+the same text in both — and no one else: a plain `subagent`, workflow or ralph
+child can call `create_goal` but is a delegated child that is not a fork, a role
+child's allow list can never name a goal tool, and a bot is another preset. The
+roles section ("Roles" below) is gated the same two ways. A missing, unreadable,
+empty or oversized file (over 3,000 bytes, counted raw) refuses the boot, naming
+the file's absolute path first.
 After an edit run `npm run render:roles` — the mirror
 `bots/gravit/agent.cordis.yml` embeds the text, and `tests/roles.test.ts` fails
 while the two differ — commit both and restart the face; nothing reloads it
@@ -1261,7 +1265,11 @@ cannot call. A `subagent_fork` child, seeded with Gravit's turns and restricted 
 every role tool and so reads Gravit's system prompt unchanged — the prefix its inherited history
 was cached under. The `gravit:cycle` contract ("The profile" above) is gated the same way, on
 `create_goal`, which no role's allow list can name: a role child reads none of it, a fork child
-all of it. The `deployment:today` date reaches every child, and so does `GRAVIT.md`, in
+all of it. Both sections also read the session's header (`isRootOrFork`): a delegated child
+that is not a fork — a plain `subagent` spawn, a workflow or ralph worker, restricted by nothing
+and so able to call every role tool and `create_goal` — reads neither, since it inherits no
+prefix to keep identical and `create_goal` needs a direct human turn on a top-level agent. The
+`deployment:today` date reaches every child, and so does `GRAVIT.md`, in
 the child's own `agent-instructions` baseline. It runs in its parent's cwd under a permission
 scope fixed when it starts: dsh tells it that an operation needing an approval is rejected, so it
 reports the limit instead. One thing is dsh's, not the face's: the child's prompt still carries
@@ -1620,10 +1628,10 @@ the seam is dropped and the table's meta line says so.
 ```bash
 npm test                  # offline unit tests - no keys, no network, no port
 npm run typecheck         # strict tsc against the pinned .d.ts (skipLibCheck: false) - the contract test
-FACE_SMOKE=1 npm test     # + the 14 isolated real boots; local stubs, no external model calls
+FACE_SMOKE=1 npm test     # + the 15 isolated real boots; local stubs, no external model calls
 ```
 
-Offline, `npm test` skips the 14 real boots listed below; `FACE_SMOKE=1` runs
+Offline, `npm test` skips the 15 real boots listed below; `FACE_SMOKE=1` runs
 them too. The typecheck includes the dependencies' own `.d.ts`, so a green one
 means the face compiles against the installed dsh, not just against itself.
 
@@ -1643,14 +1651,15 @@ and `node --test` gives each file its own:
 | `order-gate-midboot-smoke.test.ts` | Gate 2 armed while `boot()` is still pending: a slow fixture row holds the boot open while an order stand-in registers, and with `bootFace` unresolved and unary `/api` already serving, the order call is HELD with `approval/asked` logged and its body not run, an agentless call is denied by the listener, a marked tool the gate cannot name is denied by the guard alone; once the boot is released the held card reaches the first tab and `allowed-once` dispatches exactly once; a restart of the real `approval` row re-arms the listener once |
 | `client-mux-smoke.test.ts` | the page's own `client/api.js` and `client/mapper.js`, unmodified, against the host: ready, calls, emits, the control baseline, a follow's snapshot and tail, an approval answered and one rejected, a second tab's `cancel` and its refused late answer, Stop withdrawing a gate, a question answered, a gate replayed to a late tab, the non-activating page and projections reads |
 | `askuser-noclient-smoke.test.ts` | with no browser connected, an agent's question BLOCKS (parked for the next client); an agentless one is refused `NO_PROVIDER` |
-| `bots-smoke.test.ts` | the roster (a broken fixture listed with its reason, never `_template`); the shipped relative plugin path rebased onto the real `plugins/bot.js`; a bot sees allow ∩ tree, never a `role_<id>` tool, while Gravit sees the host's whole roster plus the role tools; a tool registered after the declaration is admitted; the bot's persona shadows Gravit's; Gravit's prompt carries the `deployment:today` line and the cycle contract (`Step 0 — ask once`) and a bot's carries neither; a session naming a broken preset is refused with dsh's `agent-preset/*` code; Gate 2 holds for a bot |
+| `bots-smoke.test.ts` | the roster (a broken fixture listed with its reason, never `_template`); the shipped relative plugin path rebased onto the real `plugins/bot.js`; a bot sees allow ∩ tree, never a `role_<id>` tool, while Gravit sees the host's whole roster plus the role tools; a tool registered after the declaration is admitted; the bot's persona shadows Gravit's; Gravit's prompt carries the `deployment:today` line and the cycle contract (`Step 0 — ask once`) and a bot's carries neither — the probe bot can call `create_goal`, so its missing contract is the preset's scoping, not the `create_goal` gate; a session naming a broken preset is refused with dsh's `agent-preset/*` code; Gate 2 holds for a bot |
 | `bot-runtime-smoke.test.ts` | a saved route reaches the real request without changing the host default; a save re-declares — the old conversation keeps the old soul, a new one gets the new; the journal as a runtime-context snapshot; `agentPresets/select` |
 | `bot-sandbox-smoke.test.ts` | a `read-only` session's write is refused inside the tool's content (`[sandbox: file access denied under read-only mode]`), never silently |
 | `room-smoke.test.ts` | a round on a stub model: dispatch to three bots, answers on the room log before the one wake, the synthesis; every member parented, preset-joined, `read-only` from its first event, without `dispatch`; the `room` value in the list row and in the per-record cache file; the operator's `@` and its refused write; a home session's journal write |
 | `room-discussion-smoke.test.ts` | a structured serial round: peer context, declared disagreements, the malformed-answer fallback, each member's own journal, Gravit's synthesis request, metadata surviving a flush and a re-read |
 | `subagents-smoke.test.ts` | the native subagent tools and Remotes: creation, child messages kept apart from settlement notices, permission inheritance, parent ownership, ordinary writes to managed children refused, and — after a reboot — catalog and history reads that activate neither side |
 | `instructions-smoke.test.ts` | what the `agent-instructions` baseline carries on a first request after the face's instructions patch: `GRAVIT.md` and `GRAVIT.local.md` for Gravit at the repo root; the root file plus the channel's own `strategies/x/GRAVIT.md` for a channel session; the root file for a bot session; `AGENTS.md` for none of them, `CLAUDE.md` for neither Gravit nor the channel session |
-| `roles-smoke.test.ts` | a role is a one-shot child with its own persona and tools: `role_reviewer` and `role_screener` each spawn a child whose tool list EQUALS the role's `allow` (every `role_*` tool and the forbidden ones gone — compared exactly, because dsh exempts a scope's own registrations from `restrict()`); for the reviewer's child the smoke also checks the system prompt — the role's persona (shadowing Gravit's), the date line, no `gravit:roles` section and no cycle contract — the header (`origin: subagent`, `agentPreset: gravit`, its parent's cwd), the root `GRAVIT.md` in its `agent-instructions` baseline, and its text returning through the tool, while Gravit's own prompt carries the roles section and the cycle contract (`Step 0 — ask once`); a `subagent_fork` child's first request carries Gravit's system text whole — the cycle contract included — and Gravit's tools in order; a role naming a tool the tree lacks fails at delegation with `tools.restrict() names unknown global tool "…"` and creates no child. The MCP tools the roles name are stand-ins under their production names; a foreground one-shot child leaves `ctx.sessions` as its result returns, so the smoke copies each session's header while serving its request |
+| `roles-smoke.test.ts` | a role is a one-shot child with its own persona and tools: `role_reviewer` and `role_screener` each spawn a child whose tool list EQUALS the role's `allow` (every `role_*` tool and the forbidden ones gone — compared exactly, because dsh exempts a scope's own registrations from `restrict()`); for the reviewer's child the smoke also checks the system prompt — the role's persona (shadowing Gravit's), the date line, no `gravit:roles` section and no cycle contract — the header (`origin: subagent`, `agentPreset: gravit`, its parent's cwd), the root `GRAVIT.md` in its `agent-instructions` baseline, and its text returning through the tool, while Gravit's own prompt carries the roles section and the cycle contract (`Step 0 — ask once`); a `subagent_fork` child's first request carries Gravit's system text whole — the cycle contract included — and Gravit's tools in order; a plain `subagent` child (unseeded) can call `create_goal` and every role tool yet carries neither the cycle contract nor the roles section, only the date; a role naming a tool the tree lacks fails at delegation with `tools.restrict() names unknown global tool "…"` and creates no child. The MCP tools the roles name are stand-ins under their production names; a foreground one-shot child leaves `ctx.sessions` as its result returns, so the smoke copies each session's header while serving its request |
+| `goal-smoke.test.ts` | the goal loop `../dsh/profile/cycle.md` rests on, through the face's own wire (prompts, the Stop button's `session/cancel`, a slash line's `commands/execute`): `create_goal` in a human turn returns the id and revision 1, armed; each round arrives at idle as a user message whose source is `goal` (`<goal_round>`, the objective, `Round: n/N`); the model's `blocked` in round 1 is refused (`blocked requires at least 3 consecutive goal rounds; current round is 1`), in round 3 accepted with the code `model-reported` and followed by the `<goal_blocked>` wrap-up; a second `create_goal` is refused while that goal is blocked (`GOAL_ALREADY_EXISTS`); at the cap the driver blocks with `round-limit` and sends the model nothing more; Stop mid-round pauses the goal, the model's resume of it is refused (`GOAL_TOOL_RESUME_PAUSED`: `the model cannot resume a paused goal; the user must resume it`) and `/goal resume` re-arms it; a face stopped mid-round and booted again on the same home leaves the goal active and disarmed with no request until "continue", whose `update_goal` resume bumps the revision and re-arms the rounds |
 
 `bot-sandbox-smoke.test.ts` and `askuser-noclient-smoke.test.ts` also print one
 `observed:` line each (S4, S7), the measurements the bots spec's amendments were
@@ -1745,8 +1754,10 @@ together — every pin whose track moved — then:
    projection) is counted and named, never passed silently; 0.1.1 shapes are
    rejected. At 0.2.0-rc.2: 26 lines, 23 validated, 0 rejected.
 7. `FACE_SMOKE=1 npm test` — the only step that proves the new tree MOUNTS,
-   that the page's own transport works against it (`client-mux-smoke`), and
-   that an APPROVED order still dispatches (`order-gate-smoke`). That last test
+   that the page's own transport works against it (`client-mux-smoke`), that
+   the goal loop `../dsh/profile/cycle.md` describes still behaves as written
+   (`goal-smoke`), and that an APPROVED order still dispatches
+   (`order-gate-smoke`). That last test
    exists because 0.2.0 removed `Session.events`: the Gate-2 guard read
    `undefined` and denied every approved order, failing closed with nothing
    looking wrong. `snapshotEvents()`, which the guard and the room engine read
@@ -2387,7 +2398,8 @@ A role that was never delegated to is presumed decorative.
 role's `allow` exactly; the reviewer's child is also checked for the role's persona (not
 Gravit's), the date, no roles section, the root `GRAVIT.md` in its baseline and its text
 returning through the tool; a `subagent_fork` child is assembled Gravit's system prompt and
-tools unchanged; a role naming a tool the tree lacks fails at delegation with
+tools unchanged, a plain `subagent` child neither the roles section nor the cycle contract; a
+role naming a tool the tree lacks fails at delegation with
 `tools.restrict() names unknown global tool "…"` and creates no child. Run it first; if it
 fails, stop — the composition, not the model, is wrong.
 
@@ -2451,29 +2463,38 @@ scratch home: the drill writes a strategy directory and the operator judges the 
    header per round — the client's collapsed `context · goal` row, whose summary reads
    `<goal_round>` and whose body carries the objective and `Round: n/24` — `role_screener` and
    `role_backtester` calls with their reports relayed, journal entries with artifact paths,
-   `role_reviewer` before the verdict. No card for the operator; no question after step 1
-   unless the bed cannot cover the window asked.
-3. The verdict: `status.yaml` reads `validated` or `retired` with the terms cited, or
-   `researching` with a blocked goal whose reason starts with `child-limit`, `bed-window`,
-   `data-missing` or `needs-operator`; `one_line`, `next`, `numbers` filled; the journal's last
-   entry is the verdict with the usage line; the goal is complete, or blocked with the reason's
-   first word (or the code `round-limit` when the 24 rounds are spent). `/goal` in the composer
-   prints it on the status line — `Status`, the `Blocker` code and reason, `Rounds: n/24` — and
-   the record is the log's last `goal/change`, read with the ask-user drill's step 7 recipe
-   filtered on that type.
+   `role_reviewer` before the verdict. No card for the operator — Gravit commits nothing inside
+   the rounds, where a commit outside the sandbox fence would raise one and stall the run; no
+   question after step 1 unless the bed cannot cover the window asked.
+3. The verdict: `status.yaml` reads `validated` or `retired` with the terms cited and the goal
+   complete, or `researching` with the goal blocked — never completed — on a reason whose first
+   word is `child-limit`, `bed-window`, `data-missing` or `needs-operator` (the code
+   `model-reported`), or on the code `round-limit` when the 24 rounds are spent; `one_line`,
+   `next`, `numbers` filled; the journal's last entry is the verdict, ending in a usage line
+   Gravit's closing message asks you to fill from the session-usage card; at most one commit,
+   with the verdict. `/goal` in the composer prints it on the status line — `Status`, the
+   `Blocker` code and reason, `Rounds: n/24` — and the record is the log's last `goal/change`,
+   read with the ask-user drill's step 7 recipe filtered on that type.
 4. Restart: stop the face mid-cycle on a second drill channel, start it again, send "continue".
-   Expected: Gravit calls `update_goal` with `resume` and the rounds continue; the goal did not
-   continue on its own after the restart.
+   Expected: Gravit reads the goal (`get_goal`), calls `update_goal` with `resume`, and the
+   rounds continue; the goal did not continue on its own after the restart. The Stop button
+   during a round is a different path: it PAUSES the goal, which only you can resume — Gravit
+   asks you to type `/goal resume`; a round that errored or ran out of tokens only disarms the
+   goal, and "continue" re-arms it as after a restart.
 5. Record: rounds used (`/goal` prints `Rounds: n/24`), role calls (count the child history),
-   wall time, the session's usage (the agent panel's "session usage" card), and the
-   first-request numbers for Gravit's session and for one child, read from
-   `~/.dsh/storages/session_projcache/sessions/<id>.json` (`contextBreakdown`; `<id>` is the
-   session's id, the name of its directory under `$DSH_HOME/sessions/<project-slug>/` — the
-   newest by mtime, a child's beside it), into `DEVELOPMENT.md` §4.3 and §7.4 with the date.
+   wall time, the session's usage (the agent panel's "session usage" card, the line step 3's
+   journal entry asks for), and the first-request numbers for Gravit's session and for one
+   child, read from `$DSH_HOME/storages/session_projcache/sessions/<id>.json` — the
+   `contextBreakdown` row (heuristic tokens) and, beside it, `tokenUsage` (the provider's own
+   usage) — into `DEVELOPMENT.md` §4.3 and §7.4 with the date. `<id>` is a session's id, the
+   name of its directory under `$DSH_HOME/sessions/<project-slug>/`: take the newest by mtime,
+   and confirm it holds `session.v4.jsonl.zstd` whose last `goal/change` names this drill's
+   objective (step 3's recipe); a child's id is the `childId` of a `subagent/catalog` record in
+   that parent log (the same recipe, filtered on that type).
 
 **PASS criteria are observations.** Record the run in `DEVELOPMENT.md` §4.3 and §7.4 with the
 date and the pin.
 
-**Not yet run live.** The automated half passes at `4d93481` (`cycle.test.ts`, and the cycle
-assertions of `bots-smoke` and `roles-smoke` under `FACE_SMOKE=1 npm test`); steps 1–5 are the
-operator's.
+**Not yet run live.** The automated half passes at `fae4f61` (`cycle.test.ts`,
+`goal-smoke.test.ts`, and the cycle assertions of `bots-smoke` and `roles-smoke` under
+`FACE_SMOKE=1 npm test`); steps 1–5 are the operator's.

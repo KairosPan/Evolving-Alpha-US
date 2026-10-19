@@ -266,10 +266,11 @@ preserves unclaimed queued messages and descendants, and does not cancel the who
 later send can resume parked work. dsh owns this lifecycle, including recovery.
 
 The role library is the prebuilt form of a delegated task: a role is an operator-authored
-persona plus an exact tool allow-list the dsh backend enforces at the child's creation
-(`roles/<id>/`), surfaced to Gravit as a one-shot tool. It is never a bot (no roster, no journal,
-no room) and never a bot's substitute: a role has hands and no voice, a bot a voice and no hands.
-A role's report is a claim Gravit checks (D14).
+persona plus an exact tool allow-list (`roles/<id>/`) the dsh backend enforces at the child's
+creation (a role with bash keeps the shell's reach — D12), surfaced to Gravit as a one-shot
+tool. It is never a bot (no roster, no journal, no room) and never a bot's substitute: a role
+has hands and no voice, a bot a voice and no hands. A role's report is a claim Gravit checks
+(D14).
 
 ### 7.3 What this design deliberately does not build
 

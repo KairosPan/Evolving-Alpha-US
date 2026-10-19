@@ -1,8 +1,9 @@
 /** Attributes the tool-schema block of a Gravit request to its tools (design spec section 7;
- * DEVELOPMENT.md section 4.3, R31): boots the face's own composition on a COPY of a harness home
- * with every MCP row ENABLED, opens one Gravit session and prints the `tools` its model request
- * carries. The alpaca-kit row is the operator's (its keys come from the shell the face starts
- * from, dsh/README.md step 4), so that group is the operator's run, in that shell:
+ * DEVELOPMENT.md section 4.3, R31): boots the face's own composition on a COPY of a harness home,
+ * with the MCP rows as the home mounts them, opens one Gravit session and prints the `tools` its
+ * model request carries. The alpaca-kit row is the operator's (its keys come from the shell the
+ * face starts from, dsh/README.md step 4; keyless, only seven of its ten read-only tools
+ * register), so the keyed group is the operator's run, in that shell:
  *
  *     SCRATCH=$(mktemp -d)
  *     cp -a ~/.dsh "$SCRATCH/dsh-sizes"
@@ -15,9 +16,12 @@
  * then the host's own tools) and the total, each with its tool count. `chars/4` is dsh's own
  * heuristic (the UTF-16 length of the JSON over four: the unit of the 2026-10-10 figure and of
  * `contextBreakdown`); `bytes/4` is larger wherever the text is not ASCII, as AKShare's is.
- * Exit: 0 printed; 1 the boot or the read failed; 2 refused, before any dsh code loads, because
- * `DSH_HOME` is, is inside or contains the live harness home (`liveHomeCandidates` of
- * check-home.ts, compared by device and inode).
+ * Exit: 0 printed; 1 the boot or the read failed; 2 refused, before any dsh plugin loads, because
+ * `DSH_HOME` is, is inside or contains the live harness home (`liveHomeCandidates({})` of
+ * check-home.ts, both paths canonicalized, then compared by device and inode). The guard knows only
+ * the default `~/.dsh`: a live home set elsewhere - a `DSH_HOME` exported in the operator's shell
+ * rc, which the command line above overrides - is not detected, so copy THAT home and point
+ * `DSH_HOME` at the copy.
  * @module
  */
 import { existsSync, realpathSync, statSync } from "node:fs";

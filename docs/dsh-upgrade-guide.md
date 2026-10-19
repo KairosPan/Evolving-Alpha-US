@@ -78,8 +78,8 @@ inventory's PART 2, so a step can be cited.
 
 **Prove on real boots**
 
-10. `FACE_SMOKE=1 npm test`: the fourteen real boots. A dropped `snapshotEvents()` fails Gate 2
-    and the room engine closed and loudly here (D7).
+10. `FACE_SMOKE=1 npm test`: the fifteen real boots. A dropped `snapshotEvents()` fails Gate 2
+    and the room engine closed and loudly here (D7); a moved goal tool fails `goal-smoke` (C21).
 
 **Prove on a copy of the home** (never the live one)
 
@@ -163,7 +163,7 @@ Each row: the seam, the file that pins it. Depth: the inventory's row, `DEVELOPM
 fixture validator's private paths (`check:fixture`); A7–A8 the install anchor, `PluginPackages`
 and its native addon (every `FACE_SMOKE` boot); A10 the profile manifest and patch-file shapes
 `setup` writes (`setup.test.ts`); A11 the `satisfies` contract (tsc); A12 the structural `*Like`
-types hide drift from tsc, so the fourteen real boots are the contract; A14 `FiberState.ACTIVE`
+types hide drift from tsc, so the fifteen real boots are the contract; A14 `FiberState.ACTIVE`
 as the literal `2` (`smoke.test.ts`, `panels.test.ts`); A15 Node 22's `zstdDecompress`
 (`sessions.test.ts`).
 
@@ -208,10 +208,18 @@ inside the default preset: config keys `provider` / `toolName` / `backgroundMode
 `toolFilter` (+ `agentOptions`), the row's `persona` as the child's `deployment:persona-prefix`,
 `toolFilter` as `tools.restrict({allow})` of exact names in the child's creation window
 (`roles.test.ts`, `roles-smoke`); C21 the goal loop `cycle.md` rests on: `create_goal`'s
-`max_goal_rounds`, `update_goal`'s `action: resume` (accepted only in a direct human turn) and
-`blocked_reason`, `blockedAfterConsecutiveRounds`, the driver's `round-limit`. `cycle.test.ts`
-pins only that `cycle.md` states them; the goal behaviour is the cycle drill's, and the
-re-check at a pin is §7.3's.
+`max_goal_rounds` (accepted in a direct human turn; refused, `GOAL_ALREADY_EXISTS`, while a goal
+that is not complete exists), the `<goal_round>` message the driver queues at idle (source
+`goal`, `Round: n/N`),
+`update_goal`'s `action: resume` (accepted only in a direct human turn, refused for a paused goal
+with `GOAL_TOOL_RESUME_PAUSED`) and `blocked_reason` (refused before round
+`blockedAfterConsecutiveRounds`, 3, then the code `model-reported` and the `<goal_blocked>`
+wrap-up), the driver's silent `round-limit`, Stop pausing the goal and `/goal resume` re-arming
+it, a restart disarming it until "continue" (`goal-smoke`, the fifteenth real boot — which also
+pins plan 3's Review Focus 3, the early-block refusal, that the plan left to the drill).
+`cycle.test.ts` pins `max_goal_rounds 24`, `12 role calls`, `update_goal with action resume` and
+the blocked vocabulary in `cycle.md`'s text; a real model's use of the loop is the cycle
+drill's, and the re-check at a pin is §7.3's.
 
 **D · gates and approvals.** D1 the prepended `tools/pre-execute` ask (`order-gate.test.ts`,
 `orders.test.ts`); D2 the monotonic `tools.guard` reading the live description
@@ -339,7 +347,7 @@ D9 by id).
 | D15 | telemetry opt-in is one operator row; the env switch still wins | the switch order in `composeFace` (B4) |
 | D16 | a cold session opens page-only | `session/follow` or `session/page` activation semantics (E6–E7) |
 | D18 | the spill budget stays dsh-base's `maxInlineTokens: 12500` | the row's key or default moves (B34) |
-| spec B8 | the cycle caps are `cycle.md`'s, not a dsh config: 24 rounds is the `max_goal_rounds` the contract passes to `create_goal`, 12 role calls a count Gravit keeps in the journal (charter D16, `DEVELOPMENT.md` R29) | dsh adds a per-session child total or a goal-level cap setting; the first overrun |
+| spec B8 | the cycle caps are `cycle.md`'s, not a dsh config: 24 rounds is the `max_goal_rounds` the contract passes to `create_goal`, 12 role calls a count Gravit keeps in the journal (charter D16, `DEVELOPMENT.md` R29) | dsh adds a per-session child total, or a dsh-side cap that overrides the model's `max_goal_rounds` argument (`dsh-goal`'s `defaultMaxGoalRounds`, 256, applies only when the argument is absent); the first overrun |
 
 Decisions the 2026-10-15 agent redesign adds land here with their plans (§7.3).
 
@@ -365,7 +373,7 @@ named as still to run on 0.2.0).
 | room, manual (a NEW round on `strategies/room-drill`) | README steps 1–8 | one round ran live 2026-09-30 on a scratch home; the `@`, an inline member question, a refused write, `left` and re-check, a restart **owed** |
 | roles, automated | `roles-smoke`, `roles.test.ts`, `gravit-plugin.test.ts` | passes (plan 2) |
 | roles, manual (a NEW round on `strategies/room-drill`, a backtester run past the 60 s bash default, then the alpaca-kit row disabled in a scratch copy) | README "The role drill", steps 1–6 | **not yet run** — the operator's, on a COPY of the real home |
-| the cycle, automated | `cycle.test.ts`, `gravit-plugin.test.ts`, `boot.test.ts`, `roles.test.ts`; the cycle assertions of `bots-smoke` and `roles-smoke` | passes (plan 3) |
+| the cycle, automated | `cycle.test.ts`, `gravit-plugin.test.ts`, `boot.test.ts`, `roles.test.ts`; `goal-smoke` (the goal loop itself); the cycle assertions of `bots-smoke` and `roles-smoke` | passes (plan 3; `goal-smoke` since `fae4f61`) |
 | the cycle, manual (a channel from `_template`, one thin idea, the batch answered, the rounds to a verdict, a restart and "continue") | README "The cycle drill", steps 1–5 | **not yet run** — the operator's, on the real face with its keys |
 | the subagents dock | `subagents-smoke`; the panel in a browser | manual **owed** |
 | the MCP live roster | `curl …/data/plugins.json` | 10 + 14 on 2026-09-30 (scratch) and 2026-10-01 (live) |
@@ -442,7 +450,9 @@ listed in §7.3 and enter §3 as their plans merge. The doc debts the compilatio
 Plans 1–3 of that redesign have landed on the branch: plan 1 (the map and the instructions seam —
 `GRAVIT.md`, the `agent-instructions` patch, the date section) on 2026-10-18, `2ccbfb6..c1de931`;
 plan 2 (the role library) on 2026-10-18..19, `c1de931..123d4d7`; plan 3 (the cycle contract and
-its section) on 2026-10-19, `123d4d7..4d93481` and the docs commit after it. Their seams are H10,
+its section) on 2026-10-19, `123d4d7..fae4f61` and the docs commit on it, through plan 3's final
+commit (the final review's fix wave: the contract's goal facts, the sections' header gate, the
+goal smoke). Their seams are H10,
 H11, C20 and C21 in §3.2 and the watch items of §7.3; the roles and cycle drills and the
 first-request measurements are still the operator's to run (§5, `DEVELOPMENT.md` §4.3).
 
@@ -504,12 +514,18 @@ first-request measurements are still the operator's to run (§5, `DEVELOPMENT.md
   H11 in §3.2; the `roles` section landed in plan 2 (`994ef5d`, at `getSectionOrder("TOOL_SUBAGENT")
   + 1`, also H11), gated on the assembling scope's tool view since `e389160`; the `cycle` section
   landed in plan 3 (`7cf3c57`, at `getSectionOrder("DEPLOYMENT_PERSONA_SUFFIX") - 50`, also H11),
-  gated the same way on `create_goal`, its real-boot pins `4d93481`;
-- `dsh-goal` + `dsh-goal-round-driver` + `dsh-tool-goal`: the `<goal_round>` prompt text, the
-  `round-limit` blocker, the disarm-after-resume rule (spec §11 (e)). Landed in plan 3:
-  `dsh/profile/cycle.md` is written against these facts (`7cf3c57`; `cycle.test.ts` pins that it
-  states `max_goal_rounds` 24, the `resume` path and the blocked vocabulary); the behaviour itself
-  is the cycle drill's and has not been run; entered as C21 in §3.2, with `DEVELOPMENT.md` R30;
+  gated the same way on `create_goal`, its real-boot pins `4d93481`; since `fae4f61` both
+  sections also read the session header (`isRootOrFork`), so a delegated child that is not a fork
+  — a plain `subagent`, workflow or ralph child, which can call every tool Gravit can — reads
+  neither (roles-smoke pins the spawn beside the fork). Re-check that a fork child's header still
+  carries `isSeeded` and a delegated one `origin: subagent`;
+- `dsh-goal` + `dsh-goal-round-driver` + `dsh-tool-goal` + `dsh-command-goal`: the `<goal_round>`
+  prompt text, the `round-limit` blocker, the disarm-after-resume rule (spec §11 (e)), Stop
+  pausing a goal, `/goal resume`. Landed in plan 3: `dsh/profile/cycle.md` is written against
+  these facts (`7cf3c57`, amended in `fae4f61`; `cycle.test.ts` pins that it states
+  `max_goal_rounds` 24, the `resume` path and the blocked vocabulary); the behaviour itself is
+  pinned on a real boot by `goal-smoke.test.ts` (`fae4f61`), and a real model's use of it is the
+  cycle drill's, not yet run; entered as C21 in §3.2, with `DEVELOPMENT.md` R30;
 - `dsh-compaction-tool-result-pruner` thresholds (8,192 / 4,096 / 1,024) that role reports are
   sized under (spec §11 (f)). Not landed: the spec leaves it to the cycle drill, where a 24-round
   run is the first time compaction can bite, and that drill has not been run;
@@ -519,8 +535,9 @@ first-request measurements are still the operator's to run (§5, `DEVELOPMENT.md
   `tool-ralph` out of dsh-base, §7.1), blanks the cycle section from Gravit's prompt with no boot
   warning; no `spawn` provider does the same to the roles section; and with `goal-round-driver`
   disabled the contract stays and nothing re-prompts a round. A dsh change fails `bots-smoke`
-  (Gravit's prompt carries `Step 0 — ask once`; `FACE_SMOKE=1` only), an operator's patch fails
-  nothing. Re-check at every pin that the goal tools still register (`DEVELOPMENT.md` §4.3);
+  (Gravit's prompt carries `Step 0 — ask once`) and `goal-smoke` (`FACE_SMOKE=1` only), an
+  operator's patch fails nothing. Re-check at every pin that the goal tools still register
+  (`DEVELOPMENT.md` §4.3);
 - the generated default composition (`bots/<agent>/agent.cordis.yml` as a mirror of `roles/`),
   which `definitionFor` no longer reads from disk. Landed in plan 2: the mirror and its drift test
   `994ef5d`, the in-memory render `e2bab8b`; plan 3 added the cycle text to the same render
@@ -532,7 +549,7 @@ first-request measurements are still the operator's to run (§5, `DEVELOPMENT.md
 - Fixed in plan 1: `face/README.md` "Tests" disagreed with itself on the number of real boots,
   and its table omitted `order-gate-midboot-smoke.test.ts`. It now says thirteen, the code's
   count with the instructions smoke, and its table lists thirteen files (fourteen since plan 2's
-  roles smoke).
+  roles smoke, fifteen since plan 3's goal smoke).
 - The go-live of 2026-10-01 is recorded nowhere in the repo: `DEVELOPMENT.md` §10 item 14 and
   §7.4, `ROADMAP.md`, the runbook §1 (still "the global `dsh` (0.1.1-rc.2 …)") and
   `dsh/README.md` "Installed state" read as if pending; the runbook's §3 expected-findings table
