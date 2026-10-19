@@ -17,9 +17,10 @@
  *
  * `_template` is never declared (src/bot-presets.ts declares only `isBotId`
  * directories) and is refused as an id here; `gravit` is the default preset,
- * declared from `bots/gravit` by the overlay's static `preset-gravit` row,
- * never a bot. Ids keep the retired dsh-agent-presets grammar
- * `[a-z0-9][a-z0-9-]*` (OLD packages/preset/agent-presets/src/preset.ts:18):
+ * declared by the overlay's static `preset-gravit` row from a composition the
+ * face renders out of `roles/` (src/roles.ts; `bots/gravit` supplies only its
+ * display metadata), never a bot. Ids keep the retired dsh-agent-presets
+ * grammar `[a-z0-9][a-z0-9-]*` (OLD packages/preset/agent-presets/src/preset.ts:18):
  * dsh 0.2.0 requires only a non-blank id (NEW
  * packages/preset/agent-preset-registry/src/index.ts:82), so {@link BOT_ID_RE}
  * is the face's only gate.
@@ -128,7 +129,7 @@ export interface BotRow {
   setupIssues: string[];
   /** `preset.yml`'s `model:` verbatim, absent when the default route serves the bot. */
   model?: string;
-  /** `gravit`: the host composition (plus the face's date row), not a bot. */
+  /** `gravit`: the host composition (plus the face's date row and the role rows), not a bot. */
   isDefault: boolean;
   /** Why the bot cannot be used (Rule 5: shown, never skipped): dsh's own
    *  reason when its declared composition cannot mount, or the face's reason

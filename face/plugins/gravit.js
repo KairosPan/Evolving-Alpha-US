@@ -1,12 +1,13 @@
 // face/plugins/gravit.js
 /**
  * `gravit` - the face-owned plugin Gravit's own preset mounts, and the first
- * row of `bots/gravit/agent.cordis.yml`. It holds what only Gravit is told: the
- * date (`deployment:today`) and the list of its roles (`gravit:roles`, from the
- * `roles` config key, which src/roles.ts `gravitRows` fills from `roles/`). The
- * `cycle` config key is the third section's, plan 3 of the 2026-10-15
- * redesign: the validator below already checks it, nothing reads it yet, and
- * the shipped row carries none.
+ * row of the composition the face renders for that preset (src/roles.ts
+ * `gravitRows`; `bots/gravit/agent.cordis.yml` is the render's generated
+ * mirror). It holds what only Gravit is told: the date (`deployment:today`) and
+ * the list of its roles (`gravit:roles`, from the `roles` config key, which
+ * `gravitRows` fills from `roles/`). The `cycle` config key is the third
+ * section's, plan 3 of the 2026-10-15 redesign: the validator below already
+ * checks it, nothing reads it yet, and the shipped row carries none.
  *
  * WHY A DATE. The 2026-10-10 prompt trace found no date anywhere in the
  * assembled prompt, so Gravit could not tell a fresh bar from a stale one or
@@ -22,10 +23,11 @@
  * or not a zone name) is rendered in UTC and labelled `(UTC)` - see
  * {@link resolveZone}.
  *
- * This file imports nothing ON PURPOSE, like plugins/bot.js: the composition
- * names it by a relative path, the face rebases that to an absolute `file:` URL
- * against `bots/gravit/` while it builds the declaration (src/bot-presets.ts
- * `definitionFor`), and a file URL is all the loader needs.
+ * This file imports nothing ON PURPOSE, like plugins/bot.js: the rendered
+ * composition names it by an absolute `file:` URL (src/roles.ts
+ * `GRAVIT_PLUGIN_URL`; the mirror spells the relative path
+ * `../../face/plugins/gravit.js`, which `definitionFor` in src/bot-presets.ts
+ * rebases to that same URL), and a file URL is all the loader needs.
  *
  * THE ROLE LIST. The `role_<id>` tools are registered by the sibling
  * `@deepseek-ai/dsh-tool-subagent` rows, one per role, and that package has no

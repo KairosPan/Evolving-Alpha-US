@@ -20,7 +20,7 @@ that adds a dependency on dsh adds its row to §3 in the same commit.
 
 | Component | Version | Pinned where | Checked by |
 |---|---|---|---|
-| the dsh family, 30 `@deepseek-ai/dsh-*` packages (29 on 2026-10-15; `dsh-agent-instructions` added by plan 1), every one exact | **0.2.0-rc.2** | `face/package.json`; `face/src/version.ts` `DSH_PIN` | `face/tests/version.test.ts` sweeps manifest, installed tree and constant |
+| the dsh family, 31 `@deepseek-ai/dsh-*` packages (29 on 2026-10-15; `dsh-agent-instructions` added by plan 1, `dsh-tool-subagent` by plan 2), every one exact | **0.2.0-rc.2** | `face/package.json`; `face/src/version.ts` `DSH_PIN` | `face/tests/version.test.ts` sweeps manifest, installed tree and constant |
 | `@deepseek-ai/cordis` (every dsh package peers it `~4.0.4`) | 4.0.4 | `package.json`; `CORDIS_PIN` | `version.test.ts` |
 | `@deepseek-ai/cordis-plugin-include` (imported directly for `entryListSchema`) | 1.0.9 | `package.json`; `CORDIS_INCLUDE_PIN` | `version.test.ts` |
 | `cordis-plugin-loader` / `-group` / `-timer` | 1.0.5 / 1.0.4 / 1.1.6 | **lockfile only** | nothing: a lockfile-only move of these is an upgrade and gets the whole §2 |
@@ -78,7 +78,7 @@ inventory's PART 2, so a step can be cited.
 
 **Prove on real boots**
 
-10. `FACE_SMOKE=1 npm test`: the thirteen real boots. A dropped `snapshotEvents()` fails Gate 2
+10. `FACE_SMOKE=1 npm test`: the fourteen real boots. A dropped `snapshotEvents()` fails Gate 2
     and the room engine closed and loudly here (D7).
 
 **Prove on a copy of the home** (never the live one)
@@ -97,7 +97,8 @@ inventory's PART 2, so a step can be cited.
 **Rehearse on copies**
 
 13. Rehearse the runbook §7 A checklist on a SECOND copy with the operator's MCP rows mounted
-    (`DSH_HOME=$SCRATCH/dsh-drill FACE_PORT=3091 npm start`), then delete it.
+    (`DSH_HOME=$SCRATCH/dsh-drill FACE_PORT=3091 npm start`) — the README's role drill needs
+    those rows too, so it runs here and not in step 14's fresh home — then delete it.
 14. Run the README drills in a FRESH scratch home (`npm run setup`, `npm start` on 3092): Gate 2
     / approval channel, order approval with Gate 1 armed in the scratch home only, ask-user,
     bots, room (§5).
@@ -148,6 +149,7 @@ These are the upgrade's real work. Everything else in §3.2 fails a test first.
 | H6 | the `agent-instructions` row's user-global file: hard-coded `$DSH_HOME/AGENTS.md`, outside the candidate lists the face sets | installed `dsh-agent-instructions/lib/index.js` (`USER_GLOBAL_FILE`); the candidates and the budget are the face's own patch, `face/src/instructions.ts` (H10) | 0.2.1 removes the per-row `dshHome` and reads the global file via `DSH_AGENTS_HOME` |
 | I5 | credential precedence: `.credentials.yaml` refs outrank both `.env` layers, the inherited environment wins | `boot.ts` `loadLayeredEnv`; the operator's shell | 0.2.1 changes API-key precedence for headless runs |
 | I12 | state outside `~/.dsh` and the repo is `tmpdir()` scratch only | `agents.ts`, `alpaca_kit/mcp/cache.py` | a new state directory the backup misses |
+| — | the operator's MCP server name, as the roles spell it: every `mcp__alpaca-kit__…` in `roles/*/role.yml`, and the account and order names in `NEVER` (`face/src/roles.ts`), must equal `mcp__<serverName>__…` for the row's `serverName` | `~/.dsh/profiles/face/cordis.patch.yml` (`serverName: alpaca-kit`); `roles/*/role.yml`; `face/src/roles.ts` | a renamed server, or a dsh that mints MCP tool names differently: each delegation that names the tools fails at `tools.restrict()` (never the boot), and the never-list stops covering the account tools |
 | — | the MCP live roster: `/data/plugins.json` = `alpaca-kit active 10`, `akshare active 14` | runbook §7 A | the only visible sign of G4 |
 
 ### 3.2 By test: the pinned seams and what fails first
@@ -160,7 +162,7 @@ Each row: the seam, the file that pins it. Depth: the inventory's row, `DEVELOPM
 fixture validator's private paths (`check:fixture`); A7–A8 the install anchor, `PluginPackages`
 and its native addon (every `FACE_SMOKE` boot); A10 the profile manifest and patch-file shapes
 `setup` writes (`setup.test.ts`); A11 the `satisfies` contract (tsc); A12 the structural `*Like`
-types hide drift from tsc, so the thirteen real boots are the contract; A14 `FiberState.ACTIVE`
+types hide drift from tsc, so the fourteen real boots are the contract; A14 `FiberState.ACTIVE`
 as the literal `2` (`smoke.test.ts`, `panels.test.ts`); A15 Node 22's `zstdDecompress`
 (`sessions.test.ts`).
 
@@ -200,7 +202,11 @@ snapshot (`bot-runtime-smoke`); C15 `agentPresets/read` and `/select` exist and 
 `channels.test.ts`); C17 the subagent plane the client composes: relays, catalog, interrupt
 (`subagents-smoke`, `subagents.test.ts`, `mapper.test.ts`); C18 the default model route and
 `installModelSelection` (`room-engine`, `room-smoke`, `bot-runtime-smoke`); C19 `tool-ask-user`
-configless = the blocking `legacy` mode (`smoke.test.ts`).
+configless = the blocking `legacy` mode (`smoke.test.ts`); C20 per-role `dsh-tool-subagent` rows
+inside the default preset: config keys `provider` / `toolName` / `backgroundMode` / `persona` /
+`toolFilter` (+ `agentOptions`), the row's `persona` as the child's `deployment:persona-prefix`,
+`toolFilter` as `tools.restrict({allow})` of exact names in the child's creation window
+(`roles.test.ts`, `roles-smoke`).
 
 **D · gates and approvals.** D1 the prepended `tools/pre-execute` ask (`order-gate.test.ts`,
 `orders.test.ts`); D2 the monotonic `tools.guard` reading the live description
@@ -277,12 +283,16 @@ by catalog name (`smoke.test.ts`); H7 the prompt sections the face relies on:
 `role:'system'` message, `request/header` as the durable proof a tool was offered
 (`bot-runtime-smoke`, `room-discussion-smoke`); H10 the face's instructions patch: the two
 candidate lists the face's over the inherited config, an operator's other keys and `disabled`
-kept, no row and no patch (`boot.test.ts`, `instructions-smoke`); H11 the face's date section:
-`face/plugins/gravit.js`, the first row of `bots/gravit/agent.cordis.yml`, registers
-`deployment:today` at `getSectionOrder("DEPLOYMENT_PERSONA_PREFIX") + 1` with `interpolate: false`
-and a function text re-evaluated at each assembly, in UTC when `TZ` is unusable, scoped to the
-preset revision so a bot's prompt never carries it (`gravit-plugin.test.ts`: order, which must be
-finite, shape, unload, the `TZ` fallback; `bots-smoke`: Gravit's prompt has it, a bot's does not).
+kept, no row and no patch (`boot.test.ts`, `instructions-smoke`); H11 the face's two section
+registrations: `face/plugins/gravit.js`, the first row of the default preset's rendered
+composition (`bots/gravit/agent.cordis.yml` is its mirror), registers `deployment:today` at
+`getSectionOrder("DEPLOYMENT_PERSONA_PREFIX") + 1` with `interpolate: false` and a function text
+re-evaluated at each assembly, in UTC when `TZ` is unusable, and `gravit:roles` at
+`getSectionOrder("TOOL_SUBAGENT") + 1`, blank for a session whose header says `origin: subagent`,
+each scoped to the preset revision so a bot's prompt carries neither (`gravit-plugin.test.ts`:
+order, which must be finite, shape, unload, the `TZ` fallback, the roles section's order, lines and
+blank; `bots-smoke`: Gravit's prompt has the date, a bot's does not; `roles-smoke`: Gravit's has
+the roles section, a delegated child's has the date and not the roles).
 
 **I · environment and home layout.** I1 `DSH_HOME` resolution and the dry run's live-home
 refusal (`check-home.test.ts`, `boot.test.ts`); I2 `DSH_PERMISSION_MODE` and `danger-full-access`
@@ -339,6 +349,8 @@ named as still to run on 0.2.0).
 | bots, manual (create, home conversation, tool list, `{{` refused, soul edit without restart) | README steps 1–7 | **owed** on 0.2.0 (last passed 2026-09-08 on 0.1.1) |
 | room, automated | `room-smoke`, `room-discussion-smoke` + the offline room suites | passes |
 | room, manual (a NEW round on `strategies/room-drill`) | README steps 1–8 | one round ran live 2026-09-30 on a scratch home; the `@`, an inline member question, a refused write, `left` and re-check, a restart **owed** |
+| roles, automated | `roles-smoke`, `roles.test.ts`, `gravit-plugin.test.ts` | passes (plan 2) |
+| roles, manual (a NEW round on `strategies/room-drill`, then the alpaca-kit row disabled in a scratch copy) | README "The role drill", steps 1–5 | **not yet run** — the operator's, on a COPY of the real home |
 | the subagents dock | `subagents-smoke`; the panel in a browser | manual **owed** |
 | the MCP live roster | `curl …/data/plugins.json` | 10 + 14 on 2026-09-30 (scratch) and 2026-10-01 (live) |
 | the first-live-boot checks (runbook §7 C) | the six checks | done 2026-10-01 (§6.1) |
@@ -451,24 +463,38 @@ listed in §7.3 and enter §3 as their plans merge. The doc debts the compilatio
 - per-role `@deepseek-ai/dsh-tool-subagent` rows inside the default preset: `persona`,
   `toolFilter`, `backgroundMode: one-shot`, the `spawn` provider — the config keys, the
   capability flags the backend declares, and whether the row's persona shadows the global
-  prefix for the child (spec §11 (a));
-- preset-scoped tool rows under eager activation and the roster audit (spec §11 (b));
+  prefix for the child (spec §11 (a)). Landed in plan 2: the reader `2b88cfd`, the rows and the
+  `gravit:roles` section `994ef5d`, the real-boot smoke `0ec19ab` (its equality assertions
+  `f0d8b8d`); entered as C20 in §3.2, and §3.1 gains the server-name hand check;
+- preset-scoped tool rows under eager activation and the roster audit (spec §11 (b)). Landed in
+  plan 2: `e2bab8b` renders the static `preset-gravit` row from `roles/` at compose time, so the
+  role rows mount under eager activation and a row that fails to mount lists the preset broken
+  (`bootFace` refuses it); `0ec19ab` boots it;
+- the child's prompt still carries dsh's generic tool-policy sections (`create_goal`, `workflow`,
+  `ralph`, the background-job `job_output` text) for tools `tools.restrict()` removed: those
+  sections are global and ignore the restriction (measured in plan 2, `DEVELOPMENT.md` §3.8).
+  Re-check whether a later dsh scopes tool sections to the agent's view, and drop the §3.8 caveat
+  when it does;
 - `face/plugins/gravit.js`: `ctx.systemPrompt.section` with `interpolate: false`, the orders
   `getSectionOrder` allocates for the first-party tail (spec §11 (d)). Landed in plan 1
   (`6af2eb2`): the date section at `getSectionOrder("DEPLOYMENT_PERSONA_PREFIX") + 1`, entered as
-  H11 in §3.2; the `roles` section (plan 2) and the `cycle` section (plan 3) are still to land;
+  H11 in §3.2; the `roles` section landed in plan 2 (`994ef5d`, at `getSectionOrder("TOOL_SUBAGENT")
+  + 1`, also H11); the `cycle` section (plan 3) is still to land;
 - `dsh-goal` + `dsh-goal-round-driver` + `dsh-tool-goal`: the `<goal_round>` prompt text, the
   `round-limit` blocker, the disarm-after-resume rule (spec §11 (e));
 - `dsh-compaction-tool-result-pruner` thresholds (8,192 / 4,096 / 1,024) that role reports are
   sized under (spec §11 (f));
 - the generated default composition (`bots/<agent>/agent.cordis.yml` as a mirror of `roles/`),
-  which `definitionFor` no longer reads from disk.
+  which `definitionFor` no longer reads from disk. Landed in plan 2: the mirror and its drift test
+  `994ef5d`, the in-memory render `e2bab8b`. A face that ships `bots/` must ship `roles/` beside
+  it: `composeFace` refuses a missing roles directory.
 
 ### 7.4 Doc debts found while compiling the inventory (fix in the next docs pass, after the rename lands)
 
 - Fixed in plan 1: `face/README.md` "Tests" disagreed with itself on the number of real boots,
   and its table omitted `order-gate-midboot-smoke.test.ts`. It now says thirteen, the code's
-  count with the instructions smoke, and its table lists thirteen files.
+  count with the instructions smoke, and its table lists thirteen files (fourteen since plan 2's
+  roles smoke).
 - The go-live of 2026-10-01 is recorded nowhere in the repo: `DEVELOPMENT.md` §10 item 14 and
   §7.4, `ROADMAP.md`, the runbook §1 (still "the global `dsh` (0.1.1-rc.2 …)") and
   `dsh/README.md` "Installed state" read as if pending; the runbook's §3 expected-findings table
@@ -481,7 +507,8 @@ listed in §7.3 and enter §3 as their plans merge. The doc debts the compilatio
   `PLAYWRIGHT_CLI_PATH`.
 - Fixed in plan 1: `DEVELOPMENT.md` §4's size line (31 files, 9,759 lines measured on
   2026-10-15, one plain `.js` file) now reads 32 files, some 9,900 lines (9,866 measured on
-  2026-10-18) and two plain `.js` files.
+  2026-10-18) and two plain `.js` files (33 files, some 10,200 lines since plan 2's
+  `src/roles.ts`).
 - `face/README.md` "What boot refuses" names three required rows "in this tree"; `boot.ts`
   cites upstream's seven; the three are a derived claim to re-derive at every pin.
 - `face/README.md`'s "The Gate-2 drill" heading and its "Channels" line citations are the open

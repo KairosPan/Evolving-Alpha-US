@@ -19,14 +19,18 @@ export const PLUGIN_ABS = join(REPO, "face", "plugins", "bot.js");
  *  temp root's `gravit` composition names, for the same reason. */
 export const GRAVIT_PLUGIN_ABS = join(REPO, "face", "plugins", "gravit.js");
 
-/** The repo's real `_template`, and a `gravit` whose composition is the
- *  repository's own shape: one row, the gravit plugin with `config: {}`.
- *  `gravitPlugin` spells that row's name. The default is the SHIPPED relative
- *  path, which the face's rebase lands on the real file only from a root two
- *  levels above `face/` (see {@link makeRepoBotsRoot}); a temp root passes
- *  {@link GRAVIT_PLUGIN_ABS}. Written with `dump` as `renderComposition` does.
- *  That `gravit` composition is documentation: the booted default is rendered
- *  from a roles root at compose time and `composeFace` never reads the file. */
+/** The repo's real `_template`, and a `gravit` directory whose composition is a
+ *  stand-in for the repository's own: one row, the gravit plugin with
+ *  `config: {}` (the shipped `bots/gravit/agent.cordis.yml` is the generated
+ *  mirror of `roles/` - the gravit row carrying the role summaries, then one
+ *  `dsh-tool-subagent` row per role). `gravitPlugin` spells that row's name.
+ *  The default is the SHIPPED relative path, which the face's rebase lands on
+ *  the real file only from a root two levels above `face/` (see
+ *  {@link makeRepoBotsRoot}); a temp root passes {@link GRAVIT_PLUGIN_ABS}.
+ *  Written with `dump` as `renderComposition` does. That `gravit` composition
+ *  is documentation: the booted default is rendered from a roles root at
+ *  compose time and `composeFace` never reads the file; the directory's
+ *  `preset.yml` is what `definitionFor` still reads for the display metadata. */
 export async function populateBotsRoot(root: string, gravitPlugin: string = GRAVIT_PLUGIN_RELATIVE): Promise<string> {
   await cp(join(REPO, "bots", "_template"), join(root, "_template"), { recursive: true });
   await mkdir(join(root, "gravit"));

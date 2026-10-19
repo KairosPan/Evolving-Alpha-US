@@ -410,7 +410,7 @@ findings never overrule them. Style yields to findings, but the conflict is repo
 ### 3.3 `GRAVIT.md`
 
 The workspace map every dsh agent in the tree reads on its first request — Gravit, its role
-children (plan 2 of the 2026-10-15 redesign) and the bots alike — so it states facts and rules
+children (§3.8) and the bots alike — so it states facts and rules
 only, never identity or persona: the three layers and where each lives, the PIT rule, the
 strategy directory contract and lifecycle, the bed windows (its table is pinned row for row to
 `docs/backtest-rules.md`), the room caps sentence (pinned to `ROOM_CAPS`), the never-edit list.
@@ -481,14 +481,15 @@ trail" holds nothing for them yet (§10).
 
 ### 3.6 What Gravit can call
 
-Everything below is registered tree-wide; only the MCP rows, `agent_<bin>` and `dispatch` are
+Everything below is registered tree-wide except the `role_<id>` tools, which belong to Gravit's
+preset alone (§3.8); only the MCP rows, `agent_<bin>`, `dispatch` and the role tools are
 operator- or face-specific. The host roster is dsh-base's plus the face's policy layer (§4.3),
 and on the pinned tree it equals the 0.1.1 face's name for name: 26 tools before any MCP server,
-local agent or room (measured 2026-09-30 against a boot of the 0.1.1 composition). dsh-base
-0.2.0 alone would differ — `web_fetch` and three MCP resource tools on, `ralph` and
-`str_replace_editor` gone — and the policy layer undoes each (PLAN D6, D7, D9). The rows a
-running face actually composed, and its MCP and `agent_<bin>` tools, are listed by the plugin
-panel (`/data/plugins.json`).
+local agent or room (measured 2026-09-30 against a boot of the 0.1.1 composition); Gravit's own
+sessions see that roster plus the role tools. dsh-base 0.2.0 alone would differ — `web_fetch` and
+three MCP resource tools on, `ralph` and `str_replace_editor` gone — and the policy layer undoes
+each (PLAN D6, D7, D9). The rows a running face actually composed, and its MCP and `agent_<bin>`
+tools, are listed by the plugin panel (`/data/plugins.json`).
 
 | Tool(s) | Row (`dsh-base` unless noted) | Note |
 |---|---|---|
@@ -506,6 +507,7 @@ panel (`/data/plugins.json`).
 | `mcp__akshare__*` | project `mcp-akshare` row | public A-share/other market queries, unguarded; check source errors and truncation |
 | `agent_<bin>` | face `agents.ts` | roster-gated per channel (§6.5) |
 | `dispatch` | face `room.ts` (`installRoom`) | Gravit's own: refused in any session whose header or `agentPreset` projection names a bot (§6.8) |
+| `role_<id>` (one per `roles/<id>/`) | one `dsh-tool-subagent` row per role inside Gravit's preset, rendered by `src/roles.ts` (§3.8) | scoped: a bot never sees one, and a child removes them through its own allow list; a one-shot `spawn` child with the role's persona and exactly the role's tools; the arguments are `description` (its label in the 临时子任务 panel) and `prompt`, and the call waits unless `run_in_background` is set |
 
 Not tools, but in the same prompt: a connected MCP server's `instructions` (the `mcp:akshare`
 section, §3.1). The MCP resource tools and their prompt section are off by policy (PLAN D7).
@@ -534,7 +536,9 @@ preset's own. A `./`, `../` or absolute path row becomes an escaped absolute `fi
 skill-filesystem row becomes `bots/<id>/…` — a behaviour change: 0.1.1 resolved `./skills`
 against the process cwd, `face/`, so no bot ever scanned its own `skills/` (today those hold only
 a README). `bots/gravit` is the static `preset-gravit` overlay row (§4.3), built by the same
-`definitionFor`, so a missing or non-YAML `bots/gravit/agent.cordis.yml` refuses the compose.
+`definitionFor` but handed its rows in memory — rendered from `roles/` (§3.8) — so the directory
+supplies only `preset.yml`'s display metadata and its `agent.cordis.yml` is a generated mirror the
+face never reads (a missing roles directory or an unreadable role refuses the compose instead).
 A second static row, `preset-kairos`, declares the same definition under `kairos`, the agent's id
 before the 2026-10-08 rename. Sessions created before it persist that id, and dsh refuses to
 resume a session whose preset no row declares (`agent-preset/not-found`,
@@ -562,11 +566,13 @@ grammar, which admits no leading underscore — both through `isBotId`. A soul c
 refused twice, at `rejectSoul` and again at the plugin's `validateBotConfig`: the system prompt
 is a strict template with no escape.
 
-State on 2026-09-30: eight directories are tracked. `bots/gravit` is the default composition
-every session that names no preset joins; since plan 1 of the 2026-10-15 redesign it carries one
-row, the face's `gravit.js` (the `deployment:today` section, scoped to Gravit's sessions), and
-masks no tool, so Gravit's tools stay exactly the host's — and `bots/_template` is the copy
-source, never declared and refused as an id.
+State on 2026-09-30: eight directories are tracked. `bots/gravit` is the default preset every
+session that names no preset joins; since the role library its composition is rendered from
+`roles/` at compose time (§3.8): the `gravit` row (the face's `gravit.js`, whose
+`deployment:today` and `gravit:roles` sections are scoped to Gravit's sessions), then one
+`dsh-tool-subagent` row per role. It masks no host tool, so Gravit's tools are the host's plus
+the `role_<id>` tools, and its `agent.cordis.yml` is the generated mirror of that render.
+`bots/_template` is the copy source, never declared and refused as an id.
 `bots/drill-bull/` (看多派) and `bots/drill-bear/` (看空派) are the room drill's two voices, kept
 as tracked fixtures with their channel `strategies/room-drill`; `news-scout` and the AQR room's
 `aqr-data`, `aqr-method` and `aqr-audit` are the operator's own. A created bot is the
@@ -588,26 +594,143 @@ member's first permission fact and no create→set window exists. `src/room.ts` 
 (`materializeMember`) and resumes it; nothing creates one by hand, and a session that only looks
 like one is not a member (§9, R16).
 
+### 3.8 The role directory contract
+
+`roles/<id>/` = `ROLE.md` (the child's persona, trimmed; never empty, at most 2,000 bytes as
+`wc -c` counts them, no `{{` — the system prompt is a strict template with no escape) and
+`role.yml` (`name`; `description`, the ONE line Gravit reads when it chooses a role, at most 300
+characters; `allow`, a non-empty list of exact tool names; an optional `model:
+<provider>/<model>` in `MODEL_ROUTE_RE`'s grammar; keys it does not know are ignored).
+`roles/_template/` is the copy source and carries a `README.md`, the contract for whoever opens
+the directory; it is never a role, and neither is anything under `roles/` that is not a directory
+or whose name is not an id. Three roles ship — `screener`, `backtester`, `reviewer` — each ending
+its report on the same four headings (status, what was measured, paths, limits). The operator is
+the only writer, by file edit; Gravit proposes a role in conversation and never creates or edits
+one (charter §4), and nothing in the face writes under `roles/`, so, unlike a bot, a role has no
+save and no re-declaration: `composeFace` reads the directory once per boot, and an edit reaches
+the next restart.
+
+The id is the directory name in the bots' grammar `[a-z0-9][a-z0-9-]*` (`ROLE_ID_RE`, 64
+characters, as `BOT_ID_RE`); the tool Gravit calls is `role_` plus the id with `-` as `_`
+(`toolNameFor`: `data-check` is `role_data_check`). A tool name over 64 characters
+(`TOOL_NAME_MAX`) is refused, which makes an id over 59 characters one the reader will not take:
+dsh caps nothing, a model API may cap a function name there, and `role_` plus a 64-character id
+reaches 69. The summary is one line because `plugins/gravit.js` emits one bullet per role.
+
+`readRoles(root)` (`src/roles.ts`) reads and validates every role synchronously, sorted by id, and
+returns plain data (`RoleFile`). The first problem throws an `Error` whose message opens with the
+absolute path of the file or directory at fault: the roles directory missing or not a directory,
+`ROLE.md` or `role.yml` missing or unreadable, a persona empty, over its budget or carrying `{{`,
+YAML that does not parse or is not a mapping, a blank `name` or `description`, a description on
+two lines or over its cap, an `allow` that is not a non-empty list of strings in the tool-name
+grammar, an entry the never-list below refuses, a `model` that is not a route. `composeFace` calls
+it LAST, just before the overlay is pushed, and does not catch: one bad role, or no `roles/` at
+all, ends the compose and so the boot (the fail-loud contract of spec §5.1, as 0.1.1's roster
+check refused a boot), and a face that ships `bots/` therefore ships `roles/` beside it.
+`FaceBootOptions.rolesRoot` points a test at a fixture. `gravitRows(roles, {plugin})` then renders
+the default preset's composition: the `gravit` plugin row — named by `GRAVIT_PLUGIN_URL`, an
+absolute `file:` URL that `definitionFor`'s rebase passes through — whose config `roles: [{tool,
+summary}]` the plugin turns into the `gravit:roles` section (order `TOOL_SUBAGENT` + 1; a sentence
+on what a role is and why its report is a claim to check, then `- role_<id> — <description>` per
+role: `dsh-tool-subagent` has no description key, which is why the summaries ride on this row);
+then one `@deepseek-ai/dsh-tool-subagent` row per role, id `role-<id>`, `config` =
+`provider: spawn`, `toolName: role_<id>`, `backgroundMode: one-shot`, `persona` (the `ROLE.md`
+text), `toolFilter: {allow: […]}`, and `agentOptions: {provider, model}` only when `role.yml` names
+a route (otherwise the child inherits its parent's). The rows go to `definitionFor(botsRoot,
+"gravit", rows)`, which rebases them as a file's would be and reads only `bots/gravit/preset.yml`
+(the display metadata); the `preset-kairos` alias carries the same definition (§4.3). A role row
+that fails to mount marks the default preset `broken`, and the roster audit (§4.1 step 8) refuses
+the boot.
+
+`bots/gravit/agent.cordis.yml` is a GENERATED mirror: `renderGravitComposition` dumps the same
+rows — the plugin spelled by its shipped relative path, `GRAVIT_PLUGIN_RELATIVE`, as a bot's
+composition spells its own — in the Loader's dialect (`entryListSchema`) under a three-line header
+saying so, and `cd face && npm run render:roles` (`scripts/render-roles.ts`, outside `tsc`'s
+include like the other scripts) writes it. Nothing reads it at boot; its job is to show whoever
+opens `bots/gravit` what the preset is. `tests/roles.test.ts` renders the repository's `roles/`
+and byte-compares it with the committed file, and fails while they differ, so an edit under
+`roles/` that skipped the script cannot land. The header also names `dsh/profile/cycle.md`, the
+cycle text the redesign's next plan adds; the render takes none until then.
+
+`allow` entries are EXACT: a host tool name (`read`, `grep`) or `mcp__<server>__<raw>`, letters,
+digits, `_` and `-` only (a `*` is refused where the file is read), under the server name the
+operator's profile mounts the server with — `serverName: alpaca-kit`, `dsh/README.md`; the shipped
+roles say `mcp__alpaca-kit__screen`, and a server under another name means editing every role that
+names its tools, and the account and order names in the never-list. The reason is the backend's,
+not a taste: dsh's spawn backend applies a child's `toolFilter` inside the child's creation
+window — `applyChildComposition` in the installed `dsh-subagent` calls the child context's
+`tools.restrict(filter)` — and `restrict()` in `dsh-tools` checks every name by set membership
+against the tools the child inherits, throwing `tools.restrict() names unknown global tool "…";
+known global tools: …` for a name outside the set. There is no glob and no prefix match. The
+spec's §5.2–§5.3 still say a `mcp__*__<raw>` wildcard expands against the live tree as
+`plugins/bot.js` does for a bot; its own §11.1 (a) is the correction, and the code follows §11.1
+(a). Whether a named tool exists is a fact about the tree at the moment the role is CALLED — an
+MCP tool is there only while its server is mounted, started and not given up on (§4.1 step 7) —
+not about the file, so the reader checks nothing of it: a missing tool fails THAT delegation (the
+tool result is the `restrict()` error and no child is created), never the boot
+(`roles-smoke.test.ts`).
+
+A role also never carries what a delegated child cannot use or must not hold, and the reader
+refuses such an `allow` entry with the reason in the message (`NEVER` in `src/roles.ts`;
+`tests/roles.test.ts` keeps an independent copy of the names): a tool that needs a human
+(`ask_user_question`, `exit_plan_mode` — dsh refuses `ask_user_question` to a delegated caller with
+`DELEGATED_CALLER`, so a role that needs the operator says so in its report); the open web
+(`web_search`, `web_fetch` — no as-of guard); delegation (`subagent`, `subagent_fork`,
+`send_message`, `interrupt_agent`, `list_agents`, `workflow`, `ralph`, `dispatch`, and any `role_*`
+or `agent_*` name — Gravit alone delegates); goal, todo and job tools (Gravit tracks them); the
+alpaca-kit account and order tools (`account`, `positions`, `orders`, `place_order`,
+`cancel_order` — orders stay behind the two gates, §4.7); and the `mcp__akshare__` prefix (no
+point-in-time guard, never backtest evidence).
+
+What a delegated child sees (spec §5.4 as corrected by §11.1 (a)). It JOINS the preset it was
+delegated from (`applyChildComposition` calls `agentPresets.composeFrom(childCtx, parent.ctx)`), so
+it inherits Gravit's preset layer — the `role_<id>` tools and the `gravit` plugin's sections — and
+then, in its creation window, dsh applies its own composition: the fixed `subagent:delegation`
+statement (its permission scope was fixed when it started, and an operation that needs approval is
+rejected, so it states the limit in its reply); the row's `persona` as a child-scoped
+`deployment:persona-prefix` that shadows Gravit's at order 0; and `tools.restrict({allow})`, which
+removes everything the role does not name, the preset layer's `role_<id>` tools included, so a
+role cannot delegate to a role. The `gravit:roles` section would reach it as well — a scoped
+section cannot be filtered by an allow list — so its text is a function of the assembly context and
+resolves to `''` when the assembled agent's session header says `origin: 'subagent'` (`isDelegated`
+in `plugins/gravit.js`; dsh drops an empty section): the child is never told of roles it cannot
+call. `deployment:today` is left on for it, and `GRAVIT.md` reaches it as it reaches every agent
+(§3.3). Its cwd is its parent's. It has no `ask_user_question`, by the never-list and by dsh. Two
+limits are upstream's. dsh exempts a scope's own registrations from `restrict()`, so
+`roles-smoke.test.ts` compares the child's tool list to `allow` exactly rather than checking a
+subset. And the child's prompt still carries dsh's generic tool-policy paragraphs for tools it
+lacks (`create_goal`, `workflow`, `ralph`, the background-job `job_output` text), because those
+sections are global and ignore the restriction: a small model may be told of a tool it cannot call
+(`docs/dsh-upgrade-guide.md` §7.3 watches for a dsh that scopes them to the child's view).
+
+Pinned by `tests/roles.test.ts` (the reader, the render, the mirror), `tests/gravit-plugin.test.ts`
+(the section, blank for a child), `tests/boot.test.ts` and `tests/bot-presets.test.ts` (the
+default rendered in memory and never read from the file), `tests/bots-smoke.test.ts` (Gravit's
+roster is the host's plus the role tools; a bot sees none) and `tests/roles-smoke.test.ts` (a real
+boot: persona, exact tools, the result, the loud failure); the live check is the role drill
+(`face/README.md`, §7.4).
+
 ---
 
 ## 4. Frontend: the face server (`face/src`)
 
-Some 9,900 lines of TypeScript across 32 files, run directly by `tsx` — no build step, plus two
-plain `.js` files outside `src/` (`face/plugins/bot.js` and `face/plugins/gravit.js`, §3.7 — a
-composition names each by a relative path the face rebases to an absolute `file:` URL, and each
-must import nothing). Pins:
+Some 10,200 lines of TypeScript across 33 files, run directly by `tsx` — no build step, plus two
+plain `.js` files outside `src/` (`face/plugins/bot.js` and `face/plugins/gravit.js`, §3.7–§3.8 —
+a composition names each by a path the loader reaches as an absolute `file:` URL, which the face
+rebases from a relative one for a bot, and each must import nothing). Pins:
 `DSH_PIN = 0.2.0-rc.2` (every `@deepseek-ai/dsh-*` dependency, declared exactly and installed),
 `CORDIS_PIN = 4.0.4` (`@deepseek-ai/cordis` rides its own 4.x track; the dsh packages peer it with
 a tilde range) and `CORDIS_INCLUDE_PIN = 1.0.9` (the one cordis plugin the face imports itself);
 all three are asserted by `tests/version.test.ts`, which also refuses the three package names
 0.2.0 retired. `face/README.md` carries the run table, the profile rules, the instruments,
-channels, the master rail, bots, the upgrade order, and the drills. Beside the server,
-`face/scripts/` holds two operator tools — `check-home.ts`, the go-live dry run that boots the
+channels, the master rail, bots, roles, the upgrade order, and the drills. Beside the server,
+`face/scripts/` holds three operator tools — `check-home.ts`, the go-live dry run that boots the
 face on a COPY of a harness home and read-opens every session (it refuses the live home by
-device and inode, and a copy without its `DRY-RUN-COPY` marker), and `validate-fixture.mjs`
-(`npm run check:fixture`, §6.7) — and, with `face/landing/`, the static product landing page
-(`npm run build` → `face/dist/`) and its demo-asset tooling; nothing there runs in the face
-process.
+device and inode, and a copy without its `DRY-RUN-COPY` marker), `validate-fixture.mjs`
+(`npm run check:fixture`, §6.7), and `render-roles.ts` (`npm run render:roles`, §3.8), which
+regenerates the mirror `bots/gravit/agent.cordis.yml` from `roles/` — and, with `face/landing/`,
+the static product landing page (`npm run build` → `face/dist/`) and its demo-asset tooling;
+nothing there runs in the face process.
 
 ### 4.1 Boot sequence (`main.ts` → `boot.ts`)
 
@@ -654,7 +777,10 @@ row audit; and the policy layer.
    switches (`session-telemetry-otel` disabled when `DSH_TELEMETRY_DISABLED` is non-empty and
    the row is composed; `hmr` disabled whenever composed), patch Gravit's persona into
    `system-prompt` (`personaPrefix` only, §4.3), set the `agent-instructions` row's two
-   candidate lists after it (`instructionsPatch`, §4.3), then push **the face overlay last**. This
+   candidate lists after it (`instructionsPatch`, §4.3), then push **the face overlay last** — its
+   default preset rendered here, in memory, from `roles/` (`readRoles` runs as the very last
+   step before the push; a missing roles directory or a role the reader refuses ends the compose
+   with that path, and a face that ships `bots/` ships `roles/` beside it, §3.8). This
    inverts the CLI's layering deliberately: loopback-only binding must survive an operator
    patch, so face rows win silently; the policy layer is the other way round and yields to an
    operator row with the same id.
@@ -710,7 +836,7 @@ row audit; and the policy layer.
     explaining it, and the room caps.
 
 One `bootFace` per process: given a `dshHome` (as the tests do; `main.ts` passes none) it sets
-`process.env.DSH_HOME` permanently, which is why the thirteen real-boot tests live in separate
+`process.env.DSH_HOME` permanently, which is why the fourteen real-boot tests live in separate
 files. Without `deferReady` it commits `appReady` itself as its last step, which is what every
 smoke that boots without `main.ts` relies on.
 
@@ -719,7 +845,7 @@ smoke that boots without `main.ts` relies on.
 | File | Responsibility |
 |---|---|
 | `main.ts` | entry: chdir, signal handlers and `installFailLoud`, boot with `deferReady`, the sign-in route and every route family (the room engine and the bot runtime included), `commitReady`, the tokenized URL |
-| `boot.ts` | the mirror of the dsh CLI's `runProfile` (§4.1): `composeFace`, the runtime resolution, the strict row audit, the required-service and answerer checks, `ask_user_question` in the live registry, Gate 2 registration, the preset-roster checks, `declareBots`, `commitReady` |
+| `boot.ts` | the mirror of the dsh CLI's `runProfile` (§4.1): `composeFace` (its last step renders the default preset from `roles/`), the runtime resolution, the strict row audit, the required-service and answerer checks, `ask_user_question` in the live registry, Gate 2 registration, the preset-roster checks, `declareBots`, `commitReady` |
 | `overlay.ts` | the thirteen host rows `dsh-base` does not mount (§4.3), `satisfies`-checked against each plugin's own config type; `BOTS_ROOT`, `DEFAULT_PRESET`, `GRAVIT_PLUGIN_RELATIVE`, `presetRowId` |
 | `policy.ts` | the policy layer (§4.3): `POLICY_ID_PATCHES`, `POLICY_INSERTS`, `facePolicyPatches` — each row a PLAN decision; a missing target is reported on stderr, never skipped silently |
 | `akshare.ts` | project AKShare MCP defaults, composed below operator profile/home patches |
@@ -736,7 +862,8 @@ smoke that boots without `main.ts` relies on.
 | `channels.ts` | channel = `strategies/<dir>` + workspace-registry identity; reconcile dirs ↔ registry ↔ sessions (durable and live heads, `{header}` snapshots at 0.2); `status.yaml` / `THESIS.md` / `journal.md` / `backtests/` readers; create-from-template; five routes — the overview answers `bots` (this channel's roster) and `allBots` (every preset dsh reports) beside the agent roster, and the listing's `presets` maps each session to its header's `agentPreset` (`presetHintsOf`) |
 | `agents.ts` | exec recipes for `claude` and `codex` (fixed argv, prompt on stdin, scrubbed env, `--restricted` / `--sandbox read-only`), the spawn runner, the `agent_<bin>` tool with the roster check on execute, tool sync |
 | `bots.ts` | bots = `bots/<id>/` directories: `isBotId`, `renderComposition` (the persona text written into the composition), `createBot`, `updateBotSettings`, `updateSoul`, `listBots` (dsh's roster and the face's declaration failures merged in, `broken`/`listed`); four routes, each save calling `onBotChanged` → `redeclare` |
-| `bot-presets.ts` | bots as face-declared presets (§3.7): `definitionFor` (the rebased `PresetDefinition`), `declareBots` (after boot; `redeclare` serialized per id, `errors`, `ids`) |
+| `bot-presets.ts` | bots as face-declared presets (§3.7): `definitionFor` (the rebased `PresetDefinition`; its rows come from the composition file, or are handed in — the default's, rendered from `roles/`, whose file is then not read), `declareBots` (after boot; `redeclare` serialized per id, `errors`, `ids`) |
+| `roles.ts` | the role library (§3.8): `readRoles` (the grammar, the exact-name rule and the never-list, every refusal opening with an absolute path), `toolNameFor`, `gravitRows` (the `gravit` plugin row, then one `dsh-tool-subagent` row per role), `renderGravitComposition` (the mirror's text), `GRAVIT_PLUGIN_URL`, `ROLES_ROOT`; plain data in, plain rows out, nothing mounted |
 | `bot-runtime.ts` | a bot HOME session's saved model route on its first request, the journal as a runtime-context snapshot on every request, and `/data/bots/runtime` (a live bot session's mounted persona, model and tools, or its last request's; never resumes one); reads the preset a session RUNS from the `agentPreset` projection (`sessionPresetReader`) |
 | `bot-journal.ts` | a bounded, fresh read of one bot's own `journal/notes.md` (12 KiB); never writes |
 | `room-rules.ts` | the room's pure rules: `ROOM_CAPS`, `resolveMentions` (by id, by one-token name), `finalTextOf` + `isPass`, `validateDispatch` (names the roster), `dispatchResultText` (names who was not called), `roomLinesOf` + `formatDelta` + `memberPrompt` (the attributed delta and the four standing rules), `roundEndText`, `parseModelRoute`; the `room` message-source vocabulary |
@@ -746,7 +873,7 @@ smoke that boots without `main.ts` relies on.
 | `persona.ts` | Gravit's deployment persona (`personaPrefix`): `readPersona` validates the strict `{{}}` template and refuses the boot on a bad file |
 | `instructions.ts` | the instructions patch (§4.3): `AGENT_INSTRUCTIONS_ROW_ID`, `INSTRUCTION_FILE` and `LOCAL_INSTRUCTION_FILE` (`GRAVIT.md`, `GRAVIT.local.md`), `INSTRUCTIONS_CONFIG` (`satisfies` the package's own `Config`) and `instructionsPatch(inherited?)`, which spreads the inherited row config and applies the two lists last, a fresh object on every call; imports the package's type only |
 | `plugins/bot.js` | the `gravit-bot` composition plugin: a scoped `deployment:persona-prefix` section (shadows Gravit's prefix; no suffix) + an allow-list `tools.restrict`, re-expanded after each burst of `tools/change` — coalesced to one timer turn, so a tool that registers after the declaration is admitted when the allow list names it (`expandAllow` resolves `mcp__*__<raw>` against the live tree); dependency-free |
-| `plugins/gravit.js` | the `gravit` composition plugin, the first row of `bots/gravit/agent.cordis.yml`: a scoped `deployment:today` section (`Today is YYYY-MM-DD, Weekday (Zone).`), its text a function re-evaluated at every assembly, in the process's own zone — `resolveZone()` falls back to `UTC`, labelled `(UTC)`, when `TZ` is empty or not a zone Intl can format in, so an unusable `TZ` cannot throw at assembly — ordered right after the persona prefix, `interpolate: false`; `inject` is `systemPrompt` alone, so it masks no tool; `validateGravitConfig` accepts `{}` and checks `cycle` and `roles` when present; dependency-free |
+| `plugins/gravit.js` | the `gravit` composition plugin, the first row of the default preset's rendered composition (`gravitRows` in `src/roles.ts`; `bots/gravit/agent.cordis.yml` is its generated mirror): a scoped `deployment:today` section (`Today is YYYY-MM-DD, Weekday (Zone).`), its text a function re-evaluated at every assembly, in the process's own zone — `resolveZone()` falls back to `UTC`, labelled `(UTC)`, when `TZ` is empty or not a zone Intl can format in, so an unusable `TZ` cannot throw at assembly — ordered right after the persona prefix, `interpolate: false`; and, only when its `roles` config is present, a scoped `gravit:roles` section at `getSectionOrder("TOOL_SUBAGENT") + 1` (the role intro and one `- role_<id> — <summary>` line per role, `interpolate: false`, resolving to `''` when the assembled agent's session header says `origin: 'subagent'` — `isDelegated`, §3.8); `inject` is `systemPrompt` alone, so it masks no tool; `validateGravitConfig` accepts `{}` and checks `cycle` and `roles` when present; dependency-free |
 | `panels.ts` | the master rail's feeds: host facts (`/data/host.json`), the local-agent roster (probe, auth, connect, disconnect), memory (skills), plugins (loader rows + tool schemas); builds `PanelDeps` (it requires `skills`, `tools`, `loader`, `workspaceRegistry` and `agents`), whose `channelFor` answers `{workspaceId, name, dir}` — the `dir` is what the room engine gives a member as its `cwd` |
 | `version.ts` | the three pins |
 
@@ -757,7 +884,8 @@ the real `/` (a bare `bootFace` mounts no page), `signIn` trades the launch toke
 ### 4.3 The overlay rows and the policy layer
 
 Thirteen rows, composed last, winning silently over the operator's patch and the home layer —
-`faceOverlay(port, definitionFor(bots, "gravit"))`, in this order:
+`faceOverlay(port, definitionFor(bots, "gravit", rows))`, with `rows` rendered from `roles/` by
+`composeFace` (§3.8), in this order:
 
 | Row | Package | Why the face mounts it |
 |---|---|---|
@@ -772,7 +900,7 @@ Thirteen rows, composed last, winning silently over the operator's patch and the
 | `directory-picker` | `dsh-host-directory-picker-auto` | the native folder dialog; since 0.2.0 it fails the row when either of its two runtime entries cannot load, hence the four picker packages in `package.json` |
 | `tool-ask-user` | `dsh-tool-ask-user` | the model-facing half of `userQuestions`, in no upstream bundle; configless = the blocking `legacy` mode |
 | `agent-preset-registry` | `dsh-agent-preset-registry` | `{default: gravit}`. The registry scans no directory and serves only `list`, `read` and `select` Remotes, so 0.1.1's `trust: system` posture — no authoring RPCs over a git-tracked directory — holds with nothing to configure |
-| `preset-gravit` | `dsh-agent-preset` | the default preset, static so it exists before the first `session/create`: `bots/gravit` through `definitionFor` — one row, the face's `gravit.js` (the `deployment:today` section) by its shipped relative path, rebased to a `file:` URL (`GRAVIT_PLUGIN_RELATIVE`); it masks no tool |
+| `preset-gravit` | `dsh-agent-preset` | the default preset, static so it exists before the first `session/create`: `definitionFor` over the rows `composeFace` renders from `roles/` (§3.8) — the face's `gravit.js` row (the `deployment:today` and `gravit:roles` sections) by an absolute `file:` URL (`GRAVIT_PLUGIN_URL`), then one `dsh-tool-subagent` row per role; `bots/gravit` supplies only the display metadata, its `agent.cordis.yml` being a generated mirror that is not read (`GRAVIT_PLUGIN_RELATIVE` is how the mirror spells the plugin); it masks no host tool, so Gravit's roster is the host's plus the `role_<id>` tools |
 | `preset-kairos` | `dsh-agent-preset` | the legacy alias: the default's definition under `kairos`, Gravit's id before 2026-10-08, so archived sessions resolve; `bootFace` refuses a boot where it is absent or broken; every host test goes through `isHostPreset` (`src/overlay.ts`, `client/speaker.js`) |
 
 Gone from the overlay since 0.1.1: `storage`, `storage-json`, `storage-domain` and
@@ -781,7 +909,8 @@ REACHES them (a same-id insert here would silently replace base's row and swallo
 `api-gateway` (`dsh-host-apiproxy`, deleted upstream: dsh-base's `typert-gateway` serves `/api`
 and the three controller rows carry its business methods); `cordis-host-runner` (its consumers
 are not mounted); `agent-presets` (deleted: presets are declarations, §3.7). Web-app's
-agent-plane disable set is deliberately not followed: Gravit keeps dsh-base's flat host roster.
+agent-plane disable set is deliberately not followed: Gravit keeps dsh-base's flat host roster
+and gains only the `role_<id>` tools of its preset (§3.8).
 A patch of the operator's aimed at an overlay row is accepted, overridden, and never reported
 (`PATCH_HEADER` says so where the operator looks); a patch matching no row is also silent —
 hence the `rows.has(…)` guards around the switches.
@@ -907,6 +1036,8 @@ passes on `Host` alone — `curl` works, which is residual R3 in §9.
 | `strategies/<name>/` | `createChannel` | copied from `_template`, never overwritten |
 | `bots/<id>/` | `createBot`, `updateBotSettings`, `updateSoul` | copied from `_template`; `preset.yml`, `SOUL.md` and the composition's persona row rewritten together, staged then renamed; never overwritten by create |
 | `bots/<id>/journal/` | a bot's HOME session | workspace-write, cwd = the journal; the only directory a bot writes (the write to `../SOUL.md` is refused, proven in `room-smoke`) |
+| `roles/<id>/` (`ROLE.md`, `role.yml`) | the operator | not written by the face — read once per boot by `composeFace` (`readRoles`) and rendered into Gravit's preset (§3.8); a missing roles directory or a malformed role refuses the boot |
+| `bots/gravit/agent.cordis.yml` | `npm run render:roles` (the operator runs it) | the generated mirror of that render, for readers; the face never reads it, and `tests/roles.test.ts` fails while it differs from the render |
 | `dsh/profile/persona.md` | the operator | not written by the face — read by `composeFace` into `system-prompt`'s `personaPrefix`, and a malformed template refuses the boot |
 | `data/.face_cache` | the producer, not the face | |
 
@@ -933,7 +1064,7 @@ face's `WorkspaceLike`). Recorded, not fixed.
 | `DSH_TELEMETRY_DISABLED` | `boot.ts` | unset | any non-empty value (`0`, `false` included) disables the telemetry row, and its patch composes after the operator layers, so it wins over an operator's re-enable; the policy layer disables the row by default anyway |
 | `DSH_PERMISSION_MODE` | dsh, not the face | `workspace-write` | `danger-full-access` sets approval policy `never`: it disarms the sandbox-escalation card but **not** Gate 2, which then denies in its own words |
 | `ALPACA_KIT_ENABLE_ORDERS` | the MCP child only | unset | Gate 1; the face cannot read it and consults the tool registry instead |
-| `FACE_SMOKE` | tests | unset | `=1` enables the thirteen real-boot tests |
+| `FACE_SMOKE` | tests | unset | `=1` enables the fourteen real-boot tests |
 | `DEEPSEEK_API_KEY`, `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY` | dsh's credential seam; the producers and the quote routes; the MCP row | — | not auto-loaded from the repo's `.env.*` files |
 
 Every child the face spawns for a local agent run or probe has these scrubbed — an enumerated
@@ -1335,7 +1466,7 @@ against the gateway's `stream-protocol`, `api-remotes`' event list, the session 
 check:fixture` validates every line it can against the installed dsh's own acceptance code —
 the session controller's `assertSessionWireEvent`, the gateway's frame parser and `$events` id
 predicates; on 2026-09-30, 23 of 26 lines validated, 0 rejected, and the 3 with no upstream
-validator named) → `FACE_SMOKE=1 npm test` — the thirteen real boots, `order-gate-smoke` and
+validator named) → `FACE_SMOKE=1 npm test` — the fourteen real boots, `order-gate-smoke` and
 `client-mux-smoke` above all, are the contract the structural `*Like` types cannot be → the
 drills. `cordis-plugin-include` is pinned; `loader` and `group` arrive as app-boot peers and
 `timer` through dsh-base, held by the lockfile alone; `cordis-plugin-hmr` is gone.
@@ -1369,9 +1500,9 @@ the pulses of each LIVE member's own `session/follow`.
 | Command | From | Needs | Measured 2026-09-30 |
 |---|---|---|---|
 | `python -m pytest` | repo root | nothing — offline, no keys, no bed | 381 passed in a clean checkout, ~2 s (the operator's tree adds the untracked `tests/strategies/`) |
-| `cd face && npm test` | `face/` | nothing — no port, no key | 680 tests, 667 pass, 13 skipped (2026-10-18) |
+| `cd face && npm test` | `face/` | nothing — no port, no key | 694 tests, 680 pass, 14 skipped (2026-10-19) |
 | `cd face && npm run typecheck` | `face/` | | clean, the dependencies' `.d.ts` included (`skipLibCheck: false`) |
-| `cd face && FACE_SMOKE=1 npm test` | `face/` | boots thirteen real trees into `mkdtemp` homes and binds ports; still no LLM or key (four of the smokes also create, and remove, a gitignored `.bots-smoke-*` bots root at the repo root) | the thirteen skipped tests; 680/680, ~10 s (2026-10-18) |
+| `cd face && FACE_SMOKE=1 npm test` | `face/` | boots fourteen real trees into `mkdtemp` homes and binds ports; still no LLM or key (four of the smokes also create, and remove, a gitignored `.bots-smoke-*` bots root at the repo root) | the fourteen skipped tests; 694/694, ~13 s (2026-10-19) |
 | `cd face && npm run check:fixture` | `face/` | the installed dsh | 26 fixture lines: 23 validated, 0 rejected, 3 with no upstream validator |
 
 ### 7.2 The Python suite
@@ -1399,7 +1530,7 @@ order path.
 
 ### 7.3 The face suite
 
-680 tests in 59 files (667 pass, 13 skipped without `FACE_SMOKE=1`), run by `node --test`
+694 tests in 61 files (680 pass, 14 skipped without `FACE_SMOKE=1`), run by `node --test`
 through `tsx`:
 
 - **Composition and boot** — `boot` (the layer order ending with the overlay; the policy layer
@@ -1409,9 +1540,10 @@ through `tsx`:
   `agent-instructions`' two candidate lists to `GRAVIT.md` and `GRAVIT.local.md`, after the
   persona patch and before only the overlay, keeping an operator's other keys on the row and its
   `disabled`, cloning what it is given, and absent from a composition that has no such row; a
-  skipped bundle refused; the static `preset-gravit` row equal to
-  `definitionFor(bots, "gravit")` and the `preset-kairos` alias equal to it under the legacy id,
-  and a missing default composition refused), `overlay` (exactly the thirteen rows, in order;
+  skipped bundle refused; the static `preset-gravit` row rendered from `roles/` in memory — the
+  `gravit` row by absolute URL, one `spawn` row per role — and never read from the mirror, the
+  `preset-kairos` alias equal to it under the legacy id, and a roles root with a bad role refusing
+  the compose with the file's path), `overlay` (exactly the thirteen rows, in order;
   loopback config; the rows dsh-base owns now and the retired ones never inserted), `policy`
   (every target a row the installed dsh-base composes; the composed posture; an operator row
   overriding a default; `DSH_TELEMETRY_DISABLED` winning over an operator re-enable), `setup`,
@@ -1424,7 +1556,15 @@ through `tsx`:
   local date, ISO then weekday; `apply` registering one scoped, uninterpolated section right after
   the persona slot — whose order must be finite, so a missing slot cannot pass as `NaN` — which
   unload removes; a bad config refused with its reason; an empty or non-zone `TZ` rendered in
-  UTC and labelled, never thrown at assembly), `check-home` (the
+  UTC and labelled, never thrown at assembly; the `gravit:roles` section only when `roles` is
+  configured, one past dsh's subagent section, listing every role and empty for a session whose
+  header says `origin: subagent`, an empty list rendering nothing), `roles` (the reader: the three
+  shipped roles with exact names and nothing forbidden, `_template` skipped, every refusal — a
+  missing root or file, an oversize persona, bad YAML, a wildcard, a blank or two-line
+  description, a never-list entry checked against an independent copy of the names, a
+  65-character tool name — opening with an absolute path, the limits inclusive at 2,000 bytes /
+  300 characters / 64; `gravitRows`, whose `agentOptions` appear only with a model; the committed
+  mirror byte-equal to the render, so drift fails), `check-home` (the
   go-live dry run's pieces, offline: the live-home refusal by device and inode — through a
   symlink, in another letter case, inside or above the home — and the marker; the refusal classes;
   the multi-frame log reader; the inventory diff; the MCP row walk; the `extraPatches` seam
@@ -1455,12 +1595,14 @@ through `tsx`:
   deleted and fenced; a migrated v0 + v4 directory decided by the v4 header; a lock-and-temps
   directory never deletable; the host-archive 409), `roster`, `agents`, `bots`, `bot-presets`
   (the rebasing of every shipped bot onto the real `face/plugins/bot.js` and its own `skills/`;
+  the default's definition taking the rows it is handed — rebased as a file's would be — and never
+  reading the composition file; the shipped default being the rendered `roles/`;
   `preset.yml` read as 0.1.1 read it; `declareBots` never declaring `_template` or `gravit`;
   `redeclare` disposing before registering, following the disk, serialized; the root's disposal
   taking every declaration with it), `bot-plugin` (the persona-prefix slot, a late tool admitted,
   the mask shrinking and re-admitting, a failed re-expansion contained), `bot-journal`,
   `quotes`, `quote-snapshots`, `quote-streams`, `symbol-search`, and the room suites below.
-- **The thirteen `FACE_SMOKE` boots**, below.
+- **The fourteen `FACE_SMOKE` boots**, below.
 
 The room suites are `room-rules` (the caps block verbatim, `GRAVIT.md`'s caps sentence pinned to
 `ROOM_CAPS`, mention resolution, `isPass`, `finalTextOf`, dispatch validation and its two result
@@ -1481,7 +1623,7 @@ cold-room resume and its 404/409 mapping, a re-selected session refused `dispatc
 routes under the fence — and `room-client` (the header fold, the strip and its state
 precedence, the glyph, the mention anchor, the round-end line, the gate speaker).
 
-The thirteen boots each own a file, because `bootFace` sets `process.env.DSH_HOME` for good, and
+The fourteen boots each own a file, because `bootFace` sets `process.env.DSH_HOME` for good, and
 each speaks the browser's wire through `tests/remote.ts` (`mountClient`, `signIn`, `remote`):
 
 - `smoke.test.ts` — the sign-in (`/` 401 without the cookie, the token's 303 and `dsh-auth-*`
@@ -1528,7 +1670,8 @@ each speaks the browser's wire through `tests/remote.ts` (`mountClient`, `signIn
 - `bots-smoke.test.ts` — roster listing with a broken fixture and never `_template`; the
   header's `agentPreset`; mask = allow ∩ tree, and a tool registered after the declaration
   admitted by the re-expansion; the persona shadow; the default's tool set equal to the host's
-  (the gravit plugin masks nothing) and its prompt carrying the date, which a bot's does not; the
+  plus the role tools (the gravit plugin masks nothing; no bot sees a `role_*` tool) and its
+  prompt carrying the date, which a bot's does not; the
   SHIPPED relative plugin path rebased onto the real `face/plugins/bot.js` — its bots
   root is `mkdtemp`'d inside the repository as `.bots-smoke-*`, gitignored and removed in
   `finally` — beside an absolute one; **Gate 2 from a bot session**, both outcomes (a bot whose
@@ -1563,6 +1706,17 @@ each speaks the browser's wire through `tests/remote.ts` (`mountClient`, `signIn
   at the root reads the first two, a channel session in `strategies/x` reads the root file and
   the channel's own, a bot session reads the root file (the row is host-plane); `AGENTS.md`
   reaches none of the three, `CLAUDE.md` neither Gravit nor the channel session.
+- `roles-smoke.test.ts` — role delegation on a real tree: `role_reviewer` and `role_screener`
+  each spawn a one-shot child whose system prompt carries the role's persona (shadowing
+  Gravit's), the date line and no `gravit:roles` section, whose tool list EQUALS the role's
+  `allow` (every `role_*` tool and the forbidden tools gone — an exact comparison, because dsh
+  exempts a scope's own registrations from `restrict()`), whose header says `origin: subagent`,
+  `agentPreset: gravit` and the channel's cwd, and whose text returns through the tool, while
+  Gravit's own prompt carries the roles section; then a role naming a tool the tree lacks fails at
+  delegation with `tools.restrict() names unknown global tool "…"` (anchored on the quoted name)
+  and no child is created. The MCP tools the roles name are stand-ins under their production
+  names; a foreground one-shot child leaves `ctx.sessions` as its result returns, so the smoke
+  copies each session's header while serving its request.
 
 The drills use `mcp__drill__*` stand-ins so `ALPACA_KIT_ENABLE_ORDERS` is never armed.
 
@@ -1593,11 +1747,13 @@ the re-host added (§10, item 14).
 | **Order approval** — manual half (arm Gate 1 in a *scratch* home, ask for one paper order, deny, see the audit pair) | the card, end to end | | **not yet run** — the condition before the flag flips in the real home |
 | **Client transport** — automated (`client-mux-smoke`) | the page's own `api.js` + `mapper.js` against a real host: gates, replays, withdrawals, follows, the non-activating reads | the DOM: `chat.js`'s rendering and its view modes run only in a vm harness | passes 2026-09-30 |
 | **Transport** — manual (`face/README.md`) | the browser half of the wire: the tokenized sign-in and the per-authority cookie; a cold session opened page-only, gaining no `session.v4.jsonl.zstd` or `session.lock` until it is prompted; a reconnect redrawing the window once; a new session's reply streaming without a click; `/compact` answered by `commands/execute`; the agent panel; the subagent dock; rename, fork, the directory picker, a channel rename | the approval card's endings, which are the Gate-2 drill's | **not yet run** on 0.2.0 — a headless load of the page on a scratch home reached `connected` with no console errors |
-| **Bots** — automated (`bots-smoke`, `bot-runtime-smoke`, `bot-sandbox-smoke`, `askuser-noclient-smoke`) | roster listing incl. broken; header `agentPreset`; mask = allow ∩ tree, following late tools; persona shadow; the default's roster equal to the host's, its date section scoped to Gravit (never a bot); the shipped relative plugin path, rebased; a save re-declaring; Gate 2 refusing an order tool the bot's own mask admits; the S4/S7 observations | that the approval CARD renders (no client) — a bot in a room and a home session's write to `../SOUL.md` were this row's two gaps until `room-smoke` closed both | passes 2026-09-30 |
+| **Bots** — automated (`bots-smoke`, `bot-runtime-smoke`, `bot-sandbox-smoke`, `askuser-noclient-smoke`) | roster listing incl. broken; header `agentPreset`; mask = allow ∩ tree, following late tools; persona shadow; the default's roster equal to the host's plus the role tools (never a bot's), its date section scoped to Gravit (never a bot); the shipped relative plugin path, rebased; a save re-declaring; Gate 2 refusing an order tool the bot's own mask admits; the S4/S7 observations | that the approval CARD renders (no client) — a bot in a room and a home session's write to `../SOUL.md` were this row's two gaps until `room-smoke` closed both | passes 2026-09-30; re-run 2026-10-19 with the role tools in the default's roster |
 | **Bots** — manual (`face/README.md`) | create → home → persona → tools named and not named → `{{` refused; the sidebar buckets the home session under the bot; a restart's boot line lists the id; the transcript names the speaker on all four surfaces (second run) | no automated test pins the four naming surfaces or the reconnect path; per-message attribution in a room is the Room rows below | passed 2026-09-07; re-run 2026-09-08 on `main` with the R12 fix in, passed; owed on 0.2.0 |
 | **Room** — automated (`room-smoke`, `room-discussion-smoke`) | a real round on a stub model: dispatch → three members (answered / passed / failed) → answers on the log before one wake → synthesis in one turn; members parented, preset-joined, `read-only` first, `GRAVIT.md` chain, no `dispatch`; the projection on the row and in the cache; the `@` route with a member's write refused in content; a home refused on `../SOUL.md`; the structured brief and views; the journal | that a human can read the strip; a real model's behaviour on the four standing rules | passes 2026-09-30 |
 | **Room** — manual (`face/README.md`, eight parts) | check-in → dispatch line → attributed bubbles and the strip → the fold → `@` → an inline member question with the needs-you mark → a member's write refused → `left` and re-check → a restart keeps states and titles | per-message attribution across a reconnect; convergence of four voices on one model (spec §12, R3); the peer-`@` continuation, which the operator's next `@` superseded before it ran (by design) — that path stands on the engine tests | **Drilled and PASSED 2026-09-09** on the operator's own face (`feat/rooms` @ `31b2e68`, two fresh template bots, DeepSeek as the model); one client finding (F1, the strip missing on a session's first round) fixed the same day and re-verified; owed on 0.2.0, whose 0.1.1 room sessions no longer open (§9, R20) |
 | **Ask-user** — `ask_user_question` offered, called, answered, cancelled | the seam | that it is a gate (the answer is model-visible); the instruction half (README step 6 — on a thin brief that does not name the tool, Gravit asks before it builds, per `GRAVIT.md`), left to the operator and not run | passed 2026-09-03 with a real model, 26 tools offered; re-run 2026-09-08 on `main`, passed (34 tools offered; answered, then Stop → `closed · cancelled`); owed on 0.2.0 |
+| **Role** — automated (`roles-smoke`; `roles`, `gravit-plugin`, `boot`, `bot-presets`) | on a real tree, `role_reviewer` and `role_screener` each spawn a one-shot child with the role's persona shadowing Gravit's, exactly the role's tools (compared as sets, not as a subset), the date and no roles section, its text coming back through the tool; a role naming a tool the tree lacks failing at delegation, naming it, with no child; the reader's refusals, the render and the mirror's drift | that a real model chooses and calls a role sensibly; what the child's log shows on a live home; the generic tool paragraphs the child's prompt still carries | passes 2026-10-19 |
+| **Role** — manual (`face/README.md`, four steps and a clean-up) | on a scratch copy of the operator's home: Gravit calls `role_screener`; the child's log shows exactly the screener's tools and its persona, not Gravit's; an unmounted alpaca-kit row fails the delegation with `tools.restrict()` naming the tool and creates no child; Gravit's own log shows the role tools and the roles paragraph | a real model's judgement over several delegations | **not yet run** |
 
 Owed besides, from the re-host, never yet run in a browser: the Gate-2 drill's new card endings
 — a second tab's `closed`, a lost race's `closed · settled elsewhere`, a stale card's `closed ·
@@ -1617,7 +1773,7 @@ stages all of them, with the transport drill, on a copy of the operator's home.
   mounts the real `/` and signs in through it (`tests/remote.ts`: `mountClient`, `signIn`,
   `remote`) before any `/api` call; `client-mux-smoke` drives the page's own `api.js` and
   `mapper.js`. The structural `*Like` types hide most dsh drift from `tsc`, so after every pin
-  bump the thirteen real boots are the contract.
+  bump the fourteen real boots are the contract.
 - **An arc is** brainstorm → spec (`docs/superpowers/specs/`) → plan → build with tests → a
   whole-branch review → a post-build amendments block on the spec. The block is what freezes the
   spec; the Status line is left as written. Of the five post-reset specs, chat-light,
@@ -1895,5 +2051,5 @@ In order; each with what "done" is and which charter row it reopens.
 | `FACE_PORT`, `FACE_PROFILE`, `FACE_PYTHON` | face | port, profile name, producer interpreter |
 | `FACE_AKSHARE_MCP_COMMAND` | face (`akshare.ts`) | the AKShare MCP executable, default `~/.local/bin/akshare-mcp` |
 | `FACE_IFIND_POLL_MS`, `IFIND_ACCESS_TOKEN`, `IFIND_REFRESH_TOKEN` | face (quote routes) | the A-share quote provider's refresh period and credentials |
-| `FACE_SMOKE` | face tests | enables the thirteen real boots |
+| `FACE_SMOKE` | face tests | enables the fourteen real boots |
 | `FASTMCP_LOG_LEVEL` | MCP row | `WARNING` silences FastMCP's INFO noise; never edit `server.py` for it |

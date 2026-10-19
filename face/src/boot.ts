@@ -211,8 +211,9 @@ export interface FaceBootOptions {
   /** The bots directory (`bots/`); tests point it at a fixture. Defaults to the repository's. */
   botsRoot?: string;
   /** The role library (`roles/`); tests point it at a fixture. Defaults to the repository's.
-   * {@link composeFace} reads it and renders Gravit's default preset from it, so a role it
-   * cannot read refuses the compose with the file's path (spec §5.1). */
+   * {@link composeFace} reads it and renders Gravit's default preset from it, so a MISSING
+   * roles directory, or a role it cannot read, refuses the compose with that path (spec
+   * §5.1): a face that ships `bots/` ships `roles/` beside it. */
   rolesRoot?: string;
   /** Leave the gateway's readiness uncommitted: the caller commits it with
    * {@link BootedFace.commitReady} once its OWN routes are mounted. `main.ts`
@@ -284,8 +285,9 @@ function composedRowIds(layers: readonly FacePatchList[]): Set<string> {
  * @returns the composed patch stack, the absolute root config path to boot,
  * and the loaded profile (the runtime resolution needs it).
  * @throws when the profile does not exist, a bundle was skipped, a
- * patch file cannot load, or a role under `roles/` is malformed (the message
- * opens with that file's absolute path).
+ * patch file cannot load, the roles directory is missing, or a role under
+ * `roles/` is malformed (the message opens with the absolute path of the
+ * directory or file at fault).
  */
 export function composeFace(opts: FaceBootOptions): { patches: FacePatchList; rootConfig: string; profile: Profile } {
   const home = resolveDshHome(opts.dshHome);
@@ -791,7 +793,9 @@ async function assertOrderGateArmed(gate: OrderGateFibers | undefined): Promise<
  * another — sessions and credentials landing in `~/.dsh` while the profile came
  * from the override.
  * @param opts - profile name, webserver port, optional harness home, bots
- * root, and whether the caller commits the gateway's readiness itself.
+ * root, roles root (a missing roles directory or a malformed role refuses the
+ * boot at compose time, with its path), and whether the caller commits the
+ * gateway's readiness itself.
  * @returns the settled root context, an idempotent disposer, the bot preset
  * declarations, and the readiness commit (already done unless deferred).
  * @throws after disposing the tree when any enabled row did not activate, a
