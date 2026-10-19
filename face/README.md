@@ -2472,7 +2472,8 @@ scratch home: the drill writes a strategy directory and the operator judges the 
    `model-reported`), or on the code `round-limit` when the 24 rounds are spent; `one_line`,
    `next`, `numbers` filled; the journal's last entry is the verdict, ending in a usage line
    Gravit's closing message asks you to fill from the session-usage card; at most one commit,
-   with the verdict. `/goal` in the composer prints it on the status line — `Status`, the
+   with the verdict (that commit raises the approval card — answer it; it is the only card of
+   the cycle). `/goal` in the composer prints it on the status line — `Status`, the
    `Blocker` code and reason, `Rounds: n/24` — and the record is the log's last `goal/change`,
    read with the ask-user drill's step 7 recipe filtered on that type.
 4. Restart: stop the face mid-cycle on a second drill channel, start it again, send "continue".

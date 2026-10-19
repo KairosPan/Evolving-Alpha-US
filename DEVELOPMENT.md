@@ -512,7 +512,7 @@ default broken, and the boot refuses).
 | `subagent`, `subagent_fork`, `send_message`, `interrupt_agent`, `list_agents` | `tool-subagent` (continuable), `tool-subagent-fork` (one-shot), `tool-subagent-control`, `tool-subagent-list-agents` (in-process spawn/fork) | a continuable child reaches its parent with `send_message`, delivered as an `agent-message` relay (0.1.1's `report` tool is gone); Gate 2's `tools.guard` is tree-wide, so a gated tool stays gated inside a subagent |
 | `ralph` | `tool-ralph`, re-enabled by the policy layer (PLAN D9) | fresh-subagent iteration, up to 64 rounds per call; dsh-base 0.2.0 ships the row disabled |
 | `todo_write`, `workflow`, `exit_plan_mode` | `tool-todo`, `tool-workflow`, `plan-mode` | |
-| `create_goal` / `get_goal` / `update_goal` | `tool-goal`, over dsh-base's `goal`, `goal-round-driver` and `command-goal` | the cycle's loop (`dsh/profile/cycle.md`, §4.3): `create_goal` with `max_goal_rounds` 24, refused while a goal that is not complete exists (one cycle per session); the round driver re-prompts at idle while the goal is active and armed and, at the cap, blocks it with `round-limit` and prompts nothing more, so the contract has Gravit write the researching verdict in round 24; `get_goal` gives the id and revision `update_goal` needs; `update_goal` `resume` on the operator's message after a restart or an errored or max-tokens round (both only disarm), which dsh accepts only in a direct human turn on a root agent (R30); the face's Stop during a round PAUSES the goal, and a paused goal is the operator's `/goal resume` alone (`GOAL_TOOL_RESUME_PAUSED` for the model); the model's `blocked` always carries the code `model-reported` and is refused before an automatic round 3 (`blockedAfterConsecutiveRounds`), so `cycle.md` has Gravit lead the reason with `child-limit`, `bed-window`, `data-missing` or `needs-operator`; `complete` also accepts a blocked goal and would erase its blocker, so the contract completes only a validated or retired cycle; `goal-smoke` pins each of these on a real boot (§7.3); a role never carries them (§3.8) |
+| `create_goal` / `get_goal` / `update_goal` | `tool-goal`, over dsh-base's `goal`, `goal-round-driver` and `command-goal` | the cycle's loop (`dsh/profile/cycle.md`, §4.3): `create_goal` with `max_goal_rounds` 24, refused while a goal that is not complete exists (one cycle per session); the round driver re-prompts at idle while the goal is active and armed and, at the cap, blocks it with `round-limit` and prompts nothing more, so the contract has Gravit write the researching verdict in round 24; `get_goal` gives the id and revision `update_goal` needs; `update_goal` `resume` on the operator's message after a restart or an errored or max-tokens round (both only disarm), which dsh accepts only in a direct human turn on a root agent (R30); the face's Stop during a round PAUSES the goal, and a paused goal is the operator's `/goal resume` alone (`GOAL_TOOL_RESUME_PAUSED` for the model); the model's `blocked` always carries the code `model-reported` and is refused before an automatic round 3 (`blockedAfterConsecutiveRounds`), so `cycle.md` has Gravit lead the reason with `child-limit`, `bed-window`, `data-missing` or `needs-operator`; `complete` also accepts a blocked goal and would erase its blocker, so the contract completes only a validated or retired cycle; `goal-smoke` pins most of these on a real boot (§7.3) — the errored/max-tokens disarm and `complete` accepting a blocked goal are read from the installed packages; a role never carries them (§3.8) |
 | `skill` | `tool-skill` + `skill-filesystem` | loads one `SKILL.md` by catalog name; the catalog (name + description) is what the model chooses from |
 | `web_search` | `tool-web` (`fetch: false`, PLAN D6) over `web-search-deepseek` | outbound to `https://api.deepseek.com/anthropic/v1` with `DEEPSEEK_API_KEY`; no page fetch |
 | `ask_user_question` | `tool-ask-user` (face overlay; the blocking `legacy` mode) | §4.3; the answer is model-visible, so not a gate |
@@ -1025,8 +1025,8 @@ own global `tool:goal` paragraph still reaches every child, as the other generic
 paragraphs do (§3.8).
 
 The file is the only place that tells Gravit how to run a cycle — 2,985 bytes against its 3,000
-since the final review's wave, which made it say only what the installed goal packages allow (each
-such fact pinned by `goal-smoke`, §7.3): one cycle, in the strategy's channel session (whose cwd is the
+since the final review's wave, which made it say only what the installed goal packages allow (most
+such facts pinned by `goal-smoke`, §7.3): one cycle, in the strategy's channel session (whose cwd is the
 strategy directory); Step 0, one batched `ask_user_question` before any code unless the brief
 already answers it; `create_goal` with `max_goal_rounds` 24 — refused while a goal that is not
 complete exists, so a new idea takes a new channel session — after which dsh's round driver
@@ -2263,7 +2263,8 @@ What actually holds, stated once (charter Rule 3). None is a guarantee; each is 
   (§7.3) pins the three paths on a real boot — the restart until "continue", Stop's pause with
   the model's resume refused, `/goal resume` re-arming — so a pin that moves one fails there.
   Nothing inside the rounds may wait on the operator: a commit from the channel session raises
-  an approval card (§3.3), so the contract allows one commit, with the verdict. The design
+  an approval card (§3.3), so the contract allows one commit, with the verdict — that commit
+  raises the card after the rounds are over, when the operator is back. The design
   spec's §11 (e) took the client to send no slash commands; it does, since the 0.2.0 port. The
   cycle drill's restart step runs a real model's path on an active goal; a real model meeting a
   paused goal has not been drilled.

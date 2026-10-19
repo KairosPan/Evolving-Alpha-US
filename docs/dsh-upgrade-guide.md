@@ -207,9 +207,9 @@ configless = the blocking `legacy` mode (`smoke.test.ts`); C20 per-role `dsh-too
 inside the default preset: config keys `provider` / `toolName` / `backgroundMode` / `persona` /
 `toolFilter` (+ `agentOptions`), the row's `persona` as the child's `deployment:persona-prefix`,
 `toolFilter` as `tools.restrict({allow})` of exact names in the child's creation window
-(`roles.test.ts`, `roles-smoke`); C21 the goal loop `cycle.md` rests on: `create_goal`'s
-`max_goal_rounds` (accepted in a direct human turn; refused, `GOAL_ALREADY_EXISTS`, while a goal
-that is not complete exists), the `<goal_round>` message the driver queues at idle (source
+(`roles.test.ts`, `roles-smoke`); C21 the goal loop `cycle.md` rests on: `create_goal` (accepted
+in a direct human turn; refused, `GOAL_ALREADY_EXISTS`, while a goal that is not complete
+exists) and its `max_goal_rounds`, the `<goal_round>` message the driver queues at idle (source
 `goal`, `Round: n/N`),
 `update_goal`'s `action: resume` (accepted only in a direct human turn, refused for a paused goal
 with `GOAL_TOOL_RESUME_PAUSED`) and `blocked_reason` (refused before round
@@ -306,8 +306,9 @@ resolves (`ctx.tools.get(name, context.scope)`, the gate `dsh-tool-web` and
 `dsh-tool-subagent` put on their own sections, so the plugin rests on `get` applying a scope's
 restrictions and on `assembleContextFor` setting `scope` to the agent), and `gravit:cycle` at
 `getSectionOrder("DEPLOYMENT_PERSONA_SUFFIX") - 50` with `interpolate: false` (the file's braces
-stay literal), the contract when the assembling scope resolves `create_goal` and nothing
-otherwise, so Gravit's sessions and a `subagent_fork` child's read the same text and a role
+stay literal), the contract when the assembling scope resolves `create_goal` AND the session is a
+root or a fork (`origin !== "subagent" || isSeeded`; §7.3), nothing otherwise, so Gravit's
+sessions and a `subagent_fork` child's read the same text, a plain `subagent` child's none, and a role
 child's reads none; all three are scoped to the preset revision so a bot's prompt carries none
 (`gravit-plugin.test.ts`: order, which must be finite, shape, unload, the `TZ` fallback, the
 roles section's order, lines and visibility cases, the cycle section's order, literalness, gate

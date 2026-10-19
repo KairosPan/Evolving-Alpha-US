@@ -53,8 +53,8 @@ none required: `one_line` (the current conclusion, one sentence), `next` (the ne
 channels: a letter or digit in any script first, then letters, digits, `-` and `_`, at most 41
 code points, no spaces or dots — the name becomes a path typed into shell by hand, and `cd x y` is
 zsh's two-argument form, exit 0 in the wrong directory whenever the substituted path exists.
-Commit your own iterations between cycles; a cycle commits once, with its verdict. git log is
-the audit trail.
+Commit your own iterations between cycles; a cycle commits once, with its verdict, or leaves
+the commit to the operator. git log is the audit trail.
 
 ## Rooms
 

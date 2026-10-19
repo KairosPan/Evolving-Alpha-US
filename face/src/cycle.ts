@@ -2,9 +2,9 @@
  * to run a cycle: one batched question, then a goal-driven loop of role calls to a verdict (spec
  * §6). {@link readCycle} reads it where `composeFace` renders Gravit's default preset
  * (src/boot.ts) and hands the text to `gravitRows` (src/roles.ts) as the `gravit` row's `cycle`
- * key, which `plugins/gravit.js` turns into the `gravit:cycle` section of every prompt a scope
- * that can call `create_goal` assembles: Gravit's, and a `subagent_fork` child's. A role child is
- * told nothing.
+ * key, which `plugins/gravit.js` turns into the `gravit:cycle` section of every prompt a ROOT or
+ * FORK session that can call `create_goal` assembles: Gravit's, and a `subagent_fork` child's. A
+ * role child, or any other delegated child, is told nothing.
  *
  * Unlike the persona (src/persona.ts), the text is NOT a template. The section registers with
  * `interpolate: false`, so a `{{...}}` group in it is literal prose, not an unknown variable that
