@@ -17,6 +17,7 @@ import { assembleContextFor } from "@deepseek-ai/dsh-agent";
 import { renderPrompt } from "@deepseek-ai/dsh-system-prompt";
 import { setupFaceProfile } from "../src/setup.ts";
 import { bootFace } from "../src/boot.ts";
+import { PERSONA_PATH, readPersona } from "../src/persona.ts";
 import { ROLES_ROOT, readRoles } from "../src/roles.ts";
 import { makeBotsRoot } from "./bots-fixture.ts";
 import { mountClient, remote, signIn } from "./remote.ts";
@@ -79,7 +80,13 @@ test("roles smoke: persona, exact tools, the result, and a loud failure for a mi
     const gravit = ctx.agents.get(SessionId(sessionId))!;
     const prompt = (value: string) => remote(base, cookie, "session/prompt", { request: { requestId: `roles-${crypto.randomUUID()}`, sessionId, mode: "queue", content: [{ type: "text", text: value }] } });
     const gravitPrompt = renderPrompt(await ctx.systemPrompt.assemble(assembleContextFor(gravit)));
+    /* The positives the child's two negatives below pair with. The persona is compared up to its first
+     * `{{`, as bots-smoke does (the text after it is a substituted variable); it is read from the file. */
+    const rolesIntro = "Roles. One-shot delegates";
+    const gravitPersona = readPersona(PERSONA_PATH).split("{{")[0];
     assert.ok(gravitPrompt.includes("- role_reviewer — "), "Gravit reads the roles section");
+    assert.ok(gravitPrompt.includes(rolesIntro), "Gravit reads the roles intro");
+    assert.ok(gravitPrompt.includes(gravitPersona), "Gravit is told who it is");
     const childRequestAfter = async (marker: string) => {
       await waitFor(`child ${marker}`, () => [...requested.entries()].some(([id, rs]) => isChild(id) && rs.some((r) => r.messages.some((m) => textOf(m).includes(marker)))));
       const [id, rs] = [...requested.entries()].find(([id, rs]) => isChild(id) && rs.some((r) => r.messages.some((m) => textOf(m).includes(marker))))!;
@@ -91,12 +98,16 @@ test("roles smoke: persona, exact tools, the result, and a loud failure for a mi
     await gravit.whenIdle();
     const reviewerTools = reviewer.request.tools!.map((t) => t.name).sort();
     for (const kept of ["read", "glob", "grep", "skill", "mcp__alpaca-kit__daily_bars", "mcp__alpaca-kit__calendar", "mcp__alpaca-kit__corp_actions", "mcp__alpaca-kit__market_snapshot"]) assert.ok(reviewerTools.includes(kept), `reviewer keeps ${kept}`);
-    for (const gone of ["bash", "write", "edit", "ask_user_question", "web_search", "subagent", "subagent_fork", "send_message", "role_reviewer", "role_screener", "role_backtester", "mcp__alpaca-kit__account", "mcp__alpaca-kit__screen"]) assert.equal(reviewerTools.includes(gone), false, `reviewer never sees ${gone}`);
+    for (const gone of ["bash", "write", "edit", "ask_user_question", "web_search", "subagent", "subagent_fork", "send_message", ...readRoles(ROLES_ROOT).map((r) => r.tool), "mcp__alpaca-kit__account", "mcp__alpaca-kit__screen"]) assert.equal(reviewerTools.includes(gone), false, `reviewer never sees ${gone}`);
+    /* Equality, not subsets: dsh exempts a scope's own-layer registrations from `restrict()`, so only an exact
+     * comparison with the role's allow list catches a tool the child's layer adds. */
+    const role = (id: string) => readRoles(ROLES_ROOT).find((r) => r.id === id)!;
+    assert.deepEqual(reviewerTools, [...role("reviewer").allow].sort(), "the reviewer's tools are exactly its allow list");
     const system = reviewer.request.messages[0];
     assert.equal(system.role, "system");
     assert.ok(textOf(system).includes("You are the reviewer"), "the role persona is the child's");
-    assert.equal(textOf(system).includes("You are Gravit"), false, "and it shadows Gravit's");
-    assert.equal(textOf(system).includes("Roles. One-shot delegates"), false, "the roles section is blank for a child");
+    assert.equal(textOf(system).includes(gravitPersona), false, "and it shadows Gravit's");
+    assert.equal(textOf(system).includes(rolesIntro), false, "the roles section is blank for a child");
     assert.match(textOf(system), /Today is \d{4}-\d{2}-\d{2}/, "the date reaches the child");
     assert.equal(reviewer.header.origin, "subagent");
     assert.equal(reviewer.header.agentPreset, "gravit");
@@ -109,13 +120,16 @@ test("roles smoke: persona, exact tools, the result, and a loud failure for a mi
     const screenerTools = screener.request.tools!.map((t) => t.name);
     assert.ok(["bash", "write", "mcp__alpaca-kit__screen"].every((n) => screenerTools.includes(n)));
     assert.equal(screenerTools.includes("edit"), false);
+    assert.deepEqual([...screenerTools].sort(), [...role("screener").allow].sort(), "the screener's tools are exactly its allow list");
     /* a tool the tree lacks: the delegation fails naming it, no child runs */
     unregister.get("mcp__alpaca-kit__earnings")!();
     const childrenBefore = [...requested.keys()].filter(isChild).length;
     await prompt("RUN_SCREENER");
     await gravit.whenIdle();
     const failed = gravit.session.snapshotEvents().filter((e) => e.type === "tool/result").at(-1)!;
-    assert.match(JSON.stringify(failed.data), /unknown global tool.*mcp__alpaca-kit__earnings/);
+    /* Anchored on the quoted name right after the verb: the payload is stringified, so the quotes carry a
+     * backslash, and a looser pattern would also match the name inside the error's known-tools list. */
+    assert.match(JSON.stringify(failed.data), /names unknown global tools? \\"mcp__alpaca-kit__earnings\\"/);
     assert.equal([...requested.keys()].filter(isChild).length, childrenBefore, "no child was created");
   } finally {
     await dispose?.();
