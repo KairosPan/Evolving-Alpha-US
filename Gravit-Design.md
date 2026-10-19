@@ -23,7 +23,9 @@ principal agent**. The agent, also called Gravit, runs on DeepSeek Harness (dsh)
 operator's chat face and works three layers. Gravit organizes work, checks returned evidence
 and owns the research conclusion; the operator retains final judgment. Operator-authored bots
 carry continuing research perspectives into rooms (§7.1). Temporary subagents perform bounded
-delegated work (§7.2). One principal agent does not mean only one execution context.
+delegated work (§7.2). The role library — three one-shot roles with their own persona and
+tools — is the prebuilt form of that delegation (§7.2). One principal agent does not mean only
+one execution context.
 
 - **MARKET** — point-in-time US equities data (Alpaca bars and corporate actions, EDGAR
   filings, two offline PIT beds), guarded against lookahead in code. AKShare MCP adds
@@ -48,7 +50,9 @@ carried from idea to a retirement verdict this way (2026-09-02, by its own pre-r
 falsification terms) — in the working tree; its directory has not yet been committed.
 
 **What it is not.** Not an automated trading system, not an autonomy ladder, not a hosted or
-multi-user service. Nothing runs unattended.
+multi-user service. Nothing *starts* unattended. A research cycle the operator starts runs to
+its verdict inside its strategy directory without further attention; the operator judges it
+afterwards from the journal and the diff.
 
 ## 2. Founding principles
 
@@ -99,9 +103,11 @@ the design economizes it but never designs it away.
 │            bot settings · room comparisons · child task history │
 ├──────────────────────────────────────────────────────────────────┤
 │ GRAVIT     dsh runtime · skills (mechanics + style) ·            │  the agent
-│            works strategies/ · queries via MCP tools ·           │
-│            consults room bots · delegates bounded child tasks ·  │
-│            may call rostered local CLIs as tools                 │
+│            works strategies/ ·                                   │
+│            runs research cycles under a goal ·                   │
+│            queries via MCP tools · consults room bots ·          │
+│            delegates to the role library and to bounded          │
+│            child tasks · may call rostered local CLIs as tools   │
 ├──────────────────────────────────────────────────────────────────┤
 │ alpaca_kit one Python package, two faces: importable lib         │  the workbench
 │            (backtests) + MCP server (interactive queries) ·      │  (this repo)
@@ -125,7 +131,7 @@ Who may change what. This table is the charter's core; everything else supports 
 
 | Surface | Writer | Audit / gate |
 |---|---|---|
-| `strategies/` | **Gravit**, including bounded work delegated under inherited permissions | git history is the ledger; Gravit checks delegated results and the operator reviews diffs |
+| `strategies/` | **Gravit**, including the role children and bounded tasks it delegates to under inherited permissions | git history is the ledger; Gravit checks delegated results and the operator reviews diffs |
 | `alpaca_kit/`, `face/`, `scripts/`, tests | normal engineering (operator and coding agents, reviewed) | offline suites, meta-gates, and the drills — this tier includes the code of both order gates |
 | `dsh/skills/mechanics/` | operator only | law, not style: backtest rules and tool mechanics; Gravit treats them as binding |
 | `dsh/skills/style-gravit/` | operator only | Gravit proposes changes in its journal or in conversation; it never edits the pack |
@@ -134,6 +140,7 @@ Who may change what. This table is the charter's core; everything else supports 
 | Bot definitions: `preset.yml`, `SOUL.md`, composition and skills under `bots/` | operator, through the face's supported settings or file edits; Gravit and temporary subagents may propose changes, never author them | git and review; settings saves check revisions, and inspection distinguishes saved settings from mounted configuration (D13) |
 | `bots/<id>/journal/notes.md` | operator; the bot in its own home session, subject to that session's permissions | home work is scoped to its own `journal/`; room sessions start read-only (D12). Context loading only reads notes and records the consumed snapshot; it never writes them |
 | Role definitions: `roles/<id>/` (`ROLE.md`, `role.yml`), and the mirror `bots/gravit/agent.cordis.yml` generated from them | operator, by file edit; Gravit proposes a role in conversation and never authors one | git and review; the face refuses a malformed role at boot, a drift test fails while the mirror differs from the render, and the reader keeps the account and order tools, `ask_user_question` and the AKShare tools out of every role's `allow` |
+| `dsh/profile/cycle.md` | operator only | the research-cycle contract Gravit runs; Gravit proposes changes in conversation and never edits it; git |
 | `data/pit/` beds | nobody — read-only captured artifacts | a `CHECKSUMS` manifest on the 2yr bed (the broad bed predates the manifest and carries none), checked by hand; recapture is the only legitimate write |
 | paper orders | nobody today | **Gate 1** (registration; enforced, test-pinned): the order tools exist in a session only when the operator's flag AND broker keys are both present. **Gate 2** (per-order approval; built 2026-09-04, in the face): every call to an order tool stops for a card the operator must answer (under a `never` policy, or with no session to ask in, it is denied outright rather than asked), and a guard admits the call only on a logged one-shot approval for that exact call and tool. Its automated drill passed and is mutation-proven for the refusing half (the card is raised, the read-only listing is not gated, an unapproved order does not dispatch); the admitting half — a real logged grant letting an approved order through the live pipeline — is automated too (2026-09-30), over the browser's own answer channel as well; its human half — a person reading the card against armed tools in a scratch home — has not been run (D3). It binds only when dsh runs inside the face (D8) |
 
@@ -161,7 +168,7 @@ solved would be worse than carrying them.
 | D2 | Agent commits and operator commits are indistinguishable in git | single operator, low volume | cheap fix (distinct commit identity for Gravit) on first confusion |
 | D3 | Gate 2's human half is undrilled: no person has yet read the order card against armed tools | orders are unregistered by default; the automated half is drilled | before `ALPACA_KIT_ENABLE_ORDERS` ever flips in the real harness home |
 | D4 | Mechanics skills are prose-protected only | single user; every edit reviewed | if skills ever get a second writer, including Gravit |
-| D5 | Per-session LLM usage is visible, but there is no combined accounting across Gravit, room members and temporary descendants, nor complete LLM + data API spend accounting | operator reviews usage and provider bills | first surprise bill, or any scheduled autonomous runs |
+| D5 | Per-session LLM usage is visible, but there is no combined accounting across Gravit, room members and temporary descendants, nor complete LLM + data API spend accounting | operator reviews usage and provider bills | first surprise bill, or any scheduled autonomous runs, or the first cycle whose usage surprises the operator |
 | D6 | The mechanics red-lines have no drill; no test reads the content of the skill packs | single user; every edit reviewed | carried rule: a new guard ships with its drill in the same change |
 | D7 | No instrument for net-negative drift: nothing compares "now" against "never-evolved" | strategies are few; the operator still reads everything | when an independent evaluator exists (see D1) |
 | D8 | Both order gates are prose against a shell: they hold the tool surface, the key file sits at the repo root, and Gate 2 exists only inside the face | paper account; hostname pin; the flag has never been armed | real-money intent, or any host other than the face running the profile with the flag set |
@@ -170,8 +177,9 @@ solved would be worse than carrying them.
 | D11 | *Resolved 2026-09-07.* The model is told it is Gravit: `dsh/profile/persona.md` is the `system-prompt` row's `personaPrefix`, set by the face at compose time; a bot's preset shadows it for that bot's sessions | — | — |
 | D12 | Bot tool masks are visibility, not authority. dsh scopes and `tools.restrict` are "live visibility composition, not an authority boundary"; a bot with a shell writes whatever its session's sandbox mode allows and reaches whatever the network allows | held by: the `read-only` permission preset logged into every bot room session inside its creation (file effects, subject to an operator-granted escalation card), the `journal/`-scoped `cwd` of every bot home session, Gate 2 tree-wide (the account), and the room transcript naming every dispatch and every member not called. Not held by the mask, and not held for the network | if a bot's composition is ever given the account tools, or a room session is created other than read-only (§8) |
 | D13 | Gravit's sessions and delegated tasks can work at the repository root, which includes `bots/`; their prohibition on editing bot files, including journals, is carried by `GRAVIT.md` and review, not by the sandbox | single operator; every edit reviewed; git is the ledger; a bot's own home-journal writes follow §4 | the first unauthorized edit under `bots/` |
-| D14 | Structured room evidence and child-task results have no independent verification or result-acceptance mechanism; passing runtime drills does not establish better research | originals, request snapshots and task histories remain reviewable; Gravit checks results and the operator judges them | before claiming a research-quality gain or reducing review on the strength of these features |
+| D14 | Structured room evidence, child-task results and role reports have no independent verification or result-acceptance mechanism; passing runtime drills does not establish better research | originals, request snapshots and task histories remain reviewable; Gravit checks results and the operator judges them | before claiming a research-quality gain or reducing review on the strength of these features |
 | D15 | Bot journal context is a bounded read of historical notes; freshness, conflicts and note selection still depend on manual maintenance | each request records what it consumed and exposes missing or truncated notes | when stale, conflicting or omitted notes materially affect a conclusion |
+| D16 | The per-cycle role-call cap (12) is a count Gravit keeps in the journal, not a threshold the harness enforces (Rule 1) | the round cap is enforced by the goal, every call is in the child history, and the operator reads the journal | the first overrun |
 
 ## 6. Rules carried forward
 
@@ -255,6 +263,12 @@ parent first. One-shot tasks remain read-only history. Interruption targets the 
 preserves unclaimed queued messages and descendants, and does not cancel the whole tree; a
 later send can resume parked work. dsh owns this lifecycle, including recovery.
 
+The role library is the prebuilt form of a delegated task: a role is an operator-authored
+persona plus an exact tool allow-list the dsh backend enforces at the child's creation
+(`roles/<id>/`), surfaced to Gravit as a one-shot tool. It is never a bot (no roster, no journal,
+no room) and never a bot's substitute: a role has hands and no voice, a bot a voice and no hands.
+A role's report is a claim Gravit checks (D14).
+
 ### 7.3 What this design deliberately does not build
 
 - **No privileged second agent.** Teaching and final adjudication belong to the operator;
@@ -290,6 +304,7 @@ Few and concrete. Each names the section it reopens.
 | An independent evaluator is introduced | D1 · D7 (the measurement plane) |
 | dsh leaves developer preview or ships a breaking change | the two pins · profile and skills format · the drills |
 | A bot's composition is given the account tools, a bot room session is created other than read-only, or a bot home session's cwd widens past its `journal/` | §7.1 · D8 · D12 · run the order drill under that bot's preset |
+| A role is given a bot's tools, the account tools, or ask_user_question | §7.2 · D12 · run the order drill with that role's child |
 | Claiming better research or reducing review because rooms or delegation are available | D1 · D14 · real-task comparison and explicit result acceptance |
 | Stale, conflicting or truncated journal notes affect a conclusion | §7.1 · D15 · maintenance and retrieval requirements before choosing a new memory store |
 | Expanding the interface migration in §9 | §3 (the FACE row) · §7.3 "No bespoke harness" and "No hosted face" · the two pins · the row and RPC inventory against the CLI's |
@@ -317,7 +332,7 @@ Remaining directions below are not completed capabilities. Further design remain
   runs in other projects, or gets a home of its own. Bot inspection and native child-task
   controls are implemented parts of this direction; complete frontend replacement and the
   shared-home decision remain open.
-- **Evaluate real research and make acceptance explicit** (D14). Compare representative
+- **Evaluate real research and make acceptance explicit** (D14, D16). Compare representative
   research tasks for evidence accuracy, useful disagreement, revision of conclusions, operator
   effort, elapsed time and usage. Develop traceability from claims to source material and from
   delegated results to expected artifacts, checks and unresolved limits. Current comparison
@@ -325,3 +340,7 @@ Remaining directions below are not completed capabilities. Further design remain
 - **Maintain notes and account for the whole task** (D5, D15). Design operator-reviewed journal
   updates with sources and conflict handling, and combined usage across parent, room members
   and descendants. The current journal hook only reads, and current usage remains per session.
+- **The next round: persona, memory, the teaching channel.** The persona's mechanics paragraphs
+  move to the tool descriptions, scoped sections and skills dsh provides; the style pack moves
+  into a memory substrate the operator designs; the teaching channel is designed with it.
+  Deferred by the operator on 2026-10-15.

@@ -5,6 +5,7 @@ STRATEGY runs on DeepSeek Harness (dsh). This directory is the repo's half of th
 | Path | What |
 |---|---|
 | `profile/cordis.yml` | profile TEMPLATE — mounts the alpaca-kit MCP server, the skill roots, and the INTENDED approval list (see step 6) |
+| `profile/persona.md`, `profile/cycle.md` | Gravit's two prompt texts, read by the face at compose time (dsh itself reads nothing here): the persona, set as the `system-prompt` row's `personaPrefix`, and the research-cycle contract, mounted as the `gravit:cycle` section of Gravit's prompt (a bot's and a role child's carry none). `cycle.md` is at most 3,000 bytes; after an edit, `cd face && npm run render:roles` regenerates the mirror that embeds it (`face/README.md` "The profile") |
 | `skills/mechanics/` | neutral mechanics, always apply: `backtest-rules`, `alpaca-kit-guide` |
 | `skills/style-gravit/` | the operator's own style: `doctrine`, `signals`, `lessons` — converted from the retired `seeds_v2/` JSON packs by `scripts/convert_seeds.py` |
 | `../roles/` (the repo root's, not this directory's) | the role library the face renders into Gravit's preset (`face/src/roles.ts`, `DEVELOPMENT.md` §3.8); each `role.yml` names an MCP tool as `mcp__<serverName>__<raw>`, so it spells the server name this profile mounts — `alpaca-kit` |

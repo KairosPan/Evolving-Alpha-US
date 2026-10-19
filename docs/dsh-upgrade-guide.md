@@ -155,8 +155,8 @@ These are the upgrade's real work. Everything else in §3.2 fails a test first.
 ### 3.2 By test: the pinned seams and what fails first
 
 Each row: the seam, the file that pins it. Depth: the inventory's row, `DEVELOPMENT.md` §4.1
-(boot), §4.3 (overlay and policy), §4.7 (Gate 2), §5.2 (the wire), §6.8 (rooms), §3.7 (bots),
-§3.8 (roles, C20).
+(boot), §4.3 (overlay and policy; the cycle section, C21), §4.7 (Gate 2), §5.2 (the wire), §6.8
+(rooms), §3.7 (bots), §3.8 (roles, C20).
 
 **A · pins and install.** A1–A3 the three constants vs manifest vs installed tree
 (`version.test.ts`); A5 the retired packages never declared (`version.test.ts`); A6 the
@@ -207,7 +207,9 @@ configless = the blocking `legacy` mode (`smoke.test.ts`); C20 per-role `dsh-too
 inside the default preset: config keys `provider` / `toolName` / `backgroundMode` / `persona` /
 `toolFilter` (+ `agentOptions`), the row's `persona` as the child's `deployment:persona-prefix`,
 `toolFilter` as `tools.restrict({allow})` of exact names in the child's creation window
-(`roles.test.ts`, `roles-smoke`).
+(`roles.test.ts`, `roles-smoke`); C21 the goal loop `cycle.md` rests on: `create_goal` /
+`update_goal` parameters, the direct-human authority on `resume`,
+`blockedAfterConsecutiveRounds`, the driver's `round-limit` (`cycle.test.ts`, the cycle drill).
 
 **D · gates and approvals.** D1 the prepended `tools/pre-execute` ask (`order-gate.test.ts`,
 `orders.test.ts`); D2 the monotonic `tools.guard` reading the live description
@@ -284,20 +286,24 @@ by catalog name (`smoke.test.ts`); H7 the prompt sections the face relies on:
 `role:'system'` message, `request/header` as the durable proof a tool was offered
 (`bot-runtime-smoke`, `room-discussion-smoke`); H10 the face's instructions patch: the two
 candidate lists the face's over the inherited config, an operator's other keys and `disabled`
-kept, no row and no patch (`boot.test.ts`, `instructions-smoke`); H11 the face's two section
+kept, no row and no patch (`boot.test.ts`, `instructions-smoke`); H11 the face's three section
 registrations: `face/plugins/gravit.js`, the first row of the default preset's rendered
 composition (`bots/gravit/agent.cordis.yml` is its mirror), registers `deployment:today` at
 `getSectionOrder("DEPLOYMENT_PERSONA_PREFIX") + 1` with `interpolate: false` and a function text
-re-evaluated at each assembly, in UTC when `TZ` is unusable, and `gravit:roles` at
+re-evaluated at each assembly, in UTC when `TZ` is unusable, `gravit:roles` at
 `getSectionOrder("TOOL_SUBAGENT") + 1`, listing only the roles whose tool the assembling scope
 resolves (`ctx.tools.get(name, context.scope)`, the gate `dsh-tool-web` and
 `dsh-tool-subagent` put on their own sections, so the plugin rests on `get` applying a scope's
-restrictions and on `assembleContextFor` setting `scope` to the agent); both are scoped to the
-preset revision so a bot's prompt carries neither (`gravit-plugin.test.ts`: order, which must be
-finite, shape, unload, the `TZ` fallback, the roles section's order, lines and visibility cases;
-`bots-smoke`: Gravit's prompt has the date, a bot's does not; `roles-smoke`: Gravit's has the
-roles section, a role child's has the date and not the roles, a `subagent_fork` child's system
-text equals Gravit's).
+restrictions and on `assembleContextFor` setting `scope` to the agent), and `gravit:cycle` at
+`getSectionOrder("DEPLOYMENT_PERSONA_SUFFIX") - 50` with `interpolate: false` (the file's braces
+stay literal), the contract when the assembling scope resolves `create_goal` and nothing
+otherwise, so Gravit's sessions and a `subagent_fork` child's read the same text and a role
+child's reads none; all three are scoped to the preset revision so a bot's prompt carries none
+(`gravit-plugin.test.ts`: order, which must be finite, shape, unload, the `TZ` fallback, the
+roles section's order, lines and visibility cases, the cycle section's order, literalness, gate
+and unload; `bots-smoke`: Gravit's prompt has the date and the cycle contract, a bot's neither;
+`roles-smoke`: Gravit's has the roles section and the cycle contract, a role child's has the date
+and neither, a `subagent_fork` child's system text equals Gravit's, the cycle contract included).
 
 **I · environment and home layout.** I1 `DSH_HOME` resolution and the dry run's live-home
 refusal (`check-home.test.ts`, `boot.test.ts`); I2 `DSH_PERMISSION_MODE` and `danger-full-access`
@@ -331,6 +337,7 @@ D9 by id).
 | D15 | telemetry opt-in is one operator row; the env switch still wins | the switch order in `composeFace` (B4) |
 | D16 | a cold session opens page-only | `session/follow` or `session/page` activation semantics (E6–E7) |
 | D18 | the spill budget stays dsh-base's `maxInlineTokens: 12500` | the row's key or default moves (B34) |
+| B8 (design spec) | the cycle caps are `cycle.md`'s, not a dsh config: 24 rounds is the `max_goal_rounds` the contract passes to `create_goal`, 12 role calls a count Gravit keeps in the journal (charter D16, `DEVELOPMENT.md` R29) | dsh adds a per-session child total or a goal-level cap setting; the first overrun |
 
 Decisions the 2026-10-15 agent redesign adds land here with their plans (§7.3).
 
@@ -356,6 +363,8 @@ named as still to run on 0.2.0).
 | room, manual (a NEW round on `strategies/room-drill`) | README steps 1–8 | one round ran live 2026-09-30 on a scratch home; the `@`, an inline member question, a refused write, `left` and re-check, a restart **owed** |
 | roles, automated | `roles-smoke`, `roles.test.ts`, `gravit-plugin.test.ts` | passes (plan 2) |
 | roles, manual (a NEW round on `strategies/room-drill`, a backtester run past the 60 s bash default, then the alpaca-kit row disabled in a scratch copy) | README "The role drill", steps 1–6 | **not yet run** — the operator's, on a COPY of the real home |
+| the cycle, automated | `cycle.test.ts`, `gravit-plugin.test.ts`, `boot.test.ts`, `roles.test.ts`; the cycle assertions of `bots-smoke` and `roles-smoke` | passes (plan 3) |
+| the cycle, manual (a channel from `_template`, one thin idea, the batch answered, the rounds to a verdict, a restart and "continue") | README "The cycle drill", steps 1–5 | **not yet run** — the operator's, on the real face with its keys |
 | the subagents dock | `subagents-smoke`; the panel in a browser | manual **owed** |
 | the MCP live roster | `curl …/data/plugins.json` | 10 + 14 on 2026-09-30 (scratch) and 2026-10-01 (live) |
 | the first-live-boot checks (runbook §7 C) | the six checks | done 2026-10-01 (§6.1) |
@@ -428,6 +437,13 @@ The seam inventory compiled (159 rows, nine groups, frozen at
 (`docs/superpowers/specs/2026-10-15-gravit-agent-redesign-design.md`), whose new dsh seams are
 listed in §7.3 and enter §3 as their plans merge. The doc debts the compilation found are §7.4.
 
+Plans 1–3 of that redesign have landed on the branch: plan 1 (the map and the instructions seam —
+`GRAVIT.md`, the `agent-instructions` patch, the date section) on 2026-10-18, `2ccbfb6..c1de931`;
+plan 2 (the role library) on 2026-10-18..19, `c1de931..123d4d7`; plan 3 (the cycle contract and
+its section) on 2026-10-19, `123d4d7..4d93481` and the docs commit after it. Their seams are H10,
+H11, C20 and C21 in §3.2 and the watch items of §7.3; the roles and cycle drills and the
+first-request measurements are still the operator's to run (§5, `DEVELOPMENT.md` §4.3).
+
 ## 7. Watchlist for the next upgrade
 
 ### 7.1 Upstream changes already known (0.2.1-alpha.3, 2026-10-14)
@@ -485,15 +501,29 @@ listed in §7.3 and enter §3 as their plans merge. The doc debts the compilatio
   (`6af2eb2`): the date section at `getSectionOrder("DEPLOYMENT_PERSONA_PREFIX") + 1`, entered as
   H11 in §3.2; the `roles` section landed in plan 2 (`994ef5d`, at `getSectionOrder("TOOL_SUBAGENT")
   + 1`, also H11), gated on the assembling scope's tool view since `e389160`; the `cycle` section
-  (plan 3) is still to land;
+  landed in plan 3 (`7cf3c57`, at `getSectionOrder("DEPLOYMENT_PERSONA_SUFFIX") - 50`, also H11),
+  gated the same way on `create_goal`, its real-boot pins `4d93481`;
 - `dsh-goal` + `dsh-goal-round-driver` + `dsh-tool-goal`: the `<goal_round>` prompt text, the
-  `round-limit` blocker, the disarm-after-resume rule (spec §11 (e));
+  `round-limit` blocker, the disarm-after-resume rule (spec §11 (e)). Landed in plan 3:
+  `dsh/profile/cycle.md` is written against these facts (`7cf3c57`; `cycle.test.ts` pins that it
+  states `max_goal_rounds` 24, the `resume` path and the blocked vocabulary); the behaviour itself
+  is the cycle drill's and has not been run; entered as C21 in §3.2, with `DEVELOPMENT.md` R30;
 - `dsh-compaction-tool-result-pruner` thresholds (8,192 / 4,096 / 1,024) that role reports are
-  sized under (spec §11 (f));
+  sized under (spec §11 (f)). Not landed: the spec leaves it to the cycle drill, where a 24-round
+  run is the first time compaction can bite, and that drill has not been run;
+- the section gates are silent when the tool they probe goes away. `gravit:cycle` probes
+  `create_goal`, `gravit:roles` each `role_<id>`: a profile patch that disables dsh-base's
+  `tool-goal` row, or a dsh that moves or renames the goal tools (as 0.2.1-alpha.3 moves
+  `tool-ralph` out of dsh-base, §7.1), blanks the cycle section from Gravit's prompt with no boot
+  warning; no `spawn` provider does the same to the roles section; and with `goal-round-driver`
+  disabled the contract stays and nothing re-prompts a round. A dsh change fails `bots-smoke`
+  (Gravit's prompt carries `Step 0 — ask once`; `FACE_SMOKE=1` only), an operator's patch fails
+  nothing. Re-check at every pin that the goal tools still register (`DEVELOPMENT.md` §4.3);
 - the generated default composition (`bots/<agent>/agent.cordis.yml` as a mirror of `roles/`),
   which `definitionFor` no longer reads from disk. Landed in plan 2: the mirror and its drift test
-  `994ef5d`, the in-memory render `e2bab8b`. A face that ships `bots/` must ship `roles/` beside
-  it: `composeFace` refuses a missing roles directory.
+  `994ef5d`, the in-memory render `e2bab8b`; plan 3 added the cycle text to the same render
+  (`7cf3c57`), so an edit to `cycle.md` regenerates the mirror too. A face that ships `bots/` must
+  ship `roles/` beside it: `composeFace` refuses a missing roles directory.
 
 ### 7.4 Doc debts found while compiling the inventory (fix in the next docs pass, after the rename lands)
 
@@ -514,7 +544,8 @@ listed in §7.3 and enter §3 as their plans merge. The doc debts the compilatio
 - Fixed in plan 1: `DEVELOPMENT.md` §4's size line (31 files, 9,759 lines measured on
   2026-10-15, one plain `.js` file) now reads 32 files, some 9,900 lines (9,866 measured on
   2026-10-18) and two plain `.js` files (33 files, some 10,200 lines since plan 2's
-  `src/roles.ts`).
+  `src/roles.ts`; 34 files, some 10,300 lines — 10,321 measured on 2026-10-19 — since plan 3's
+  `src/cycle.ts`).
 - `face/README.md` "What boot refuses" names three required rows "in this tree"; `boot.ts`
   cites upstream's seven; the three are a derived claim to re-derive at every pin.
 - `face/README.md`'s "The Gate-2 drill" heading and its "Channels" line citations are the open
